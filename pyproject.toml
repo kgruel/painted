@@ -1,6 +1,6 @@
 [project]
 name = "painted"
-version = "0.0.1"
+version = "0.1.1"
 description = "A cell-buffer terminal UI framework"
 readme = "README.md"
 license = "MIT"
@@ -24,9 +24,9 @@ classifiers = [
 painted = "painted.__main__:main"
 
 [project.urls]
-Homepage = "https://github.com/kylegruel/painted"
-Repository = "https://github.com/kylegruel/painted"
-Issues = "https://github.com/kylegruel/painted/issues"
+Homepage = "https://github.com/kgruel/painted"
+Repository = "https://github.com/kgruel/painted"
+Issues = "https://github.com/kgruel/painted/issues"
 
 [dependency-groups]
 dev = [
