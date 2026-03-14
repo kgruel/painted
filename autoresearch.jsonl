@@ -6,3 +6,5 @@
 {"run":5,"commit":"10baf56","metric":2.081,"metrics":{},"status":"discard","description":"Tried nested row/column iteration in Buffer.diff to avoid modulo/division per changed cell; slightly slower than current best.","timestamp":1773530146909,"segment":0}
 {"run":6,"commit":"10baf56","metric":2.04,"metrics":{},"status":"checks_failed","description":"Tried compose join_horizontal/join_vertical local caching with direct Block internals; benchmark improved slightly but architecture checks reject accessing private Block._rows outside block.py.","timestamp":1773530229494,"segment":0}
 {"type":"config","name":"Optimize painted frame diff rendering (multi-workload)","metricName":"frame_ms","metricUnit":"ms","bestDirection":"lower"}
+{"run":1,"commit":"fd2e2c3","metric":1.337,"metrics":{},"status":"keep","description":"Broaden benchmark to multi-workload frame rendering with responsive and focus demos plus a lower-level Buffer.diff companion benchmark.","timestamp":1773530760253,"segment":0}
+{"type":"config","name":"Optimize painted frame diff rendering (multi-workload, corrected static diff)","metricName":"frame_ms","metricUnit":"ms","bestDirection":"lower"}

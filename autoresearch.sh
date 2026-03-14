@@ -152,7 +152,7 @@ def frame_pass(render_fn, current_data, previous_data):
     return (t1 - t0), (t2 - t1), (t3 - t2), len(writes)
 
 
-def make_diff_pair(change_stride: int) -> tuple[Buffer, Buffer]:
+def make_diff_pair(change_stride: int | None) -> tuple[Buffer, Buffer]:
     a = Buffer(WIDTH, HEIGHT)
     b = Buffer(WIDTH, HEIGHT)
     base = Style(dim=True)
@@ -161,6 +161,8 @@ def make_diff_pair(change_stride: int) -> tuple[Buffer, Buffer]:
     for y in range(HEIGHT):
         fill.paint(a, 0, y)
         fill.paint(b, 0, y)
+    if change_stride is None:
+        return a, b
     for idx in range(0, WIDTH * HEIGHT, change_stride):
         x = idx % WIDTH
         y = idx // WIDTH
@@ -169,7 +171,7 @@ def make_diff_pair(change_stride: int) -> tuple[Buffer, Buffer]:
         b.put(x, y, "#", hot)
     return a, b
 
-STATIC_A, STATIC_B = make_diff_pair(WIDTH * HEIGHT + 1)
+STATIC_A, STATIC_B = make_diff_pair(None)
 SPARSE_A, SPARSE_B = make_diff_pair(211)
 DENSE_A, DENSE_B = make_diff_pair(3)
 

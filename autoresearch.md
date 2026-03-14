@@ -42,4 +42,6 @@ Optimize end-to-end frame rendering performance for painted's cell-buffer render
 - Next step: broaden the benchmark to prevent overfitting by adding:
   - a second end-to-end workload based on `demos/patterns/focus.py`
   - a lower-level `Buffer.diff()` microbenchmark with static/sparse/dense cases
+- Multi-workload benchmark is now in place.
+- Benchmark honesty fix: the first diff-only `static` case accidentally had one changed cell due to stride generation; corrected so the static companion case is truly zero-diff before continuing optimization.
 - Architectural guardrails matter: direct access to `Block._rows` from `compose.py` was rejected by checks, so optimizations should stay inside owning modules or public APIs.
