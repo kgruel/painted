@@ -113,20 +113,20 @@ class Buffer:
 
     def diff(self, other: Buffer) -> list[CellWrite]:
         """Compare with another buffer, return list of cells that differ."""
-        if self.width != other.width or self.height != other.height:
+        width = self.width
+        cells = self._cells
+
+        if width != other.width or self.height != other.height:
             # Dimension mismatch: treat every cell as changed. This avoids IndexError
             # and ensures coordinates are computed against `self`'s stride.
-            writes: list[CellWrite] = []
-            for i in range(len(self._cells)):
-                y, x = divmod(i, self.width)
-                writes.append(CellWrite(x, y, self._cells[i]))
-            return writes
+            return [CellWrite(i % width, i // width, cell) for i, cell in enumerate(cells)]
 
         writes: list[CellWrite] = []
-        for i in range(len(self._cells)):
-            if self._cells[i] != other._cells[i]:
-                y, x = divmod(i, self.width)
-                writes.append(CellWrite(x, y, self._cells[i]))
+        append = writes.append
+        other_cells = other._cells
+        for i, cell in enumerate(cells):
+            if cell != other_cells[i]:
+                append(CellWrite(i % width, i // width, cell))
         return writes
 
     def line_hashes(self, *, include_style: bool = True) -> list[int]:
