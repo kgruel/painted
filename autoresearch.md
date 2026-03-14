@@ -1,11 +1,11 @@
 # Autoresearch: painted frame diff renderer
 
 ## Objective
-Optimize end-to-end frame rendering performance for painted's cell-buffer renderer. The workload should reflect realistic library usage across multiple UI shapes: render representative dashboards/panels into Blocks, paint into Buffers, and diff frames under static, sparse-update, and churned-update scenarios. Also include a lower-level Buffer.diff companion benchmark so renderer wins do not come from shifting cost between layers.
+Optimize end-to-end frame rendering performance for painted's cell-buffer renderer. The workload should reflect realistic library usage across multiple UI shapes and screen sizes: render representative dashboards into Blocks, including a full-screen variant with an extra streaming log panel, paint into Buffers, and diff frames under static, sparse-update, and churned-update scenarios. Also include a lower-level Buffer.diff companion benchmark so renderer wins do not come from shifting cost between layers.
 
 ## Metrics
-- **Primary**: `frame_ms` (ms, lower is better)
-- **Secondary**: `responsive_frame_ms`, `focus_frame_ms`, `diff_only_ms`, `render_ms`, `paint_ms`, `diff_ms`, `diff_cells_static`, `diff_cells_sparse`, `diff_cells_churn`, `focus_diff_cells_sparse`, `focus_diff_cells_churn`
+- **Primary**: `frame_ms` (ms, lower is better) — the top-level 225x60 suite
+- **Secondary**: `frame_ms_small`, `responsive_large_ms`, `responsive_small_ms`, `focus_large_ms`, `focus_small_ms`, `log_dashboard_large_ms`, `log_dashboard_small_ms`, `diff_only_ms`, `render_ms`, `paint_ms`, `diff_ms`
 
 ## How to Run
 `./autoresearch.sh` — outputs `METRIC frame_ms=<number>` and secondary metric lines.
@@ -30,7 +30,7 @@ Optimize end-to-end frame rendering performance for painted's cell-buffer render
 ## Constraints
 - Preserve existing behavior and correctness
 - `./dev check` must pass for kept results
-- Do not overfit to one scenario: both UI workloads and the diff-only companion stay in the benchmark
+- Do not overfit to one scenario: both screen sizes, the log-panel workload, and the diff-only companion stay in the benchmark
 - Keep benchmark honest: real Block render -> Buffer paint -> Buffer diff pipeline
 
 ## What's Been Tried
@@ -39,9 +39,8 @@ Optimize end-to-end frame rendering performance for painted's cell-buffer render
   - adding a Buffer-specific slice-copy fast path in `Block.paint()`
   - streamlining `Buffer.diff()`
   - short-circuiting equal buffers in `Buffer.diff()`
-- Next step: broaden the benchmark to prevent overfitting by adding:
-  - a second end-to-end workload based on `demos/patterns/focus.py`
-  - a lower-level `Buffer.diff()` microbenchmark with static/sparse/dense cases
-- Multi-workload benchmark is now in place.
-- Benchmark honesty fix: the first diff-only `static` case accidentally had one changed cell due to stride generation; corrected so the static companion case is truly zero-diff before continuing optimization.
-- Architectural guardrails matter: direct access to `Block._rows` from `compose.py` was rejected by checks, so optimizations should stay inside owning modules or public APIs.
+- Multi-workload benchmark was added with responsive + focus + diff-only companion.
+- Benchmark honesty fix: diff-only static companion case is now truly zero-diff.
+- Some narrower `Block.text()`/compose micro-optimizations did not carry over to the broader benchmark.
+- Next refinement: stress full-screen rendering more realistically by adding a larger dashboard variant with a streaming log panel and benchmarking both `140x40` and `225x60`, with the larger suite as the top-level score.
+- Architectural guardrails matter: optimizations should stay inside owning modules or public APIs.
