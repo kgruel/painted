@@ -147,6 +147,47 @@ class Block:
 
     def paint(self, buffer: Buffer | BufferView, x: int = 0, y: int = 0) -> None:
         """Transfer cells into a buffer region. Clips to buffer bounds."""
+        if isinstance(buffer, Buffer):
+            left = max(x, 0)
+            top = max(y, 0)
+            right = min(x + self.width, buffer.width)
+            bottom = min(y + self.height, buffer.height)
+            if left >= right or top >= bottom:
+                return
+
+            src_x = left - x
+            span = right - left
+            dst_cells = buffer._cells
+            dst_ids = buffer._ids
+            buffer_width = buffer.width
+
+            if self._ids is None:
+                if self.id is None:
+                    for by in range(top, bottom):
+                        src_row = self._rows[by - y]
+                        start = by * buffer_width + left
+                        dst_cells[start : start + span] = src_row[src_x : src_x + span]
+                        if dst_ids is not None:
+                            dst_ids[start : start + span] = [None] * span
+                    return
+
+                ids = buffer._ensure_ids()
+                for by in range(top, bottom):
+                    src_row = self._rows[by - y]
+                    start = by * buffer_width + left
+                    dst_cells[start : start + span] = src_row[src_x : src_x + span]
+                    ids[start : start + span] = [self.id] * span
+                return
+
+            ids = buffer._ensure_ids()
+            for by in range(top, bottom):
+                src_idx = by - y
+                src_row = self._rows[src_idx]
+                start = by * buffer_width + left
+                dst_cells[start : start + span] = src_row[src_x : src_x + span]
+                ids[start : start + span] = self._ids[src_idx][src_x : src_x + span]
+            return
+
         if self._ids is None:
             if self.id is None:
                 for row_idx in range(self.height):

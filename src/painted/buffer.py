@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import cast
 
 from wcwidth import wcwidth
 
@@ -31,7 +32,7 @@ class Buffer:
 
     def _ensure_ids(self) -> list[str | None]:
         if self._ids is None:
-            self._ids = [None] * (self.width * self.height)
+            self._ids = cast(list[str | None], [None] * (self.width * self.height))
         return self._ids
 
     def _index(self, x: int, y: int) -> int | None:
