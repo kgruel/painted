@@ -1,3 +1,4 @@
 {"type":"config","name":"Optimize painted frame diff rendering","metricName":"frame_ms","metricUnit":"ms","bestDirection":"lower"}
 {"run":1,"commit":"af761db","metric":3.739,"metrics":{},"status":"checks_failed","description":"Baseline frame-diff benchmark stood up from demos/patterns/responsive.py; benchmark passes but repo checks currently fail on existing buffer.py ty diagnostics from main.","timestamp":1773529997043,"segment":0}
 {"run":2,"commit":"f0349e9","metric":2.192,"metrics":{},"status":"keep","description":"Add Buffer-specific fast path in Block.paint using row slice copies instead of per-cell put calls, and fix existing buffer typing issue on main so checks pass.","timestamp":1773530076423,"segment":0}
+{"run":3,"commit":"427b169","metric":2.112,"metrics":{},"status":"keep","description":"Streamline Buffer.diff with local bindings and enumerate-based iteration to reduce per-cell overhead in frame diffs.","timestamp":1773530099125,"segment":0}

@@ -121,9 +121,12 @@ class Buffer:
             # and ensures coordinates are computed against `self`'s stride.
             return [CellWrite(i % width, i // width, cell) for i, cell in enumerate(cells)]
 
+        other_cells = other._cells
+        if cells == other_cells:
+            return []
+
         writes: list[CellWrite] = []
         append = writes.append
-        other_cells = other._cells
         for i, cell in enumerate(cells):
             if cell != other_cells[i]:
                 append(CellWrite(i % width, i // width, cell))
