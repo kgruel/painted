@@ -127,9 +127,15 @@ class Buffer:
 
         writes: list[CellWrite] = []
         append = writes.append
-        for i, cell in enumerate(cells):
-            if cell != other_cells[i]:
-                append(CellWrite(i % width, i // width, cell))
+        height = self.height
+        row_start = 0
+        for y in range(height):
+            row_end = row_start + width
+            if cells[row_start:row_end] != other_cells[row_start:row_end]:
+                for x, cell in enumerate(cells[row_start:row_end]):
+                    if cell != other_cells[row_start + x]:
+                        append(CellWrite(x, y, cell))
+            row_start = row_end
         return writes
 
     def line_hashes(self, *, include_style: bool = True) -> list[int]:
