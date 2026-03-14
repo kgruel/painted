@@ -160,32 +160,37 @@ class Block:
             dst_cells = buffer._cells
             dst_ids = buffer._ids
             buffer_width = buffer.width
+            rows = self._rows
 
             if self._ids is None:
                 if self.id is None:
+                    clear_ids = [None] * span if dst_ids is not None else None
                     for by in range(top, bottom):
-                        src_row = self._rows[by - y]
+                        src_row = rows[by - y]
                         start = by * buffer_width + left
                         dst_cells[start : start + span] = src_row[src_x : src_x + span]
-                        if dst_ids is not None:
-                            dst_ids[start : start + span] = [None] * span
+                        if dst_ids is not None and clear_ids is not None:
+                            dst_ids[start : start + span] = clear_ids
                     return
 
                 ids = buffer._ensure_ids()
+                row_ids = [self.id] * span
                 for by in range(top, bottom):
-                    src_row = self._rows[by - y]
+                    src_row = rows[by - y]
                     start = by * buffer_width + left
                     dst_cells[start : start + span] = src_row[src_x : src_x + span]
-                    ids[start : start + span] = [self.id] * span
+                    ids[start : start + span] = row_ids
                 return
 
             ids = buffer._ensure_ids()
+            src_ids = self._ids
+            assert src_ids is not None
             for by in range(top, bottom):
                 src_idx = by - y
-                src_row = self._rows[src_idx]
+                src_row = rows[src_idx]
                 start = by * buffer_width + left
                 dst_cells[start : start + span] = src_row[src_x : src_x + span]
-                ids[start : start + span] = self._ids[src_idx][src_x : src_x + span]
+                ids[start : start + span] = src_ids[src_idx][src_x : src_x + span]
             return
 
         if self._ids is None:
