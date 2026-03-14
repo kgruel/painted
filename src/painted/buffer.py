@@ -131,9 +131,11 @@ class Buffer:
         row_start = 0
         for y in range(height):
             row_end = row_start + width
-            if cells[row_start:row_end] != other_cells[row_start:row_end]:
-                for x, cell in enumerate(cells[row_start:row_end]):
-                    if cell != other_cells[row_start + x]:
+            row_cells = cells[row_start:row_end]
+            other_row = other_cells[row_start:row_end]
+            if row_cells != other_row:
+                for x, cell in enumerate(row_cells):
+                    if cell != other_row[x]:
                         append(CellWrite(x, y, cell))
             row_start = row_end
         return writes
