@@ -166,32 +166,35 @@ class Block:
             if self._ids is None:
                 if self.id is None:
                     clear_ids = [None] * span if dst_ids is not None else None
+                    start = top * buffer_width + left
                     for by in range(top, bottom):
                         src_row = rows[by - y]
-                        start = by * buffer_width + left
                         dst_cells[start : start + span] = src_row[src_x:src_end]
                         if dst_ids is not None and clear_ids is not None:
                             dst_ids[start : start + span] = clear_ids
+                        start += buffer_width
                     return
 
                 ids = buffer._ensure_ids()
                 row_ids = [self.id] * span
+                start = top * buffer_width + left
                 for by in range(top, bottom):
                     src_row = rows[by - y]
-                    start = by * buffer_width + left
                     dst_cells[start : start + span] = src_row[src_x:src_end]
                     ids[start : start + span] = row_ids
+                    start += buffer_width
                 return
 
             ids = buffer._ensure_ids()
             src_ids = self._ids
             assert src_ids is not None
+            start = top * buffer_width + left
             for by in range(top, bottom):
                 src_idx = by - y
                 src_row = rows[src_idx]
-                start = by * buffer_width + left
                 dst_cells[start : start + span] = src_row[src_x:src_end]
                 ids[start : start + span] = src_ids[src_idx][src_x : src_x + span]
+                start += buffer_width
             return
 
         if self._ids is None:
