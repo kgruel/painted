@@ -156,7 +156,8 @@ class Block:
                 return
 
             src_x = left - x
-            span = right - left
+            src_end = src_x + (right - left)
+            span = src_end - src_x
             dst_cells = buffer._cells
             dst_ids = buffer._ids
             buffer_width = buffer.width
@@ -168,7 +169,7 @@ class Block:
                     for by in range(top, bottom):
                         src_row = rows[by - y]
                         start = by * buffer_width + left
-                        dst_cells[start : start + span] = src_row[src_x : src_x + span]
+                        dst_cells[start : start + span] = src_row[src_x:src_end]
                         if dst_ids is not None and clear_ids is not None:
                             dst_ids[start : start + span] = clear_ids
                     return
@@ -178,7 +179,7 @@ class Block:
                 for by in range(top, bottom):
                     src_row = rows[by - y]
                     start = by * buffer_width + left
-                    dst_cells[start : start + span] = src_row[src_x : src_x + span]
+                    dst_cells[start : start + span] = src_row[src_x:src_end]
                     ids[start : start + span] = row_ids
                 return
 
@@ -189,7 +190,7 @@ class Block:
                 src_idx = by - y
                 src_row = rows[src_idx]
                 start = by * buffer_width + left
-                dst_cells[start : start + span] = src_row[src_x : src_x + span]
+                dst_cells[start : start + span] = src_row[src_x:src_end]
                 ids[start : start + span] = src_ids[src_idx][src_x : src_x + span]
             return
 
