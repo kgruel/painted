@@ -11,6 +11,23 @@ from .buffer import Buffer, BufferView
 from .cell import Cell, Style
 
 
+# Internal cell cache to avoid repeated Cell construction for ASCII characters.
+_cell_cache: dict[tuple[str, Style], Cell] = {}
+_CACHE_LIMIT = 4096
+
+
+def _cached_cell(char: str, style: Style) -> Cell:
+    """Return a cached Cell for single ASCII characters."""
+    key = (char, style)
+    cell = _cell_cache.get(key)
+    if cell is not None:
+        return cell
+    cell = Cell(char, style)
+    if len(_cell_cache) < _CACHE_LIMIT:
+        _cell_cache[key] = cell
+    return cell
+
+
 class Wrap(Enum):
     NONE = "none"  # single line, truncate at width
     CHAR = "char"  # break at any character
@@ -94,7 +111,7 @@ class Block:
         if wrap == Wrap.NONE:
             # Truncate at width, single line
             if content.isascii():
-                cells = [Cell(ch, style) for ch in content[:width]]
+                cells = [_cached_cell(ch, style) for ch in content[:width]]
                 cells = _pad_row(cells, width, style)
                 return Block([cells], width, id=id)
             cells = _cells_from_text(content, style, max_width=width)
@@ -108,10 +125,10 @@ class Block:
                     if width == 1:
                         cells = [Cell("…", style)]
                     else:
-                        cells = [Cell(ch, style) for ch in content[: width - 1]]
+                        cells = [_cached_cell(ch, style) for ch in content[: width - 1]]
                         cells.append(Cell("…", style))
                 else:
-                    cells = [Cell(ch, style) for ch in content]
+                    cells = [_cached_cell(ch, style) for ch in content]
                 cells = _pad_row(cells, width, style)
                 return Block([cells], width, id=id)
             if display_width(content) > width:
@@ -270,7 +287,7 @@ class Block:
 def _pad_row(cells: list[Cell], width: int, style: Style) -> list[Cell]:
     """Pad a row to the target width with space cells."""
     if len(cells) < width:
-        space = Cell(" ", style)
+        space = _cached_cell(" ", style)
         cells = cells + [space] * (width - len(cells))
     return cells
 
@@ -282,8 +299,8 @@ def _cells_from_text(text: str, style: Style, *, max_width: int | None = None) -
     """
     if text.isascii():
         if max_width is None:
-            return [Cell(ch, style) for ch in text]
-        return [Cell(ch, style) for ch in text[:max_width]]
+            return [_cached_cell(ch, style) for ch in text]
+        return [_cached_cell(ch, style) for ch in text[:max_width]]
 
     cells: list[Cell] = []
     used = 0
