@@ -14,3 +14,4 @@ htmlcov/
 .env
 HANDOFF.md
 LOG.md
+.loops/
