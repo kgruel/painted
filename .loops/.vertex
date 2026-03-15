@@ -1,7 +1,0 @@
-// painted — workspace root
-discover "./**/*.vertex"
-
-observers {
-  kyle { }
-  painted-claude { }
-}
