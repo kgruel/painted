@@ -27,6 +27,15 @@ def join_horizontal(*blocks: Block, gap: int = 0, align: Align = Align.START) ->
     has_ids = any((b.id is not None) or (b._ids is not None) for b in blocks)
     gap_cell = Cell(" ", Style())
     if not has_ids:
+        if gap == 0 and align is Align.START and all(b.height == max_height for b in blocks):
+            rows: list[tuple[Cell, ...]] = []
+            for row_idx in range(max_height):
+                row = tuple()
+                for block in blocks:
+                    row += block.row(row_idx)
+                rows.append(row)
+            return Block(rows, total_width)
+
         rows: list[tuple[Cell, ...]] = [tuple() for _ in range(max_height)]
         gap_cells = (gap_cell,) * gap
         for i, block in enumerate(blocks):
