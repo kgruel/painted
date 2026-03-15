@@ -10,6 +10,8 @@ import os
 import shutil
 import sys
 
+_ENV_SIZE_CACHE: tuple[str | None, str | None, tuple[int, int] | None] = (None, None, None)
+
 from .types import CliContext, OutputMode, Zoom
 
 
@@ -36,18 +38,28 @@ def resolve_mode(
 
 def _env_terminal_size() -> tuple[int, int] | None:
     """Return terminal size from COLUMNS/LINES when both are valid positive ints."""
+    global _ENV_SIZE_CACHE
+
     cols = os.environ.get("COLUMNS")
     lines = os.environ.get("LINES")
+    cached_cols, cached_lines, cached_size = _ENV_SIZE_CACHE
+    if cols == cached_cols and lines == cached_lines:
+        return cached_size
+
+    size: tuple[int, int] | None
     if cols is None or lines is None:
-        return None
-    try:
-        width = int(cols)
-        height = int(lines)
-    except ValueError:
-        return None
-    if width <= 0 or height <= 0:
-        return None
-    return width, height
+        size = None
+    else:
+        try:
+            width = int(cols)
+            height = int(lines)
+        except ValueError:
+            size = None
+        else:
+            size = (width, height) if width > 0 and height > 0 else None
+
+    _ENV_SIZE_CACHE = (cols, lines, size)
+    return size
 
 
 def detect_context(
