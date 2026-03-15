@@ -137,6 +137,23 @@ class Block:
         object.__setattr__(self, "_ids", frozen_ids)
         object.__setattr__(self, "_frozen", True)
 
+    @staticmethod
+    def _create(
+        rows: tuple[tuple[Cell, ...] | Sequence[Cell], ...],
+        width: int,
+        id: str | None = None,
+        ids: tuple[tuple[str | None, ...], ...] | None = None,
+    ) -> Block:
+        """Internal fast constructor — rows must be frozen tuples of correct width."""
+        b = object.__new__(Block)
+        object.__setattr__(b, "width", width)
+        object.__setattr__(b, "height", len(rows))
+        object.__setattr__(b, "id", id)
+        object.__setattr__(b, "_rows", rows)
+        object.__setattr__(b, "_ids", ids)
+        object.__setattr__(b, "_frozen", True)
+        return b
+
     def __setattr__(self, name: str, value: object) -> None:
         if getattr(self, "_frozen", False):
             raise AttributeError(f"{type(self).__name__} is immutable")
@@ -162,7 +179,7 @@ class Block:
         if wrap == Wrap.NONE:
             # Truncate at width, single line
             if content.isascii():
-                return Block((_ascii_row_tuple(content, width, style),), width, id=id)
+                return Block._create((_ascii_row_tuple(content, width, style),), width, id=id)
             cells = _cells_from_text(content, style, max_width=width)
             cells = _pad_row(cells, width, style)
             return Block([cells], width, id=id)
@@ -177,7 +194,7 @@ class Block:
                         cells = _ascii_cells(content[: width - 1], style)
                         cells.append(Cell("…", style))
                 else:
-                    return Block((_ascii_row_tuple(content, width, style),), width, id=id)
+                    return Block._create((_ascii_row_tuple(content, width, style),), width, id=id)
                 cells = _pad_row(cells, width, style)
                 return Block([cells], width, id=id)
             if display_width(content) > width:

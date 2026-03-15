@@ -51,7 +51,7 @@ def join_horizontal(*blocks: Block, gap: int = 0, align: Align = Align.START) ->
                 for block in blocks:
                     row += block.row(row_idx)
                 rows.append(row)
-            return Block(rows, total_width)
+            return Block._create(tuple(rows), total_width)
 
         rows: list[tuple[Cell, ...]] = [tuple() for _ in range(max_height)]
         gap_cells = (gap_cell,) * gap
@@ -71,7 +71,7 @@ def join_horizontal(*blocks: Block, gap: int = 0, align: Align = Align.START) ->
                 if i < len(blocks) - 1 and gap > 0:
                     rows[row_idx] += gap_cells
 
-        return Block(rows, total_width)
+        return Block._create(tuple(rows), total_width)
 
     rows: list[list[Cell]] = [[] for _ in range(max_height)]
     ids_rows: list[list[str | None]] = [[] for _ in range(max_height)]
@@ -125,7 +125,7 @@ def join_vertical(*blocks: Block, gap: int = 0, align: Align = Align.START) -> B
             if i < len(blocks) - 1 and gap > 0:
                 for _ in range(gap):
                     rows.append(gap_row)
-        return Block(rows, max_width)
+        return Block._create(tuple(rows), max_width)
 
     for i, block in enumerate(blocks):
         offset = _halign_offset(block.width, max_width, align)
@@ -190,7 +190,7 @@ def pad(
             rows.append(pad_left + block.row(row_idx) + pad_right)
         for _ in range(bottom):
             rows.append(pad_row)
-        return Block(rows, new_width, id=block.id)
+        return Block._create(tuple(rows), new_width, id=block.id)
 
     # Top padding
     for _ in range(top):
@@ -282,6 +282,8 @@ def border(
         if pos <= block.width:
             top_row[pos] = space_cell
 
+    if ids_rows is None and isinstance(top_row, list):
+        top_row = tuple(top_row)
     rows.append(top_row)
     if ids_rows is not None:
         ids_rows.append([border_id] * new_width)
@@ -321,7 +323,7 @@ def border(
         ids_rows.append([border_id] * new_width)
 
     if ids_rows is None:
-        return Block(rows, new_width, id=block.id)
+        return Block._create(tuple(rows), new_width, id=block.id)
     return Block(rows, new_width, ids=ids_rows)
 
 
