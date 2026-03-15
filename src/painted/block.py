@@ -388,13 +388,13 @@ def _cells_from_text(text: str, style: Style, *, max_width: int | None = None) -
         if max_width is not None and used + w > max_width:
             break
 
-        cells.append(Cell(ch, style))
+        cells.append(_cached_cell(ch, style))
         if w == 2:
             if max_width is not None and used + 2 > max_width:
                 # Can't fit the full wide char; drop it.
                 cells.pop()
                 break
-            cells.append(Cell(" ", style))
+            cells.append(_cached_cell(" ", style))
 
         used += w
 
