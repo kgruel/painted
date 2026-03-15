@@ -12,6 +12,7 @@ import html as _html
 from .block import Block
 from .cell import NAMED_COLORS, Style
 from ._color import _idx_to_rgb
+from ._row_ops import iter_row_spans
 
 _BASE_FG = "var(--painted-fg, var(--text))"
 _BASE_BG = "var(--painted-bg, var(--code-bg))"
@@ -67,7 +68,8 @@ def render_html(block: Block) -> str:
         last_css: str | None = None
         span_open = False
 
-        for cell in block.row(row_idx):
+        for row_span in iter_row_spans(block.row(row_idx)):
+            cell = row_span.cells[0]
             css = _style_to_css(cell.style)
             if not css:
                 if span_open:

@@ -14,6 +14,7 @@ from wcwidth import wcwidth
 from .buffer import CellWrite
 from .cell import NAMED_COLORS, Style
 from ._color import _idx_to_rgb, _nearest_basic, _rgb_to_256, _rgb_to_basic
+from ._row_ops import iter_row_spans, row_visible_text
 
 if TYPE_CHECKING:
     from .block import Block
@@ -303,7 +304,7 @@ def print_block(
         # rstrip trailing spaces — join_vertical pads to widest block,
         # which creates noise when piped to files/other tools.
         for row_idx in range(block.height):
-            line = "".join(cell.char for cell in block.row(row_idx))
+            line = row_visible_text(block.row(row_idx))
             stream.write(line.rstrip())
             stream.write("\n")
 
@@ -319,7 +320,8 @@ def write_block_ansi(block: Block, writer: Writer, stream: TextIO) -> None:
         parts: list[str] = []
         last_style: Style | None = None
 
-        for cell in block.row(row_idx):
+        for span in iter_row_spans(block.row(row_idx)):
+            cell = span.cells[0]
             if cell.style != last_style:
                 parts.append(writer.reset_style())
                 sgr = writer.apply_style(cell.style)

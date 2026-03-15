@@ -27,6 +27,6 @@
 
   wide characters
 
-  日 本 語  width=6
+  日本語 width=6
   café   width=4
 

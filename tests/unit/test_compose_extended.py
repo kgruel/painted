@@ -13,6 +13,7 @@ from painted import (
     truncate,
     vslice,
 )
+from painted.core._text_width import char_width
 from painted.core.borders import HEAVY, ROUNDED
 from tests.helpers import row_text, text_block
 
@@ -217,6 +218,16 @@ class TestTruncateIdPropagation:
         assert result.height == 2
         assert _row_ids(result, 0) == ["a", "b", "c"]
         assert _row_ids(result, 1) == ["e", "f", "g"]
+
+    def test_truncate_preserves_wide_char_placeholder_pairs(self):
+        """Truncation must not leave a wide-char lead cell without its placeholder."""
+        result = truncate(Block.text("A\u4e16B", Style()), 3)
+        row = result.row(0)
+        for idx, cell in enumerate(row):
+            if char_width(cell.char) == 2:
+                assert idx + 1 < len(row)
+                assert row[idx + 1].char == " "
+                assert row[idx + 1].style == cell.style
 
 
 # ---------------------------------------------------------------------------

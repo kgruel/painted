@@ -5,9 +5,10 @@ from __future__ import annotations
 from enum import Enum
 
 from ._text_width import char_width, display_width
-from .block import Block
+from .block import Block, _cells_from_text
 from .borders import ROUNDED, BorderChars
 from .cell import Cell, Style
+from ._row_ops import blank_cell, take_row_prefix
 
 
 class Align(Enum):
@@ -345,27 +346,49 @@ def truncate(block: Block, width: int, ellipsis: str = "…") -> Block:
     if block.width <= width:
         return block
 
+    ellipsis_width = display_width(ellipsis)
     rows: list[list[Cell]] = []
     ids_rows: list[list[str | None]] | None = [] if block._ids is not None else None
     for row_idx in range(block.height):
         src_row = block.row(row_idx)
+        src_ids = block._ids[row_idx] if block._ids is not None else None
         if width <= 0:
             rows.append([])
             if ids_rows is not None:
                 ids_rows.append([])
-        elif width == 1:
-            # Only room for ellipsis
-            rows.append([Cell(ellipsis, src_row[0].style)])
-            if ids_rows is not None:
-                ids_rows.append([block._ids[row_idx][0]])
         else:
-            new_row = list(src_row[: width - 1])
-            new_row.append(Cell(ellipsis, src_row[width - 1].style))
+            if ellipsis_width <= 0:
+                prefix_budget = width
+            elif ellipsis_width >= width:
+                prefix_budget = 0
+            else:
+                prefix_budget = width - ellipsis_width
+
+            prefix_cells, prefix_ids, used = take_row_prefix(src_row, prefix_budget, src_ids)
+            style_idx = min(len(src_row) - 1, prefix_budget) if src_row else 0
+            fill_style = src_row[style_idx].style if src_row else Style()
+            while used < prefix_budget:
+                prefix_cells.append(blank_cell(fill_style))
+                if prefix_ids is not None and src_ids is not None:
+                    prefix_ids.append(src_ids[used])
+                used += 1
+
+            ell_style = src_row[style_idx].style if src_row else Style()
+            ell_cells = _cells_from_text(ellipsis, ell_style, max_width=width - used)
+            if not ell_cells and width > used:
+                ell_cells = [blank_cell(ell_style)] * (width - used)
+
+            new_row = prefix_cells + ell_cells
+            if len(new_row) < width:
+                new_row.extend([blank_cell(ell_style)] * (width - len(new_row)))
             rows.append(new_row)
             if ids_rows is not None:
-                src_ids = block._ids[row_idx]
-                new_ids = list(src_ids[: width - 1])
-                new_ids.append(src_ids[width - 1])
+                if prefix_ids is None:
+                    prefix_ids = []
+                ell_id_idx = min(len(src_ids) - 1, prefix_budget) if src_ids else 0
+                ell_id = src_ids[ell_id_idx] if src_ids else None
+                new_ids = list(prefix_ids)
+                new_ids.extend([ell_id] * (width - len(new_ids)))
                 ids_rows.append(new_ids)
 
     if ids_rows is None:

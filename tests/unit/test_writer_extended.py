@@ -401,3 +401,16 @@ class TestPrintBlock:
         print_block(block, buf)  # use_ansi=None (auto)
         output = buf.getvalue()
         assert "\x1b" not in output
+
+    def test_print_block_plain_wide_chars_do_not_emit_placeholder_spaces(self):
+        block = Block.text("A\u4e16B", Style())
+        buf = io.StringIO()
+        print_block(block, buf, use_ansi=False)
+        assert buf.getvalue() == "A世B\n"
+
+    def test_print_block_ansi_wide_chars_do_not_emit_placeholder_spaces(self):
+        block = Block.text("A\u4e16B", Style(fg="red"))
+        buf = io.StringIO()
+        print_block(block, buf, use_ansi=True)
+        visible = re.sub(r"\x1b\[[0-9;]*m", "", buf.getvalue())
+        assert visible == "A世B\n"

@@ -6,6 +6,7 @@ from collections.abc import Sequence
 from enum import Enum
 from typing import cast
 
+from ._row_ops import blank_cell, iter_row_spans
 from ._text_width import char_width, display_width
 from .buffer import Buffer, BufferView
 from .cell import Cell, Style
@@ -274,76 +275,92 @@ class Block:
             if left >= right or top >= bottom:
                 return
 
-            src_x = left - x
-            src_end = src_x + (right - left)
-            span = src_end - src_x
-            dst_cells = buffer._cells
-            dst_ids = buffer._ids
-            buffer_width = buffer.width
-            rows = self._rows
+            if 0 <= x and x + self.width <= buffer.width:
+                src_x = left - x
+                src_end = src_x + (right - left)
+                span = src_end - src_x
+                dst_cells = buffer._cells
+                dst_ids = buffer._ids
+                buffer_width = buffer.width
+                rows = self._rows
 
-            if self._ids is None:
-                if self.id is None:
-                    clear_ids = [None] * span if dst_ids is not None else None
+                if self._ids is None:
+                    if self.id is None:
+                        clear_ids = [None] * span if dst_ids is not None else None
+                        start = top * buffer_width + left
+                        for by in range(top, bottom):
+                            src_row = rows[by - y]
+                            dst_cells[start : start + span] = src_row[src_x:src_end]
+                            if dst_ids is not None and clear_ids is not None:
+                                dst_ids[start : start + span] = clear_ids
+                            start += buffer_width
+                        return
+
+                    ids = buffer._ensure_ids()
+                    row_ids = [self.id] * span
                     start = top * buffer_width + left
                     for by in range(top, bottom):
                         src_row = rows[by - y]
                         dst_cells[start : start + span] = src_row[src_x:src_end]
-                        if dst_ids is not None and clear_ids is not None:
-                            dst_ids[start : start + span] = clear_ids
+                        ids[start : start + span] = row_ids
                         start += buffer_width
                     return
 
                 ids = buffer._ensure_ids()
-                row_ids = [self.id] * span
+                src_ids = self._ids
+                assert src_ids is not None
                 start = top * buffer_width + left
                 for by in range(top, bottom):
-                    src_row = rows[by - y]
+                    src_idx = by - y
+                    src_row = rows[src_idx]
                     dst_cells[start : start + span] = src_row[src_x:src_end]
-                    ids[start : start + span] = row_ids
+                    ids[start : start + span] = src_ids[src_idx][src_x : src_x + span]
                     start += buffer_width
                 return
 
-            ids = buffer._ensure_ids()
-            src_ids = self._ids
-            assert src_ids is not None
-            start = top * buffer_width + left
-            for by in range(top, bottom):
-                src_idx = by - y
-                src_row = rows[src_idx]
-                dst_cells[start : start + span] = src_row[src_x:src_end]
-                ids[start : start + span] = src_ids[src_idx][src_x : src_x + span]
-                start += buffer_width
-            return
-
-        if self._ids is None:
-            if self.id is None:
-                for row_idx in range(self.height):
-                    for col_idx in range(self.width):
-                        bx = x + col_idx
-                        by = y + row_idx
-                        cell = self._rows[row_idx][col_idx]
-                        buffer.put(bx, by, cell.char, cell.style)
-                return
-
-            for row_idx in range(self.height):
-                for col_idx in range(self.width):
-                    bx = x + col_idx
-                    by = y + row_idx
-                    cell = self._rows[row_idx][col_idx]
-                    buffer.put_id(bx, by, cell.char, cell.style, self.id)
-            return
+        target = buffer
+        uniform_id = self.id if self._ids is None else None
 
         for row_idx in range(self.height):
-            for col_idx in range(self.width):
-                bx = x + col_idx
-                by = y + row_idx
-                cell = self._rows[row_idx][col_idx]
-                cid = self._ids[row_idx][col_idx]
-                if cid is None:
-                    buffer.put(bx, by, cell.char, cell.style)
-                else:
-                    buffer.put_id(bx, by, cell.char, cell.style, cid)
+            by = y + row_idx
+            if by < 0 or by >= target.height:
+                continue
+
+            src_row = self._rows[row_idx]
+            src_ids = self._ids[row_idx] if self._ids is not None else None
+
+            for span in iter_row_spans(src_row, src_ids):
+                bx = x + span.start
+
+                if span.width == 1:
+                    if 0 <= bx < target.width:
+                        cell = span.cells[0]
+                        cid = span.ids[0] if span.ids is not None else uniform_id
+                        if cid is None:
+                            target.put(bx, by, cell.char, cell.style)
+                        else:
+                            target.put_id(bx, by, cell.char, cell.style, cid)
+                    continue
+
+                if 0 <= bx and bx + span.width <= target.width:
+                    for offset, cell in enumerate(span.cells):
+                        cid = span.ids[offset] if span.ids is not None else uniform_id
+                        px = bx + offset
+                        if cid is None:
+                            target.put(px, by, cell.char, cell.style)
+                        else:
+                            target.put_id(px, by, cell.char, cell.style, cid)
+                    continue
+
+                for offset, cell in enumerate(span.cells):
+                    px = bx + offset
+                    if 0 <= px < target.width:
+                        blank = blank_cell(cell.style)
+                        cid = span.ids[offset] if span.ids is not None else uniform_id
+                        if cid is None:
+                            target.put(px, by, blank.char, blank.style)
+                        else:
+                            target.put_id(px, by, blank.char, blank.style, cid)
 
     def row(self, y: int) -> tuple[Cell, ...]:
         """Access a row by index."""

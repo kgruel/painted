@@ -5,11 +5,14 @@ from __future__ import annotations
 import pytest
 
 from painted import Block, Style, Wrap
+from painted.core._text_width import display_width
 from painted.core.block import _char_wrap, _word_wrap, _take_word_prefix, _cells_from_text
 from painted.core.buffer import Buffer
+from painted.core.cell import Cell
 
 
 S = Style()
+S_RED = Style(fg="red")
 
 
 def _chars(block: Block, y: int = 0) -> list[str]:
@@ -185,6 +188,19 @@ class TestBlockPaint:
         buf = Buffer(5, 5)
         b.paint(buf, 3, 2)
         assert buf.get(3, 2).char == "Z"
+
+    def test_paint_wide_char_into_too_narrow_buffer_does_not_overflow(self):
+        b = Block.text("\u4e16", S)
+        buf = Buffer(1, 1)
+        b.paint(buf, 0, 0)
+        rendered = "".join(buf.get(x, 0).char for x in range(buf.width))
+        assert display_width(rendered) <= buf.width
+
+    def test_paint_left_clipped_wide_char_does_not_leave_placeholder(self):
+        b = Block.text("\u4e16", S_RED)
+        buf = Buffer(1, 1)
+        b.paint(buf, -1, 0)
+        assert buf.get(0, 0) == Cell(" ", S_RED)
 
 
 # --- Block.row() edge cases ---

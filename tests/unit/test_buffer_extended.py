@@ -1,6 +1,7 @@
 """Extended tests for Buffer and BufferView — covering scroll, clone, hit, views."""
 
 from painted.core.buffer import Buffer, BufferView, CellWrite
+from painted.core._text_width import display_width
 from painted.core.cell import EMPTY_CELL, Cell, Style
 
 S = Style()
@@ -54,6 +55,13 @@ class TestBufferPutText:
         buf.put_text(0, 0, "\u4e16", S)  # '世' is width-2
         assert buf.get(0, 0) == Cell("\u4e16", S)
         assert buf.get(1, 0) == Cell(" ", S)  # placeholder
+
+    def test_put_text_wide_char_does_not_overflow_narrow_buffer(self):
+        """A narrow target must not end up containing a half-rendered wide glyph."""
+        buf = Buffer(1, 1)
+        buf.put_text(0, 0, "\u4e16", S)
+        rendered = "".join(buf.get(x, 0).char for x in range(buf.width))
+        assert display_width(rendered) <= buf.width
 
     def test_put_text_skips_non_printable(self):
         """Control characters (wcwidth < 0) are skipped."""
@@ -302,6 +310,19 @@ class TestBufferScroll:
         assert self._row_chars(buf, 0) == "bbb"
         assert self._row_chars(buf, 3) == "   "
 
+    def test_scroll_moves_hit_ids_with_cells(self):
+        buf = Buffer(2, 3)
+        for y, tag in enumerate(("a", "b", "c")):
+            buf.put_id(0, y, tag.upper(), S, tag)
+
+        buf.scroll_region_in_place(0, 2, 1)
+
+        assert buf.get(0, 0) == Cell("B", S)
+        assert buf.hit(0, 0) == "b"
+        assert buf.get(0, 1) == Cell("C", S)
+        assert buf.hit(0, 1) == "c"
+        assert buf.hit(0, 2) is None
+
 
 # -- BufferView: coordinate translation & clipping --------------------------
 
@@ -361,13 +382,13 @@ class TestBufferView:
         assert buf.get(1, 0) == Cell("\u4e16", S)
         assert buf.get(2, 0) == Cell(" ", S)  # placeholder
 
-    def test_view_put_text_wide_char_clips_placeholder(self):
-        """Wide char at view edge: char placed but placeholder clipped."""
+    def test_view_put_text_wide_char_fully_clips_at_edge(self):
+        """A wide char that cannot fit in the view should be skipped entirely."""
         buf = Buffer(10, 10)
         view = buf.region(0, 0, 2, 1)
-        # Place wide char at col 1 — placeholder would be at col 2, outside view width 2
+        # Place a wide char at the last visible column.
         view.put_text(1, 0, "\u4e16", S)
-        assert buf.get(1, 0) == Cell("\u4e16", S)
+        assert buf.get(1, 0) == EMPTY_CELL
         assert buf.get(2, 0) == EMPTY_CELL  # placeholder clipped
 
     def test_view_put_text_skips_non_printable(self):

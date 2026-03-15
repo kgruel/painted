@@ -7,6 +7,7 @@ from typing import cast
 
 from wcwidth import wcwidth
 
+from ._row_ops import blank_cell
 from .cell import EMPTY_CELL, Cell, Style
 
 
@@ -66,6 +67,7 @@ class Buffer:
     def put_text(self, x: int, y: int, text: str, style: Style) -> None:
         """Write a string horizontally, respecting wide characters."""
         col = x
+        blank = blank_cell(style)
         for ch in text:
             w = wcwidth(ch)
             if w < 0:
@@ -74,19 +76,36 @@ class Buffer:
             if w == 0:
                 # Zero-width (combining) — skip
                 continue
-            # Place the character
-            idx = self._index(col, y)
-            if idx is not None:
-                self._cells[idx] = Cell(ch, style)
-                if self._ids is not None:
-                    self._ids[idx] = None
-            # For wide chars (w == 2), fill the next cell with a placeholder
-            if w == 2:
-                next_idx = self._index(col + 1, y)
-                if next_idx is not None:
-                    self._cells[next_idx] = Cell(" ", style)
+            if w == 1:
+                idx = self._index(col, y)
+                if idx is not None:
+                    self._cells[idx] = Cell(ch, style)
                     if self._ids is not None:
-                        self._ids[next_idx] = None
+                        self._ids[idx] = None
+                col += w
+                continue
+
+            # Only write a wide glyph when it fully fits; otherwise blank the
+            # visible overlap so the row stays column-valid.
+            if 0 <= col and col + w <= self.width and 0 <= y < self.height:
+                idx = self._index(col, y)
+                if idx is not None:
+                    self._cells[idx] = Cell(ch, style)
+                    if self._ids is not None:
+                        self._ids[idx] = None
+                for dx in range(1, w):
+                    next_idx = self._index(col + dx, y)
+                    if next_idx is not None:
+                        self._cells[next_idx] = blank
+                        if self._ids is not None:
+                            self._ids[next_idx] = None
+            else:
+                for dx in range(w):
+                    idx = self._index(col + dx, y)
+                    if idx is not None:
+                        self._cells[idx] = blank
+                        if self._ids is not None:
+                            self._ids[idx] = None
             col += w
 
     def fill(self, x: int, y: int, w: int, h: int, char: str, style: Style) -> None:
@@ -197,6 +216,8 @@ class Buffer:
             for y in range(top, bottom + 1):
                 start = y * self.width
                 self._cells[start : start + self.width] = [fill] * self.width
+                if self._ids is not None:
+                    self._ids[start : start + self.width] = [None] * self.width
             return
 
         w = self.width
@@ -207,9 +228,13 @@ class Buffer:
                 dst = y * w
                 src = (y + n) * w
                 self._cells[dst : dst + w] = self._cells[src : src + w]
+                if self._ids is not None:
+                    self._ids[dst : dst + w] = self._ids[src : src + w]
             for y in range(bottom - n + 1, bottom + 1):
                 start = y * w
                 self._cells[start : start + w] = [fill] * w
+                if self._ids is not None:
+                    self._ids[start : start + w] = [None] * w
         else:
             m = -n
             # Scroll down: copy rows upwards in index space (descending y).
@@ -217,9 +242,13 @@ class Buffer:
                 dst = y * w
                 src = (y - m) * w
                 self._cells[dst : dst + w] = self._cells[src : src + w]
+                if self._ids is not None:
+                    self._ids[dst : dst + w] = self._ids[src : src + w]
             for y in range(top, top + m):
                 start = y * w
                 self._cells[start : start + w] = [fill] * w
+                if self._ids is not None:
+                    self._ids[start : start + w] = [None] * w
 
     def clone(self) -> Buffer:
         """Deep copy for diff comparison."""
@@ -269,15 +298,27 @@ class BufferView:
     def put_text(self, x: int, y: int, text: str, style: Style) -> None:
         """Write text, clipping characters that fall outside the view."""
         col = x
+        blank = blank_cell(style)
         for ch in text:
             w = wcwidth(ch)
             if w <= 0:
                 continue
-            # Only write if within clip bounds
-            if 0 <= col < self._w and 0 <= y < self._h:
+
+            if w == 1:
+                if 0 <= col < self._w and 0 <= y < self._h:
+                    self._buffer.put(self._ox + col, self._oy + y, ch, style)
+                col += w
+                continue
+
+            if 0 <= col and col + w <= self._w and 0 <= y < self._h:
                 self._buffer.put(self._ox + col, self._oy + y, ch, style)
-                if w == 2 and col + 1 < self._w:
-                    self._buffer.put(self._ox + col + 1, self._oy + y, " ", style)
+                for dx in range(1, w):
+                    self._buffer.put(self._ox + col + dx, self._oy + y, " ", style)
+            else:
+                for dx in range(w):
+                    px = col + dx
+                    if 0 <= px < self._w and 0 <= y < self._h:
+                        self._buffer.put(self._ox + px, self._oy + y, blank.char, blank.style)
             col += w
 
     def fill(self, x: int, y: int, w: int, h: int, char: str, style: Style) -> None:
