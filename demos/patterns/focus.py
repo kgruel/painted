@@ -212,7 +212,7 @@ def _details_panel(state: AppState, *, width: int, height: int) -> Block:
     cmd = state.last_command or "(none)"
 
     rows: list[Block] = [
-        Block.text("selected service:", Style(dim=True), width=content_w),
+        Block.text("selected service:", STYLE_DIM, width=content_w),
         Block.text(
             f"  {svc.name}  v{svc.version}  {svc.region}" if svc else "  (none)",
             Style(bold=True),
@@ -220,16 +220,16 @@ def _details_panel(state: AppState, *, width: int, height: int) -> Block:
         ),
         Block.text(
             f"  health={svc.health}  p95={svc.p95_ms}ms  err={svc.error_rate:.2f}%" if svc else "",
-            (_service_style(svc).merge(Style(dim=True)) if svc else Style(dim=True)),
+            (_service_style(svc).merge(STYLE_DIM) if svc else STYLE_DIM),
             width=content_w,
         ),
         Block.text("", Style(), width=content_w),
-        Block.text("last command:", Style(dim=True), width=content_w),
+        Block.text("last command:", STYLE_DIM, width=content_w),
         Block.text(
-            f"  {cmd}", p.accent if state.last_command else Style(dim=True), width=content_w
+            f"  {cmd}", p.accent if state.last_command else STYLE_DIM, width=content_w
         ),
         Block.text("", Style(), width=content_w),
-        Block.text("recent deploy log:", Style(dim=True), width=content_w),
+        Block.text("recent deploy log:", STYLE_DIM, width=content_w),
         Block.text("  10:34:12Z  build ✓  sha=9f2c7a1", p.muted, width=content_w),
         Block.text("  10:34:20Z  rollout  4/4 healthy", p.muted, width=content_w),
         Block.text("  10:34:24Z  metrics  p95=72ms err=0.08%", p.muted, width=content_w),
@@ -534,15 +534,15 @@ def _key_frames(result: ScenarioResult) -> list[tuple[str, object]]:
 def _frame_block(frame: object, *, width: int, max_lines: int) -> Block:
     # CapturedFrame: .lines is list[str] of exact surface width lines.
     lines = getattr(frame, "lines", [])
-    rows = [Block.text(line.rstrip(), Style(dim=True), width=width) for line in lines[:max_lines]]
+    rows = [Block.text(line.rstrip(), STYLE_DIM, width=width) for line in lines[:max_lines]]
     if not rows:
-        return Block.text("(no frame)", Style(dim=True), width=width)
+        return Block.text("(no frame)", STYLE_DIM, width=width)
     return join_vertical(*rows)
 
 
 def _render_summary(results: list[ScenarioResult], width: int) -> Block:
     p = current_palette()
-    dim = Style(dim=True)
+    dim = STYLE_DIM
     icons = current_icons()
     sections: list[Block] = []
 
@@ -563,7 +563,7 @@ def _render_summary(results: list[ScenarioResult], width: int) -> Block:
 
 def _render_detailed(results: list[ScenarioResult], width: int) -> Block:
     p = current_palette()
-    dim = Style(dim=True)
+    dim = STYLE_DIM
     icons = current_icons()
     sections: list[Block] = []
     snap_w = max(20, min(width - 6, 96))
@@ -589,7 +589,7 @@ def _render_detailed(results: list[ScenarioResult], width: int) -> Block:
 
 def _render_full(results: list[ScenarioResult], width: int) -> Block:
     p = current_palette()
-    dim = Style(dim=True)
+    dim = STYLE_DIM
     icons = current_icons()
     sections: list[Block] = []
     snap_w = max(20, min(width - 6, 120))
