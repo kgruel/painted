@@ -252,10 +252,11 @@ class Buffer:
 
     def clone(self) -> Buffer:
         """Deep copy for diff comparison."""
-        buf = Buffer(self.width, self.height)
+        buf = object.__new__(Buffer)
+        buf.width = self.width
+        buf.height = self.height
         buf._cells = list(self._cells)  # Cells are frozen, shallow copy is fine
-        if self._ids is not None:
-            buf._ids = list(self._ids)
+        buf._ids = list(self._ids) if self._ids is not None else None
         return buf
 
 
