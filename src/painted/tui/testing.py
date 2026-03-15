@@ -151,7 +151,8 @@ class TestSurface:
         if self.write_ansi and (writes or needs_clear):
             self.surface._writer.write_frame(writes, clear_first=needs_clear)
 
-        # Swap: current becomes previous for next frame.
-        self.surface._prev = buf.clone()
+        # Snapshot once: previous frame state for next diff + captured frame payload.
+        snapshot = buf.clone()
+        self.surface._prev = snapshot
 
-        frames.append(CapturedFrame(buffer=buf.clone(), writes=tuple(writes)))
+        frames.append(CapturedFrame(buffer=snapshot, writes=tuple(writes)))

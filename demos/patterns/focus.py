@@ -147,7 +147,12 @@ def _services_panel(state: AppState, *, width: int, height: int) -> Block:
         p95 = "--" if svc.p95_ms == 0 else f"{svc.p95_ms:>3d}"
         err = f"{svc.error_rate:>5.2f}"
 
-        base = _service_style(svc)
+        if svc.health == "ok":
+            base = p.success
+        elif svc.health == "degraded":
+            base = p.warning
+        else:
+            base = p.error
         row_style = base.merge(Style(bold=True)) if selected else base.merge(p.muted)
         line = f"{marker} {svc.name:<20.20s} {health:<8s} {p95:>3s}  {err:>5s}"
         rows.append(Block.text(line, row_style, width=content_w))
