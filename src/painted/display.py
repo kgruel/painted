@@ -12,62 +12,69 @@ from __future__ import annotations
 import json
 import sys
 from collections.abc import Callable
-from typing import Any, TextIO
+from typing import TYPE_CHECKING, Any, TextIO
 
-from contextlib import nullcontext
-
-from .core.block import Block
-from .core.writer import print_block
-from .cli.types import Format, OutputMode, Zoom
-from .cli.context import detect_context
-from .icon_set import ASCII_ICONS, use_icons
+if TYPE_CHECKING:
+    from .core.block import Block
 
 _MISSING = object()
+
+
+def _format_value(fmt: Any) -> str:
+    if isinstance(fmt, str):
+        return fmt
+    value = getattr(fmt, "value", None)
+    if isinstance(value, str):
+        return value
+    return str(fmt)
+
+
+def _detect_show_context(force_plain: bool) -> tuple[bool, int]:
+    if force_plain:
+        use_ansi = False
+    else:
+        stdout = sys.stdout
+        is_tty = stdout.isatty()
+        use_ansi = is_tty
+
+    import shutil
+
+    width = shutil.get_terminal_size().columns
+    return use_ansi, width
 
 
 def show(
     data: Any = _MISSING,
     *,
-    zoom: Zoom = Zoom.DETAILED,
-    lens: Callable[[Any, int, int], Block] | None = None,
-    format: Format = Format.AUTO,
+    zoom: int | None = None,
+    lens: "Callable[[Any, int, int], Block] | None" = None,
+    format: Any = "auto",
     file: TextIO = sys.stdout,
 ) -> None:
-    """Display data with auto-detected formatting.
+    """Display data with auto-detected formatting."""
+    if zoom is None:
+        zoom = 2  # Zoom.DETAILED
 
-    Four paths:
-    - No args: blank line (like print())
-    - Block: print directly via print_block
-    - JSON format (piped or explicit): json.dumps with default=str
-    - Otherwise: render through lens (default shape_lens) then print_block
-
-    Args:
-        data: Any Python value, or a pre-built Block. Omit for blank line.
-        zoom: Detail level (default SUMMARY).
-        lens: Render function override (default: shape_lens).
-        format: Force output format (default: auto-detect from TTY).
-        file: Output stream (default: sys.stdout).
-    """
     # No args — blank line
     if data is _MISSING:
         file.write("\n")
         file.flush()
         return
 
-    from .views.lens import shape_lens
+    fmt = _format_value(format)
+    is_json = fmt == "json"
+    force_plain = fmt == "plain"
 
-    # Resolve format to bools — JSON short-circuits, plain suppresses ANSI
-    is_json = format == Format.JSON
-    force_plain = format == Format.PLAIN
+    # Block passthrough — avoid importing Block for common builtin payloads
+    if not isinstance(data, (dict, list, set, tuple, str, int, float, bool)) and data is not None:
+        from .core.block import Block
 
-    # Block passthrough — already rendered, no icon resolution needed
-    if isinstance(data, Block):
-        if is_json:
-            # Can't JSON-serialize a Block, fall through to ANSI/plain
-            pass
-        ctx = detect_context(zoom, OutputMode.AUTO, force_plain=force_plain)
-        print_block(data, file, use_ansi=ctx.use_ansi)
-        return
+        if isinstance(data, Block):
+            from .core.writer import print_block
+
+            use_ansi, _width = _detect_show_context(force_plain)
+            print_block(data, file, use_ansi=use_ansi)
+            return
 
     # JSON path — serialize directly, bypasses render pipeline
     if is_json:
@@ -76,8 +83,7 @@ def show(
         file.flush()
         return
 
-    # Detect output context
-    ctx = detect_context(zoom, OutputMode.AUTO, force_plain=force_plain)
+    use_ansi, width = _detect_show_context(force_plain)
 
     # Scalars — no structure to inspect, just print
     if lens is None and (data is None or isinstance(data, (str, int, float, bool))):
@@ -87,8 +93,15 @@ def show(
         return
 
     # Rendered path — scope ASCII icons for plain output, restored on exit
-    icons_scope = use_icons(ASCII_ICONS) if not ctx.use_ansi else nullcontext()
+    from .core.writer import print_block
+    from .views.lens.shape import shape_lens
+
     render_fn = lens or shape_lens
-    with icons_scope:
-        block = render_fn(data, ctx.zoom, ctx.width)
-    print_block(block, file, use_ansi=ctx.use_ansi)
+    if not use_ansi and lens is not None:
+        from .icon_set import ASCII_ICONS, use_icons
+
+        with use_icons(ASCII_ICONS):
+            block = render_fn(data, zoom, width)
+    else:
+        block = render_fn(data, zoom, width)
+    print_block(block, file, use_ansi=use_ansi)
