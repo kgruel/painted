@@ -18,39 +18,12 @@ For CLI harness and in-place rendering:
     from painted.inplace import InPlaceRenderer
 """
 
-# --- Eager: core primitives (always cheap, no higher-layer deps) ---
-
-from .core.block import Block, Wrap
-from .core.borders import ASCII, DOUBLE, HEAVY, LIGHT, ROUNDED, BorderChars
-from .core.cell import EMPTY_CELL, Cell, Style
-from .core.compose import (
-    Align,
-    border,
-    join_horizontal,
-    join_responsive,
-    join_vertical,
-    pad,
-    truncate,
-    vslice,
-)
-from .core.span import Line, Span
-from .core.writer import ColorDepth, Writer, print_block
-from .core.html import render_html
-from .core.zoom import Zoom
-
-# --- Eager: shared root primitives (leaf nodes, no higher-layer deps) ---
-
-from .cursor import Cursor, CursorMode
-from .viewport import Viewport
-
-# --- Lazy: everything else (cli, views, aesthetic, display) ---
-#
-# This ensures `import painted.core` or `from painted import Block` does not
-# pull in cli/, views/, or tui/. Higher-layer symbols are resolved on first
-# access via __getattr__.
+# Root package is fully lazy. This keeps `import painted.core` and
+# `from painted import ...` cold-start cost low by avoiding eager imports
+# of renderer/framework modules until symbols are actually accessed.
 
 __all__ = [
-    # Primitives (eager)
+    # Primitives
     "Style",
     "Cell",
     "EMPTY_CELL",
@@ -59,7 +32,7 @@ __all__ = [
     "Block",
     "Wrap",
     "Zoom",
-    # Composition (eager)
+    # Composition
     "Align",
     "join_horizontal",
     "join_vertical",
@@ -77,14 +50,14 @@ __all__ = [
     "DOUBLE",
     "LIGHT",
     "ASCII",
-    # Output (eager)
+    # Output
     "Writer",
     "ColorDepth",
     "print_block",
     "render_html",
-    # Display (lazy)
+    # Display
     "show",
-    # CLI framework (lazy)
+    # CLI framework
     "OutputMode",
     "Format",
     "CliContext",
@@ -103,9 +76,9 @@ __all__ = [
     "parse_format",
     "resolve_mode",
     "detect_context",
-    # In-place rendering (lazy)
+    # In-place rendering
     "InPlaceRenderer",
-    # Aesthetic (lazy)
+    # Aesthetic
     "Palette",
     "DEFAULT_PALETTE",
     "NORD_PALETTE",
@@ -120,7 +93,6 @@ __all__ = [
     "reset_icons",
 ]
 
-# Mapping from lazy symbol name → (module, name) for __getattr__
 _LAZY_IMPORTS: dict[str, tuple[str, str]] = {}
 
 
@@ -128,6 +100,32 @@ def _register_lazy(module: str, names: list[str]) -> None:
     for name in names:
         _LAZY_IMPORTS[name] = (module, name)
 
+
+_register_lazy(".core.cell", ["Cell", "EMPTY_CELL", "Style"])
+_register_lazy(".core.span", ["Line", "Span"])
+_register_lazy(".core.block", ["Block", "Wrap"])
+_register_lazy(".core.zoom", ["Zoom"])
+_register_lazy(
+    ".core.compose",
+    [
+        "Align",
+        "border",
+        "join_horizontal",
+        "join_responsive",
+        "join_vertical",
+        "pad",
+        "truncate",
+        "vslice",
+    ],
+)
+_register_lazy(
+    ".core.borders",
+    ["ASCII", "DOUBLE", "HEAVY", "LIGHT", "ROUNDED", "BorderChars"],
+)
+_register_lazy(".core.writer", ["ColorDepth", "Writer", "print_block"])
+_register_lazy(".core.html", ["render_html"])
+_register_lazy(".cursor", ["Cursor", "CursorMode"])
+_register_lazy(".viewport", ["Viewport"])
 
 _register_lazy(
     ".cli",
@@ -188,7 +186,6 @@ def __getattr__(name: str):
 
         mod = importlib.import_module(module_path, __name__)
         value = getattr(mod, attr)
-        # Cache on module to avoid repeated __getattr__ calls
         globals()[name] = value
         return value
     raise AttributeError(f"module 'painted' has no attribute {name!r}")
