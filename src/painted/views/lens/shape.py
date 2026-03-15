@@ -52,9 +52,6 @@ def shape_lens(content: Any, zoom: int, width: int) -> Block:
 
     For nested structures, each nesting level reduces effective zoom by 1.
     """
-    from .chart import chart_lens
-    from .tree import tree_lens
-
     if width <= 0:
         return Block.empty(0, 1)
 
@@ -70,13 +67,19 @@ def shape_lens(content: Any, zoom: int, width: int) -> Block:
 
     # Auto-dispatch: numeric data -> chart
     if _is_numeric_sequence(content):
+        from .chart import chart_lens
+
         return chart_lens(content, zoom, width)
 
     if _is_labeled_numeric(content):
+        from .chart import chart_lens
+
         return chart_lens(content, zoom, width)
 
     # Auto-dispatch: hierarchical data -> tree
     if _is_hierarchical(content):
+        from .tree import tree_lens
+
         return tree_lens(content, zoom, width)
 
     if isinstance(content, dict):
