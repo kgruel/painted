@@ -1,0 +1,2 @@
+{"type":"config","name":"painted real-world pipeline profiling","metricName":"pipeline_ms","metricUnit":"ms","bestDirection":"lower"}
+{"run":1,"commit":"54c9772","metric":0,"metrics":{},"status":"crash","description":"Baseline attempt failed: benchmark passed --static to CliRunner instances that do not advertise mode flags when fetch_stream/handlers are omitted.","timestamp":1773560840283,"segment":0}
