@@ -174,7 +174,7 @@ class Block:
 
         if width is None:
             cells = _cells_from_text(content, style)
-            return Block([cells], len(cells), id=id)
+            return Block._create((tuple(cells),), len(cells), id=id)
 
         if wrap == Wrap.NONE:
             # Truncate at width, single line
@@ -182,7 +182,7 @@ class Block:
                 return Block._create((_ascii_row_tuple(content, width, style),), width, id=id)
             cells = _cells_from_text(content, style, max_width=width)
             cells = _pad_row(cells, width, style)
-            return Block([cells], width, id=id)
+            return Block._create((tuple(cells),), width, id=id)
 
         if wrap == Wrap.ELLIPSIS:
             # Truncate with ellipsis if needed
@@ -196,7 +196,7 @@ class Block:
                 else:
                     return Block._create((_ascii_row_tuple(content, width, style),), width, id=id)
                 cells = _pad_row(cells, width, style)
-                return Block([cells], width, id=id)
+                return Block._create((tuple(cells),), width, id=id)
             if display_width(content) > width:
                 if width == 1:
                     cells = [Cell("…", style)]
@@ -206,7 +206,7 @@ class Block:
             else:
                 cells = _cells_from_text(content, style, max_width=width)
             cells = _pad_row(cells, width, style)
-            return Block([cells], width, id=id)
+            return Block._create((tuple(cells),), width, id=id)
 
         if wrap == Wrap.CHAR:
             # Break at any character boundary
