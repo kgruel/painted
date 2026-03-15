@@ -356,10 +356,16 @@ class Block:
         return self.id
 
 
+_space_cells: dict[Style, Cell] = {}
+
+
 def _pad_row(cells: list[Cell], width: int, style: Style) -> list[Cell]:
     """Pad a row to the target width with space cells."""
     if len(cells) < width:
-        space = _cached_cell(" ", style)
+        space = _space_cells.get(style)
+        if space is None:
+            space = Cell(" ", style)
+            _space_cells[style] = space
         cells = cells + [space] * (width - len(cells))
     return cells
 
