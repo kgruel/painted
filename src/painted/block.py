@@ -44,10 +44,13 @@ def _ascii_row_tuple(chars: str, width: int, style: Style) -> tuple[Cell, ...]:
         m = {}
         _style_cell_maps[style] = m
     src = chars[:width]
-    for ch in src:
-        if ch not in m:
-            m[ch] = Cell(ch, style)
-    row = tuple(map(m.__getitem__, src))
+    try:
+        row = tuple(map(m.__getitem__, src))
+    except KeyError:
+        for ch in src:
+            if ch not in m:
+                m[ch] = Cell(ch, style)
+        row = tuple(map(m.__getitem__, src))
     n = len(row)
     if n < width:
         space = m.get(" ")

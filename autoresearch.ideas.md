@@ -1,9 +1,17 @@
 # Autoresearch Ideas — painted frame diff renderer
 
-## Remaining optimization paths (diminishing returns territory)
+## Summary of wins so far (3.66ms → 1.12ms, -69%)
+- slots=True on Cell/Style/CellWrite dataclasses
+- Cell cache (style→char→Cell) with map().__getitem__ for ASCII text
+- _ascii_row_tuple: padded frozen tuple rows bypassing list intermediates
+- Block._create: fast constructor bypassing validation + freeze
+- Compose cell caching (_SPACE_CELL, _border_cell)
+- Style.merge cache
+- display_width + char_width caches
+- Buffer.diff identity-based row scanning (is not)
 
-- **_word_wrap optimization**: 1,600 calls at 12ms/200 renders. Could cache word-wrapped results for repeated text+width combinations.
-- **Style.merge caching**: 11,600 calls at 9ms/200. Could memoize merged styles since both inputs are frozen/hashable. But these are in demo code, not library code.
-- **Buffer.diff with memoryview**: Use a memoryview or array for cells instead of list, enabling faster bulk comparison. Would require significant refactoring.
-- **Reduce object.__setattr__ in _create**: The 6 setattr calls per Block could potentially be reduced by using a C extension or ctypes, but that violates the "no new dependencies" constraint.
-- **Pre-allocate CellWrite list**: In diff, pre-sizing the writes list based on expected change count could reduce list growth overhead.
+## Remaining paths (deep diminishing returns)
+- **_word_wrap optimization**: Could cache word-wrapped results for repeated text+width. ~4ms/200 renders.
+- **Reduce Cell.__init__ overhead**: 59K remaining calls are from compose borders, truncate, and non-hot paths. Most are already cached; the remainder are one-off constructions.
+- **Buffer internal representation**: Using array/bytes instead of list[Cell] could enable bulk comparison, but would require major refactoring and likely violate the "no public API changes" constraint.
+- **Block.text dispatch optimization**: 12K calls with isascii+len checks could be slightly faster with match/case or precomputed dispatch, but gains would be ~1ms/200.
