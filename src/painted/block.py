@@ -78,12 +78,27 @@ class Block:
 
         if wrap == Wrap.NONE:
             # Truncate at width, single line
+            if content.isascii():
+                cells = [Cell(ch, style) for ch in content[:width]]
+                cells = _pad_row(cells, width, style)
+                return Block([cells], width, id=id)
             cells = _cells_from_text(content, style, max_width=width)
             cells = _pad_row(cells, width, style)
             return Block([cells], width, id=id)
 
         if wrap == Wrap.ELLIPSIS:
             # Truncate with ellipsis if needed
+            if content.isascii():
+                if content[width:]:
+                    if width == 1:
+                        cells = [Cell("…", style)]
+                    else:
+                        cells = [Cell(ch, style) for ch in content[: width - 1]]
+                        cells.append(Cell("…", style))
+                else:
+                    cells = [Cell(ch, style) for ch in content]
+                cells = _pad_row(cells, width, style)
+                return Block([cells], width, id=id)
             if display_width(content) > width:
                 if width == 1:
                     cells = [Cell("…", style)]
