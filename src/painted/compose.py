@@ -68,46 +68,54 @@ def join_vertical(*blocks: Block, gap: int = 0, align: Align = Align.START) -> B
     max_width = max(b.width for b in blocks)
     pad_cell = Cell(" ", Style())
 
-    rows: list[list[Cell]] = []
+    rows: list[list[Cell] | tuple[Cell, ...]] = []
     has_ids = any((b.id is not None) or (b._ids is not None) for b in blocks)
     ids_rows: list[list[str | None]] | None = [] if has_ids else None
+
+    if ids_rows is None:
+        gap_row = (pad_cell,) * max_width
+        for i, block in enumerate(blocks):
+            offset = _halign_offset(block.width, max_width, align)
+            pad_left = (pad_cell,) * offset
+            pad_right = (pad_cell,) * (max_width - offset - block.width)
+            for row_idx in range(block.height):
+                rows.append(pad_left + block.row(row_idx) + pad_right)
+            if i < len(blocks) - 1 and gap > 0:
+                for _ in range(gap):
+                    rows.append(gap_row)
+        return Block(rows, max_width)
 
     for i, block in enumerate(blocks):
         offset = _halign_offset(block.width, max_width, align)
 
         for row_idx in range(block.height):
             row: list[Cell] = []
-            row_ids: list[str | None] | None = [] if ids_rows is not None else None
+            row_ids: list[str | None] = []
             # Left padding
             if offset > 0:
                 row.extend([pad_cell] * offset)
-                if row_ids is not None:
-                    row_ids.extend([None] * offset)
+                row_ids.extend([None] * offset)
             # Block content
             row.extend(block.row(row_idx))
-            if row_ids is not None:
-                if block._ids is not None:
-                    row_ids.extend(block._ids[row_idx])
-                elif block.id is not None:
-                    row_ids.extend([block.id] * block.width)
-                else:
-                    row_ids.extend([None] * block.width)
+            if block._ids is not None:
+                row_ids.extend(block._ids[row_idx])
+            elif block.id is not None:
+                row_ids.extend([block.id] * block.width)
+            else:
+                row_ids.extend([None] * block.width)
             # Right padding
             right_pad = max_width - offset - block.width
             if right_pad > 0:
                 row.extend([pad_cell] * right_pad)
-                if row_ids is not None:
-                    row_ids.extend([None] * right_pad)
+                row_ids.extend([None] * right_pad)
             rows.append(row)
-            if ids_rows is not None and row_ids is not None:
-                ids_rows.append(row_ids)
+            ids_rows.append(row_ids)
 
         # Insert gap rows between blocks (not after the last)
         if i < len(blocks) - 1 and gap > 0:
             for _ in range(gap):
                 rows.append([pad_cell] * max_width)
-                if ids_rows is not None:
-                    ids_rows.append([None] * max_width)
+                ids_rows.append([None] * max_width)
 
     if ids_rows is None:
         return Block(rows, max_width)
