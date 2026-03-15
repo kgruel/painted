@@ -37,6 +37,27 @@ def _ascii_cells(text: str, style: Style) -> list[Cell]:
     return list(map(m.__getitem__, text))
 
 
+def _ascii_row_tuple(chars: str, width: int, style: Style) -> tuple[Cell, ...]:
+    """Build a padded ASCII row as a frozen tuple, bypassing list intermediates."""
+    m = _style_cell_maps.get(style)
+    if m is None:
+        m = {}
+        _style_cell_maps[style] = m
+    src = chars[:width]
+    for ch in src:
+        if ch not in m:
+            m[ch] = Cell(ch, style)
+    row = tuple(map(m.__getitem__, src))
+    n = len(row)
+    if n < width:
+        space = m.get(" ")
+        if space is None:
+            space = Cell(" ", style)
+            m[" "] = space
+        row = row + (space,) * (width - n)
+    return row
+
+
 def _cached_cell(char: str, style: Style) -> Cell:
     """Return a cached Cell for single ASCII characters."""
     m = _style_cell_maps.get(style)
@@ -141,9 +162,7 @@ class Block:
         if wrap == Wrap.NONE:
             # Truncate at width, single line
             if content.isascii():
-                cells = _ascii_cells(content[:width], style)
-                cells = _pad_row(cells, width, style)
-                return Block([cells], width, id=id)
+                return Block((_ascii_row_tuple(content, width, style),), width, id=id)
             cells = _cells_from_text(content, style, max_width=width)
             cells = _pad_row(cells, width, style)
             return Block([cells], width, id=id)
@@ -158,7 +177,7 @@ class Block:
                         cells = _ascii_cells(content[: width - 1], style)
                         cells.append(Cell("…", style))
                 else:
-                    cells = _ascii_cells(content, style)
+                    return Block((_ascii_row_tuple(content, width, style),), width, id=id)
                 cells = _pad_row(cells, width, style)
                 return Block([cells], width, id=id)
             if display_width(content) > width:
