@@ -22,13 +22,20 @@ def display_width(text: str) -> int:
     return w
 
 
+_char_width_cache: dict[str, int] = {}
+
+
 def char_width(ch: str) -> int:
     """Return the display width (columns) of a single character."""
     if ch.isascii():
         return 1
+    cached = _char_width_cache.get(ch)
+    if cached is not None:
+        return cached
     w = wcwidth(ch)
     if w < 0:
-        return 1
+        w = 1
+    _char_width_cache[ch] = w
     return w
 
 
