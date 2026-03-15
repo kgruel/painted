@@ -98,16 +98,10 @@ def show(
 
     render_fn = lens or shape_lens
     if not use_ansi and lens is not None:
-        from contextlib import nullcontext
-
         from .icon_set import ASCII_ICONS, use_icons
 
-        icons_scope = use_icons(ASCII_ICONS)
+        with use_icons(ASCII_ICONS):
+            block = render_fn(data, zoom, width)
     else:
-        from contextlib import nullcontext
-
-        icons_scope = nullcontext()
-
-    with icons_scope:
         block = render_fn(data, zoom, width)
     print_block(block, file, use_ansi=use_ansi)
