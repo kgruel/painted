@@ -6,6 +6,7 @@ and sets up ambient defaults (icon set).
 
 from __future__ import annotations
 
+import os
 import shutil
 import sys
 
@@ -33,6 +34,22 @@ def resolve_mode(
     return OutputMode.STATIC
 
 
+def _env_terminal_size() -> tuple[int, int] | None:
+    """Return terminal size from COLUMNS/LINES when both are valid positive ints."""
+    cols = os.environ.get("COLUMNS")
+    lines = os.environ.get("LINES")
+    if cols is None or lines is None:
+        return None
+    try:
+        width = int(cols)
+        height = int(lines)
+    except ValueError:
+        return None
+    if width <= 0 or height <= 0:
+        return None
+    return width, height
+
+
 def detect_context(
     zoom: Zoom,
     mode: OutputMode,
@@ -51,12 +68,18 @@ def detect_context(
     resolved_mode = resolve_mode(mode, is_tty, is_pipe, default_mode)
     use_ansi = not force_plain and (is_tty or resolved_mode == OutputMode.INTERACTIVE)
 
-    size = shutil.get_terminal_size()
+    size = _env_terminal_size()
+    if size is None:
+        ts = shutil.get_terminal_size()
+        width, height = ts.columns, ts.lines
+    else:
+        width, height = size
+
     return CliContext(
         zoom=zoom,
         mode=resolved_mode,
         use_ansi=use_ansi,
         is_tty=is_tty,
-        width=size.columns,
-        height=size.lines,
+        width=width,
+        height=height,
     )

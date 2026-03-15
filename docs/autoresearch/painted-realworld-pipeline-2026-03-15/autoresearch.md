@@ -39,4 +39,6 @@ Optimize end-to-end performance of painted's real-world CLI/TUI pipeline, not ju
 - Keep benchmark deterministic (fixed terminal dimensions, deterministic sample data)
 
 ## What's Been Tried
-- Initial session setup; baseline pending.
+- Initial session setup and baseline established at `pipeline_ms=8.234`.
+- First failed attempt: passed `--static` to runners that did not expose mode flags (because benchmark used bare `CliRunner` without stream/interactive handlers); fixed by relying on AUTO static resolution in non-TTY context.
+- Kept optimization: cache `argparse.ArgumentParser` inside `CliRunner` across repeated `run()` calls. New score: `pipeline_ms=8.221` (~0.16% better).
