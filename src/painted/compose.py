@@ -24,10 +24,31 @@ def join_horizontal(*blocks: Block, gap: int = 0, align: Align = Align.START) ->
     max_height = max(b.height for b in blocks)
     total_width = sum(b.width for b in blocks) + gap * (len(blocks) - 1)
 
-    rows: list[list[Cell]] = [[] for _ in range(max_height)]
     has_ids = any((b.id is not None) or (b._ids is not None) for b in blocks)
-    ids_rows: list[list[str | None]] | None = [[] for _ in range(max_height)] if has_ids else None
     gap_cell = Cell(" ", Style())
+    if not has_ids:
+        rows: list[tuple[Cell, ...]] = [tuple() for _ in range(max_height)]
+        gap_cells = (gap_cell,) * gap
+        for i, block in enumerate(blocks):
+            # Calculate vertical offset for alignment
+            offset = _valign_offset(block.height, max_height, align)
+            blank_row = (gap_cell,) * block.width
+
+            for row_idx in range(max_height):
+                src_row = row_idx - offset
+                if 0 <= src_row < block.height:
+                    rows[row_idx] += block.row(src_row)
+                else:
+                    rows[row_idx] += blank_row
+
+                # Add gap cells between blocks (not after the last)
+                if i < len(blocks) - 1 and gap > 0:
+                    rows[row_idx] += gap_cells
+
+        return Block(rows, total_width)
+
+    rows: list[list[Cell]] = [[] for _ in range(max_height)]
+    ids_rows: list[list[str | None]] = [[] for _ in range(max_height)]
 
     for i, block in enumerate(blocks):
         # Calculate vertical offset for alignment
@@ -37,26 +58,21 @@ def join_horizontal(*blocks: Block, gap: int = 0, align: Align = Align.START) ->
             src_row = row_idx - offset
             if 0 <= src_row < block.height:
                 rows[row_idx].extend(block.row(src_row))
-                if ids_rows is not None:
-                    if block._ids is not None:
-                        ids_rows[row_idx].extend(block._ids[src_row])
-                    elif block.id is not None:
-                        ids_rows[row_idx].extend([block.id] * block.width)
-                    else:
-                        ids_rows[row_idx].extend([None] * block.width)
+                if block._ids is not None:
+                    ids_rows[row_idx].extend(block._ids[src_row])
+                elif block.id is not None:
+                    ids_rows[row_idx].extend([block.id] * block.width)
+                else:
+                    ids_rows[row_idx].extend([None] * block.width)
             else:
                 rows[row_idx].extend([gap_cell] * block.width)
-                if ids_rows is not None:
-                    ids_rows[row_idx].extend([None] * block.width)
+                ids_rows[row_idx].extend([None] * block.width)
 
             # Add gap cells between blocks (not after the last)
             if i < len(blocks) - 1 and gap > 0:
                 rows[row_idx].extend([gap_cell] * gap)
-                if ids_rows is not None:
-                    ids_rows[row_idx].extend([None] * gap)
+                ids_rows[row_idx].extend([None] * gap)
 
-    if ids_rows is None:
-        return Block(rows, total_width)
     return Block(rows, total_width, ids=ids_rows)
 
 
