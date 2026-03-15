@@ -10,10 +10,8 @@ Four paths:
 from __future__ import annotations
 
 import json
-import shutil
 import sys
 from collections.abc import Callable
-from contextlib import nullcontext
 from typing import TYPE_CHECKING, Any, TextIO
 
 if TYPE_CHECKING:
@@ -32,6 +30,8 @@ def _detect_show_context(force_plain: bool) -> tuple[bool, int]:
     stdout = sys.stdout
     is_tty = hasattr(stdout, "isatty") and stdout.isatty()
     use_ansi = (not force_plain) and is_tty
+    import shutil
+
     width = shutil.get_terminal_size().columns
     return use_ansi, width
 
@@ -88,6 +88,8 @@ def show(
     from .core.writer import print_block
     from .icon_set import ASCII_ICONS, use_icons
     from .views.lens.shape import shape_lens
+
+    from contextlib import nullcontext
 
     icons_scope = use_icons(ASCII_ICONS) if not use_ansi else nullcontext()
     render_fn = lens or shape_lens
