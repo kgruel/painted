@@ -9,6 +9,9 @@ from __future__ import annotations
 from wcwidth import wcswidth, wcwidth
 
 
+_display_width_cache: dict[str, int] = {}
+
+
 def display_width(text: str) -> int:
     """Return the display width (columns) of a string.
 
@@ -16,9 +19,14 @@ def display_width(text: str) -> int:
     """
     if text.isascii():
         return len(text)
+    cached = _display_width_cache.get(text)
+    if cached is not None:
+        return cached
     w = wcswidth(text)
     if w < 0:
-        return len(text)
+        w = len(text)
+    if len(_display_width_cache) < 4096:
+        _display_width_cache[text] = w
     return w
 
 
