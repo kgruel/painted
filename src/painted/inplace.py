@@ -62,13 +62,8 @@ class InPlaceRenderer:
             raise RuntimeError("InPlaceRenderer.render() called outside of a context manager")
         # Move up and clear previous content
         if self._height > 0:
-            # Move cursor up N lines
-            self._stream.write(f"\x1b[{self._height}A")
-            # Clear each line
-            for _ in range(self._height):
-                self._stream.write("\x1b[2K\n")
-            # Move back up
-            self._stream.write(f"\x1b[{self._height}A")
+            h = self._height
+            self._stream.write(f"\x1b[{h}A" + ("\x1b[2K\n" * h) + f"\x1b[{h}A")
 
         # Write new content
         self._write_block(block)
@@ -84,11 +79,8 @@ class InPlaceRenderer:
         if not self._active:
             raise RuntimeError("InPlaceRenderer.clear() called outside of a context manager")
         if self._height > 0:
-            # Move up and clear
-            self._stream.write(f"\x1b[{self._height}A")
-            for _ in range(self._height):
-                self._stream.write("\x1b[2K\n")
-            self._stream.write(f"\x1b[{self._height}A")
+            h = self._height
+            self._stream.write(f"\x1b[{h}A" + ("\x1b[2K\n" * h) + f"\x1b[{h}A")
             self._stream.flush()
             self._height = 0
 

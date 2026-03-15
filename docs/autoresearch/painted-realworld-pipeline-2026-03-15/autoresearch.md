@@ -46,4 +46,10 @@ Optimize end-to-end performance of painted's real-world CLI/TUI pipeline, not ju
 - Kept optimization: clone `Buffer` once per TestSurface frame and reuse snapshot for both `_prev` and captured frame object.
 - Added cold metrics as secondary only (`cold_start_ms`, `cold_import_ms`), then separated warm/cold sampling loops so cold subprocess sampling does not perturb the warm-path primary metric.
 - Kept optimization: `Buffer.clone()` now bypasses `Buffer.__init__` with `object.__new__`, avoiding throwaway preallocation.
-- Major kept optimization: added `capture_writes` toggle to `TestSurface`; when ANSI output is off and caller does not need per-cell writes, skip `Buffer.diff()`. Enabled for focus demo scenarios that only consume emissions/frame text. Current best observed `pipeline_ms=7.291`.
+- Major kept optimization: added `capture_writes` toggle to `TestSurface`; when ANSI output is off and caller does not need per-cell writes, skip `Buffer.diff()`. Enabled for focus demo scenarios that only consume emissions/frame text.
+- Additional keeps after this note:
+  - `buffer_to_lines()` switched to contiguous row iteration over `Buffer._cells`.
+  - `detect_context()` caches parsed `COLUMNS`/`LINES` values.
+- Current code-backed best remains `pipeline_ms=6.949` at commit `4a35304`.
+- Higher-leverage attempts around focus rendering/data capture, search filtering, writer style/color resolution, and live plain-stream handling did not beat the best primary metric.
+- Variance check runs (no-code reruns near the end) showed notable measurement spread in warm metrics; some isolated low scores were accompanied by cold-metric swings, so they were explicitly discarded as noise rather than treated as wins.

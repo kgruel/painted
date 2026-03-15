@@ -146,24 +146,11 @@ class Buffer:
 
         writes: list[CellWrite] = []
         append = writes.append
-        height = self.height
-        total = width * height
-        # Compare cells in bulk, then find per-row diffs only for changed rows
-        row_start = 0
-        for y in range(height):
-            row_end = row_start + width
-            # Quick scan: check if any cell differs in this row
-            changed = False
-            for i in range(row_start, row_end):
-                if cells[i] is not other_cells[i]:
-                    changed = True
-                    break
-            if changed:
-                for i in range(row_start, row_end):
-                    cell = cells[i]
-                    if cell is not other_cells[i] and cell != other_cells[i]:
-                        append(CellWrite(i - row_start, y, cell))
-            row_start = row_end
+        for i, cell in enumerate(cells):
+            other_cell = other_cells[i]
+            if cell is other_cell or cell == other_cell:
+                continue
+            append(CellWrite(i % width, i // width, cell))
         return writes
 
     def line_hashes(self, *, include_style: bool = True) -> list[int]:
@@ -255,8 +242,8 @@ class Buffer:
         buf = object.__new__(Buffer)
         buf.width = self.width
         buf.height = self.height
-        buf._cells = list(self._cells)  # Cells are frozen, shallow copy is fine
-        buf._ids = list(self._ids) if self._ids is not None else None
+        buf._cells = self._cells.copy()  # Cells are frozen, shallow copy is fine
+        buf._ids = self._ids.copy() if self._ids is not None else None
         return buf
 
 

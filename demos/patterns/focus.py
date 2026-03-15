@@ -75,6 +75,9 @@ SERVICES: tuple[Service, ...] = (
     Service("queue", "1.12.2", "us-east-1", "ok", 67, 0.10),
     Service("storage", "6.0.1", "us-west-2", "down", 0, 100.0),
 )
+SERVICE_HEALTH = tuple(s.health.upper() for s in SERVICES)
+SERVICE_P95 = tuple("--" if s.p95_ms == 0 else f"{s.p95_ms:>3d}" for s in SERVICES)
+SERVICE_ERR = tuple(f"{s.error_rate:>5.2f}" for s in SERVICES)
 
 COMMANDS: tuple[str, ...] = (
     "deploy api-gateway",
@@ -104,6 +107,11 @@ class AppState:
     last_event: str = ""
 
 
+STYLE_PLAIN = Style()
+STYLE_DIM = Style(dim=True)
+STYLE_BOLD = Style(bold=True)
+
+
 def _service_style(service: Service) -> Style:
     p = current_palette()
     if service.health == "ok":
@@ -119,7 +127,7 @@ def _panel_title(widget_id: str, focus: Focus) -> tuple[str, Style]:
     if not is_focused:
         return widget_id, p.muted
     if focus.captured:
-        return f"{widget_id}  CAP", p.accent.merge(Style(bold=True))
+        return f"{widget_id}  CAP", p.accent.merge(STYLE_BOLD)
     return f"{widget_id}  NAV", p.accent
 
 
@@ -135,17 +143,15 @@ def _services_panel(state: AppState, *, width: int, height: int) -> Block:
     content_w = max(0, width - 2)
     content_h = max(0, height - 2)
 
-    header = Block.text(
-        "name                 health   p95   err%", Style(dim=True), width=content_w
-    )
+    header = Block.text("name                 health   p95   err%", STYLE_DIM, width=content_w)
     rows: list[Block] = [header]
 
     for i, svc in enumerate(SERVICES):
         selected = i == state.services_cursor.index
         marker = ">" if selected else " "
-        health = svc.health.upper()
-        p95 = "--" if svc.p95_ms == 0 else f"{svc.p95_ms:>3d}"
-        err = f"{svc.error_rate:>5.2f}"
+        health = SERVICE_HEALTH[i]
+        p95 = SERVICE_P95[i]
+        err = SERVICE_ERR[i]
 
         if svc.health == "ok":
             base = p.success
@@ -153,7 +159,7 @@ def _services_panel(state: AppState, *, width: int, height: int) -> Block:
             base = p.warning
         else:
             base = p.error
-        row_style = base.merge(Style(bold=True)) if selected else base.merge(p.muted)
+        row_style = base.merge(STYLE_BOLD) if selected else base.merge(p.muted)
         line = f"{marker} {svc.name:<20.20s} {health:<8s} {p95:>3s}  {err:>5s}"
         rows.append(Block.text(line, row_style, width=content_w))
 
@@ -171,27 +177,27 @@ def _search_panel(state: AppState, *, width: int, height: int) -> Block:
     selected = state.search.selected if state.search.selected < len(matches) else -1
 
     query_style = (
-        p.accent.merge(Style(bold=True))
+        p.accent.merge(STYLE_BOLD)
         if state.focus.id == "search" and state.focus.captured
-        else Style()
+        else STYLE_PLAIN
     )
     query_line = join_horizontal(
-        Block.text("query: ", Style(dim=True)),
+        Block.text("query: ", STYLE_DIM),
         Block.text(state.search.query or " ", query_style),
     )
     query_line = pad(query_line, right=max(0, content_w - query_line.width))
 
-    rows: list[Block] = [query_line, Block.text("", Style(), width=content_w)]
-    rows.append(Block.text("matches (fuzzy):", Style(dim=True), width=content_w))
+    rows: list[Block] = [query_line, Block.text("", STYLE_PLAIN, width=content_w)]
+    rows.append(Block.text("matches (fuzzy):", STYLE_DIM, width=content_w))
 
     max_rows = max(0, content_h - len(rows) - 1)
     for i, cmd in enumerate(matches[:max_rows]):
         is_sel = i == selected
         marker = ">" if is_sel else " "
-        style = p.accent.merge(Style(bold=True)) if is_sel else Style(dim=True)
+        style = p.accent.merge(STYLE_BOLD) if is_sel else STYLE_DIM
         rows.append(Block.text(f"{marker} {cmd}", style, width=content_w))
 
-    footer = Block.text(f"{len(matches):>2d} match(es)", Style(dim=True), width=content_w)
+    footer = Block.text(f"{len(matches):>2d} match(es)", STYLE_DIM, width=content_w)
     content = _fixed_height(join_vertical(*rows, footer), content_h)
     return border(content, chars=ROUNDED, title=title, title_style=title_style, style=title_style)
 
@@ -455,12 +461,10 @@ def run_scenario(scenario: Scenario) -> ScenarioResult:
     emissions = harness.emissions
 
     emission_kinds = {k for k, _ in emissions}
-    checks: list[tuple[str, bool]] = []
-
-    for kind in scenario.expected_emissions:
-        checks.append((f"{kind} seen", kind in emission_kinds))
-    for kind in scenario.unexpected_emissions:
-        checks.append((f"{kind} absent", kind not in emission_kinds))
+    checks = [
+        *[(f"{kind} seen", kind in emission_kinds) for kind in scenario.expected_emissions],
+        *[(f"{kind} absent", kind not in emission_kinds) for kind in scenario.unexpected_emissions],
+    ]
 
     passed = all(ok for _, ok in checks)
     return ScenarioResult(

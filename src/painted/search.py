@@ -5,7 +5,6 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
 
-from .cursor import Cursor, CursorMode
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,15 +35,15 @@ class Search:
         """Return new Search with selection moved to next match (wrapping)."""
         if match_count == 0:
             return self
-        cursor = Cursor(index=self.selected, count=match_count, mode=CursorMode.WRAP).next()
-        return replace(self, selected=cursor.index)
+        selected = (self.selected + 1) % match_count
+        return replace(self, selected=selected)
 
     def select_prev(self, match_count: int) -> Search:
         """Return new Search with selection moved to previous match (wrapping)."""
         if match_count == 0:
             return self
-        cursor = Cursor(index=self.selected, count=match_count, mode=CursorMode.WRAP).prev()
-        return replace(self, selected=cursor.index)
+        selected = (self.selected - 1) % match_count
+        return replace(self, selected=selected)
 
     def selected_item(self, matches: Sequence[str]) -> str | None:
         """Return the currently selected item from matches, or None if empty."""

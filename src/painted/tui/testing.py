@@ -25,10 +25,11 @@ def buffer_to_lines(buf: Buffer) -> list[str]:
     width = buf.width
     cells = buf._cells
     out: list[str] = []
+    append = out.append
     row_start = 0
     for _ in range(buf.height):
         row_end = row_start + width
-        out.append("".join(cell.char for cell in cells[row_start:row_end]))
+        append("".join(cell.char for cell in cells[row_start:row_end]))
         row_start = row_end
     return out
 
@@ -159,13 +160,14 @@ class TestSurface:
         self.surface._dirty = False
         self.surface.render()
 
-        buf = self.surface._buf
-        prev = self.surface._prev
+        surface = self.surface
+        buf = surface._buf
+        prev = surface._prev
         if buf is None or prev is None:
             return
 
-        needs_clear = getattr(self.surface, "_needs_clear", False)
-        self.surface._needs_clear = False
+        needs_clear = surface._needs_clear
+        surface._needs_clear = False
 
         writes: list[CellWrite]
         if self.capture_writes or self.write_ansi:
@@ -174,10 +176,10 @@ class TestSurface:
             writes = []
 
         if self.write_ansi and (writes or needs_clear):
-            self.surface._writer.write_frame(writes, clear_first=needs_clear)
+            surface._writer.write_frame(writes, clear_first=needs_clear)
 
         # Snapshot once: previous frame state for next diff + captured frame payload.
         snapshot = buf.clone()
-        self.surface._prev = snapshot
+        surface._prev = snapshot
 
         frames.append(CapturedFrame(buffer=snapshot, writes=tuple(writes)))

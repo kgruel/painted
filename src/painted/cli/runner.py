@@ -71,12 +71,17 @@ class CliRunner(Generic[T]):
         if "-h" in args or "--help" in args:
             return self._handle_help(args)
 
-        parser = self._get_parser()
-        parsed = parser.parse_args(args)
+        if not args and self.add_args is None:
+            zoom = self.default_zoom
+            mode = OutputMode.AUTO
+            fmt = Format.AUTO
+        else:
+            parser = self._get_parser()
+            parsed = parser.parse_args(args)
 
-        zoom = parse_zoom(parsed, self.default_zoom)
-        mode = parse_mode(parsed)
-        fmt = parse_format(parsed)
+            zoom = parse_zoom(parsed, self.default_zoom)
+            mode = parse_mode(parsed)
+            fmt = parse_format(parsed)
 
         # JSON short-circuits — it's data export, not rendering
         is_json = fmt == Format.JSON
@@ -217,6 +222,26 @@ class CliRunner(Generic[T]):
         if self.fetch_stream is not None:
             # Streaming mode: update as data arrives
             async def stream() -> int:
+                if not ctx.use_ansi:
+                    from ..core.writer import print_block
+
+                    last_block = None
+                    try:
+                        async for state in self.fetch_stream():  # type: ignore[misc]
+                            try:
+                                last_block = self.render(ctx, state)
+                            except Exception as exc:
+                                print_block(self._render_error_block(ctx, exc), use_ansi=False)
+                                return 2
+                    except (KeyboardInterrupt, asyncio.CancelledError):
+                        return 0
+                    except Exception as exc:
+                        print_block(self._fetch_error_block(ctx, exc), use_ansi=False)
+                        return 1
+                    if last_block is not None:
+                        print_block(last_block, use_ansi=False)
+                    return 0
+
                 with InPlaceRenderer() as renderer:
                     try:
                         async for state in self.fetch_stream():  # type: ignore[misc]

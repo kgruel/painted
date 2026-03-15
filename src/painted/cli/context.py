@@ -74,10 +74,13 @@ def detect_context(
     JSON is not a context concern — callers handle it before reaching here.
     ``force_plain`` suppresses ANSI when the user passes ``--plain``.
     """
-    is_tty = hasattr(sys.stdout, "isatty") and sys.stdout.isatty()
-    is_pipe = not is_tty
+    stdout = sys.stdout
+    is_tty = hasattr(stdout, "isatty") and stdout.isatty()
 
-    resolved_mode = resolve_mode(mode, is_tty, is_pipe, default_mode)
+    if mode == OutputMode.AUTO:
+        resolved_mode = default_mode if is_tty else OutputMode.STATIC
+    else:
+        resolved_mode = mode
     use_ansi = not force_plain and (is_tty or resolved_mode == OutputMode.INTERACTIVE)
 
     size = _env_terminal_size()
