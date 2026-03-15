@@ -75,6 +75,9 @@ SERVICES: tuple[Service, ...] = (
     Service("queue", "1.12.2", "us-east-1", "ok", 67, 0.10),
     Service("storage", "6.0.1", "us-west-2", "down", 0, 100.0),
 )
+SERVICE_HEALTH = tuple(s.health.upper() for s in SERVICES)
+SERVICE_P95 = tuple("--" if s.p95_ms == 0 else f"{s.p95_ms:>3d}" for s in SERVICES)
+SERVICE_ERR = tuple(f"{s.error_rate:>5.2f}" for s in SERVICES)
 
 COMMANDS: tuple[str, ...] = (
     "deploy api-gateway",
@@ -104,6 +107,11 @@ class AppState:
     last_event: str = ""
 
 
+STYLE_PLAIN = Style()
+STYLE_DIM = Style(dim=True)
+STYLE_BOLD = Style(bold=True)
+
+
 def _service_style(service: Service) -> Style:
     p = current_palette()
     if service.health == "ok":
@@ -119,7 +127,7 @@ def _panel_title(widget_id: str, focus: Focus) -> tuple[str, Style]:
     if not is_focused:
         return widget_id, p.muted
     if focus.captured:
-        return f"{widget_id}  CAP", p.accent.merge(Style(bold=True))
+        return f"{widget_id}  CAP", p.accent.merge(STYLE_BOLD)
     return f"{widget_id}  NAV", p.accent
 
 
@@ -135,20 +143,23 @@ def _services_panel(state: AppState, *, width: int, height: int) -> Block:
     content_w = max(0, width - 2)
     content_h = max(0, height - 2)
 
-    header = Block.text(
-        "name                 health   p95   err%", Style(dim=True), width=content_w
-    )
+    header = Block.text("name                 health   p95   err%", STYLE_DIM, width=content_w)
     rows: list[Block] = [header]
 
     for i, svc in enumerate(SERVICES):
         selected = i == state.services_cursor.index
         marker = ">" if selected else " "
-        health = svc.health.upper()
-        p95 = "--" if svc.p95_ms == 0 else f"{svc.p95_ms:>3d}"
-        err = f"{svc.error_rate:>5.2f}"
+        health = SERVICE_HEALTH[i]
+        p95 = SERVICE_P95[i]
+        err = SERVICE_ERR[i]
 
-        base = _service_style(svc)
-        row_style = base.merge(Style(bold=True)) if selected else base.merge(p.muted)
+        if svc.health == "ok":
+            base = p.success
+        elif svc.health == "degraded":
+            base = p.warning
+        else:
+            base = p.error
+        row_style = base.merge(STYLE_BOLD) if selected else base.merge(p.muted)
         line = f"{marker} {svc.name:<20.20s} {health:<8s} {p95:>3s}  {err:>5s}"
         rows.append(Block.text(line, row_style, width=content_w))
 
@@ -166,27 +177,27 @@ def _search_panel(state: AppState, *, width: int, height: int) -> Block:
     selected = state.search.selected if state.search.selected < len(matches) else -1
 
     query_style = (
-        p.accent.merge(Style(bold=True))
+        p.accent.merge(STYLE_BOLD)
         if state.focus.id == "search" and state.focus.captured
-        else Style()
+        else STYLE_PLAIN
     )
     query_line = join_horizontal(
-        Block.text("query: ", Style(dim=True)),
+        Block.text("query: ", STYLE_DIM),
         Block.text(state.search.query or " ", query_style),
     )
     query_line = pad(query_line, right=max(0, content_w - query_line.width))
 
-    rows: list[Block] = [query_line, Block.text("", Style(), width=content_w)]
-    rows.append(Block.text("matches (fuzzy):", Style(dim=True), width=content_w))
+    rows: list[Block] = [query_line, Block.text("", STYLE_PLAIN, width=content_w)]
+    rows.append(Block.text("matches (fuzzy):", STYLE_DIM, width=content_w))
 
     max_rows = max(0, content_h - len(rows) - 1)
     for i, cmd in enumerate(matches[:max_rows]):
         is_sel = i == selected
         marker = ">" if is_sel else " "
-        style = p.accent.merge(Style(bold=True)) if is_sel else Style(dim=True)
+        style = p.accent.merge(STYLE_BOLD) if is_sel else STYLE_DIM
         rows.append(Block.text(f"{marker} {cmd}", style, width=content_w))
 
-    footer = Block.text(f"{len(matches):>2d} match(es)", Style(dim=True), width=content_w)
+    footer = Block.text(f"{len(matches):>2d} match(es)", STYLE_DIM, width=content_w)
     content = _fixed_height(join_vertical(*rows, footer), content_h)
     return border(content, chars=ROUNDED, title=title, title_style=title_style, style=title_style)
 
@@ -201,7 +212,7 @@ def _details_panel(state: AppState, *, width: int, height: int) -> Block:
     cmd = state.last_command or "(none)"
 
     rows: list[Block] = [
-        Block.text("selected service:", Style(dim=True), width=content_w),
+        Block.text("selected service:", STYLE_DIM, width=content_w),
         Block.text(
             f"  {svc.name}  v{svc.version}  {svc.region}" if svc else "  (none)",
             Style(bold=True),
@@ -209,16 +220,16 @@ def _details_panel(state: AppState, *, width: int, height: int) -> Block:
         ),
         Block.text(
             f"  health={svc.health}  p95={svc.p95_ms}ms  err={svc.error_rate:.2f}%" if svc else "",
-            (_service_style(svc).merge(Style(dim=True)) if svc else Style(dim=True)),
+            (_service_style(svc).merge(STYLE_DIM) if svc else STYLE_DIM),
             width=content_w,
         ),
         Block.text("", Style(), width=content_w),
-        Block.text("last command:", Style(dim=True), width=content_w),
+        Block.text("last command:", STYLE_DIM, width=content_w),
         Block.text(
-            f"  {cmd}", p.accent if state.last_command else Style(dim=True), width=content_w
+            f"  {cmd}", p.accent if state.last_command else STYLE_DIM, width=content_w
         ),
         Block.text("", Style(), width=content_w),
-        Block.text("recent deploy log:", Style(dim=True), width=content_w),
+        Block.text("recent deploy log:", STYLE_DIM, width=content_w),
         Block.text("  10:34:12Z  build ✓  sha=9f2c7a1", p.muted, width=content_w),
         Block.text("  10:34:20Z  rollout  4/4 healthy", p.muted, width=content_w),
         Block.text("  10:34:24Z  metrics  p95=72ms err=0.08%", p.muted, width=content_w),
@@ -445,17 +456,15 @@ class ScenarioResult:
 
 def run_scenario(scenario: Scenario) -> ScenarioResult:
     app = FocusDemoApp()
-    harness = TestSurface(app, width=88, height=22, input_queue=scenario.keys)
+    harness = TestSurface(app, width=88, height=22, input_queue=scenario.keys, capture_writes=False)
     frames = harness.run_to_completion()
     emissions = harness.emissions
 
-    emission_kinds = [k for k, _ in emissions]
-    checks: list[tuple[str, bool]] = []
-
-    for kind in scenario.expected_emissions:
-        checks.append((f"{kind} seen", kind in emission_kinds))
-    for kind in scenario.unexpected_emissions:
-        checks.append((f"{kind} absent", kind not in emission_kinds))
+    emission_kinds = {k for k, _ in emissions}
+    checks = [
+        *[(f"{kind} seen", kind in emission_kinds) for kind in scenario.expected_emissions],
+        *[(f"{kind} absent", kind not in emission_kinds) for kind in scenario.unexpected_emissions],
+    ]
 
     passed = all(ok for _, ok in checks)
     return ScenarioResult(
@@ -470,18 +479,12 @@ def run_scenario(scenario: Scenario) -> ScenarioResult:
 # --- Rendering ---
 
 
-def _emission_style(kind: str) -> Style:
-    p = current_palette()
-    if kind.startswith(("focus.", "services.", "search.", "cmd.", "key.")):
-        return p.accent
-    return p.muted
-
-
-def _emission_block(kind: str, data: dict) -> Block:
+def _emission_block(kind: str, data: dict, *, accent: Style, muted: Style, dim: Style) -> Block:
     data_str = " ".join(f"{k}={v}" for k, v in data.items())
+    kind_style = accent if kind.startswith(("focus.", "services.", "search.", "cmd.", "key.")) else muted
     return join_horizontal(
-        Block.text(f"  {kind:<18s}", _emission_style(kind)),
-        Block.text(f" {data_str}", Style(dim=True)),
+        Block.text(f"  {kind:<18s}", kind_style),
+        Block.text(f" {data_str}", dim),
     )
 
 
@@ -506,39 +509,44 @@ def _render_minimal(results: list[ScenarioResult], width: int) -> Block:
 
 def _key_frames(result: ScenarioResult) -> list[tuple[str, object]]:
     keys = result.scenario.keys
-    idxs: list[int] = [0]
-    if len(result.frames) > 1:
-        idxs.append(1)
+    frames = result.frames
+    n = len(frames)
+    if n == 0:
+        return []
+
+    indices: list[int] = [0]
+    if n > 1:
+        indices.append(1)
+    enter_i = -1
     try:
-        enter_i = keys.index("enter")
-        idxs.append(enter_i + 1)
+        enter_i = keys.index("enter") + 1
     except ValueError:
         pass
-    if result.frames:
-        idxs.append(len(result.frames) - 1)
-    # De-dup while preserving order
-    seen: set[int] = set()
+    if 0 <= enter_i < n and enter_i not in indices:
+        indices.append(enter_i)
+    last_i = n - 1
+    if last_i not in indices:
+        indices.append(last_i)
+
     out: list[tuple[str, object]] = []
-    for i in idxs:
-        if i in seen or i < 0 or i >= len(result.frames):
-            continue
-        seen.add(i)
+    for i in indices:
         label = "initial" if i == 0 else f"after '{keys[i - 1]}'"
-        out.append((label, result.frames[i]))
+        out.append((label, frames[i]))
     return out
 
 
 def _frame_block(frame: object, *, width: int, max_lines: int) -> Block:
     # CapturedFrame: .lines is list[str] of exact surface width lines.
     lines = getattr(frame, "lines", [])
-    rows = [Block.text(line.rstrip(), Style(dim=True), width=width) for line in lines[:max_lines]]
+    rows = [Block.text(line.rstrip(), STYLE_DIM, width=width) for line in lines[:max_lines]]
     if not rows:
-        return Block.text("(no frame)", Style(dim=True), width=width)
+        return Block.text("(no frame)", STYLE_DIM, width=width)
     return join_vertical(*rows)
 
 
 def _render_summary(results: list[ScenarioResult], width: int) -> Block:
     p = current_palette()
+    dim = STYLE_DIM
     icons = current_icons()
     sections: list[Block] = []
 
@@ -546,10 +554,10 @@ def _render_summary(results: list[ScenarioResult], width: int) -> Block:
         icon = icons.check if r.passed else icons.cross
         header_style = p.success if r.passed else p.error
         header = Block.text(f"{icon} {r.scenario.name}", header_style)
-        keys_line = Block.text(f"  keys: {' -> '.join(r.scenario.keys)}", Style(dim=True))
+        keys_line = Block.text(f"  keys: {' -> '.join(r.scenario.keys)}", dim)
 
         # Prefer domain emissions; ui.key is left in but muted.
-        trace = join_vertical(*[_emission_block(k, d) for k, d in r.emissions])
+        trace = join_vertical(*[_emission_block(k, d, accent=p.accent, muted=p.muted, dim=dim) for k, d in r.emissions])
         checks = join_vertical(*[_check_block(desc, ok) for desc, ok in r.checks])
 
         sections.append(join_vertical(header, keys_line, trace, checks, Block.text("", Style())))
@@ -559,6 +567,7 @@ def _render_summary(results: list[ScenarioResult], width: int) -> Block:
 
 def _render_detailed(results: list[ScenarioResult], width: int) -> Block:
     p = current_palette()
+    dim = STYLE_DIM
     icons = current_icons()
     sections: list[Block] = []
     snap_w = max(20, min(width - 6, 96))
@@ -568,12 +577,12 @@ def _render_detailed(results: list[ScenarioResult], width: int) -> Block:
         icon = icons.check if r.passed else icons.cross
         header_style = p.success if r.passed else p.error
         header = Block.text(f"{icon} {r.scenario.name}", header_style)
-        keys_line = Block.text(f"  keys: {' -> '.join(r.scenario.keys)}", Style(dim=True))
-        trace = join_vertical(*[_emission_block(k, d) for k, d in r.emissions])
+        keys_line = Block.text(f"  keys: {' -> '.join(r.scenario.keys)}", dim)
+        trace = join_vertical(*[_emission_block(k, d, accent=p.accent, muted=p.muted, dim=dim) for k, d in r.emissions])
 
         frames: list[Block] = []
         for label, frame in _key_frames(r):
-            frames.append(Block.text(f"  [{label}]", Style(dim=True)))
+            frames.append(Block.text(f"  [{label}]", dim))
             frames.append(_frame_block(frame, width=snap_w, max_lines=snap_lines))
             frames.append(Block.text("", Style()))
 
@@ -584,6 +593,7 @@ def _render_detailed(results: list[ScenarioResult], width: int) -> Block:
 
 def _render_full(results: list[ScenarioResult], width: int) -> Block:
     p = current_palette()
+    dim = STYLE_DIM
     icons = current_icons()
     sections: list[Block] = []
     snap_w = max(20, min(width - 6, 120))
@@ -591,25 +601,25 @@ def _render_full(results: list[ScenarioResult], width: int) -> Block:
     for r in results:
         icon = icons.check if r.passed else icons.cross
         title = f"{icon} {r.scenario.name}"
-        keys_line = Block.text(f"keys: {' -> '.join(r.scenario.keys)}", Style(dim=True))
-        trace = join_vertical(*[_emission_block(k, d) for k, d in r.emissions])
+        keys_line = Block.text(f"keys: {' -> '.join(r.scenario.keys)}", dim)
+        trace = join_vertical(*[_emission_block(k, d, accent=p.accent, muted=p.muted, dim=dim) for k, d in r.emissions])
         checks = join_vertical(*[_check_block(desc, ok) for desc, ok in r.checks])
 
         frame_blocks: list[Block] = []
         for label, frame in _key_frames(r):
-            frame_blocks.append(Block.text(f"[{label}]", Style(dim=True)))
+            frame_blocks.append(Block.text(f"[{label}]", dim))
             frame_blocks.append(_frame_block(frame, width=snap_w, max_lines=16))
             frame_blocks.append(Block.text("", Style()))
 
         inner = join_vertical(
             keys_line,
             Block.text("", Style()),
-            Block.text("emissions:", Style(dim=True)),
+            Block.text("emissions:", dim),
             trace,
             Block.text("", Style()),
             checks,
             Block.text("", Style()),
-            Block.text("frames:", Style(dim=True)),
+            Block.text("frames:", dim),
             join_vertical(*frame_blocks) if frame_blocks else Block.empty(0, 0),
         )
         sections.append(

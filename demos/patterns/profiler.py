@@ -248,7 +248,8 @@ def _extract_profile(
 ) -> ProfileData:
     """Pure function: extract ProfileData from a completed TestSurface run."""
     write_counts = [len(f.writes) for f in frames]
-    avg = sum(write_counts) / len(write_counts) if write_counts else 0.0
+    total_writes = sum(write_counts)
+    avg = total_writes / len(write_counts) if write_counts else 0.0
     threshold = avg * 2
 
     frame_profiles = tuple(
@@ -274,7 +275,7 @@ def _extract_profile(
         dimensions=f"{harness.width}x{harness.height}",
         input_count=len(_SCENARIO_INPUTS),
         frame_count=len(frames),
-        total_writes=sum(write_counts),
+        total_writes=total_writes,
         avg_writes=round(avg, 1),
         max_writes=max(write_counts) if write_counts else 0,
         hot_frame_count=sum(1 for f in frame_profiles if f.is_hot),

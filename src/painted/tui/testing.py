@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import io
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TextIO
 
 from .mouse import MouseEvent
@@ -22,7 +22,16 @@ InputItem = str | MouseEvent
 
 def buffer_to_lines(buf: Buffer) -> list[str]:
     """Return the buffer as a list of text lines (characters only)."""
-    return ["".join(buf.get(x, y).char for x in range(buf.width)) for y in range(buf.height)]
+    width = buf.width
+    cells = buf._cells
+    out: list[str] = []
+    append = out.append
+    row_start = 0
+    for _ in range(buf.height):
+        row_end = row_start + width
+        append("".join(cell.char for cell in cells[row_start:row_end]))
+        row_start = row_end
+    return out
 
 
 @dataclass(frozen=True, slots=True)
@@ -31,14 +40,24 @@ class CapturedFrame:
 
     buffer: Buffer
     writes: tuple[CellWrite, ...]
+    _lines_cache: list[str] | None = field(default=None, init=False, repr=False)
+    _text_cache: str | None = field(default=None, init=False, repr=False)
 
     @property
     def lines(self) -> list[str]:
-        return buffer_to_lines(self.buffer)
+        cached = self._lines_cache
+        if cached is None:
+            cached = buffer_to_lines(self.buffer)
+            object.__setattr__(self, "_lines_cache", cached)
+        return cached
 
     @property
     def text(self) -> str:
-        return "\n".join(self.lines)
+        cached = self._text_cache
+        if cached is None:
+            cached = "\n".join(self.lines)
+            object.__setattr__(self, "_text_cache", cached)
+        return cached
 
 
 class TestSurface:
@@ -64,6 +83,7 @@ class TestSurface:
         input_queue: Iterable[InputItem] = (),
         stream: TextIO | None = None,
         write_ansi: bool = False,
+        capture_writes: bool = True,
     ):
         self.surface = surface
         self.width = width
@@ -71,6 +91,7 @@ class TestSurface:
         self.input_queue = list(input_queue)
         self.stream = stream if stream is not None else io.StringIO()
         self.write_ansi = write_ansi
+        self.capture_writes = capture_writes
         self.emissions: list[tuple[str, dict]] = []
 
         original_emit = self.surface._on_emit
@@ -139,19 +160,26 @@ class TestSurface:
         self.surface._dirty = False
         self.surface.render()
 
-        buf = self.surface._buf
-        prev = self.surface._prev
+        surface = self.surface
+        buf = surface._buf
+        prev = surface._prev
         if buf is None or prev is None:
             return
 
-        needs_clear = getattr(self.surface, "_needs_clear", False)
-        self.surface._needs_clear = False
+        needs_clear = surface._needs_clear
+        surface._needs_clear = False
 
-        writes = buf.diff(prev)
+        writes: list[CellWrite]
+        if self.capture_writes or self.write_ansi:
+            writes = buf.diff(prev)
+        else:
+            writes = []
+
         if self.write_ansi and (writes or needs_clear):
-            self.surface._writer.write_frame(writes, clear_first=needs_clear)
+            surface._writer.write_frame(writes, clear_first=needs_clear)
 
-        # Swap: current becomes previous for next frame.
-        self.surface._prev = buf.clone()
+        # Snapshot once: previous frame state for next diff + captured frame payload.
+        snapshot = buf.clone()
+        surface._prev = snapshot
 
-        frames.append(CapturedFrame(buffer=buf.clone(), writes=tuple(writes)))
+        frames.append(CapturedFrame(buffer=snapshot, writes=tuple(writes)))

@@ -87,16 +87,17 @@ class Writer:
         if style.reverse:
             codes.append("7")
 
+        depth = self.detect_color_depth()
         if style.fg is not None:
-            codes.extend(self._color_codes(style.fg, foreground=True))
+            codes.extend(self._color_codes(style.fg, foreground=True, depth=depth))
         if style.bg is not None:
-            codes.extend(self._color_codes(style.bg, foreground=False))
+            codes.extend(self._color_codes(style.bg, foreground=False, depth=depth))
 
         if not codes:
             return ""
         return f"\x1b[{';'.join(codes)}m"
 
-    def _color_codes(self, color: str | int, foreground: bool) -> list[str]:
+    def _color_codes(self, color: str | int, foreground: bool, *, depth: ColorDepth) -> list[str]:
         """Convert a color value to SGR parameter strings.
 
         Automatically downgrades colors when terminal color depth is limited:
@@ -104,7 +105,6 @@ class Writer:
         - 256-color index -> 16-color, as needed
         - Named colors always emit as basic SGR (already safe)
         """
-        depth = self.detect_color_depth()
         base = 30 if foreground else 40
 
         if isinstance(color, int):
