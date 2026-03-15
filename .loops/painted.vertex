@@ -1,0 +1,16 @@
+name "painted"
+store "./data/painted.db"
+
+observers {
+  kyle { }
+  painted-claude { }
+}
+
+loops {
+  decision { fold { items "by" "topic" } }
+  thread   { fold { items "by" "name" } }
+  task     { fold { items "by" "name" } }
+  session  { fold { items "by" "name" } }
+
+  boundary when="session" status="closed"
+}
