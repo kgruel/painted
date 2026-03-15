@@ -11,7 +11,7 @@ import json
 import shutil
 import sys
 from collections.abc import Callable
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from typing import TYPE_CHECKING, Generic, TypeVar
 
 from contextlib import nullcontext
@@ -62,32 +62,16 @@ class CliRunner(Generic[T]):
     # Optional: describe pre-parsed args for help rendering
     help_args: list[HelpArg] | None = None
 
+    # Internal parser cache for repeated invocations
+    _parser_cache: argparse.ArgumentParser | None = field(default=None, init=False, repr=False)
+
     def run(self, args: list[str]) -> int:
         """Parse args, resolve context, dispatch."""
         # Intercept --help before argparse
         if "-h" in args or "--help" in args:
             return self._handle_help(args)
 
-        parser = argparse.ArgumentParser(
-            description=self.description,
-            prog=self.prog,
-            add_help=False,
-        )
-        # Re-add -h/--help so argparse still recognizes it for error messages
-        parser.add_argument("-h", "--help", action="help", help=argparse.SUPPRESS)
-
-        # Infer supported modes from config
-        modes: set[OutputMode] = {OutputMode.STATIC}
-        if self.fetch_stream is not None:
-            modes.add(OutputMode.LIVE)
-        if self.handlers and OutputMode.INTERACTIVE in self.handlers:
-            modes.add(OutputMode.INTERACTIVE)
-
-        add_cli_args(parser, modes=modes)
-
-        if self.add_args is not None:
-            self.add_args(parser)
-
+        parser = self._get_parser()
         parsed = parser.parse_args(args)
 
         zoom = parse_zoom(parsed, self.default_zoom)
@@ -108,6 +92,33 @@ class CliRunner(Generic[T]):
         ctx = detect_context(zoom, mode, force_plain=force_plain, default_mode=self.default_mode)
 
         return self._dispatch(ctx)
+
+    def _get_parser(self) -> argparse.ArgumentParser:
+        """Build and cache the parser for repeated invocations."""
+        if self._parser_cache is not None:
+            return self._parser_cache
+
+        parser = argparse.ArgumentParser(
+            description=self.description,
+            prog=self.prog,
+            add_help=False,
+        )
+        # Re-add -h/--help so argparse still recognizes it for error messages
+        parser.add_argument("-h", "--help", action="help", help=argparse.SUPPRESS)
+
+        modes: set[OutputMode] = {OutputMode.STATIC}
+        if self.fetch_stream is not None:
+            modes.add(OutputMode.LIVE)
+        if self.handlers and OutputMode.INTERACTIVE in self.handlers:
+            modes.add(OutputMode.INTERACTIVE)
+
+        add_cli_args(parser, modes=modes)
+
+        if self.add_args is not None:
+            self.add_args(parser)
+
+        self._parser_cache = parser
+        return parser
 
     def _handle_help(self, args: list[str]) -> int:
         """Render zoom-aware help and return 0."""
