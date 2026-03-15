@@ -22,7 +22,7 @@ NAMED_COLORS = {
 }
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Style:
     """Immutable text style with color and attribute flags."""
 
@@ -47,7 +47,7 @@ class Style:
         )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Cell:
     """Atomic display unit: a single character with style."""
 
