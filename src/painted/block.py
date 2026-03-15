@@ -62,6 +62,10 @@ class Wrap(Enum):
 
 
 def _freeze_cell_rows(rows: Sequence[Sequence[Cell]]) -> tuple[tuple[Cell, ...], ...]:
+    n = len(rows)
+    if n == 1:
+        r = rows[0]
+        return (cast(tuple[Cell, ...], r) if isinstance(r, tuple) else tuple(r),)
     frozen: list[tuple[Cell, ...]] = []
     for row in rows:
         frozen.append(cast(tuple[Cell, ...], row) if isinstance(row, tuple) else tuple(row))
