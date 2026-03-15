@@ -128,15 +128,22 @@ class Buffer:
         writes: list[CellWrite] = []
         append = writes.append
         height = self.height
+        total = width * height
+        # Compare cells in bulk, then find per-row diffs only for changed rows
         row_start = 0
         for y in range(height):
             row_end = row_start + width
-            row_cells = cells[row_start:row_end]
-            other_row = other_cells[row_start:row_end]
-            if row_cells != other_row:
-                for x, cell in enumerate(row_cells):
-                    if cell != other_row[x]:
-                        append(CellWrite(x, y, cell))
+            # Quick scan: check if any cell differs in this row
+            changed = False
+            for i in range(row_start, row_end):
+                if cells[i] is not other_cells[i]:
+                    changed = True
+                    break
+            if changed:
+                for i in range(row_start, row_end):
+                    cell = cells[i]
+                    if cell is not other_cells[i] and cell != other_cells[i]:
+                        append(CellWrite(i - row_start, y, cell))
             row_start = row_end
         return writes
 
