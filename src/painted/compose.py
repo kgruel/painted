@@ -16,6 +16,23 @@ class Align(Enum):
     END = "end"  # bottom or right
 
 
+# Cached default-style space cell for gap/pad operations.
+_SPACE_CELL = Cell(" ", Style())
+
+# Cache for border cells keyed by (char, style).
+_border_cell_cache: dict[tuple[str, Style], Cell] = {}
+
+
+def _border_cell(char: str, style: Style) -> Cell:
+    key = (char, style)
+    cell = _border_cell_cache.get(key)
+    if cell is not None:
+        return cell
+    cell = Cell(char, style)
+    _border_cell_cache[key] = cell
+    return cell
+
+
 def join_horizontal(*blocks: Block, gap: int = 0, align: Align = Align.START) -> Block:
     """Join blocks left-to-right with optional gap and vertical alignment."""
     if not blocks:
@@ -25,7 +42,7 @@ def join_horizontal(*blocks: Block, gap: int = 0, align: Align = Align.START) ->
     total_width = sum(b.width for b in blocks) + gap * (len(blocks) - 1)
 
     has_ids = any((b.id is not None) or (b._ids is not None) for b in blocks)
-    gap_cell = Cell(" ", Style())
+    gap_cell = _SPACE_CELL
     if not has_ids:
         if gap == 0 and align is Align.START and all(b.height == max_height for b in blocks):
             rows: list[tuple[Cell, ...]] = []
@@ -91,7 +108,7 @@ def join_vertical(*blocks: Block, gap: int = 0, align: Align = Align.START) -> B
         return Block.empty(0, 0)
 
     max_width = max(b.width for b in blocks)
-    pad_cell = Cell(" ", Style())
+    pad_cell = _SPACE_CELL
 
     rows: list[list[Cell] | tuple[Cell, ...]] = []
     has_ids = any((b.id is not None) or (b._ids is not None) for b in blocks)
@@ -158,7 +175,7 @@ def pad(
 ) -> Block:
     """Add empty cell padding around a block."""
     new_width = block.width + left + right
-    space = Cell(" ", style)
+    space = _border_cell(" ", style)
 
     rows: list[list[Cell] | tuple[Cell, ...]] = []
     ids_rows: list[list[str | None]] | None = [] if block._ids is not None else None
@@ -223,19 +240,19 @@ def border(
         border_id = block.id
 
     # Top border
-    horizontal_cell = Cell(chars.horizontal, style)
+    horizontal_cell = _border_cell(chars.horizontal, style)
     top_row: list[Cell] | tuple[Cell, ...]
     if ids_rows is None and title is None:
         top_row = (
-            (Cell(chars.top_left, style),)
+            (_border_cell(chars.top_left, style),)
             + (horizontal_cell,) * block.width
-            + (Cell(chars.top_right, style),)
+            + (_border_cell(chars.top_right, style),)
         )
     else:
         top_row = (
-            [Cell(chars.top_left, style)]
+            [_border_cell(chars.top_left, style)]
             + [horizontal_cell] * block.width
-            + [Cell(chars.top_right, style)]
+            + [_border_cell(chars.top_right, style)]
         )
 
     # Paint title into top row if provided
@@ -246,7 +263,8 @@ def border(
         ts = title_style if title_style is not None else style
         pos = 2  # start after top_left + 1 padding cell
         # Space before title
-        top_row[pos] = Cell(" ", ts)
+        space_cell = _border_cell(" ", ts)
+        top_row[pos] = space_cell
         pos += 1
         for ch in title:
             w = char_width(ch)
@@ -256,20 +274,20 @@ def border(
                 break
             if w == 2 and pos + 1 > block.width:
                 break
-            top_row[pos] = Cell(ch, ts)
+            top_row[pos] = _border_cell(ch, ts)
             if w == 2:
-                top_row[pos + 1] = Cell(" ", ts)
+                top_row[pos + 1] = space_cell
             pos += w
         # Space after title
         if pos <= block.width:
-            top_row[pos] = Cell(" ", ts)
+            top_row[pos] = space_cell
 
     rows.append(top_row)
     if ids_rows is not None:
         ids_rows.append([border_id] * new_width)
 
     # Content rows with vertical borders
-    vertical_cell = Cell(chars.vertical, style)
+    vertical_cell = _border_cell(chars.vertical, style)
     if ids_rows is None:
         for row_idx in range(block.height):
             rows.append((vertical_cell, *block.row(row_idx), vertical_cell))
@@ -288,15 +306,15 @@ def border(
     # Bottom border
     if ids_rows is None:
         bottom_row = (
-            (Cell(chars.bottom_left, style),)
+            (_border_cell(chars.bottom_left, style),)
             + (horizontal_cell,) * block.width
-            + (Cell(chars.bottom_right, style),)
+            + (_border_cell(chars.bottom_right, style),)
         )
     else:
         bottom_row = (
-            [Cell(chars.bottom_left, style)]
+            [_border_cell(chars.bottom_left, style)]
             + [horizontal_cell] * block.width
-            + [Cell(chars.bottom_right, style)]
+            + [_border_cell(chars.bottom_right, style)]
         )
     rows.append(bottom_row)
     if ids_rows is not None:
