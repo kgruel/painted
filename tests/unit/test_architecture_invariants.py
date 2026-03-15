@@ -148,10 +148,10 @@ def test_state_dataclasses_declared_frozen() -> None:
 
 def test_block_rows_private_not_accessed_outside_block() -> None:
     painted_root = Path(__file__).resolve().parents[2] / "src" / "painted"
-    block_py = painted_root / "block.py"
+    block_files = {painted_root / "block.py", painted_root / "core" / "block.py"}
 
     for py_file in painted_root.rglob("*.py"):
-        if py_file == block_py:
+        if py_file in block_files:
             continue
         assert "._rows" not in py_file.read_text(encoding="utf-8"), (
             f"{py_file} accesses Block._rows directly"
@@ -234,6 +234,24 @@ def test_public_modules_do_not_import_private_symbols_from_siblings() -> None:
     painted_root = Path(__file__).resolve().parents[2] / "src" / "painted"
     src_root = painted_root.parent
 
+    # Re-export shims at the package root re-export private symbols from core —
+    # these are backwards-compatibility wrappers, not cross-cutting usage.
+    reexport_shims = {
+        painted_root / name
+        for name in (
+            "block.py",
+            "buffer.py",
+            "cell.py",
+            "compose.py",
+            "borders.py",
+            "span.py",
+            "writer.py",
+            "html.py",
+            "_text_width.py",
+            "_color.py",
+        )
+    }
+
     def imported_private_symbols(py_file: Path) -> list[str]:
         tree = ast.parse(py_file.read_text(encoding="utf-8"), filename=str(py_file))
         current_mod = _module_name_for_file(src_root, py_file)
@@ -252,6 +270,12 @@ def test_public_modules_do_not_import_private_symbols_from_siblings() -> None:
     violations: list[str] = []
     for py_file in sorted(painted_root.rglob("*.py")):
         if py_file.name.startswith("_") and py_file.name != "__init__.py":
+            continue
+        # Skip re-export shims (they import private symbols from core by design)
+        if py_file in reexport_shims:
+            continue
+        # Skip core-internal imports (core modules may use each other's privates)
+        if (painted_root / "core") in py_file.parents:
             continue
         for item in imported_private_symbols(py_file):
             violations.append(f"{py_file.relative_to(src_root)} imports {item}")
