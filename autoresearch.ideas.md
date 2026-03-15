@@ -1,1 +1,0 @@
-- Add a public Block row-iterator / row-sharing constructor fast path so compose.join_vertical can concatenate already-frozen rows without rebuilding per-row lists; an internal prototype improved frame_ms to ~3.449ms but failed architecture checks because compose.py cannot access Block._rows directly.

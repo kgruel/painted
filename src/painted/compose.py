@@ -127,39 +127,45 @@ def pad(
     new_width = block.width + left + right
     space = Cell(" ", style)
 
-    rows: list[list[Cell]] = []
+    rows: list[list[Cell] | tuple[Cell, ...]] = []
     ids_rows: list[list[str | None]] | None = [] if block._ids is not None else None
+
+    if ids_rows is None:
+        pad_left = (space,) * left
+        pad_right = (space,) * right
+        pad_row = (space,) * new_width
+        for _ in range(top):
+            rows.append(pad_row)
+        for row_idx in range(block.height):
+            rows.append(pad_left + block.row(row_idx) + pad_right)
+        for _ in range(bottom):
+            rows.append(pad_row)
+        return Block(rows, new_width, id=block.id)
 
     # Top padding
     for _ in range(top):
         rows.append([space] * new_width)
-        if ids_rows is not None:
-            ids_rows.append([None] * new_width)
+        ids_rows.append([None] * new_width)
 
     # Content rows with left/right padding
     for row_idx in range(block.height):
         row: list[Cell] = []
-        row_ids: list[str | None] | None = [] if ids_rows is not None else None
+        row_ids: list[str | None] = []
         if left > 0:
             row.extend([space] * left)
-            if row_ids is not None:
-                row_ids.extend([None] * left)
+            row_ids.extend([None] * left)
         row.extend(block.row(row_idx))
-        if row_ids is not None:
-            row_ids.extend(block._ids[row_idx])
+        row_ids.extend(block._ids[row_idx])
         if right > 0:
             row.extend([space] * right)
-            if row_ids is not None:
-                row_ids.extend([None] * right)
+            row_ids.extend([None] * right)
         rows.append(row)
-        if ids_rows is not None and row_ids is not None:
-            ids_rows.append(row_ids)
+        ids_rows.append(row_ids)
 
     # Bottom padding
     for _ in range(bottom):
         rows.append([space] * new_width)
-        if ids_rows is not None:
-            ids_rows.append([None] * new_width)
+        ids_rows.append([None] * new_width)
 
     if ids_rows is None:
         return Block(rows, new_width, id=block.id)
