@@ -250,6 +250,11 @@ def _cells_from_text(text: str, style: Style, *, max_width: int | None = None) -
 
     Uses a space placeholder for the trailing cell of a wide character.
     """
+    if text.isascii():
+        if max_width is None:
+            return [Cell(ch, style) for ch in text]
+        return [Cell(ch, style) for ch in text[:max_width]]
+
     cells: list[Cell] = []
     used = 0
 
