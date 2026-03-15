@@ -1,1 +1,2 @@
 {"type":"config","name":"painted first-show cold-start","metricName":"first_show_ms","metricUnit":"ms","bestDirection":"lower"}
+{"run":1,"commit":"56602ff","metric":92.217,"metrics":{},"status":"keep","description":"Retargeted autoresearch to first_show_ms with the same anti-overfitting multi-scenario fresh-process harness; established new first-show baseline after import-surface wins.","timestamp":1773605035570,"segment":0}
