@@ -24,7 +24,7 @@ from typing import Protocol
 from ..core.block import Block
 from ..core.cell import Style
 from ..core.compose import join_horizontal, join_vertical, pad, truncate
-from ..cli.types import Zoom
+from ..core.zoom import Zoom
 from ..palette import current_palette
 from ..core._text_width import display_width
 

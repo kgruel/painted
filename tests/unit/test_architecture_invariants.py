@@ -213,11 +213,7 @@ def test_runtime_state_dataclasses_are_frozen() -> None:
 # in follow-up.md item 3. The allowlist below makes this explicit.
 # =============================================================================
 
-_KNOWN_VIOLATIONS = {
-    # views/record.py needs Zoom for zoom-aware rendering. Zoom should be
-    # extracted from cli/ into shared vocabulary — not a cli-only concern.
-    ("views", "cli"),
-}
+_KNOWN_VIOLATIONS: set[tuple[str, str]] = set()
 
 
 def _layer_of(mod: str) -> str:

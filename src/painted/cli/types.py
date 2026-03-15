@@ -1,22 +1,16 @@
-"""Core types for the CLI framework layer.
+"""Types for the CLI framework layer.
 
-Zoom, OutputMode, Format, and CliContext — the shared vocabulary
-between CLI argument parsing, context detection, and rendering.
+OutputMode, Format, and CliContext — the vocabulary for CLI argument
+parsing, context detection, and dispatch. Zoom lives in core/ as shared
+rendering vocabulary.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum, IntEnum
+from enum import Enum
 
-
-class Zoom(IntEnum):
-    """Detail level for rendering."""
-
-    MINIMAL = 0  # One-liner, counts only
-    SUMMARY = 1  # Key information, tree structure
-    DETAILED = 2  # Everything visible, nested expansion
-    FULL = 3  # All fields, full depth
+from ..core.zoom import Zoom
 
 
 class OutputMode(Enum):

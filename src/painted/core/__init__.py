@@ -33,6 +33,9 @@ from .buffer import Buffer, BufferView, CellWrite
 # Text primitives
 from .span import Line, Span
 
+# Rendering constraint
+from .zoom import Zoom
+
 # Output
 from .writer import ColorDepth, Writer, print_block
 from .html import render_html
@@ -68,6 +71,8 @@ __all__ = [
     # Text primitives
     "Span",
     "Line",
+    # Rendering constraint
+    "Zoom",
     # Output
     "Writer",
     "ColorDepth",
