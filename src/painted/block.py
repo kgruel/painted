@@ -25,6 +25,18 @@ def _get_cell_map(style: Style) -> dict[str, Cell]:
     return m
 
 
+def _ascii_cells(text: str, style: Style) -> list[Cell]:
+    """Convert ASCII text to cached Cell list using fast map() lookup."""
+    m = _style_cell_maps.get(style)
+    if m is None:
+        m = {}
+        _style_cell_maps[style] = m
+    for ch in text:
+        if ch not in m:
+            m[ch] = Cell(ch, style)
+    return list(map(m.__getitem__, text))
+
+
 def _cached_cell(char: str, style: Style) -> Cell:
     """Return a cached Cell for single ASCII characters."""
     m = _style_cell_maps.get(style)
@@ -125,7 +137,7 @@ class Block:
         if wrap == Wrap.NONE:
             # Truncate at width, single line
             if content.isascii():
-                cells = [_cached_cell(ch, style) for ch in content[:width]]
+                cells = _ascii_cells(content[:width], style)
                 cells = _pad_row(cells, width, style)
                 return Block([cells], width, id=id)
             cells = _cells_from_text(content, style, max_width=width)
@@ -139,10 +151,10 @@ class Block:
                     if width == 1:
                         cells = [Cell("…", style)]
                     else:
-                        cells = [_cached_cell(ch, style) for ch in content[: width - 1]]
+                        cells = _ascii_cells(content[: width - 1], style)
                         cells.append(Cell("…", style))
                 else:
-                    cells = [_cached_cell(ch, style) for ch in content]
+                    cells = _ascii_cells(content, style)
                 cells = _pad_row(cells, width, style)
                 return Block([cells], width, id=id)
             if display_width(content) > width:
@@ -312,9 +324,17 @@ def _cells_from_text(text: str, style: Style, *, max_width: int | None = None) -
     Uses a space placeholder for the trailing cell of a wide character.
     """
     if text.isascii():
+        m = _style_cell_maps.get(style)
+        if m is None:
+            m = {}
+            _style_cell_maps[style] = m
+        # Ensure all chars in text are cached
+        for ch in text if max_width is None else text[:max_width]:
+            if ch not in m:
+                m[ch] = Cell(ch, style)
         if max_width is None:
-            return [_cached_cell(ch, style) for ch in text]
-        return [_cached_cell(ch, style) for ch in text[:max_width]]
+            return list(map(m.__getitem__, text))
+        return list(map(m.__getitem__, text[:max_width]))
 
     cells: list[Cell] = []
     used = 0
