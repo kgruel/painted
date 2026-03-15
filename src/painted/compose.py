@@ -16,6 +16,23 @@ class Align(Enum):
     END = "end"  # bottom or right
 
 
+# Cached default-style space cell for gap/pad operations.
+_SPACE_CELL = Cell(" ", Style())
+
+# Cache for border cells keyed by (char, style).
+_border_cell_cache: dict[tuple[str, Style], Cell] = {}
+
+
+def _border_cell(char: str, style: Style) -> Cell:
+    key = (char, style)
+    cell = _border_cell_cache.get(key)
+    if cell is not None:
+        return cell
+    cell = Cell(char, style)
+    _border_cell_cache[key] = cell
+    return cell
+
+
 def join_horizontal(*blocks: Block, gap: int = 0, align: Align = Align.START) -> Block:
     """Join blocks left-to-right with optional gap and vertical alignment."""
     if not blocks:
@@ -24,10 +41,53 @@ def join_horizontal(*blocks: Block, gap: int = 0, align: Align = Align.START) ->
     max_height = max(b.height for b in blocks)
     total_width = sum(b.width for b in blocks) + gap * (len(blocks) - 1)
 
-    rows: list[list[Cell]] = [[] for _ in range(max_height)]
     has_ids = any((b.id is not None) or (b._ids is not None) for b in blocks)
-    ids_rows: list[list[str | None]] | None = [[] for _ in range(max_height)] if has_ids else None
-    gap_cell = Cell(" ", Style())
+    gap_cell = _SPACE_CELL
+    if not has_ids:
+        if gap == 0 and align is Align.START and all(b.height == max_height for b in blocks):
+            n = len(blocks)
+            if n == 2:
+                b0, b1 = blocks
+                return Block._create(
+                    tuple(b0.row(i) + b1.row(i) for i in range(max_height)),
+                    total_width,
+                )
+            if n == 3:
+                b0, b1, b2 = blocks
+                return Block._create(
+                    tuple(b0.row(i) + b1.row(i) + b2.row(i) for i in range(max_height)),
+                    total_width,
+                )
+            rows: list[tuple[Cell, ...]] = []
+            for row_idx in range(max_height):
+                row = tuple()
+                for block in blocks:
+                    row += block.row(row_idx)
+                rows.append(row)
+            return Block._create(tuple(rows), total_width)
+
+        rows: list[tuple[Cell, ...]] = [tuple() for _ in range(max_height)]
+        gap_cells = (gap_cell,) * gap
+        for i, block in enumerate(blocks):
+            # Calculate vertical offset for alignment
+            offset = _valign_offset(block.height, max_height, align)
+            blank_row = (gap_cell,) * block.width
+
+            for row_idx in range(max_height):
+                src_row = row_idx - offset
+                if 0 <= src_row < block.height:
+                    rows[row_idx] += block.row(src_row)
+                else:
+                    rows[row_idx] += blank_row
+
+                # Add gap cells between blocks (not after the last)
+                if i < len(blocks) - 1 and gap > 0:
+                    rows[row_idx] += gap_cells
+
+        return Block._create(tuple(rows), total_width)
+
+    rows: list[list[Cell]] = [[] for _ in range(max_height)]
+    ids_rows: list[list[str | None]] = [[] for _ in range(max_height)]
 
     for i, block in enumerate(blocks):
         # Calculate vertical offset for alignment
@@ -37,26 +97,21 @@ def join_horizontal(*blocks: Block, gap: int = 0, align: Align = Align.START) ->
             src_row = row_idx - offset
             if 0 <= src_row < block.height:
                 rows[row_idx].extend(block.row(src_row))
-                if ids_rows is not None:
-                    if block._ids is not None:
-                        ids_rows[row_idx].extend(block._ids[src_row])
-                    elif block.id is not None:
-                        ids_rows[row_idx].extend([block.id] * block.width)
-                    else:
-                        ids_rows[row_idx].extend([None] * block.width)
+                if block._ids is not None:
+                    ids_rows[row_idx].extend(block._ids[src_row])
+                elif block.id is not None:
+                    ids_rows[row_idx].extend([block.id] * block.width)
+                else:
+                    ids_rows[row_idx].extend([None] * block.width)
             else:
                 rows[row_idx].extend([gap_cell] * block.width)
-                if ids_rows is not None:
-                    ids_rows[row_idx].extend([None] * block.width)
+                ids_rows[row_idx].extend([None] * block.width)
 
             # Add gap cells between blocks (not after the last)
             if i < len(blocks) - 1 and gap > 0:
                 rows[row_idx].extend([gap_cell] * gap)
-                if ids_rows is not None:
-                    ids_rows[row_idx].extend([None] * gap)
+                ids_rows[row_idx].extend([None] * gap)
 
-    if ids_rows is None:
-        return Block(rows, total_width)
     return Block(rows, total_width, ids=ids_rows)
 
 
@@ -66,48 +121,56 @@ def join_vertical(*blocks: Block, gap: int = 0, align: Align = Align.START) -> B
         return Block.empty(0, 0)
 
     max_width = max(b.width for b in blocks)
-    pad_cell = Cell(" ", Style())
+    pad_cell = _SPACE_CELL
 
-    rows: list[list[Cell]] = []
+    rows: list[list[Cell] | tuple[Cell, ...]] = []
     has_ids = any((b.id is not None) or (b._ids is not None) for b in blocks)
     ids_rows: list[list[str | None]] | None = [] if has_ids else None
+
+    if ids_rows is None:
+        gap_row = (pad_cell,) * max_width
+        for i, block in enumerate(blocks):
+            offset = _halign_offset(block.width, max_width, align)
+            pad_left = (pad_cell,) * offset
+            pad_right = (pad_cell,) * (max_width - offset - block.width)
+            for row_idx in range(block.height):
+                rows.append(pad_left + block.row(row_idx) + pad_right)
+            if i < len(blocks) - 1 and gap > 0:
+                for _ in range(gap):
+                    rows.append(gap_row)
+        return Block._create(tuple(rows), max_width)
 
     for i, block in enumerate(blocks):
         offset = _halign_offset(block.width, max_width, align)
 
         for row_idx in range(block.height):
             row: list[Cell] = []
-            row_ids: list[str | None] | None = [] if ids_rows is not None else None
+            row_ids: list[str | None] = []
             # Left padding
             if offset > 0:
                 row.extend([pad_cell] * offset)
-                if row_ids is not None:
-                    row_ids.extend([None] * offset)
+                row_ids.extend([None] * offset)
             # Block content
             row.extend(block.row(row_idx))
-            if row_ids is not None:
-                if block._ids is not None:
-                    row_ids.extend(block._ids[row_idx])
-                elif block.id is not None:
-                    row_ids.extend([block.id] * block.width)
-                else:
-                    row_ids.extend([None] * block.width)
+            if block._ids is not None:
+                row_ids.extend(block._ids[row_idx])
+            elif block.id is not None:
+                row_ids.extend([block.id] * block.width)
+            else:
+                row_ids.extend([None] * block.width)
             # Right padding
             right_pad = max_width - offset - block.width
             if right_pad > 0:
                 row.extend([pad_cell] * right_pad)
-                if row_ids is not None:
-                    row_ids.extend([None] * right_pad)
+                row_ids.extend([None] * right_pad)
             rows.append(row)
-            if ids_rows is not None and row_ids is not None:
-                ids_rows.append(row_ids)
+            ids_rows.append(row_ids)
 
         # Insert gap rows between blocks (not after the last)
         if i < len(blocks) - 1 and gap > 0:
             for _ in range(gap):
                 rows.append([pad_cell] * max_width)
-                if ids_rows is not None:
-                    ids_rows.append([None] * max_width)
+                ids_rows.append([None] * max_width)
 
     if ids_rows is None:
         return Block(rows, max_width)
@@ -125,41 +188,47 @@ def pad(
 ) -> Block:
     """Add empty cell padding around a block."""
     new_width = block.width + left + right
-    space = Cell(" ", style)
+    space = _border_cell(" ", style)
 
-    rows: list[list[Cell]] = []
+    rows: list[list[Cell] | tuple[Cell, ...]] = []
     ids_rows: list[list[str | None]] | None = [] if block._ids is not None else None
+
+    if ids_rows is None:
+        pad_left = (space,) * left
+        pad_right = (space,) * right
+        pad_row = (space,) * new_width
+        for _ in range(top):
+            rows.append(pad_row)
+        for row_idx in range(block.height):
+            rows.append(pad_left + block.row(row_idx) + pad_right)
+        for _ in range(bottom):
+            rows.append(pad_row)
+        return Block._create(tuple(rows), new_width, id=block.id)
 
     # Top padding
     for _ in range(top):
         rows.append([space] * new_width)
-        if ids_rows is not None:
-            ids_rows.append([None] * new_width)
+        ids_rows.append([None] * new_width)
 
     # Content rows with left/right padding
     for row_idx in range(block.height):
         row: list[Cell] = []
-        row_ids: list[str | None] | None = [] if ids_rows is not None else None
+        row_ids: list[str | None] = []
         if left > 0:
             row.extend([space] * left)
-            if row_ids is not None:
-                row_ids.extend([None] * left)
+            row_ids.extend([None] * left)
         row.extend(block.row(row_idx))
-        if row_ids is not None:
-            row_ids.extend(block._ids[row_idx])
+        row_ids.extend(block._ids[row_idx])
         if right > 0:
             row.extend([space] * right)
-            if row_ids is not None:
-                row_ids.extend([None] * right)
+            row_ids.extend([None] * right)
         rows.append(row)
-        if ids_rows is not None and row_ids is not None:
-            ids_rows.append(row_ids)
+        ids_rows.append(row_ids)
 
     # Bottom padding
     for _ in range(bottom):
         rows.append([space] * new_width)
-        if ids_rows is not None:
-            ids_rows.append([None] * new_width)
+        ids_rows.append([None] * new_width)
 
     if ids_rows is None:
         return Block(rows, new_width, id=block.id)
@@ -176,7 +245,7 @@ def border(
 ) -> Block:
     """Wrap a block with a 1-cell border, optionally with a title in the top row."""
     new_width = block.width + 2
-    rows: list[list[Cell]] = []
+    rows: list[list[Cell] | tuple[Cell, ...]] = []
     has_ids = (id is not None) or (block._ids is not None)
     ids_rows: list[list[str | None]] | None = [] if has_ids else None
     border_id: str | None = id
@@ -184,11 +253,20 @@ def border(
         border_id = block.id
 
     # Top border
-    top_row = (
-        [Cell(chars.top_left, style)]
-        + [Cell(chars.horizontal, style)] * block.width
-        + [Cell(chars.top_right, style)]
-    )
+    horizontal_cell = _border_cell(chars.horizontal, style)
+    top_row: list[Cell] | tuple[Cell, ...]
+    if ids_rows is None and title is None:
+        top_row = (
+            (_border_cell(chars.top_left, style),)
+            + (horizontal_cell,) * block.width
+            + (_border_cell(chars.top_right, style),)
+        )
+    else:
+        top_row = (
+            [_border_cell(chars.top_left, style)]
+            + [horizontal_cell] * block.width
+            + [_border_cell(chars.top_right, style)]
+        )
 
     # Paint title into top row if provided
     title_width = display_width(title) if title else 0
@@ -198,7 +276,8 @@ def border(
         ts = title_style if title_style is not None else style
         pos = 2  # start after top_left + 1 padding cell
         # Space before title
-        top_row[pos] = Cell(" ", ts)
+        space_cell = _border_cell(" ", ts)
+        top_row[pos] = space_cell
         pos += 1
         for ch in title:
             w = char_width(ch)
@@ -208,25 +287,28 @@ def border(
                 break
             if w == 2 and pos + 1 > block.width:
                 break
-            top_row[pos] = Cell(ch, ts)
+            top_row[pos] = _border_cell(ch, ts)
             if w == 2:
-                top_row[pos + 1] = Cell(" ", ts)
+                top_row[pos + 1] = space_cell
             pos += w
         # Space after title
         if pos <= block.width:
-            top_row[pos] = Cell(" ", ts)
+            top_row[pos] = space_cell
 
+    if ids_rows is None and isinstance(top_row, list):
+        top_row = tuple(top_row)
     rows.append(top_row)
     if ids_rows is not None:
         ids_rows.append([border_id] * new_width)
 
     # Content rows with vertical borders
-    for row_idx in range(block.height):
-        row = (
-            [Cell(chars.vertical, style)] + list(block.row(row_idx)) + [Cell(chars.vertical, style)]
-        )
-        rows.append(row)
-        if ids_rows is not None:
+    vertical_cell = _border_cell(chars.vertical, style)
+    if ids_rows is None:
+        for row_idx in range(block.height):
+            rows.append((vertical_cell, *block.row(row_idx), vertical_cell))
+    else:
+        for row_idx in range(block.height):
+            rows.append([vertical_cell] + list(block.row(row_idx)) + [vertical_cell])
             inner_ids: list[str | None]
             if block._ids is not None:
                 inner_ids = list(block._ids[row_idx])
@@ -237,17 +319,24 @@ def border(
             ids_rows.append([border_id] + inner_ids + [border_id])
 
     # Bottom border
-    bottom_row = (
-        [Cell(chars.bottom_left, style)]
-        + [Cell(chars.horizontal, style)] * block.width
-        + [Cell(chars.bottom_right, style)]
-    )
+    if ids_rows is None:
+        bottom_row = (
+            (_border_cell(chars.bottom_left, style),)
+            + (horizontal_cell,) * block.width
+            + (_border_cell(chars.bottom_right, style),)
+        )
+    else:
+        bottom_row = (
+            [_border_cell(chars.bottom_left, style)]
+            + [horizontal_cell] * block.width
+            + [_border_cell(chars.bottom_right, style)]
+        )
     rows.append(bottom_row)
     if ids_rows is not None:
         ids_rows.append([border_id] * new_width)
 
     if ids_rows is None:
-        return Block(rows, new_width, id=block.id)
+        return Block._create(tuple(rows), new_width, id=block.id)
     return Block(rows, new_width, ids=ids_rows)
 
 

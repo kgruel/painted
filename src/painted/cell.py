@@ -22,7 +22,7 @@ NAMED_COLORS = {
 }
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Style:
     """Immutable text style with color and attribute flags."""
 
@@ -36,7 +36,11 @@ class Style:
 
     def merge(self, other: Style) -> Style:
         """Combine styles. `other` overrides non-None/non-False fields."""
-        return Style(
+        key = (self, other)
+        cached = _merge_cache.get(key)
+        if cached is not None:
+            return cached
+        result = Style(
             fg=other.fg if other.fg is not None else self.fg,
             bg=other.bg if other.bg is not None else self.bg,
             bold=other.bold or self.bold,
@@ -45,9 +49,15 @@ class Style:
             reverse=other.reverse or self.reverse,
             dim=other.dim or self.dim,
         )
+        if len(_merge_cache) < 1024:
+            _merge_cache[key] = result
+        return result
 
 
-@dataclass(frozen=True)
+_merge_cache: dict[tuple[Style, Style], Style] = {}
+
+
+@dataclass(frozen=True, slots=True)
 class Cell:
     """Atomic display unit: a single character with style."""
 

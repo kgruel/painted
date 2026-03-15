@@ -4,10 +4,81 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from enum import Enum
+from typing import cast
 
 from ._text_width import char_width, display_width
 from .buffer import Buffer, BufferView
 from .cell import Cell, Style
+
+
+# Internal cell cache: maps Style → dict of char → Cell for ASCII characters.
+_style_cell_maps: dict[Style, dict[str, Cell]] = {}
+
+
+def _get_cell_map(style: Style) -> dict[str, Cell]:
+    """Return a char→Cell map for the given style, creating lazily."""
+    m = _style_cell_maps.get(style)
+    if m is not None:
+        return m
+    m = {}
+    _style_cell_maps[style] = m
+    return m
+
+
+def _ascii_cells(text: str, style: Style) -> list[Cell]:
+    """Convert ASCII text to cached Cell list using fast map() lookup."""
+    m = _style_cell_maps.get(style)
+    if m is None:
+        m = {}
+        _style_cell_maps[style] = m
+    try:
+        return list(map(m.__getitem__, text))
+    except KeyError:
+        for ch in text:
+            if ch not in m:
+                m[ch] = Cell(ch, style)
+        return list(map(m.__getitem__, text))
+
+
+def _ascii_row_tuple(chars: str, width: int, style: Style) -> tuple[Cell, ...]:
+    """Build a padded ASCII row as a frozen tuple, bypassing list intermediates."""
+    m = _style_cell_maps.get(style)
+    if m is None:
+        m = {}
+        _style_cell_maps[style] = m
+    src = chars[:width]
+    try:
+        row = tuple(map(m.__getitem__, src))
+    except KeyError:
+        for ch in src:
+            if ch not in m:
+                m[ch] = Cell(ch, style)
+        row = tuple(map(m.__getitem__, src))
+    n = len(row)
+    if n < width:
+        space = m.get(" ")
+        if space is None:
+            space = Cell(" ", style)
+            m[" "] = space
+        row = row + (space,) * (width - n)
+    return row
+
+
+def _cached_cell(char: str, style: Style) -> Cell:
+    """Return a cached Cell for single ASCII characters."""
+    m = _style_cell_maps.get(style)
+    if m is not None:
+        cell = m.get(char)
+        if cell is not None:
+            return cell
+        cell = Cell(char, style)
+        m[char] = cell
+        return cell
+    m = {}
+    _style_cell_maps[style] = m
+    cell = Cell(char, style)
+    m[char] = cell
+    return cell
 
 
 class Wrap(Enum):
@@ -15,6 +86,26 @@ class Wrap(Enum):
     CHAR = "char"  # break at any character
     WORD = "word"  # break at word boundaries
     ELLIPSIS = "ellipsis"  # truncate with "…"
+
+
+def _freeze_cell_rows(rows: Sequence[Sequence[Cell]]) -> tuple[tuple[Cell, ...], ...]:
+    n = len(rows)
+    if n == 1:
+        r = rows[0]
+        return (cast(tuple[Cell, ...], r) if isinstance(r, tuple) else tuple(r),)
+    frozen: list[tuple[Cell, ...]] = []
+    for row in rows:
+        frozen.append(cast(tuple[Cell, ...], row) if isinstance(row, tuple) else tuple(row))
+    return tuple(frozen)
+
+
+def _freeze_id_rows(
+    rows: Sequence[Sequence[str | None]],
+) -> tuple[tuple[str | None, ...], ...]:
+    frozen: list[tuple[str | None, ...]] = []
+    for row in rows:
+        frozen.append(cast(tuple[str | None, ...], row) if isinstance(row, tuple) else tuple(row))
+    return tuple(frozen)
 
 
 class Block:
@@ -30,10 +121,8 @@ class Block:
         id: str | None = None,
         ids: Sequence[Sequence[str | None]] | None = None,
     ):
-        frozen_rows: tuple[tuple[Cell, ...], ...] = tuple(tuple(r) for r in rows)
-        frozen_ids: tuple[tuple[str | None, ...], ...] | None = (
-            tuple(tuple(r) for r in ids) if ids is not None else None
-        )
+        frozen_rows = _freeze_cell_rows(rows)
+        frozen_ids = _freeze_id_rows(ids) if ids is not None else None
         for row_idx, row in enumerate(frozen_rows):
             if len(row) != width:
                 raise ValueError(f"Block row {row_idx} width {len(row)} != block width {width}")
@@ -53,6 +142,23 @@ class Block:
         object.__setattr__(self, "_rows", frozen_rows)
         object.__setattr__(self, "_ids", frozen_ids)
         object.__setattr__(self, "_frozen", True)
+
+    @staticmethod
+    def _create(
+        rows: tuple[tuple[Cell, ...] | Sequence[Cell], ...],
+        width: int,
+        id: str | None = None,
+        ids: tuple[tuple[str | None, ...], ...] | None = None,
+    ) -> Block:
+        """Internal fast constructor — rows must be frozen tuples of correct width."""
+        b = object.__new__(Block)
+        object.__setattr__(b, "width", width)
+        object.__setattr__(b, "height", len(rows))
+        object.__setattr__(b, "id", id)
+        object.__setattr__(b, "_rows", rows)
+        object.__setattr__(b, "_ids", ids)
+        object.__setattr__(b, "_frozen", True)
+        return b
 
     def __setattr__(self, name: str, value: object) -> None:
         if getattr(self, "_frozen", False):
@@ -74,16 +180,29 @@ class Block:
 
         if width is None:
             cells = _cells_from_text(content, style)
-            return Block([cells], len(cells), id=id)
+            return Block._create((tuple(cells),), len(cells), id=id)
 
         if wrap == Wrap.NONE:
             # Truncate at width, single line
+            if content.isascii():
+                return Block._create((_ascii_row_tuple(content, width, style),), width, id=id)
             cells = _cells_from_text(content, style, max_width=width)
             cells = _pad_row(cells, width, style)
-            return Block([cells], width, id=id)
+            return Block._create((tuple(cells),), width, id=id)
 
         if wrap == Wrap.ELLIPSIS:
             # Truncate with ellipsis if needed
+            if content.isascii():
+                if content[width:]:
+                    if width == 1:
+                        cells = [Cell("…", style)]
+                    else:
+                        cells = _ascii_cells(content[: width - 1], style)
+                        cells.append(Cell("…", style))
+                else:
+                    return Block._create((_ascii_row_tuple(content, width, style),), width, id=id)
+                cells = _pad_row(cells, width, style)
+                return Block._create((tuple(cells),), width, id=id)
             if display_width(content) > width:
                 if width == 1:
                     cells = [Cell("…", style)]
@@ -93,7 +212,7 @@ class Block:
             else:
                 cells = _cells_from_text(content, style, max_width=width)
             cells = _pad_row(cells, width, style)
-            return Block([cells], width, id=id)
+            return Block._create((tuple(cells),), width, id=id)
 
         if wrap == Wrap.CHAR:
             # Break at any character boundary
@@ -147,6 +266,56 @@ class Block:
 
     def paint(self, buffer: Buffer | BufferView, x: int = 0, y: int = 0) -> None:
         """Transfer cells into a buffer region. Clips to buffer bounds."""
+        if isinstance(buffer, Buffer):
+            left = max(x, 0)
+            top = max(y, 0)
+            right = min(x + self.width, buffer.width)
+            bottom = min(y + self.height, buffer.height)
+            if left >= right or top >= bottom:
+                return
+
+            src_x = left - x
+            src_end = src_x + (right - left)
+            span = src_end - src_x
+            dst_cells = buffer._cells
+            dst_ids = buffer._ids
+            buffer_width = buffer.width
+            rows = self._rows
+
+            if self._ids is None:
+                if self.id is None:
+                    clear_ids = [None] * span if dst_ids is not None else None
+                    start = top * buffer_width + left
+                    for by in range(top, bottom):
+                        src_row = rows[by - y]
+                        dst_cells[start : start + span] = src_row[src_x:src_end]
+                        if dst_ids is not None and clear_ids is not None:
+                            dst_ids[start : start + span] = clear_ids
+                        start += buffer_width
+                    return
+
+                ids = buffer._ensure_ids()
+                row_ids = [self.id] * span
+                start = top * buffer_width + left
+                for by in range(top, bottom):
+                    src_row = rows[by - y]
+                    dst_cells[start : start + span] = src_row[src_x:src_end]
+                    ids[start : start + span] = row_ids
+                    start += buffer_width
+                return
+
+            ids = buffer._ensure_ids()
+            src_ids = self._ids
+            assert src_ids is not None
+            start = top * buffer_width + left
+            for by in range(top, bottom):
+                src_idx = by - y
+                src_row = rows[src_idx]
+                dst_cells[start : start + span] = src_row[src_x:src_end]
+                ids[start : start + span] = src_ids[src_idx][src_x : src_x + span]
+                start += buffer_width
+            return
+
         if self._ids is None:
             if self.id is None:
                 for row_idx in range(self.height):
@@ -187,10 +356,16 @@ class Block:
         return self.id
 
 
+_space_cells: dict[Style, Cell] = {}
+
+
 def _pad_row(cells: list[Cell], width: int, style: Style) -> list[Cell]:
     """Pad a row to the target width with space cells."""
     if len(cells) < width:
-        space = Cell(" ", style)
+        space = _space_cells.get(style)
+        if space is None:
+            space = Cell(" ", style)
+            _space_cells[style] = space
         cells = cells + [space] * (width - len(cells))
     return cells
 
@@ -200,27 +375,62 @@ def _cells_from_text(text: str, style: Style, *, max_width: int | None = None) -
 
     Uses a space placeholder for the trailing cell of a wide character.
     """
+    if text.isascii():
+        m = _style_cell_maps.get(style)
+        if m is None:
+            m = {}
+            _style_cell_maps[style] = m
+        src = text if max_width is None else text[:max_width]
+        try:
+            return list(map(m.__getitem__, src))
+        except KeyError:
+            for ch in src:
+                if ch not in m:
+                    m[ch] = Cell(ch, style)
+            return list(map(m.__getitem__, src))
+
+    # Inline cell caching for the non-ASCII path to avoid per-char function calls
+    m = _style_cell_maps.get(style)
+    if m is None:
+        m = {}
+        _style_cell_maps[style] = m
+
     cells: list[Cell] = []
     used = 0
+    append = cells.append
+    m_get = m.get
 
     for ch in text:
-        w = char_width(ch)
-        if w == 0:
-            # Zero-width (combining) chars aren't representable as separate cells.
-            continue
-
-        if max_width is not None and used + w > max_width:
-            break
-
-        cells.append(Cell(ch, style))
-        if w == 2:
-            if max_width is not None and used + 2 > max_width:
-                # Can't fit the full wide char; drop it.
-                cells.pop()
+        if ch.isascii():
+            if max_width is not None and used + 1 > max_width:
                 break
-            cells.append(Cell(" ", style))
-
-        used += w
+            cell = m_get(ch)
+            if cell is None:
+                cell = Cell(ch, style)
+                m[ch] = cell
+            append(cell)
+            used += 1
+        else:
+            w = char_width(ch)
+            if w == 0:
+                continue
+            if max_width is not None and used + w > max_width:
+                break
+            cell = m_get(ch)
+            if cell is None:
+                cell = Cell(ch, style)
+                m[ch] = cell
+            append(cell)
+            if w == 2:
+                if max_width is not None and used + 2 > max_width:
+                    cells.pop()
+                    break
+                space = m_get(" ")
+                if space is None:
+                    space = Cell(" ", style)
+                    m[" "] = space
+                append(space)
+            used += w
 
         if max_width is not None and used >= max_width:
             break

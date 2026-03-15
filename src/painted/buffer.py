@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import cast
 
 from wcwidth import wcwidth
 
 from .cell import EMPTY_CELL, Cell, Style
 
 
-@dataclass
+@dataclass(slots=True)
 class CellWrite:
     """A single cell change: position + new cell value."""
 
@@ -31,7 +32,7 @@ class Buffer:
 
     def _ensure_ids(self) -> list[str | None]:
         if self._ids is None:
-            self._ids = [None] * (self.width * self.height)
+            self._ids = cast(list[str | None], [None] * (self.width * self.height))
         return self._ids
 
     def _index(self, x: int, y: int) -> int | None:
@@ -112,20 +113,38 @@ class Buffer:
 
     def diff(self, other: Buffer) -> list[CellWrite]:
         """Compare with another buffer, return list of cells that differ."""
-        if self.width != other.width or self.height != other.height:
+        width = self.width
+        cells = self._cells
+
+        if width != other.width or self.height != other.height:
             # Dimension mismatch: treat every cell as changed. This avoids IndexError
             # and ensures coordinates are computed against `self`'s stride.
-            writes: list[CellWrite] = []
-            for i in range(len(self._cells)):
-                y, x = divmod(i, self.width)
-                writes.append(CellWrite(x, y, self._cells[i]))
-            return writes
+            return [CellWrite(i % width, i // width, cell) for i, cell in enumerate(cells)]
+
+        other_cells = other._cells
+        if cells == other_cells:
+            return []
 
         writes: list[CellWrite] = []
-        for i in range(len(self._cells)):
-            if self._cells[i] != other._cells[i]:
-                y, x = divmod(i, self.width)
-                writes.append(CellWrite(x, y, self._cells[i]))
+        append = writes.append
+        height = self.height
+        total = width * height
+        # Compare cells in bulk, then find per-row diffs only for changed rows
+        row_start = 0
+        for y in range(height):
+            row_end = row_start + width
+            # Quick scan: check if any cell differs in this row
+            changed = False
+            for i in range(row_start, row_end):
+                if cells[i] is not other_cells[i]:
+                    changed = True
+                    break
+            if changed:
+                for i in range(row_start, row_end):
+                    cell = cells[i]
+                    if cell is not other_cells[i] and cell != other_cells[i]:
+                        append(CellWrite(i - row_start, y, cell))
+            row_start = row_end
         return writes
 
     def line_hashes(self, *, include_style: bool = True) -> list[int]:
