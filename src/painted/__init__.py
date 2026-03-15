@@ -18,39 +18,12 @@ For CLI harness and in-place rendering:
     from painted.inplace import InPlaceRenderer
 """
 
-# --- Eager: core primitives (always cheap, no higher-layer deps) ---
-
-from .core.block import Block, Wrap
-from .core.borders import ASCII, DOUBLE, HEAVY, LIGHT, ROUNDED, BorderChars
-from .core.cell import EMPTY_CELL, Cell, Style
-from .core.compose import (
-    Align,
-    border,
-    join_horizontal,
-    join_responsive,
-    join_vertical,
-    pad,
-    truncate,
-    vslice,
-)
-from .core.span import Line, Span
-from .core.writer import ColorDepth, Writer, print_block
-from .core.html import render_html
-from .core.zoom import Zoom
-
-# --- Eager: shared root primitives (leaf nodes, no higher-layer deps) ---
-
-from .cursor import Cursor, CursorMode
-from .viewport import Viewport
-
-# --- Lazy: everything else (cli, views, aesthetic, display) ---
-#
-# This ensures `import painted.core` or `from painted import Block` does not
-# pull in cli/, views/, or tui/. Higher-layer symbols are resolved on first
-# access via __getattr__.
+# Root package is fully lazy. This keeps `import painted.core` and
+# `from painted import ...` cold-start cost low by avoiding eager imports
+# of renderer/framework modules until symbols are actually accessed.
 
 __all__ = [
-    # Primitives (eager)
+    # Primitives
     "Style",
     "Cell",
     "EMPTY_CELL",
@@ -59,7 +32,7 @@ __all__ = [
     "Block",
     "Wrap",
     "Zoom",
-    # Composition (eager)
+    # Composition
     "Align",
     "join_horizontal",
     "join_vertical",
@@ -77,14 +50,14 @@ __all__ = [
     "DOUBLE",
     "LIGHT",
     "ASCII",
-    # Output (eager)
+    # Output
     "Writer",
     "ColorDepth",
     "print_block",
     "render_html",
-    # Display (lazy)
+    # Display
     "show",
-    # CLI framework (lazy)
+    # CLI framework
     "OutputMode",
     "Format",
     "CliContext",
@@ -103,9 +76,9 @@ __all__ = [
     "parse_format",
     "resolve_mode",
     "detect_context",
-    # In-place rendering (lazy)
+    # In-place rendering
     "InPlaceRenderer",
-    # Aesthetic (lazy)
+    # Aesthetic
     "Palette",
     "DEFAULT_PALETTE",
     "NORD_PALETTE",
@@ -120,60 +93,74 @@ __all__ = [
     "reset_icons",
 ]
 
-# Mapping from lazy symbol name → (module, name) for __getattr__
-_LAZY_IMPORTS: dict[str, tuple[str, str]] = {}
+from importlib import import_module as _import_module
 
-
-def _register_lazy(module: str, names: list[str]) -> None:
-    for name in names:
-        _LAZY_IMPORTS[name] = (module, name)
-
-
-_register_lazy(
-    ".cli",
-    [
-        "CliContext",
-        "CliRunner",
-        "Format",
-        "HelpArg",
-        "HelpData",
-        "HelpFlag",
-        "HelpGroup",
-        "OutputMode",
-        "add_cli_args",
-        "detect_context",
-        "parse_format",
-        "parse_mode",
-        "parse_zoom",
-        "resolve_mode",
-        "run_cli",
-        "AppCommand",
-        "AppRunner",
-        "run_app",
-    ],
-)
-
-_register_lazy(
-    ".icon_set",
-    ["ASCII_ICONS", "IconSet", "current_icons", "reset_icons", "use_icons"],
-)
-
-_register_lazy(".inplace", ["InPlaceRenderer"])
-
-_register_lazy(
-    ".palette",
-    [
-        "DEFAULT_PALETTE",
-        "MONO_PALETTE",
-        "NORD_PALETTE",
-        "Palette",
-        "current_palette",
-        "reset_palette",
-        "use_palette",
-    ],
-)
-
-_register_lazy(".display", ["show"])
+_LAZY_IMPORTS: dict[str, tuple[str, str]] = {
+    # Core
+    "Cell": (".core.cell", "Cell"),
+    "EMPTY_CELL": (".core.cell", "EMPTY_CELL"),
+    "Style": (".core.cell", "Style"),
+    "Line": (".core.span", "Line"),
+    "Span": (".core.span", "Span"),
+    "Block": (".core.block", "Block"),
+    "Wrap": (".core.block", "Wrap"),
+    "Zoom": (".core.zoom", "Zoom"),
+    "Align": (".core.compose", "Align"),
+    "border": (".core.compose", "border"),
+    "join_horizontal": (".core.compose", "join_horizontal"),
+    "join_responsive": (".core.compose", "join_responsive"),
+    "join_vertical": (".core.compose", "join_vertical"),
+    "pad": (".core.compose", "pad"),
+    "truncate": (".core.compose", "truncate"),
+    "vslice": (".core.compose", "vslice"),
+    "ASCII": (".core.borders", "ASCII"),
+    "DOUBLE": (".core.borders", "DOUBLE"),
+    "HEAVY": (".core.borders", "HEAVY"),
+    "LIGHT": (".core.borders", "LIGHT"),
+    "ROUNDED": (".core.borders", "ROUNDED"),
+    "BorderChars": (".core.borders", "BorderChars"),
+    "ColorDepth": (".core.writer", "ColorDepth"),
+    "Writer": (".core.writer", "Writer"),
+    "print_block": (".core.writer", "print_block"),
+    "render_html": (".core.html", "render_html"),
+    "Cursor": (".cursor", "Cursor"),
+    "CursorMode": (".cursor", "CursorMode"),
+    "Viewport": (".viewport", "Viewport"),
+    # CLI
+    "CliContext": (".cli", "CliContext"),
+    "CliRunner": (".cli", "CliRunner"),
+    "Format": (".cli", "Format"),
+    "HelpArg": (".cli", "HelpArg"),
+    "HelpData": (".cli", "HelpData"),
+    "HelpFlag": (".cli", "HelpFlag"),
+    "HelpGroup": (".cli", "HelpGroup"),
+    "OutputMode": (".cli", "OutputMode"),
+    "add_cli_args": (".cli", "add_cli_args"),
+    "detect_context": (".cli", "detect_context"),
+    "parse_format": (".cli", "parse_format"),
+    "parse_mode": (".cli", "parse_mode"),
+    "parse_zoom": (".cli", "parse_zoom"),
+    "resolve_mode": (".cli", "resolve_mode"),
+    "run_cli": (".cli", "run_cli"),
+    "AppCommand": (".cli", "AppCommand"),
+    "AppRunner": (".cli", "AppRunner"),
+    "run_app": (".cli", "run_app"),
+    # Aesthetic + display
+    "ASCII_ICONS": (".icon_set", "ASCII_ICONS"),
+    "IconSet": (".icon_set", "IconSet"),
+    "current_icons": (".icon_set", "current_icons"),
+    "reset_icons": (".icon_set", "reset_icons"),
+    "use_icons": (".icon_set", "use_icons"),
+    "InPlaceRenderer": (".inplace", "InPlaceRenderer"),
+    "DEFAULT_PALETTE": (".palette", "DEFAULT_PALETTE"),
+    "MONO_PALETTE": (".palette", "MONO_PALETTE"),
+    "NORD_PALETTE": (".palette", "NORD_PALETTE"),
+    "Palette": (".palette", "Palette"),
+    "current_palette": (".palette", "current_palette"),
+    "reset_palette": (".palette", "reset_palette"),
+    "use_palette": (".palette", "use_palette"),
+    "show": (".display", "show"),
+}
 
 
 def __dir__():
@@ -184,11 +171,8 @@ def __getattr__(name: str):
     spec = _LAZY_IMPORTS.get(name)
     if spec is not None:
         module_path, attr = spec
-        import importlib
-
-        mod = importlib.import_module(module_path, __name__)
+        mod = _import_module(module_path, __name__)
         value = getattr(mod, attr)
-        # Cache on module to avoid repeated __getattr__ calls
         globals()[name] = value
         return value
     raise AttributeError(f"module 'painted' has no attribute {name!r}")

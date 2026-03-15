@@ -6,39 +6,7 @@ beyond wcwidth. Import from here when you just want the renderer.
     from painted.core import Block, Style, join_horizontal, border, Buffer
 """
 
-# Primitives
-from .cell import EMPTY_CELL, Cell, Style
-
-# Blocks
-from .block import Block, Wrap
-
-# Composition
-from .compose import (
-    Align,
-    border,
-    join_horizontal,
-    join_responsive,
-    join_vertical,
-    pad,
-    truncate,
-    vslice,
-)
-
-# Borders
-from .borders import ASCII, DOUBLE, HEAVY, LIGHT, ROUNDED, BorderChars
-
-# Buffer
-from .buffer import Buffer, BufferView, CellWrite
-
-# Text primitives
-from .span import Line, Span
-
-# Rendering constraint
-from .zoom import Zoom
-
-# Output
-from .writer import ColorDepth, Writer, print_block
-from .html import render_html
+from importlib import import_module as _import_module
 
 __all__ = [
     # Primitives
@@ -79,3 +47,50 @@ __all__ = [
     "print_block",
     "render_html",
 ]
+
+_LAZY_IMPORTS: dict[str, tuple[str, str]] = {
+    "Style": (".cell", "Style"),
+    "Cell": (".cell", "Cell"),
+    "EMPTY_CELL": (".cell", "EMPTY_CELL"),
+    "Block": (".block", "Block"),
+    "Wrap": (".block", "Wrap"),
+    "Align": (".compose", "Align"),
+    "join_horizontal": (".compose", "join_horizontal"),
+    "join_vertical": (".compose", "join_vertical"),
+    "join_responsive": (".compose", "join_responsive"),
+    "pad": (".compose", "pad"),
+    "border": (".compose", "border"),
+    "truncate": (".compose", "truncate"),
+    "vslice": (".compose", "vslice"),
+    "BorderChars": (".borders", "BorderChars"),
+    "ROUNDED": (".borders", "ROUNDED"),
+    "HEAVY": (".borders", "HEAVY"),
+    "DOUBLE": (".borders", "DOUBLE"),
+    "LIGHT": (".borders", "LIGHT"),
+    "ASCII": (".borders", "ASCII"),
+    "Buffer": (".buffer", "Buffer"),
+    "BufferView": (".buffer", "BufferView"),
+    "CellWrite": (".buffer", "CellWrite"),
+    "Span": (".span", "Span"),
+    "Line": (".span", "Line"),
+    "Zoom": (".zoom", "Zoom"),
+    "Writer": (".writer", "Writer"),
+    "ColorDepth": (".writer", "ColorDepth"),
+    "print_block": (".writer", "print_block"),
+    "render_html": (".html", "render_html"),
+}
+
+
+def __dir__() -> list[str]:
+    return list(__all__) + list(globals())
+
+
+def __getattr__(name: str):
+    spec = _LAZY_IMPORTS.get(name)
+    if spec is not None:
+        module_path, attr = spec
+        mod = _import_module(module_path, __name__)
+        value = getattr(mod, attr)
+        globals()[name] = value
+        return value
+    raise AttributeError(f"module 'painted.core' has no attribute {name!r}")
