@@ -509,25 +509,29 @@ def _render_minimal(results: list[ScenarioResult], width: int) -> Block:
 
 def _key_frames(result: ScenarioResult) -> list[tuple[str, object]]:
     keys = result.scenario.keys
-    idxs: list[int] = [0]
-    if len(result.frames) > 1:
-        idxs.append(1)
+    frames = result.frames
+    n = len(frames)
+    if n == 0:
+        return []
+
+    indices: list[int] = [0]
+    if n > 1:
+        indices.append(1)
+    enter_i = -1
     try:
-        enter_i = keys.index("enter")
-        idxs.append(enter_i + 1)
+        enter_i = keys.index("enter") + 1
     except ValueError:
         pass
-    if result.frames:
-        idxs.append(len(result.frames) - 1)
-    # De-dup while preserving order
-    seen: set[int] = set()
+    if 0 <= enter_i < n and enter_i not in indices:
+        indices.append(enter_i)
+    last_i = n - 1
+    if last_i not in indices:
+        indices.append(last_i)
+
     out: list[tuple[str, object]] = []
-    for i in idxs:
-        if i in seen or i < 0 or i >= len(result.frames):
-            continue
-        seen.add(i)
+    for i in indices:
         label = "initial" if i == 0 else f"after '{keys[i - 1]}'"
-        out.append((label, result.frames[i]))
+        out.append((label, frames[i]))
     return out
 
 

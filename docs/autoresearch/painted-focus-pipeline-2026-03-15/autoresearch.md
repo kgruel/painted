@@ -33,4 +33,6 @@ Optimize the focus demo end-to-end path as the new primary target. This isolates
 
 ## What's Been Tried
 - New target created from retrospective: prior full-suite work plateaued at `pipeline_ms=6.919` and identified focus path as dominant remaining cost.
-- Baseline pending for this focused target.
+- Baseline established at `focus_ms=16.177`.
+- Kept: cached palette/style refs in emission block rendering (summary/detailed/full), bringing `focus_ms` to `16.124`.
+- Kept: reused shared `STYLE_DIM` constant broadly in focus rendering paths (details, frame snapshots, summary/detailed/full sections), reducing style object churn and improving to `focus_ms=15.648`.
