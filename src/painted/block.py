@@ -389,16 +389,26 @@ def _cells_from_text(text: str, style: Style, *, max_width: int | None = None) -
                     m[ch] = Cell(ch, style)
             return list(map(m.__getitem__, src))
 
+    # Inline cell caching for the non-ASCII path to avoid per-char function calls
+    m = _style_cell_maps.get(style)
+    if m is None:
+        m = {}
+        _style_cell_maps[style] = m
+
     cells: list[Cell] = []
     used = 0
     append = cells.append
+    m_get = m.get
 
     for ch in text:
         if ch.isascii():
-            # ASCII chars are always width 1
             if max_width is not None and used + 1 > max_width:
                 break
-            append(_cached_cell(ch, style))
+            cell = m_get(ch)
+            if cell is None:
+                cell = Cell(ch, style)
+                m[ch] = cell
+            append(cell)
             used += 1
         else:
             w = char_width(ch)
@@ -406,12 +416,20 @@ def _cells_from_text(text: str, style: Style, *, max_width: int | None = None) -
                 continue
             if max_width is not None and used + w > max_width:
                 break
-            append(_cached_cell(ch, style))
+            cell = m_get(ch)
+            if cell is None:
+                cell = Cell(ch, style)
+                m[ch] = cell
+            append(cell)
             if w == 2:
                 if max_width is not None and used + 2 > max_width:
                     cells.pop()
                     break
-                append(_cached_cell(" ", style))
+                space = m_get(" ")
+                if space is None:
+                    space = Cell(" ", style)
+                    m[" "] = space
+                append(space)
             used += w
 
         if max_width is not None and used >= max_width:
