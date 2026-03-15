@@ -176,6 +176,10 @@ _register_lazy(
 _register_lazy(".display", ["show"])
 
 
+def __dir__():
+    return list(__all__) + list(globals())
+
+
 def __getattr__(name: str):
     spec = _LAZY_IMPORTS.get(name)
     if spec is not None:
