@@ -1,19 +1,31 @@
-# Autoresearch Ideas — painted frame diff renderer
+# Autoresearch Ideas — painted import surface
 
-## Summary of wins (3.66ms → 0.98ms, -73%)
-- slots=True on Cell/Style/CellWrite dataclasses
-- Cell cache (style→char→Cell) with map().__getitem__ for ASCII text  
-- try/except cache priming (skip per-char checks on hot path)
-- _ascii_row_tuple: padded frozen tuple rows bypassing list intermediates
-- Block._create: fast constructor bypassing validation + freeze
-- Compose cell caching (_SPACE_CELL, _border_cell)
-- Style.merge cache, display_width cache, char_width cache
-- Buffer.diff identity-based row scanning (is not)
-- Inlined cell cache in _cells_from_text non-ASCII path
-- Dedicated _space_cells cache for padding
+## Initial hypotheses
 
-## Remaining paths (very deep diminishing returns)
-- **Reduce dict.get calls**: 162K dict.get + 102K __hash__ calls dominate. Strategies: reduce cache key complexity, use id()-based lookups where safe, or batch operations.
-- **Reduce isascii calls**: 112K calls — some are redundant across call chain.  
-- **Block._create overhead**: 15K calls × 6 setattr = 90K attribute sets. Could use __init__ bypass or tuple packing.
-- **join_horizontal/vertical**: 15ms/200 renders. Could try flattening the block iteration or pre-computing row tuples.
+- `import painted.core` should be close to the floor after the lazy top-level
+  import refactor. If it is still expensive, the cost is likely inside
+  `painted.core` itself rather than the root package.
+- `from painted import run_cli` may still overpay because `painted.cli.__init__`
+  eagerly imports help, app runner, and the main runner.
+- `from painted import show` should stay lighter than `run_cli`, but it still
+  imports display + CLI context/types + icon-set support up front.
+
+## Likely optimization paths
+
+- **Lazy `painted.cli` facade:** make `painted.cli.__init__` mirror the root
+  package and defer `help`, `app_runner`, and `runner` until needed.
+- **Split help path from run path:** if `run_cli_import_ms` is high, move help
+  rendering imports out of the base runner import surface.
+- **Keep `show` on a narrower dependency diet:** if `show_import_ms` is high,
+  revisit whether display needs the full CLI vocabulary at import time.
+- **Track module creep:** if `core_import_modules` grows over time, add a hard
+  regression test around the allowed import set.
+- **Memory over latency tradeoffs:** if a faster import path increases peak KiB
+  substantially, keep both metrics visible rather than chasing raw ms only.
+
+## Nice-to-have follow-ups
+
+- Add a `__dir__` implementation for lazy root exports so REPL discoverability
+  stays good without forcing eager imports.
+- Add a dedicated smoke test for `from painted import *` if the root facade
+  becomes more dynamic over time.

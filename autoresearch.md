@@ -1,46 +1,92 @@
-# Autoresearch: painted frame diff renderer
+# Autoresearch: painted import surface and cold-start cost
 
 ## Objective
-Optimize end-to-end frame rendering performance for painted's cell-buffer renderer. The workload should reflect realistic library usage across multiple UI shapes and screen sizes: render representative dashboards into Blocks, including a full-screen variant with an extra streaming log panel, paint into Buffers, and diff frames under static, sparse-update, and churned-update scenarios. Also include a lower-level Buffer.diff companion benchmark so renderer wins do not come from shifting cost between layers.
+
+Measure the cold-start cost of painted's public entrypoints in fresh Python
+interpreters. The goal is not just "make imports smaller", but to preserve the
+new architectural boundary story in runtime terms:
+
+- `import painted.core` should stay self-contained
+- top-level eager primitives should remain cheap
+- higher-layer entrypoints should only pay for the layer they expose
+- first-use paths (`show`, `run_cli --help`) should be measurable and defendable
+
+This complements the frame-diff benchmark. That experiment measures hot-path
+render throughput; this one measures first-touch latency and import surface area.
 
 ## Metrics
-- **Primary**: `frame_ms` (ms, lower is better) — the top-level 225x60 suite
-- **Secondary**: `frame_ms_small`, `responsive_large_ms`, `responsive_small_ms`, `focus_large_ms`, `focus_small_ms`, `log_dashboard_large_ms`, `log_dashboard_small_ms`, `diff_only_ms`, `render_ms`, `paint_ms`, `diff_ms`
+
+- **Primary:** `core_import_ms` (ms, lower is better)
+- **Secondary:**
+  - `noop_process_ms`
+  - `top_block_import_ms`
+  - `show_import_ms`
+  - `run_cli_import_ms`
+  - `first_show_ms`
+  - `first_help_ms`
+  - matching `*_wall_ms` metrics
+  - matching `*_modules` metrics
+  - matching `*_peak_kib` metrics
+
+`*_ms` is the median child-process scenario time. `*_wall_ms` includes the full
+subprocess wall time so startup overhead stays visible.
 
 ## How to Run
-`./autoresearch.sh` — outputs `METRIC frame_ms=<number>` and secondary metric lines.
+
+`./autoresearch.sh`
+
+Useful knobs:
+
+- `REPEATS=11 ./autoresearch.sh` — increase sample count
+- `LOG_JSONL=0 ./autoresearch.sh` — skip appending to `autoresearch.jsonl`
+- `METRIC_TAG=branch-name ./autoresearch.sh` — annotate the log entry
+
+## Scenarios
+
+Each scenario runs in a fresh child Python process:
+
+- `noop_process` — baseline subprocess with no painted import
+- `core_import` — `import painted.core`
+- `top_block_import` — `from painted import Block, Style`
+- `show_import` — `from painted import show`
+- `run_cli_import` — `from painted import run_cli`
+- `first_show` — first `show({...}, format=Format.PLAIN)` call
+- `first_help` — first `run_cli(['--help'], ...)` call
 
 ## Files in Scope
-- `src/painted/buffer.py` — buffer writes, diffing, line hashing
-- `src/painted/block.py` — block paint internals if they matter end-to-end
-- `src/painted/compose.py` — composition overhead if benchmark-backed
-- `demos/patterns/responsive.py` — dashboard/render workload
-- `demos/patterns/focus.py` — alternate panel-heavy workload
-- `autoresearch.sh` — benchmark harness
-- `autoresearch.checks.sh` — correctness gate
-- `autoresearch.md` — experiment notes and resume context
-- `autoresearch.ideas.md` — deferred optimization ideas
+
+- `src/painted/__init__.py`
+- `src/painted/core/__init__.py`
+- `src/painted/core/zoom.py`
+- `src/painted/display.py`
+- `src/painted/cli/__init__.py`
+- `src/painted/cli/runner.py`
+- `src/painted/cli/help.py`
+- `src/painted/views/__init__.py`
+- `autoresearch.sh`
+- `autoresearch.checks.sh`
+- `autoresearch.md`
+- `autoresearch.ideas.md`
+- `SUMMARY.md`
 
 ## Off Limits
-- Public API changes
-- New runtime dependencies
-- Benchmark-only shortcuts that bypass real rendering, painting, or diff semantics
-- Terminal I/O timing as the primary metric
+
+- Public API removals just to reduce import cost
+- Benchmark-only shortcuts that bypass real entrypoints
+- Reusing a warmed interpreter between scenarios
+- Hiding architectural regressions behind cache-heavy parent-process setups
 
 ## Constraints
-- Preserve existing behavior and correctness
-- `./dev check` must pass for kept results
-- Do not overfit to one scenario: both screen sizes, the log-panel workload, and the diff-only companion stay in the benchmark
-- Keep benchmark honest: real Block render -> Buffer paint -> Buffer diff pipeline
 
-## What's Been Tried
-- Initial responsive-only benchmark quickly found large wins in `Block.paint()` and `Buffer.diff()`.
-- Best responsive-only run reached ~2.06ms/frame from a 3.74ms baseline by:
-  - adding a Buffer-specific slice-copy fast path in `Block.paint()`
-  - streamlining `Buffer.diff()`
-  - short-circuiting equal buffers in `Buffer.diff()`
-- Multi-workload benchmark was added with responsive + focus + diff-only companion.
-- Benchmark honesty fix: diff-only static companion case is now truly zero-diff.
-- Some narrower `Block.text()`/compose micro-optimizations did not carry over to the broader benchmark.
-- Next refinement: stress full-screen rendering more realistically by adding a larger dashboard variant with a streaming log panel and benchmarking both `140x40` and `225x60`, with the larger suite as the top-level score.
-- Architectural guardrails matter: optimizations should stay inside owning modules or public APIs.
+- Preserve current runtime behavior
+- Keep `painted.core` isolated from `cli/`, `views/`, and `tui/`
+- `./dev check` must pass for kept results
+- Measure real child-process imports, not just in-process warm access
+- Keep the benchmark honest: interpreter-cold, process-isolated scenarios
+
+## Notes
+
+- This benchmark is cold at the interpreter level, not at the OS page-cache
+  level. Repeated runs still benefit from filesystem cache.
+- Module-count and peak-allocation metrics are side signals. The decision
+  metric is still latency.
