@@ -31,10 +31,13 @@ def _ascii_cells(text: str, style: Style) -> list[Cell]:
     if m is None:
         m = {}
         _style_cell_maps[style] = m
-    for ch in text:
-        if ch not in m:
-            m[ch] = Cell(ch, style)
-    return list(map(m.__getitem__, text))
+    try:
+        return list(map(m.__getitem__, text))
+    except KeyError:
+        for ch in text:
+            if ch not in m:
+                m[ch] = Cell(ch, style)
+        return list(map(m.__getitem__, text))
 
 
 def _ascii_row_tuple(chars: str, width: int, style: Style) -> tuple[Cell, ...]:
