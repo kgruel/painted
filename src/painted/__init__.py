@@ -93,85 +93,74 @@ __all__ = [
     "reset_icons",
 ]
 
-_LAZY_IMPORTS: dict[str, tuple[str, str]] = {}
+from importlib import import_module as _import_module
 
-
-def _register_lazy(module: str, names: list[str]) -> None:
-    for name in names:
-        _LAZY_IMPORTS[name] = (module, name)
-
-
-_register_lazy(".core.cell", ["Cell", "EMPTY_CELL", "Style"])
-_register_lazy(".core.span", ["Line", "Span"])
-_register_lazy(".core.block", ["Block", "Wrap"])
-_register_lazy(".core.zoom", ["Zoom"])
-_register_lazy(
-    ".core.compose",
-    [
-        "Align",
-        "border",
-        "join_horizontal",
-        "join_responsive",
-        "join_vertical",
-        "pad",
-        "truncate",
-        "vslice",
-    ],
-)
-_register_lazy(
-    ".core.borders",
-    ["ASCII", "DOUBLE", "HEAVY", "LIGHT", "ROUNDED", "BorderChars"],
-)
-_register_lazy(".core.writer", ["ColorDepth", "Writer", "print_block"])
-_register_lazy(".core.html", ["render_html"])
-_register_lazy(".cursor", ["Cursor", "CursorMode"])
-_register_lazy(".viewport", ["Viewport"])
-
-_register_lazy(
-    ".cli",
-    [
-        "CliContext",
-        "CliRunner",
-        "Format",
-        "HelpArg",
-        "HelpData",
-        "HelpFlag",
-        "HelpGroup",
-        "OutputMode",
-        "add_cli_args",
-        "detect_context",
-        "parse_format",
-        "parse_mode",
-        "parse_zoom",
-        "resolve_mode",
-        "run_cli",
-        "AppCommand",
-        "AppRunner",
-        "run_app",
-    ],
-)
-
-_register_lazy(
-    ".icon_set",
-    ["ASCII_ICONS", "IconSet", "current_icons", "reset_icons", "use_icons"],
-)
-
-_register_lazy(".inplace", ["InPlaceRenderer"])
-
-_register_lazy(
-    ".palette",
-    [
-        "DEFAULT_PALETTE",
-        "MONO_PALETTE",
-        "NORD_PALETTE",
-        "Palette",
-        "current_palette",
-        "reset_palette",
-        "use_palette",
-    ],
-)
-
-_register_lazy(".display", ["show"])
+_LAZY_IMPORTS: dict[str, tuple[str, str]] = {
+    # Core
+    "Cell": (".core.cell", "Cell"),
+    "EMPTY_CELL": (".core.cell", "EMPTY_CELL"),
+    "Style": (".core.cell", "Style"),
+    "Line": (".core.span", "Line"),
+    "Span": (".core.span", "Span"),
+    "Block": (".core.block", "Block"),
+    "Wrap": (".core.block", "Wrap"),
+    "Zoom": (".core.zoom", "Zoom"),
+    "Align": (".core.compose", "Align"),
+    "border": (".core.compose", "border"),
+    "join_horizontal": (".core.compose", "join_horizontal"),
+    "join_responsive": (".core.compose", "join_responsive"),
+    "join_vertical": (".core.compose", "join_vertical"),
+    "pad": (".core.compose", "pad"),
+    "truncate": (".core.compose", "truncate"),
+    "vslice": (".core.compose", "vslice"),
+    "ASCII": (".core.borders", "ASCII"),
+    "DOUBLE": (".core.borders", "DOUBLE"),
+    "HEAVY": (".core.borders", "HEAVY"),
+    "LIGHT": (".core.borders", "LIGHT"),
+    "ROUNDED": (".core.borders", "ROUNDED"),
+    "BorderChars": (".core.borders", "BorderChars"),
+    "ColorDepth": (".core.writer", "ColorDepth"),
+    "Writer": (".core.writer", "Writer"),
+    "print_block": (".core.writer", "print_block"),
+    "render_html": (".core.html", "render_html"),
+    "Cursor": (".cursor", "Cursor"),
+    "CursorMode": (".cursor", "CursorMode"),
+    "Viewport": (".viewport", "Viewport"),
+    # CLI
+    "CliContext": (".cli", "CliContext"),
+    "CliRunner": (".cli", "CliRunner"),
+    "Format": (".cli", "Format"),
+    "HelpArg": (".cli", "HelpArg"),
+    "HelpData": (".cli", "HelpData"),
+    "HelpFlag": (".cli", "HelpFlag"),
+    "HelpGroup": (".cli", "HelpGroup"),
+    "OutputMode": (".cli", "OutputMode"),
+    "add_cli_args": (".cli", "add_cli_args"),
+    "detect_context": (".cli", "detect_context"),
+    "parse_format": (".cli", "parse_format"),
+    "parse_mode": (".cli", "parse_mode"),
+    "parse_zoom": (".cli", "parse_zoom"),
+    "resolve_mode": (".cli", "resolve_mode"),
+    "run_cli": (".cli", "run_cli"),
+    "AppCommand": (".cli", "AppCommand"),
+    "AppRunner": (".cli", "AppRunner"),
+    "run_app": (".cli", "run_app"),
+    # Aesthetic + display
+    "ASCII_ICONS": (".icon_set", "ASCII_ICONS"),
+    "IconSet": (".icon_set", "IconSet"),
+    "current_icons": (".icon_set", "current_icons"),
+    "reset_icons": (".icon_set", "reset_icons"),
+    "use_icons": (".icon_set", "use_icons"),
+    "InPlaceRenderer": (".inplace", "InPlaceRenderer"),
+    "DEFAULT_PALETTE": (".palette", "DEFAULT_PALETTE"),
+    "MONO_PALETTE": (".palette", "MONO_PALETTE"),
+    "NORD_PALETTE": (".palette", "NORD_PALETTE"),
+    "Palette": (".palette", "Palette"),
+    "current_palette": (".palette", "current_palette"),
+    "reset_palette": (".palette", "reset_palette"),
+    "use_palette": (".palette", "use_palette"),
+    "show": (".display", "show"),
+}
 
 
 def __dir__():
@@ -182,9 +171,7 @@ def __getattr__(name: str):
     spec = _LAZY_IMPORTS.get(name)
     if spec is not None:
         module_path, attr = spec
-        import importlib
-
-        mod = importlib.import_module(module_path, __name__)
+        mod = _import_module(module_path, __name__)
         value = getattr(mod, attr)
         globals()[name] = value
         return value
