@@ -22,7 +22,15 @@ InputItem = str | MouseEvent
 
 def buffer_to_lines(buf: Buffer) -> list[str]:
     """Return the buffer as a list of text lines (characters only)."""
-    return ["".join(buf.get(x, y).char for x in range(buf.width)) for y in range(buf.height)]
+    width = buf.width
+    cells = buf._cells
+    out: list[str] = []
+    row_start = 0
+    for _ in range(buf.height):
+        row_end = row_start + width
+        out.append("".join(cell.char for cell in cells[row_start:row_end]))
+        row_start = row_end
+    return out
 
 
 @dataclass(frozen=True, slots=True)
