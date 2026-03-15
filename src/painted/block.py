@@ -374,13 +374,14 @@ def _cells_from_text(text: str, style: Style, *, max_width: int | None = None) -
         if m is None:
             m = {}
             _style_cell_maps[style] = m
-        # Ensure all chars in text are cached
-        for ch in text if max_width is None else text[:max_width]:
-            if ch not in m:
-                m[ch] = Cell(ch, style)
-        if max_width is None:
-            return list(map(m.__getitem__, text))
-        return list(map(m.__getitem__, text[:max_width]))
+        src = text if max_width is None else text[:max_width]
+        try:
+            return list(map(m.__getitem__, src))
+        except KeyError:
+            for ch in src:
+                if ch not in m:
+                    m[ch] = Cell(ch, style)
+            return list(map(m.__getitem__, src))
 
     cells: list[Cell] = []
     used = 0
