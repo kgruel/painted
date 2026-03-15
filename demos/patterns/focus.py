@@ -479,18 +479,12 @@ def run_scenario(scenario: Scenario) -> ScenarioResult:
 # --- Rendering ---
 
 
-def _emission_style(kind: str) -> Style:
-    p = current_palette()
-    if kind.startswith(("focus.", "services.", "search.", "cmd.", "key.")):
-        return p.accent
-    return p.muted
-
-
-def _emission_block(kind: str, data: dict) -> Block:
+def _emission_block(kind: str, data: dict, *, accent: Style, muted: Style, dim: Style) -> Block:
     data_str = " ".join(f"{k}={v}" for k, v in data.items())
+    kind_style = accent if kind.startswith(("focus.", "services.", "search.", "cmd.", "key.")) else muted
     return join_horizontal(
-        Block.text(f"  {kind:<18s}", _emission_style(kind)),
-        Block.text(f" {data_str}", Style(dim=True)),
+        Block.text(f"  {kind:<18s}", kind_style),
+        Block.text(f" {data_str}", dim),
     )
 
 
@@ -548,6 +542,7 @@ def _frame_block(frame: object, *, width: int, max_lines: int) -> Block:
 
 def _render_summary(results: list[ScenarioResult], width: int) -> Block:
     p = current_palette()
+    dim = Style(dim=True)
     icons = current_icons()
     sections: list[Block] = []
 
@@ -555,10 +550,10 @@ def _render_summary(results: list[ScenarioResult], width: int) -> Block:
         icon = icons.check if r.passed else icons.cross
         header_style = p.success if r.passed else p.error
         header = Block.text(f"{icon} {r.scenario.name}", header_style)
-        keys_line = Block.text(f"  keys: {' -> '.join(r.scenario.keys)}", Style(dim=True))
+        keys_line = Block.text(f"  keys: {' -> '.join(r.scenario.keys)}", dim)
 
         # Prefer domain emissions; ui.key is left in but muted.
-        trace = join_vertical(*[_emission_block(k, d) for k, d in r.emissions])
+        trace = join_vertical(*[_emission_block(k, d, accent=p.accent, muted=p.muted, dim=dim) for k, d in r.emissions])
         checks = join_vertical(*[_check_block(desc, ok) for desc, ok in r.checks])
 
         sections.append(join_vertical(header, keys_line, trace, checks, Block.text("", Style())))
@@ -568,6 +563,7 @@ def _render_summary(results: list[ScenarioResult], width: int) -> Block:
 
 def _render_detailed(results: list[ScenarioResult], width: int) -> Block:
     p = current_palette()
+    dim = Style(dim=True)
     icons = current_icons()
     sections: list[Block] = []
     snap_w = max(20, min(width - 6, 96))
@@ -577,12 +573,12 @@ def _render_detailed(results: list[ScenarioResult], width: int) -> Block:
         icon = icons.check if r.passed else icons.cross
         header_style = p.success if r.passed else p.error
         header = Block.text(f"{icon} {r.scenario.name}", header_style)
-        keys_line = Block.text(f"  keys: {' -> '.join(r.scenario.keys)}", Style(dim=True))
-        trace = join_vertical(*[_emission_block(k, d) for k, d in r.emissions])
+        keys_line = Block.text(f"  keys: {' -> '.join(r.scenario.keys)}", dim)
+        trace = join_vertical(*[_emission_block(k, d, accent=p.accent, muted=p.muted, dim=dim) for k, d in r.emissions])
 
         frames: list[Block] = []
         for label, frame in _key_frames(r):
-            frames.append(Block.text(f"  [{label}]", Style(dim=True)))
+            frames.append(Block.text(f"  [{label}]", dim))
             frames.append(_frame_block(frame, width=snap_w, max_lines=snap_lines))
             frames.append(Block.text("", Style()))
 
@@ -593,6 +589,7 @@ def _render_detailed(results: list[ScenarioResult], width: int) -> Block:
 
 def _render_full(results: list[ScenarioResult], width: int) -> Block:
     p = current_palette()
+    dim = Style(dim=True)
     icons = current_icons()
     sections: list[Block] = []
     snap_w = max(20, min(width - 6, 120))
@@ -600,25 +597,25 @@ def _render_full(results: list[ScenarioResult], width: int) -> Block:
     for r in results:
         icon = icons.check if r.passed else icons.cross
         title = f"{icon} {r.scenario.name}"
-        keys_line = Block.text(f"keys: {' -> '.join(r.scenario.keys)}", Style(dim=True))
-        trace = join_vertical(*[_emission_block(k, d) for k, d in r.emissions])
+        keys_line = Block.text(f"keys: {' -> '.join(r.scenario.keys)}", dim)
+        trace = join_vertical(*[_emission_block(k, d, accent=p.accent, muted=p.muted, dim=dim) for k, d in r.emissions])
         checks = join_vertical(*[_check_block(desc, ok) for desc, ok in r.checks])
 
         frame_blocks: list[Block] = []
         for label, frame in _key_frames(r):
-            frame_blocks.append(Block.text(f"[{label}]", Style(dim=True)))
+            frame_blocks.append(Block.text(f"[{label}]", dim))
             frame_blocks.append(_frame_block(frame, width=snap_w, max_lines=16))
             frame_blocks.append(Block.text("", Style()))
 
         inner = join_vertical(
             keys_line,
             Block.text("", Style()),
-            Block.text("emissions:", Style(dim=True)),
+            Block.text("emissions:", dim),
             trace,
             Block.text("", Style()),
             checks,
             Block.text("", Style()),
-            Block.text("frames:", Style(dim=True)),
+            Block.text("frames:", dim),
             join_vertical(*frame_blocks) if frame_blocks else Block.empty(0, 0),
         )
         sections.append(

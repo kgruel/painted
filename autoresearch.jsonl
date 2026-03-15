@@ -53,3 +53,4 @@
 {"run":52,"commit":"046eefe","metric":6.919,"metrics":{},"status":"keep","description":"Use list.copy() for Buffer.clone cell/id list duplication instead of list(...); small but consistent clone-path improvement across TestSurface-heavy workloads.","timestamp":1773590973959,"segment":0}
 {"run":53,"commit":"046eefe","metric":6.981,"metrics":{},"status":"discard","description":"Avoid per-frame tuple() conversion for empty TestSurface writes via shared empty tuple path; no primary improvement.","timestamp":1773591015893,"segment":0}
 {"type":"config","name":"painted focus-path pipeline","metricName":"focus_ms","metricUnit":"ms","bestDirection":"lower"}
+{"run":1,"commit":"dd2eca5","metric":16.177,"metrics":{},"status":"keep","description":"Phase 2 setup: new focus-path autoresearch target with dedicated harness and cold metrics. Established baseline focus_ms across minimal/summary/full zoom workloads.","timestamp":1773597074158,"segment":0}
