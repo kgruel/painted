@@ -1,18 +1,4 @@
-"""Lens functions: stateless content-to-Block transformation at zoom levels.
-
-Four built-in strategies:
-  shape_lens  — auto-dispatches by data shape (generic Python values)
-  tree_lens   — hierarchical data with branch characters
-  chart_lens  — numeric data as sparklines/bars
-  flame_lens  — hierarchical data as proportional horizontal segments
-
-All share the same signature: (data, zoom, width) -> Block.
-"""
-
-from .chart import chart_lens
-from .flame import flame_lens
-from .shape import shape_lens
-from .tree import NodeRenderer, tree_lens
+"""Lens functions: stateless content-to-Block transformation at zoom levels."""
 
 __all__ = [
     "NodeRenderer",
@@ -21,3 +7,29 @@ __all__ = [
     "shape_lens",
     "tree_lens",
 ]
+
+_LAZY_IMPORTS: dict[str, tuple[str, str]] = {
+    "NodeRenderer": (".tree", "NodeRenderer"),
+    "chart_lens": (".chart", "chart_lens"),
+    "flame_lens": (".flame", "flame_lens"),
+    "shape_lens": (".shape", "shape_lens"),
+    "tree_lens": (".tree", "tree_lens"),
+}
+
+
+def __dir__() -> list[str]:
+    return list(__all__) + list(globals())
+
+
+def __getattr__(name: str):
+    spec = _LAZY_IMPORTS.get(name)
+    if spec is None:
+        raise AttributeError(f"module 'painted.views.lens' has no attribute {name!r}")
+
+    module_path, attr = spec
+    import importlib
+
+    mod = importlib.import_module(module_path, __name__)
+    value = getattr(mod, attr)
+    globals()[name] = value
+    return value
