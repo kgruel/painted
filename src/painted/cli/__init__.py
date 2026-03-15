@@ -7,7 +7,7 @@ and lifecycle management for CLI tools built on painted's renderer.
 """
 
 from .args import add_cli_args, parse_format, parse_mode, parse_zoom
-from .context import detect_context, resolve_mode, setup_defaults
+from .context import detect_context, resolve_mode
 from .help import (
     HelpArg,
     HelpData,
@@ -30,7 +30,6 @@ __all__ = [
     # Context
     "resolve_mode",
     "detect_context",
-    "setup_defaults",
     # Args
     "add_cli_args",
     "parse_zoom",

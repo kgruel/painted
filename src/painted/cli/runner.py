@@ -14,8 +14,10 @@ from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from typing import TYPE_CHECKING, Generic, TypeVar
 
+from contextlib import nullcontext
+
 from .args import add_cli_args, parse_format, parse_mode, parse_zoom
-from .context import detect_context, setup_defaults
+from .context import detect_context
 from .help import HelpArg, build_help_data, render_help, scan_help_args
 from .types import CliContext, Format, OutputMode, Zoom
 
@@ -143,27 +145,35 @@ class CliRunner(Generic[T]):
         print(json.dumps(data, default=str))
         return 0
 
+    @staticmethod
+    def _icon_scope(ctx: CliContext):
+        """Scoped ASCII icon override for plain output — restored on exit."""
+        if not ctx.use_ansi:
+            from ..icon_set import ASCII_ICONS, use_icons
+
+            return use_icons(ASCII_ICONS)
+        return nullcontext()
+
     def _dispatch(self, ctx: CliContext) -> int:
         """Dispatch to appropriate output mechanism."""
-        setup_defaults(ctx)
+        with self._icon_scope(ctx):
+            # Check for custom handler
+            if self.handlers and ctx.mode in self.handlers:
+                result = self.handlers[ctx.mode](ctx)
+                return result if isinstance(result, int) else 0
 
-        # Check for custom handler
-        if self.handlers and ctx.mode in self.handlers:
-            result = self.handlers[ctx.mode](ctx)
-            return result if isinstance(result, int) else 0
+            # Dispatch by mode
+            if ctx.mode == OutputMode.STATIC:
+                return self._run_static(ctx)
 
-        # Dispatch by mode
-        if ctx.mode == OutputMode.STATIC:
-            return self._run_static(ctx)
+            elif ctx.mode == OutputMode.LIVE:
+                return self._run_live(ctx)
 
-        elif ctx.mode == OutputMode.LIVE:
-            return self._run_live(ctx)
+            elif ctx.mode == OutputMode.INTERACTIVE:
+                # Falls back to LIVE if no custom handler
+                return self._run_live(ctx)
 
-        elif ctx.mode == OutputMode.INTERACTIVE:
-            # Falls back to LIVE if no custom handler
-            return self._run_live(ctx)
-
-        return 0
+            return 0
 
     def _run_static(self, ctx: CliContext) -> int:
         """Run with static output (print_block)."""

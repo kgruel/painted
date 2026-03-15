@@ -14,10 +14,13 @@ import sys
 from collections.abc import Callable
 from typing import Any, TextIO
 
+from contextlib import nullcontext
+
 from .core.block import Block
 from .core.writer import print_block
 from .cli.types import Format, OutputMode, Zoom
-from .cli.context import detect_context, setup_defaults
+from .cli.context import detect_context
+from .icon_set import ASCII_ICONS, use_icons
 
 _MISSING = object()
 
@@ -57,13 +60,12 @@ def show(
     is_json = format == Format.JSON
     force_plain = format == Format.PLAIN
 
-    # Block passthrough — already rendered
+    # Block passthrough — already rendered, no icon resolution needed
     if isinstance(data, Block):
         if is_json:
             # Can't JSON-serialize a Block, fall through to ANSI/plain
             pass
         ctx = detect_context(zoom, OutputMode.AUTO, force_plain=force_plain)
-        setup_defaults(ctx)
         print_block(data, file, use_ansi=ctx.use_ansi)
         return
 
@@ -76,7 +78,6 @@ def show(
 
     # Detect output context
     ctx = detect_context(zoom, OutputMode.AUTO, force_plain=force_plain)
-    setup_defaults(ctx)
 
     # Scalars — no structure to inspect, just print
     if lens is None and (data is None or isinstance(data, (str, int, float, bool))):
@@ -85,7 +86,9 @@ def show(
         file.flush()
         return
 
-    # Rendered path — lens to Block, then print
+    # Rendered path — scope ASCII icons for plain output, restored on exit
+    icons_scope = use_icons(ASCII_ICONS) if not ctx.use_ansi else nullcontext()
     render_fn = lens or shape_lens
-    block = render_fn(data, ctx.zoom, ctx.width)
+    with icons_scope:
+        block = render_fn(data, ctx.zoom, ctx.width)
     print_block(block, file, use_ansi=ctx.use_ansi)

@@ -60,16 +60,3 @@ def detect_context(
         width=size.columns,
         height=size.lines,
     )
-
-
-def setup_defaults(ctx: CliContext) -> None:
-    """Set ambient IconSet from resolved runtime context.
-
-    Palette is never auto-set — it's a deliberate aesthetic choice.
-    MONO_PALETTE exists for explicit opt-in (e.g., low-vision, e-ink),
-    not as a Format.PLAIN default.
-    """
-    from ..icon_set import ASCII_ICONS, use_icons
-
-    if not ctx.use_ansi:
-        use_icons(ASCII_ICONS)
