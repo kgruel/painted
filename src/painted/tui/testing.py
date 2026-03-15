@@ -74,6 +74,7 @@ class TestSurface:
         input_queue: Iterable[InputItem] = (),
         stream: TextIO | None = None,
         write_ansi: bool = False,
+        capture_writes: bool = True,
     ):
         self.surface = surface
         self.width = width
@@ -81,6 +82,7 @@ class TestSurface:
         self.input_queue = list(input_queue)
         self.stream = stream if stream is not None else io.StringIO()
         self.write_ansi = write_ansi
+        self.capture_writes = capture_writes
         self.emissions: list[tuple[str, dict]] = []
 
         original_emit = self.surface._on_emit
@@ -157,7 +159,12 @@ class TestSurface:
         needs_clear = getattr(self.surface, "_needs_clear", False)
         self.surface._needs_clear = False
 
-        writes = buf.diff(prev)
+        writes: list[CellWrite]
+        if self.capture_writes or self.write_ansi:
+            writes = buf.diff(prev)
+        else:
+            writes = []
+
         if self.write_ansi and (writes or needs_clear):
             self.surface._writer.write_frame(writes, clear_first=needs_clear)
 

@@ -450,7 +450,7 @@ class ScenarioResult:
 
 def run_scenario(scenario: Scenario) -> ScenarioResult:
     app = FocusDemoApp()
-    harness = TestSurface(app, width=88, height=22, input_queue=scenario.keys)
+    harness = TestSurface(app, width=88, height=22, input_queue=scenario.keys, capture_writes=False)
     frames = harness.run_to_completion()
     emissions = harness.emissions
 
