@@ -115,7 +115,7 @@ cold_start_cases = [
 ]
 
 
-def run_suite_once() -> dict[str, float]:
+def run_warm_suite_once() -> dict[str, float]:
     responsive_t = [timed_run(responsive_runner, c) for c in responsive_cases]
     focus_t = [timed_run(focus_runner, c) for c in focus_cases]
     profiler_t = [timed_run(profiler_runner, c) for c in profiler_cases]
@@ -138,9 +138,6 @@ def run_suite_once() -> dict[str, float]:
 
     all_scenarios = responsive_t + focus_t + profiler_t + live_static_t + live_stream_t
 
-    cold_start = [timed_cold_process(script, args) for script, args in cold_start_cases]
-    cold_import = timed_cold_process("-c", ["import painted"])  # full interpreter startup + painted import
-
     return {
         "pipeline_ms": mean(all_scenarios) * 1000.0,
         "responsive_ms": mean(responsive_t) * 1000.0,
@@ -150,16 +147,25 @@ def run_suite_once() -> dict[str, float]:
         "live_stream_ms": mean(live_stream_t) * 1000.0,
         "static_plain_ms": mean(static_plain) * 1000.0,
         "static_ansi_ms": mean(static_ansi) * 1000.0,
+    }
+
+
+def run_cold_suite_once() -> dict[str, float]:
+    cold_start = [timed_cold_process(script, args) for script, args in cold_start_cases]
+    cold_import = timed_cold_process("-c", ["import painted"])  # full interpreter startup + painted import
+    return {
         "cold_start_ms": mean(cold_start) * 1000.0,
         "cold_import_ms": cold_import * 1000.0,
     }
 
 
 for _ in range(5):
-    run_suite_once()
+    run_warm_suite_once()
 
-runs = 20
-totals = {
+warm_runs = 20
+cold_runs = 5
+
+warm_totals = {
     "pipeline_ms": 0.0,
     "responsive_ms": 0.0,
     "focus_ms": 0.0,
@@ -168,15 +174,24 @@ totals = {
     "live_stream_ms": 0.0,
     "static_plain_ms": 0.0,
     "static_ansi_ms": 0.0,
+}
+cold_totals = {
     "cold_start_ms": 0.0,
     "cold_import_ms": 0.0,
 }
 
-for _ in range(runs):
-    sample = run_suite_once()
+for _ in range(warm_runs):
+    sample = run_warm_suite_once()
     for k, v in sample.items():
-        totals[k] += v
+        warm_totals[k] += v
 
-for k, v in totals.items():
-    print(f"METRIC {k}={v / runs:.3f}")
+for _ in range(cold_runs):
+    sample = run_cold_suite_once()
+    for k, v in sample.items():
+        cold_totals[k] += v
+
+for k, v in warm_totals.items():
+    print(f"METRIC {k}={v / warm_runs:.3f}")
+for k, v in cold_totals.items():
+    print(f"METRIC {k}={v / cold_runs:.3f}")
 PY
