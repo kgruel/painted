@@ -10,7 +10,7 @@ from wcwidth import wcwidth
 from .cell import EMPTY_CELL, Cell, Style
 
 
-@dataclass
+@dataclass(slots=True)
 class CellWrite:
     """A single cell change: position + new cell value."""
 
