@@ -11,20 +11,34 @@ from .buffer import Buffer, BufferView
 from .cell import Cell, Style
 
 
-# Internal cell cache to avoid repeated Cell construction for ASCII characters.
-_cell_cache: dict[tuple[str, Style], Cell] = {}
-_CACHE_LIMIT = 4096
+# Internal cell cache: maps Style → dict of char → Cell for ASCII characters.
+_style_cell_maps: dict[Style, dict[str, Cell]] = {}
+
+
+def _get_cell_map(style: Style) -> dict[str, Cell]:
+    """Return a char→Cell map for the given style, creating lazily."""
+    m = _style_cell_maps.get(style)
+    if m is not None:
+        return m
+    m = {}
+    _style_cell_maps[style] = m
+    return m
 
 
 def _cached_cell(char: str, style: Style) -> Cell:
     """Return a cached Cell for single ASCII characters."""
-    key = (char, style)
-    cell = _cell_cache.get(key)
-    if cell is not None:
+    m = _style_cell_maps.get(style)
+    if m is not None:
+        cell = m.get(char)
+        if cell is not None:
+            return cell
+        cell = Cell(char, style)
+        m[char] = cell
         return cell
+    m = {}
+    _style_cell_maps[style] = m
     cell = Cell(char, style)
-    if len(_cell_cache) < _CACHE_LIMIT:
-        _cell_cache[key] = cell
+    m[char] = cell
     return cell
 
 
