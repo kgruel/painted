@@ -391,25 +391,28 @@ def _cells_from_text(text: str, style: Style, *, max_width: int | None = None) -
 
     cells: list[Cell] = []
     used = 0
+    append = cells.append
 
     for ch in text:
-        w = char_width(ch)
-        if w == 0:
-            # Zero-width (combining) chars aren't representable as separate cells.
-            continue
-
-        if max_width is not None and used + w > max_width:
-            break
-
-        cells.append(_cached_cell(ch, style))
-        if w == 2:
-            if max_width is not None and used + 2 > max_width:
-                # Can't fit the full wide char; drop it.
-                cells.pop()
+        if ch.isascii():
+            # ASCII chars are always width 1
+            if max_width is not None and used + 1 > max_width:
                 break
-            cells.append(_cached_cell(" ", style))
-
-        used += w
+            append(_cached_cell(ch, style))
+            used += 1
+        else:
+            w = char_width(ch)
+            if w == 0:
+                continue
+            if max_width is not None and used + w > max_width:
+                break
+            append(_cached_cell(ch, style))
+            if w == 2:
+                if max_width is not None and used + 2 > max_width:
+                    cells.pop()
+                    break
+                append(_cached_cell(" ", style))
+            used += w
 
         if max_width is not None and used >= max_width:
             break
