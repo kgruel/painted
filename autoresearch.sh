@@ -90,7 +90,7 @@ for name, snippet in SCENARIOS.items():
         "peak_kib": statistics.median(peak_samples),
     }
 
-print(f"METRIC core_import_ms={results['core_import']['ms']:.3f}")
+print(f"METRIC first_show_ms={results['first_show']['ms']:.3f}")
 for name in SCENARIOS:
     print(f"METRIC {name}_ms={results[name]['ms']:.3f}")
     print(f"METRIC {name}_wall_ms={results[name]['wall_ms']:.3f}")
