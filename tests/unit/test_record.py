@@ -479,7 +479,7 @@ class TestApplyGutter:
 
     def test_gutter_continuous_on_multiline(self):
         """Gutter rail covers every line, not just the first."""
-        from painted.compose import join_vertical
+        from painted.core.compose import join_vertical
 
         inner = join_vertical(
             Block.text("line1", Style()),
@@ -497,7 +497,7 @@ class TestApplyGutter:
 
     def test_gutter_step_pass_stays_thin(self):
         """Pass/success gutter stays │ on continuation lines (baseline)."""
-        from painted.compose import join_vertical
+        from painted.core.compose import join_vertical
 
         inner = join_vertical(
             Block.text("line1", Style()),
@@ -511,7 +511,7 @@ class TestApplyGutter:
 
     def test_gutter_step_warning(self):
         """Warning gutter: ▐ on first line, │ on continuation."""
-        from painted.compose import join_vertical
+        from painted.core.compose import join_vertical
 
         inner = join_vertical(
             Block.text("line1", Style()),

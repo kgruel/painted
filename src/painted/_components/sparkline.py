@@ -15,8 +15,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from .._sparkline_core import sparkline_text
-from ..block import Block
-from ..cell import Style
+from ..core.block import Block
+from ..core.cell import Style
 
 if TYPE_CHECKING:
     from ..icon_set import IconSet

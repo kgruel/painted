@@ -38,7 +38,7 @@ from painted._timer import FrameTimer
 from painted.palette import current_palette
 from painted.tui import Buffer, Layer, Pop, Push, Quit, Stay, Surface, render_layers
 from painted.views import chart_lens, flame_lens
-from painted.writer import Writer
+from painted.core.writer import Writer
 
 
 # --- Data model ---

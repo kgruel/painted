@@ -50,7 +50,7 @@ from typing import TYPE_CHECKING, Generic, TypeVar
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
-    from .block import Block
+    from .core.block import Block
 
 T = TypeVar("T")  # State type
 R = TypeVar("R")  # Return type
@@ -360,9 +360,9 @@ def render_help(data: HelpData, zoom: Zoom, width: int, use_ansi: bool) -> Block
       eff == 1 → expanded (flag columns with descriptions)
       eff >= 2 → expanded + group.detail + flag.detail
     """
-    from .block import Block
-    from .cell import Style
-    from .compose import join_vertical
+    from .core.block import Block
+    from .core.cell import Style
+    from .core.compose import join_vertical
 
     rows: list[Block] = []
     dim = Style(dim=True) if use_ansi else Style()
@@ -689,7 +689,7 @@ class CliRunner(Generic[T]):
         width = shutil.get_terminal_size().columns
         block = render_help(help_data, zoom, width, use_ansi)
 
-        from .writer import print_block
+        from .core.writer import print_block
 
         print_block(block, use_ansi=use_ansi)
         return 0
@@ -733,7 +733,7 @@ class CliRunner(Generic[T]):
 
     def _run_static(self, ctx: CliContext) -> int:
         """Run with static output (print_block)."""
-        from .writer import print_block
+        from .core.writer import print_block
 
         try:
             state = self.fetch()
@@ -757,7 +757,7 @@ class CliRunner(Generic[T]):
         import asyncio
 
         from .inplace import InPlaceRenderer
-        from .writer import print_block
+        from .core.writer import print_block
 
         if self.fetch_stream is not None:
             # Streaming mode: update as data arrives
@@ -813,8 +813,8 @@ class CliRunner(Generic[T]):
 
     @staticmethod
     def _fetch_error_block(ctx: CliContext, exc: Exception) -> Block:
-        from .block import Block, Wrap
-        from .cell import Style
+        from .core.block import Block, Wrap
+        from .core.cell import Style
 
         try:
             from .palette import current_palette
@@ -829,8 +829,8 @@ class CliRunner(Generic[T]):
 
     @staticmethod
     def _render_error_block(ctx: CliContext, exc: Exception) -> Block:
-        from .block import Block, Wrap
-        from .cell import Style
+        from .core.block import Block, Wrap
+        from .core.cell import Style
 
         message = str(exc).strip()
         if message:

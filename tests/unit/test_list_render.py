@@ -1,7 +1,7 @@
 """Tests for list_view() render function."""
 
 from painted import Style
-from painted.span import Line, Span
+from painted.core.span import Line, Span
 from painted.views import ListState, list_view
 from painted import Cursor, Viewport
 from tests.helpers import row_text

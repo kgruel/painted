@@ -14,8 +14,8 @@ from typing import TextIO
 
 from .._mouse import MouseEvent
 from ..app import Surface
-from ..buffer import Buffer, CellWrite
-from ..writer import ColorDepth, Writer
+from ..core.buffer import Buffer, CellWrite
+from ..core.writer import ColorDepth, Writer
 
 InputItem = str | MouseEvent
 

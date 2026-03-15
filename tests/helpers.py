@@ -10,7 +10,7 @@ import io
 
 from painted import Block, Cell, CliContext, Style, Zoom
 from painted.fidelity import OutputMode
-from painted.writer import print_block
+from painted.core.writer import print_block
 
 
 def static_ctx(zoom: Zoom) -> CliContext:

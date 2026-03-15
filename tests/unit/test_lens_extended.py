@@ -1,7 +1,7 @@
 """Extended tests for lens functions — targeting uncovered lines in _lens.py."""
 
-from painted.block import Block
-from painted.cell import Style
+from painted.core.block import Block
+from painted.core.cell import Style
 from painted.views import chart_lens, flame_lens, shape_lens, tree_lens
 from tests.helpers import block_to_text
 

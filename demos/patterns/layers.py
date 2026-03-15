@@ -205,7 +205,7 @@ def _stack_sig(layers: tuple[Layer, ...]) -> str:
 
 
 def _snapshot(state: DemoState, *, width: int, height: int) -> list[str]:
-    from painted.buffer import Buffer
+    from painted.core.buffer import Buffer
     from painted.tui import render_layers
 
     buf = Buffer(width, height)
@@ -217,8 +217,8 @@ def _snapshot(state: DemoState, *, width: int, height: int) -> list[str]:
 def _snapshot_progressive(
     state: DemoState, *, width: int, height: int
 ) -> list[tuple[str, list[str]]]:
-    from painted.buffer import Buffer
-    from painted.buffer import BufferView
+    from painted.core.buffer import Buffer
+    from painted.core.buffer import BufferView
 
     layers = _get_layers(state)
     if not layers:

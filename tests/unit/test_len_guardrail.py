@@ -14,8 +14,8 @@ _LIB_ROOT = Path(__file__).resolve().parent.parent.parent
 
 # Paths relative to _LIB_ROOT — used for both file access and allowlist keys
 _REL_PATHS = [
-    "src/painted/block.py",
-    "src/painted/compose.py",
+    "src/painted/core/block.py",
+    "src/painted/core/compose.py",
     "src/painted/_lens.py",
     "src/painted/_components/text_input.py",
     "src/painted/_components/data_explorer.py",

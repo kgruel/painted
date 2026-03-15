@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from painted._components.sparkline import sparkline, sparkline_with_range
-from painted.cell import Style
+from painted.core.cell import Style
 from painted.icon_set import ASCII_ICONS, reset_icons, use_icons
 from painted.palette import MONO_PALETTE, reset_palette
 

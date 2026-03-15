@@ -21,12 +21,12 @@ from collections.abc import Callable
 from datetime import datetime
 from typing import Protocol
 
-from .block import Block
-from .cell import Style
-from .compose import join_horizontal, join_vertical, pad, truncate
+from .core.block import Block
+from .core.cell import Style
+from .core.compose import join_horizontal, join_vertical, pad, truncate
 from .fidelity import Zoom
 from .palette import current_palette
-from ._text_width import display_width
+from .core._text_width import display_width
 
 
 # ---------------------------------------------------------------------------

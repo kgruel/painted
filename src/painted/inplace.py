@@ -22,10 +22,10 @@ from __future__ import annotations
 import sys
 from typing import TYPE_CHECKING, TextIO
 
-from .writer import Writer, write_block_ansi
+from .core.writer import Writer, write_block_ansi
 
 if TYPE_CHECKING:
-    from .block import Block
+    from .core.block import Block
 
 
 class InPlaceRenderer:

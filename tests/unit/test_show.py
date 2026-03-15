@@ -4,7 +4,7 @@ import io
 import json
 
 from painted import Block, Style, show
-from painted.writer import print_block
+from painted.core.writer import print_block
 
 
 class TestShowNoArgs:

@@ -5,8 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
-from ..block import Block
-from ..cell import Cell, Style
+from ..core.block import Block
+from ..core.cell import Cell, Style
 
 if TYPE_CHECKING:
     from ..icon_set import IconSet

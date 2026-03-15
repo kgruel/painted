@@ -7,10 +7,10 @@ import re
 
 import pytest
 
-from painted.buffer import CellWrite
-from painted.cell import Cell, Style
-from painted.writer import ColorDepth, ScrollOp, Writer, print_block
-from painted.block import Block
+from painted.core.buffer import CellWrite
+from painted.core.cell import Cell, Style
+from painted.core.writer import ColorDepth, ScrollOp, Writer, print_block
+from painted.core.block import Block
 
 
 # ---------------------------------------------------------------------------

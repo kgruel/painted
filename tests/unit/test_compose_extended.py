@@ -13,7 +13,7 @@ from painted import (
     truncate,
     vslice,
 )
-from painted.borders import HEAVY, ROUNDED
+from painted.core.borders import HEAVY, ROUNDED
 from tests.helpers import row_text, text_block
 
 

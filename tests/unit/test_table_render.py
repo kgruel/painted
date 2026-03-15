@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from painted import Cursor, Style, Viewport
-from painted.span import Line
+from painted.core.span import Line
 from painted.views import Column, TableState, table
 from tests.helpers import row_text
 
@@ -272,7 +272,7 @@ class TestEdgeCases:
 
 class TestColumnAlignment:
     def test_end_aligned_column(self) -> None:
-        from painted.compose import Align
+        from painted.core.compose import Align
 
         cols = [Column(header=Line.plain("Num"), width=6, align=Align.END)]
         rows = _make_rows([["42"]])
@@ -285,7 +285,7 @@ class TestColumnAlignment:
         assert data_text.endswith("42") or data_text.rstrip() == "42"
 
     def test_center_aligned_column(self) -> None:
-        from painted.compose import Align
+        from painted.core.compose import Align
 
         cols = [Column(header=Line.plain("Mid"), width=7, align=Align.CENTER)]
         rows = _make_rows([["hi"]])

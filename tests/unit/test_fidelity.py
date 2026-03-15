@@ -343,7 +343,7 @@ class TestCliRunner:
 
     @staticmethod
     def _patch_print_block_to_current_stdout(monkeypatch):
-        from painted import writer as writer_mod
+        from painted.core import writer as writer_mod
 
         real_print_block = writer_mod.print_block
 
@@ -817,7 +817,7 @@ class TestRunCliHelp:
 
     @staticmethod
     def _patch_print_block_to_current_stdout(monkeypatch):
-        from painted import writer as writer_mod
+        from painted.core import writer as writer_mod
 
         real_print_block = writer_mod.print_block
 

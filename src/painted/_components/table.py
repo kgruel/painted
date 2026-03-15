@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 
-from ..block import Block
-from ..buffer import Buffer
-from ..cell import Style
-from ..compose import Align, truncate
+from ..core.block import Block
+from ..core.buffer import Buffer
+from ..core.cell import Style
+from ..core.compose import Align, truncate
 from ..cursor import Cursor
-from ..span import Line, Span
+from ..core.span import Line, Span
 from ..viewport import Viewport
 
 

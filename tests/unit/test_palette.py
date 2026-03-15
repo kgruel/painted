@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from painted.cell import Style
+from painted.core.cell import Style
 from painted.palette import (
     DEFAULT_PALETTE,
     MONO_PALETTE,

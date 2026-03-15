@@ -5,8 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
-from ..block import Block
-from ..cell import Style
+from ..core.block import Block
+from ..core.cell import Style
 from ..cursor import Cursor, CursorMode
 
 if TYPE_CHECKING:

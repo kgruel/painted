@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from painted._text_width import (
+from painted.core._text_width import (
     char_width,
     display_width,
     index_for_col,

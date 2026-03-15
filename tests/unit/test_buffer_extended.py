@@ -1,7 +1,7 @@
 """Extended tests for Buffer and BufferView — covering scroll, clone, hit, views."""
 
-from painted.buffer import Buffer, BufferView, CellWrite
-from painted.cell import EMPTY_CELL, Cell, Style
+from painted.core.buffer import Buffer, BufferView, CellWrite
+from painted.core.cell import EMPTY_CELL, Cell, Style
 
 S = Style()
 S_RED = Style(fg="red")

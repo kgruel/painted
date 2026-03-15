@@ -4,7 +4,7 @@ Use this when building interactive terminal applications.
 """
 
 from ..app import Emit, LifecycleHook, Surface
-from ..buffer import Buffer, BufferView, CellWrite
+from ..core.buffer import Buffer, BufferView, CellWrite
 from ..cursor import Cursor, CursorMode
 from ..focus import Focus, linear_next, linear_prev, ring_next, ring_prev
 from ..keyboard import Input, KeyboardInput

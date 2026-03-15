@@ -47,7 +47,7 @@ def _patch_painted_output_to_sys_stdout():
     capture them unless we temporarily wrap the call sites.
     """
     import painted as _painted
-    import painted.writer as _writer
+    import painted.core.writer as _writer
 
     orig_print_block = _painted.print_block
     orig_show = _painted.show

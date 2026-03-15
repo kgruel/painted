@@ -83,9 +83,9 @@ class AppRunner:
             return self._handle_help(argv)
 
         # Unknown command → error + help to stderr
-        from .block import Block
-        from .cell import Style
-        from .writer import print_block
+        from .core.block import Block
+        from .core.cell import Style
+        from .core.writer import print_block
 
         try:
             from .palette import current_palette
@@ -107,7 +107,7 @@ class AppRunner:
 
     def _handle_help(self, args: list[str]) -> int:
         """Render zoom-aware help and return 0."""
-        from .writer import print_block
+        from .core.writer import print_block
 
         zoom, fmt = scan_help_args(args)
         help_data = self._build_help_data()
@@ -129,7 +129,7 @@ class AppRunner:
 
     def _handle_subcommand_help(self, cmd: AppCommand, args: list[str]) -> int:
         """Render zoom-aware help for a subcommand and return 0."""
-        from .writer import print_block
+        from .core.writer import print_block
 
         zoom, fmt = scan_help_args(args)
         help_data = self._build_subcommand_help_data(cmd)

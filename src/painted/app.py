@@ -9,11 +9,11 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 from ._mouse import MouseEvent
-from .buffer import Buffer, CellWrite
+from .core.buffer import Buffer, CellWrite
 from .keyboard import KeyboardInput
 from .layer import Layer
 from .layer import process_key as _process_key
-from .writer import ScrollOp, Writer
+from .core.writer import ScrollOp, Writer
 
 Emit = Callable[[str, dict[str, Any]], None]
 LifecycleHook = Callable[[], Awaitable[None]]

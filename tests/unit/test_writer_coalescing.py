@@ -5,9 +5,9 @@ from __future__ import annotations
 import io
 import re
 
-from painted.buffer import CellWrite
-from painted.cell import Cell, Style
-from painted.writer import ColorDepth, ScrollOp, Writer
+from painted.core.buffer import CellWrite
+from painted.core.cell import Cell, Style
+from painted.core.writer import ColorDepth, ScrollOp, Writer
 
 
 def _capture(ops) -> str:

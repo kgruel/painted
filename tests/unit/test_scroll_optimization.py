@@ -9,10 +9,10 @@ from __future__ import annotations
 import io
 import re
 
-from painted.buffer import Buffer
-from painted.cell import Style
+from painted.core.buffer import Buffer
+from painted.core.cell import Style
 from painted.tui import Surface
-from painted.writer import ScrollOp, Writer
+from painted.core.writer import ScrollOp, Writer
 
 
 def _count_cups(output: str) -> int:

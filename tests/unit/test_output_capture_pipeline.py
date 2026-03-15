@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from painted import Block, Style, Zoom, render_html
-from painted.cell import Cell
+from painted.core.cell import Cell
 
 
 def _row_text(block: Block, y: int = 0) -> str:

@@ -23,7 +23,7 @@ from contextvars import ContextVar, Token
 from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
 
-from .cell import Style
+from .core.cell import Style
 
 
 @dataclass(frozen=True)

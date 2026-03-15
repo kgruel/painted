@@ -25,12 +25,12 @@ from collections.abc import Callable as _Callable
 from typing import Any as _Any
 from typing import TextIO as _TextIO
 
-from .block import Block, Wrap
-from .borders import ASCII, DOUBLE, HEAVY, LIGHT, ROUNDED, BorderChars
-from .cell import EMPTY_CELL, Cell, Style
+from .core.block import Block, Wrap
+from .core.borders import ASCII, DOUBLE, HEAVY, LIGHT, ROUNDED, BorderChars
+from .core.cell import EMPTY_CELL, Cell, Style
 
 # Composition
-from .compose import (
+from .core.compose import (
     Align,
     border,
     join_horizontal,
@@ -85,12 +85,12 @@ from .palette import (
     reset_palette,
     use_palette,
 )
-from .span import Line, Span
+from .core.span import Line, Span
 from .viewport import Viewport
 
 # Output
-from .writer import ColorDepth, Writer, print_block
-from .html import render_html
+from .core.writer import ColorDepth, Writer, print_block
+from .core.html import render_html
 
 _MISSING = object()
 

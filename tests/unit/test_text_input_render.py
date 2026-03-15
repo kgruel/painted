@@ -1,6 +1,6 @@
 """Tests for TextInputState operations and text_input() rendering."""
 
-from painted.cell import Cell, Style
+from painted.core.cell import Cell, Style
 from painted.views import TextInputState, text_input
 
 

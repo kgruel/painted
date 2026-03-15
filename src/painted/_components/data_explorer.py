@@ -5,10 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from typing import Any
 
-from .._text_width import display_width, truncate
-from ..block import Block
-from ..cell import Style
-from ..compose import join_vertical
+from ..core._text_width import display_width, truncate
+from ..core.block import Block
+from ..core.cell import Style
+from ..core.compose import join_vertical
 from ..cursor import Cursor
 from ..viewport import Viewport
 

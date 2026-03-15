@@ -15,10 +15,10 @@ from collections.abc import Callable, Sequence
 from typing import TYPE_CHECKING, Any
 
 from ._sparkline_core import sparkline_text
-from ._text_width import display_width, truncate, truncate_ellipsis
-from .block import Block
-from .cell import EMPTY_CELL, Style
-from .compose import join_horizontal, join_vertical
+from .core._text_width import display_width, truncate, truncate_ellipsis
+from .core.block import Block
+from .core.cell import EMPTY_CELL, Style
+from .core.compose import join_horizontal, join_vertical
 
 if TYPE_CHECKING:
     from .icon_set import IconSet
@@ -263,7 +263,7 @@ def _render_list(lst: list, zoom: int, width: int) -> Block:
             rows.append(row)
         else:
             # Multi-row item: prefix first row, indent remaining
-            from .cell import Cell
+            from .core.cell import Cell
 
             first_row_cells = [Cell("-", Style(dim=True)), Cell(" ", Style())]
             first_row_cells.extend(item_block.row(0))

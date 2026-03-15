@@ -5,10 +5,10 @@ from __future__ import annotations
 import io
 
 from painted import Style
-from painted.buffer import Buffer, CellWrite
-from painted.cell import Cell
+from painted.core.buffer import Buffer, CellWrite
+from painted.core.cell import Cell
 from painted.tui import Surface, TestSurface
-from painted.writer import ColorDepth, Writer
+from painted.core.writer import ColorDepth, Writer
 
 
 class FillSurface(Surface):

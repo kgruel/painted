@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import io
 
-from painted.writer import (
+from painted.core.writer import (
     ColorDepth,
     Writer,
 )
-from painted._color import _idx_to_rgb, _nearest_basic, _rgb_to_256, _rgb_to_basic
+from painted.core._color import _idx_to_rgb, _nearest_basic, _rgb_to_256, _rgb_to_basic
 
 # --- Pure color arithmetic ---
 

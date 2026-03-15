@@ -5,8 +5,8 @@ from __future__ import annotations
 import pytest
 
 from painted import Block, Style, Wrap
-from painted.block import _char_wrap, _word_wrap, _take_word_prefix, _cells_from_text
-from painted.buffer import Buffer
+from painted.core.block import _char_wrap, _word_wrap, _take_word_prefix, _cells_from_text
+from painted.core.buffer import Buffer
 
 
 S = Style()
@@ -21,20 +21,20 @@ def _chars(block: Block, y: int = 0) -> list[str]:
 
 class TestBlockInitValidation:
     def test_row_width_mismatch_raises(self):
-        from painted.cell import Cell
+        from painted.core.cell import Cell
 
         with pytest.raises(ValueError, match="row 0 width 2 != block width 3"):
             Block([[Cell("a", S), Cell("b", S)]], 3)
 
     def test_ids_height_mismatch_raises(self):
-        from painted.cell import Cell
+        from painted.core.cell import Cell
 
         row = [Cell("a", S)]
         with pytest.raises(ValueError, match="ids height 2 != block height 1"):
             Block([row], 1, ids=[[None], [None]])
 
     def test_ids_row_width_mismatch_raises(self):
-        from painted.cell import Cell
+        from painted.core.cell import Cell
 
         row = [Cell("a", S), Cell("b", S)]
         with pytest.raises(ValueError, match="ids row 0 width 1 != block width 2"):
@@ -170,7 +170,7 @@ class TestBlockPaint:
 
     def test_paint_with_per_cell_ids(self):
         """Covers the paint path using per-cell _ids (lines 142-151)."""
-        from painted.cell import Cell
+        from painted.core.cell import Cell
 
         row = [Cell("a", S), Cell("b", S)]
         ids = [["left", None]]
@@ -223,7 +223,7 @@ class TestBlockCellId:
         assert b.cell_id(0, 0) is None
 
     def test_cell_id_with_per_cell_ids(self):
-        from painted.cell import Cell
+        from painted.core.cell import Cell
 
         row = [Cell("a", S), Cell("b", S)]
         ids = [["alpha", "beta"]]

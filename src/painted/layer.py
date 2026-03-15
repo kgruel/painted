@@ -6,7 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, replace
 from typing import Any, Generic, TypeVar
 
-from .buffer import Buffer, BufferView
+from .core.buffer import Buffer, BufferView
 
 S = TypeVar("S")  # Layer state type
 A = TypeVar("A")  # App state type

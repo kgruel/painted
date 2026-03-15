@@ -67,8 +67,8 @@ def _assert_no_imports(py_file: Path, forbidden_prefixes: set[str]) -> None:
 
 
 def test_block_defensively_freezes_rows() -> None:
-    from painted.block import Block
-    from painted.cell import Cell, Style
+    from painted.core.block import Block
+    from painted.core.cell import Cell, Style
 
     style = Style()
     rows = [[Cell("a", style), Cell("b", style)]]
@@ -148,7 +148,7 @@ def test_state_dataclasses_declared_frozen() -> None:
 
 def test_block_rows_private_not_accessed_outside_block() -> None:
     painted_root = Path(__file__).resolve().parents[2] / "src" / "painted"
-    block_files = {painted_root / "block.py", painted_root / "core" / "block.py"}
+    block_files = {painted_root / "core" / "block.py"}
 
     for py_file in painted_root.rglob("*.py"):
         if py_file in block_files:
@@ -165,8 +165,8 @@ def test_runtime_state_dataclasses_are_frozen() -> None:
     from painted._components.spinner import SpinnerState
     from painted._components.table import TableState
     from painted._components.text_input import TextInputState
-    from painted.borders import BorderChars
-    from painted.cell import Cell, Style
+    from painted.core.borders import BorderChars
+    from painted.core.cell import Cell, Style
     from painted.cursor import Cursor
     from painted.fidelity import CliContext
     from painted.focus import Focus
@@ -174,7 +174,7 @@ def test_runtime_state_dataclasses_are_frozen() -> None:
     from painted.palette import Palette
     from painted.region import Region
     from painted.search import Search
-    from painted.span import Line, Span
+    from painted.core.span import Line, Span
     from painted.viewport import Viewport
 
     for cls in (
@@ -204,7 +204,8 @@ def test_runtime_state_dataclasses_are_frozen() -> None:
 
 def test_primitives_do_not_import_tui() -> None:
     painted_root = Path(__file__).resolve().parents[2] / "src" / "painted"
-    for py_file in (painted_root / "cell.py", painted_root / "span.py", painted_root / "block.py"):
+    core_root = painted_root / "core"
+    for py_file in (core_root / "cell.py", core_root / "span.py", core_root / "block.py"):
         _assert_no_imports(py_file, {"painted.tui"})
 
 
@@ -234,24 +235,6 @@ def test_public_modules_do_not_import_private_symbols_from_siblings() -> None:
     painted_root = Path(__file__).resolve().parents[2] / "src" / "painted"
     src_root = painted_root.parent
 
-    # Re-export shims at the package root re-export private symbols from core —
-    # these are backwards-compatibility wrappers, not cross-cutting usage.
-    reexport_shims = {
-        painted_root / name
-        for name in (
-            "block.py",
-            "buffer.py",
-            "cell.py",
-            "compose.py",
-            "borders.py",
-            "span.py",
-            "writer.py",
-            "html.py",
-            "_text_width.py",
-            "_color.py",
-        )
-    }
-
     def imported_private_symbols(py_file: Path) -> list[str]:
         tree = ast.parse(py_file.read_text(encoding="utf-8"), filename=str(py_file))
         current_mod = _module_name_for_file(src_root, py_file)
@@ -270,9 +253,6 @@ def test_public_modules_do_not_import_private_symbols_from_siblings() -> None:
     violations: list[str] = []
     for py_file in sorted(painted_root.rglob("*.py")):
         if py_file.name.startswith("_") and py_file.name != "__init__.py":
-            continue
-        # Skip re-export shims (they import private symbols from core by design)
-        if py_file in reexport_shims:
             continue
         # Skip core-internal imports (core modules may use each other's privates)
         if (painted_root / "core") in py_file.parents:
