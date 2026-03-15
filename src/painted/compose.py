@@ -185,11 +185,19 @@ def border(
 
     # Top border
     horizontal_cell = Cell(chars.horizontal, style)
-    top_row = (
-        [Cell(chars.top_left, style)]
-        + [horizontal_cell] * block.width
-        + [Cell(chars.top_right, style)]
-    )
+    top_row: list[Cell] | tuple[Cell, ...]
+    if ids_rows is None and title is None:
+        top_row = (
+            (Cell(chars.top_left, style),)
+            + (horizontal_cell,) * block.width
+            + (Cell(chars.top_right, style),)
+        )
+    else:
+        top_row = (
+            [Cell(chars.top_left, style)]
+            + [horizontal_cell] * block.width
+            + [Cell(chars.top_right, style)]
+        )
 
     # Paint title into top row if provided
     title_width = display_width(title) if title else 0
@@ -239,11 +247,18 @@ def border(
             ids_rows.append([border_id] + inner_ids + [border_id])
 
     # Bottom border
-    bottom_row = (
-        [Cell(chars.bottom_left, style)]
-        + [horizontal_cell] * block.width
-        + [Cell(chars.bottom_right, style)]
-    )
+    if ids_rows is None:
+        bottom_row = (
+            (Cell(chars.bottom_left, style),)
+            + (horizontal_cell,) * block.width
+            + (Cell(chars.bottom_right, style),)
+        )
+    else:
+        bottom_row = (
+            [Cell(chars.bottom_left, style)]
+            + [horizontal_cell] * block.width
+            + [Cell(chars.bottom_right, style)]
+        )
     rows.append(bottom_row)
     if ids_rows is not None:
         ids_rows.append([border_id] * new_width)
