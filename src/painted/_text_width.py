@@ -14,6 +14,8 @@ def display_width(text: str) -> int:
 
     Falls back to len(text) if wcswidth reports non-printable characters.
     """
+    if text.isascii():
+        return len(text)
     w = wcswidth(text)
     if w < 0:
         return len(text)
@@ -22,6 +24,8 @@ def display_width(text: str) -> int:
 
 def char_width(ch: str) -> int:
     """Return the display width (columns) of a single character."""
+    if ch.isascii():
+        return 1
     w = wcwidth(ch)
     if w < 0:
         return 1
