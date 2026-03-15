@@ -176,7 +176,7 @@ def border(
 ) -> Block:
     """Wrap a block with a 1-cell border, optionally with a title in the top row."""
     new_width = block.width + 2
-    rows: list[list[Cell]] = []
+    rows: list[list[Cell] | tuple[Cell, ...]] = []
     has_ids = (id is not None) or (block._ids is not None)
     ids_rows: list[list[str | None]] | None = [] if has_ids else None
     border_id: str | None = id
@@ -184,9 +184,10 @@ def border(
         border_id = block.id
 
     # Top border
+    horizontal_cell = Cell(chars.horizontal, style)
     top_row = (
         [Cell(chars.top_left, style)]
-        + [Cell(chars.horizontal, style)] * block.width
+        + [horizontal_cell] * block.width
         + [Cell(chars.top_right, style)]
     )
 
@@ -221,12 +222,13 @@ def border(
         ids_rows.append([border_id] * new_width)
 
     # Content rows with vertical borders
-    for row_idx in range(block.height):
-        row = (
-            [Cell(chars.vertical, style)] + list(block.row(row_idx)) + [Cell(chars.vertical, style)]
-        )
-        rows.append(row)
-        if ids_rows is not None:
+    vertical_cell = Cell(chars.vertical, style)
+    if ids_rows is None:
+        for row_idx in range(block.height):
+            rows.append((vertical_cell, *block.row(row_idx), vertical_cell))
+    else:
+        for row_idx in range(block.height):
+            rows.append([vertical_cell] + list(block.row(row_idx)) + [vertical_cell])
             inner_ids: list[str | None]
             if block._ids is not None:
                 inner_ids = list(block._ids[row_idx])
@@ -239,7 +241,7 @@ def border(
     # Bottom border
     bottom_row = (
         [Cell(chars.bottom_left, style)]
-        + [Cell(chars.horizontal, style)] * block.width
+        + [horizontal_cell] * block.width
         + [Cell(chars.bottom_right, style)]
     )
     rows.append(bottom_row)

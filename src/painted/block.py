@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from enum import Enum
+from typing import cast
 
 from ._text_width import char_width, display_width
 from .buffer import Buffer, BufferView
@@ -15,6 +16,22 @@ class Wrap(Enum):
     CHAR = "char"  # break at any character
     WORD = "word"  # break at word boundaries
     ELLIPSIS = "ellipsis"  # truncate with "…"
+
+
+def _freeze_cell_rows(rows: Sequence[Sequence[Cell]]) -> tuple[tuple[Cell, ...], ...]:
+    frozen: list[tuple[Cell, ...]] = []
+    for row in rows:
+        frozen.append(cast(tuple[Cell, ...], row) if isinstance(row, tuple) else tuple(row))
+    return tuple(frozen)
+
+
+def _freeze_id_rows(
+    rows: Sequence[Sequence[str | None]],
+) -> tuple[tuple[str | None, ...], ...]:
+    frozen: list[tuple[str | None, ...]] = []
+    for row in rows:
+        frozen.append(cast(tuple[str | None, ...], row) if isinstance(row, tuple) else tuple(row))
+    return tuple(frozen)
 
 
 class Block:
@@ -30,10 +47,8 @@ class Block:
         id: str | None = None,
         ids: Sequence[Sequence[str | None]] | None = None,
     ):
-        frozen_rows: tuple[tuple[Cell, ...], ...] = tuple(tuple(r) for r in rows)
-        frozen_ids: tuple[tuple[str | None, ...], ...] | None = (
-            tuple(tuple(r) for r in ids) if ids is not None else None
-        )
+        frozen_rows = _freeze_cell_rows(rows)
+        frozen_ids = _freeze_id_rows(ids) if ids is not None else None
         for row_idx, row in enumerate(frozen_rows):
             if len(row) != width:
                 raise ValueError(f"Block row {row_idx} width {len(row)} != block width {width}")
