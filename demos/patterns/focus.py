@@ -454,7 +454,7 @@ def run_scenario(scenario: Scenario) -> ScenarioResult:
     frames = harness.run_to_completion()
     emissions = harness.emissions
 
-    emission_kinds = [k for k, _ in emissions]
+    emission_kinds = {k for k, _ in emissions}
     checks: list[tuple[str, bool]] = []
 
     for kind in scenario.expected_emissions:

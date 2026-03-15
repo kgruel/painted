@@ -4,8 +4,8 @@
 Optimize end-to-end performance of painted's real-world CLI/TUI pipeline, not just low-level block/buffer internals. The workload measures representative demo apps through the full run_cli stack (arg parsing, context detection, fetch/render, static/live dispatch), plus a TestSurface-based app profile path. This gives a practical profile of user-facing costs in production-like usage.
 
 ## Metrics
-- **Primary**: `pipeline_ms` (ms, lower is better) — average per-scenario time across the full suite
-- **Secondary**: `responsive_ms`, `focus_ms`, `profiler_ms`, `live_static_ms`, `live_stream_ms`, `static_plain_ms`, `static_ansi_ms`
+- **Primary**: `pipeline_ms` (ms, lower is better) — average per-scenario time across the warm full suite
+- **Secondary**: `responsive_ms`, `focus_ms`, `profiler_ms`, `live_static_ms`, `live_stream_ms`, `static_plain_ms`, `static_ansi_ms`, `cold_start_ms`, `cold_import_ms`
 
 ## How to Run
 `./docs/autoresearch/painted-realworld-pipeline-2026-03-15/autoresearch.sh` — outputs `METRIC name=number` lines.

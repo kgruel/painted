@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import io
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TextIO
 
 from .mouse import MouseEvent
@@ -31,14 +31,24 @@ class CapturedFrame:
 
     buffer: Buffer
     writes: tuple[CellWrite, ...]
+    _lines_cache: list[str] | None = field(default=None, init=False, repr=False)
+    _text_cache: str | None = field(default=None, init=False, repr=False)
 
     @property
     def lines(self) -> list[str]:
-        return buffer_to_lines(self.buffer)
+        cached = self._lines_cache
+        if cached is None:
+            cached = buffer_to_lines(self.buffer)
+            object.__setattr__(self, "_lines_cache", cached)
+        return cached
 
     @property
     def text(self) -> str:
-        return "\n".join(self.lines)
+        cached = self._text_cache
+        if cached is None:
+            cached = "\n".join(self.lines)
+            object.__setattr__(self, "_text_cache", cached)
+        return cached
 
 
 class TestSurface:

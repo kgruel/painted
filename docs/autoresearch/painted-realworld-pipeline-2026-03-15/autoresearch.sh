@@ -18,6 +18,8 @@ from __future__ import annotations
 
 import io
 import os
+import subprocess
+import sys
 from contextlib import redirect_stdout
 from statistics import mean
 from time import perf_counter
@@ -49,6 +51,27 @@ def timed_run(runner: CliRunner, args: list[str]) -> float:
     elapsed = perf_counter() - t0
     if code != 0:
         raise RuntimeError(f"runner failed: args={args} code={code}")
+    return elapsed
+
+
+def timed_cold_process(script: str, args: list[str]) -> float:
+    env = os.environ.copy()
+    env["COLUMNS"] = os.environ.get("COLUMNS", "140")
+    env["LINES"] = os.environ.get("LINES", "40")
+    t0 = perf_counter()
+    proc = subprocess.run(
+        [sys.executable, script, *args],
+        check=False,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+        text=True,
+        env=env,
+    )
+    elapsed = perf_counter() - t0
+    if proc.returncode != 0:
+        raise RuntimeError(
+            f"cold process failed: script={script} args={args} code={proc.returncode} stderr={proc.stderr[-200:]}"
+        )
     return elapsed
 
 
@@ -84,6 +107,13 @@ live_stream_cases = [
     ["--live", "-q", "--plain"],
 ]
 
+cold_start_cases = [
+    ("demos/patterns/responsive.py", ["-q", "--plain"]),
+    ("demos/patterns/focus.py", ["-q", "--plain"]),
+    ("demos/patterns/profiler.py", ["-q", "--plain"]),
+    ("demos/patterns/live.py", ["--static", "-q", "--plain"]),
+]
+
 
 def run_suite_once() -> dict[str, float]:
     responsive_t = [timed_run(responsive_runner, c) for c in responsive_cases]
@@ -108,6 +138,9 @@ def run_suite_once() -> dict[str, float]:
 
     all_scenarios = responsive_t + focus_t + profiler_t + live_static_t + live_stream_t
 
+    cold_start = [timed_cold_process(script, args) for script, args in cold_start_cases]
+    cold_import = timed_cold_process("-c", ["import painted"])  # full interpreter startup + painted import
+
     return {
         "pipeline_ms": mean(all_scenarios) * 1000.0,
         "responsive_ms": mean(responsive_t) * 1000.0,
@@ -117,6 +150,8 @@ def run_suite_once() -> dict[str, float]:
         "live_stream_ms": mean(live_stream_t) * 1000.0,
         "static_plain_ms": mean(static_plain) * 1000.0,
         "static_ansi_ms": mean(static_ansi) * 1000.0,
+        "cold_start_ms": mean(cold_start) * 1000.0,
+        "cold_import_ms": cold_import * 1000.0,
     }
 
 
@@ -133,6 +168,8 @@ totals = {
     "live_stream_ms": 0.0,
     "static_plain_ms": 0.0,
     "static_ansi_ms": 0.0,
+    "cold_start_ms": 0.0,
+    "cold_import_ms": 0.0,
 }
 
 for _ in range(runs):
