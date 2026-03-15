@@ -202,31 +202,89 @@ def test_runtime_state_dataclasses_are_frozen() -> None:
         assert cls.__dataclass_params__.frozen is True
 
 
-def test_primitives_do_not_import_tui() -> None:
+# =============================================================================
+# Layer boundary enforcement
+#
+# Allowed dependency direction: core ← views ← cli ← tui
+# Each layer may only import from layers to its left (and root shared modules).
+#
+# Known violation: views/record.py imports Zoom from cli.types.
+# Zoom is shared rendering vocabulary that should move out of cli/ — tracked
+# in follow-up.md item 3. The allowlist below makes this explicit.
+# =============================================================================
+
+_KNOWN_VIOLATIONS = {
+    # views/record.py needs Zoom for zoom-aware rendering. Zoom should be
+    # extracted from cli/ into shared vocabulary — not a cli-only concern.
+    ("views", "cli"),
+}
+
+
+def _layer_of(mod: str) -> str:
+    """Classify a painted module into its architectural layer."""
+    for layer in ("core", "views", "cli", "tui"):
+        if mod == f"painted.{layer}" or mod.startswith(f"painted.{layer}."):
+            return layer
+    return "root"
+
+
+def _layer_files(painted_root: Path, layer: str) -> list[Path]:
+    """Get all .py files in a layer directory."""
+    return sorted((painted_root / layer).rglob("*.py"))
+
+
+def _check_layer_boundary(
+    painted_root: Path,
+    src_root: Path,
+    layer: str,
+    forbidden_layers: set[str],
+) -> list[str]:
+    """Check that a layer doesn't import from forbidden layers."""
+    violations = []
+    for py_file in _layer_files(painted_root, layer):
+        imported = _iter_imported_modules(src_root, py_file)
+        for mod in sorted(imported):
+            target_layer = _layer_of(mod)
+            if target_layer in forbidden_layers:
+                key = (layer, target_layer)
+                if key in _KNOWN_VIOLATIONS:
+                    continue
+                violations.append(
+                    f"{py_file.relative_to(src_root)} imports {mod} ({layer} → {target_layer})"
+                )
+    return violations
+
+
+def test_core_is_self_contained() -> None:
+    """core/ must not import from views/, cli/, or tui/."""
     painted_root = Path(__file__).resolve().parents[2] / "src" / "painted"
-    core_root = painted_root / "core"
-    for py_file in (core_root / "cell.py", core_root / "span.py", core_root / "block.py"):
-        _assert_no_imports(py_file, {"painted.tui"})
+    src_root = painted_root.parent
+    violations = _check_layer_boundary(painted_root, src_root, "core", {"views", "cli", "tui"})
+    assert not violations, "core/ imports higher layers:\n" + "\n".join(violations)
 
 
-def test_views_do_not_import_app() -> None:
+def test_views_do_not_import_cli_or_tui() -> None:
+    """views/ may import core/ and root, but not cli/ or tui/."""
     painted_root = Path(__file__).resolve().parents[2] / "src" / "painted"
-    view_files: list[Path] = []
-    view_files.extend(sorted((painted_root / "views" / "components").rglob("*.py")))
-    view_files.extend(sorted((painted_root / "views" / "lens").rglob("*.py")))
-    view_files.append(painted_root / "views" / "big_text.py")
-    view_files.append(painted_root / "views" / "record.py")
-    view_files.append(painted_root / "views" / "profile.py")
-    view_files.append(painted_root / "views" / "__init__.py")
-
-    for py_file in view_files:
-        _assert_no_imports(py_file, {"painted.tui"})
+    src_root = painted_root.parent
+    violations = _check_layer_boundary(painted_root, src_root, "views", {"cli", "tui"})
+    assert not violations, "views/ imports framework layers:\n" + "\n".join(violations)
 
 
-def test_tui_does_not_import_views() -> None:
+def test_cli_does_not_import_tui() -> None:
+    """cli/ may import core/ and root, but not tui/ or views/."""
     painted_root = Path(__file__).resolve().parents[2] / "src" / "painted"
-    for py_file in sorted((painted_root / "tui").rglob("*.py")):
-        _assert_no_imports(py_file, {"painted.views"})
+    src_root = painted_root.parent
+    violations = _check_layer_boundary(painted_root, src_root, "cli", {"tui", "views"})
+    assert not violations, "cli/ imports higher layers:\n" + "\n".join(violations)
+
+
+def test_tui_does_not_import_views_or_cli() -> None:
+    """tui/ may import core/ and root, but not views/ or cli/."""
+    painted_root = Path(__file__).resolve().parents[2] / "src" / "painted"
+    src_root = painted_root.parent
+    violations = _check_layer_boundary(painted_root, src_root, "tui", {"views", "cli"})
+    assert not violations, "tui/ imports sibling layers:\n" + "\n".join(violations)
 
 
 def test_public_modules_do_not_import_private_symbols_from_siblings() -> None:
