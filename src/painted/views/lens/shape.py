@@ -65,25 +65,38 @@ def shape_lens(content: Any, zoom: int, width: int) -> Block:
     if isinstance(content, (str, int, float)):
         return _render_scalar(content, zoom, width)
 
-    # Auto-dispatch: numeric data -> chart
+    # Auto-dispatch for dicts in one pass over values
+    if isinstance(content, dict):
+        if content:
+            values = content.values()
+            all_numeric = True
+            any_nested = False
+            for v in values:
+                is_numeric = isinstance(v, (int, float)) and not isinstance(v, bool)
+                if not is_numeric:
+                    all_numeric = False
+                if isinstance(v, (dict, list)) and v:
+                    any_nested = True
+                if any_nested and not all_numeric:
+                    break
+
+            if all_numeric:
+                from .chart import chart_lens
+
+                return chart_lens(content, zoom, width)
+
+            if any_nested:
+                from .tree import tree_lens
+
+                return tree_lens(content, zoom, width)
+
+        return _render_dict(content, zoom, width)
+
+    # Auto-dispatch: numeric sequences -> chart
     if _is_numeric_sequence(content):
         from .chart import chart_lens
 
         return chart_lens(content, zoom, width)
-
-    if _is_labeled_numeric(content):
-        from .chart import chart_lens
-
-        return chart_lens(content, zoom, width)
-
-    # Auto-dispatch: hierarchical data -> tree
-    if _is_hierarchical(content):
-        from .tree import tree_lens
-
-        return tree_lens(content, zoom, width)
-
-    if isinstance(content, dict):
-        return _render_dict(content, zoom, width)
 
     if isinstance(content, list):
         return _render_list(content, zoom, width)
@@ -155,6 +168,22 @@ def _render_dict(d: dict, zoom: int, width: int) -> Block:
     # zoom >= 2: key-value table
     if not d:
         return Block.text("{}", style, width=width)
+
+    if len(d) == 1:
+        (key, value), = d.items()
+        key_style = Style(bold=True)
+        key_text = f"{key}:"
+        key_col_width = min(display_width(key_text) + 1, width // 2)
+        if display_width(key_text) > key_col_width:
+            key_text = (
+                truncate_ellipsis(key_text, key_col_width)
+                if key_col_width > 1
+                else truncate(key_text, key_col_width)
+            )
+        val_col_width = max(1, width - key_col_width)
+        key_block = Block.text(key_text, key_style, width=key_col_width)
+        val_block = shape_lens(value, max(0, zoom - 1), val_col_width)
+        return join_horizontal(key_block, val_block)
 
     rows: list[Block] = []
     key_style = Style(bold=True)

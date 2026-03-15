@@ -21,15 +21,22 @@ _MISSING = object()
 
 
 def _format_value(fmt: Any) -> str:
-    if hasattr(fmt, "value"):
-        return str(fmt.value)
+    if isinstance(fmt, str):
+        return fmt
+    value = getattr(fmt, "value", None)
+    if isinstance(value, str):
+        return value
     return str(fmt)
 
 
 def _detect_show_context(force_plain: bool) -> tuple[bool, int]:
-    stdout = sys.stdout
-    is_tty = hasattr(stdout, "isatty") and stdout.isatty()
-    use_ansi = (not force_plain) and is_tty
+    if force_plain:
+        use_ansi = False
+    else:
+        stdout = sys.stdout
+        is_tty = stdout.isatty()
+        use_ansi = is_tty
+
     import shutil
 
     width = shutil.get_terminal_size().columns
@@ -58,15 +65,16 @@ def show(
     is_json = fmt == "json"
     force_plain = fmt == "plain"
 
-    # Block passthrough — already rendered, no icon resolution needed
-    from .core.block import Block
+    # Block passthrough — avoid importing Block for common builtin payloads
+    if not isinstance(data, (dict, list, set, tuple, str, int, float, bool)) and data is not None:
+        from .core.block import Block
 
-    if isinstance(data, Block):
-        from .core.writer import print_block
+        if isinstance(data, Block):
+            from .core.writer import print_block
 
-        use_ansi, _width = _detect_show_context(force_plain)
-        print_block(data, file, use_ansi=use_ansi)
-        return
+            use_ansi, _width = _detect_show_context(force_plain)
+            print_block(data, file, use_ansi=use_ansi)
+            return
 
     # JSON path — serialize directly, bypasses render pipeline
     if is_json:
@@ -86,13 +94,20 @@ def show(
 
     # Rendered path — scope ASCII icons for plain output, restored on exit
     from .core.writer import print_block
-    from .icon_set import ASCII_ICONS, use_icons
     from .views.lens.shape import shape_lens
 
-    from contextlib import nullcontext
-
-    icons_scope = use_icons(ASCII_ICONS) if not use_ansi else nullcontext()
     render_fn = lens or shape_lens
+    if not use_ansi and lens is not None:
+        from contextlib import nullcontext
+
+        from .icon_set import ASCII_ICONS, use_icons
+
+        icons_scope = use_icons(ASCII_ICONS)
+    else:
+        from contextlib import nullcontext
+
+        icons_scope = nullcontext()
+
     with icons_scope:
         block = render_fn(data, zoom, width)
     print_block(block, file, use_ansi=use_ansi)
