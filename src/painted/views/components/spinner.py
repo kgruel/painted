@@ -5,12 +5,12 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
-from ..core.block import Block
-from ..core.cell import Style
-from ..cursor import Cursor, CursorMode
+from ...core.block import Block
+from ...core.cell import Style
+from ...cursor import Cursor, CursorMode
 
 if TYPE_CHECKING:
-    from ..icon_set import IconSet
+    from ...icon_set import IconSet
 
 
 @dataclass(frozen=True)
@@ -57,7 +57,7 @@ def spinner(
     Returns:
         1-character Block with the spinner frame.
     """
-    from ..icon_set import IconSet, current_icons
+    from ...icon_set import IconSet, current_icons
 
     ic = icons or current_icons()
 

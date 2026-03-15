@@ -16,9 +16,9 @@ _LIB_ROOT = Path(__file__).resolve().parent.parent.parent
 _REL_PATHS = [
     "src/painted/core/block.py",
     "src/painted/core/compose.py",
-    "src/painted/_lens.py",
-    "src/painted/_components/text_input.py",
-    "src/painted/_components/data_explorer.py",
+    "src/painted/views/lens/shape.py",
+    "src/painted/views/components/text_input.py",
+    "src/painted/views/components/data_explorer.py",
 ]
 
 TARGET_MODULES = [(_LIB_ROOT / p, p) for p in _REL_PATHS]
@@ -31,14 +31,14 @@ _SUSPICIOUS_ARG_RE = re.compile(
 # Allowlist of len() calls that are intentionally about indices or collection sizes.
 # Keys are (path, lineno, source_snippet).
 ALLOWLIST = {
-    ("src/painted/_components/text_input.py", 23, "len(ch)"),
-    ("src/painted/_components/text_input.py", 34, "len(self.text)"),
-    ("src/painted/_components/text_input.py", 47, "len(self.text)"),
-    ("src/painted/_components/text_input.py", 57, "len(self.text)"),
-    ("src/painted/_components/text_input.py", 61, "len(text)"),
-    ("src/painted/_components/text_input.py", 69, "len(text)"),
-    ("src/painted/_components/text_input.py", 70, "len(text)"),
-    ("src/painted/_components/text_input.py", 83, "len(text)"),
+    ("src/painted/views/components/text_input.py", 23, "len(ch)"),
+    ("src/painted/views/components/text_input.py", 34, "len(self.text)"),
+    ("src/painted/views/components/text_input.py", 47, "len(self.text)"),
+    ("src/painted/views/components/text_input.py", 57, "len(self.text)"),
+    ("src/painted/views/components/text_input.py", 61, "len(text)"),
+    ("src/painted/views/components/text_input.py", 69, "len(text)"),
+    ("src/painted/views/components/text_input.py", 70, "len(text)"),
+    ("src/painted/views/components/text_input.py", 83, "len(text)"),
 }
 
 

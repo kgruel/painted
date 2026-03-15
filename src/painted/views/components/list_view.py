@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 
-from ..core.block import Block
-from ..core.buffer import Buffer
-from ..core.cell import Style
-from ..cursor import Cursor
-from ..core.span import Line, Span
-from ..viewport import Viewport
+from ...core.block import Block
+from ...core.buffer import Buffer
+from ...core.cell import Style
+from ...cursor import Cursor
+from ...core.span import Line, Span
+from ...viewport import Viewport
 
 
 @dataclass(frozen=True)

@@ -40,8 +40,8 @@ from painted import (
 )
 from painted.icon_set import current_icons
 from painted.palette import current_palette
-from painted._components.spinner import SpinnerState, spinner
-from painted._components.progress import ProgressState, progress_bar
+from painted.views.components.spinner import SpinnerState, spinner
+from painted.views.components.progress import ProgressState, progress_bar
 
 
 # --- Data model ---

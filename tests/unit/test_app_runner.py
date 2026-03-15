@@ -4,8 +4,8 @@ import json
 
 import pytest
 
-from painted.app_runner import AppCommand, AppRunner, run_app
-from painted.fidelity import HelpArg, HelpData, Zoom
+from painted.cli import AppCommand, AppRunner, run_app
+from painted.cli import HelpArg, HelpData, Zoom
 
 
 class TestAppCommand:

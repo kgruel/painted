@@ -5,12 +5,12 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from typing import Any
 
-from ..core._text_width import display_width, truncate
-from ..core.block import Block
-from ..core.cell import Style
-from ..core.compose import join_vertical
-from ..cursor import Cursor
-from ..viewport import Viewport
+from ...core._text_width import display_width, truncate
+from ...core.block import Block
+from ...core.cell import Style
+from ...core.compose import join_vertical
+from ...cursor import Cursor
+from ...viewport import Viewport
 
 _MAX_CHILDREN = 50
 

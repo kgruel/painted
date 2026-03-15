@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from painted._components.progress import ProgressState, progress_bar
+from painted.views.components.progress import ProgressState, progress_bar
 from painted.core.cell import Style
 from painted.icon_set import (
     ASCII_ICONS,

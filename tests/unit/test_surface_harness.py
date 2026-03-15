@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from painted import Style
-from painted.mouse import MouseAction, MouseButton, MouseEvent
+from painted.tui import MouseAction, MouseButton, MouseEvent
 from painted.tui import (
     Layer,
     Pop,

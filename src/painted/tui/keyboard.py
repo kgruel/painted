@@ -8,7 +8,7 @@ import sys
 import termios
 import tty
 
-from ._mouse import MouseEvent, parse_sgr_mouse
+from .mouse import MouseEvent, parse_sgr_mouse
 
 # Timeout (seconds) to wait for bytes following ESC
 # 50ms handles SSH latency while still feeling responsive for bare ESC

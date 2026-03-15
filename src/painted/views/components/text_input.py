@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 
-from ..core._text_width import char_width, display_width, index_for_col, take_prefix
-from ..core.block import Block
-from ..core.cell import Cell, Style
+from ...core._text_width import char_width, display_width, index_for_col, take_prefix
+from ...core.block import Block
+from ...core.cell import Cell, Style
 
 
 @dataclass(frozen=True)

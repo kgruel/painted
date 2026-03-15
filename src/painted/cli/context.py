@@ -1,0 +1,75 @@
+"""Context detection and resolution for CLI tools.
+
+Resolves AUTO mode to concrete delivery, detects TTY/pipe,
+and sets up ambient defaults (icon set).
+"""
+
+from __future__ import annotations
+
+import shutil
+import sys
+
+from .types import CliContext, OutputMode, Zoom
+
+
+def resolve_mode(
+    requested: OutputMode,
+    is_tty: bool,
+    is_pipe: bool,
+    default_mode: OutputMode = OutputMode.LIVE,
+) -> OutputMode:
+    """Resolve AUTO to concrete mode.
+
+    When requested is AUTO, pipes always get STATIC. TTYs get default_mode
+    (LIVE by default, but callers can override to STATIC for run-and-exit
+    commands that support --live as opt-in).
+    """
+    if requested != OutputMode.AUTO:
+        return requested
+    if is_pipe:
+        return OutputMode.STATIC
+    if is_tty:
+        return default_mode
+    return OutputMode.STATIC
+
+
+def detect_context(
+    zoom: Zoom,
+    mode: OutputMode,
+    *,
+    force_plain: bool = False,
+    default_mode: OutputMode = OutputMode.LIVE,
+) -> CliContext:
+    """Detect and resolve full runtime context.
+
+    JSON is not a context concern — callers handle it before reaching here.
+    ``force_plain`` suppresses ANSI when the user passes ``--plain``.
+    """
+    is_tty = hasattr(sys.stdout, "isatty") and sys.stdout.isatty()
+    is_pipe = not is_tty
+
+    resolved_mode = resolve_mode(mode, is_tty, is_pipe, default_mode)
+    use_ansi = not force_plain and (is_tty or resolved_mode == OutputMode.INTERACTIVE)
+
+    size = shutil.get_terminal_size()
+    return CliContext(
+        zoom=zoom,
+        mode=resolved_mode,
+        use_ansi=use_ansi,
+        is_tty=is_tty,
+        width=size.columns,
+        height=size.lines,
+    )
+
+
+def setup_defaults(ctx: CliContext) -> None:
+    """Set ambient IconSet from resolved runtime context.
+
+    Palette is never auto-set — it's a deliberate aesthetic choice.
+    MONO_PALETTE exists for explicit opt-in (e.g., low-vision, e-ink),
+    not as a Format.PLAIN default.
+    """
+    from ..icon_set import ASCII_ICONS, use_icons
+
+    if not ctx.use_ansi:
+        use_icons(ASCII_ICONS)

@@ -2,12 +2,11 @@
 
 import argparse
 import json
-import sys
 
 import pytest
 
 from painted import Block, Style
-from painted.fidelity import (
+from painted.cli import (
     CliContext,
     CliRunner,
     Format,
@@ -17,8 +16,6 @@ from painted.fidelity import (
     HelpGroup,
     OutputMode,
     Zoom,
-    _build_help_data,
-    _extract_add_args_flags,
     help_args_to_flags,
     render_help,
     add_cli_args,
@@ -28,6 +25,7 @@ from painted.fidelity import (
     resolve_mode,
     run_cli,
 )
+from painted.cli.help import build_help_data, _extract_add_args_flags
 
 # =============================================================================
 # Zoom Tests
@@ -182,7 +180,7 @@ class TestUseAnsiResolution:
 
     def test_force_plain_gives_no_ansi(self, monkeypatch):
         """force_plain=True always produces use_ansi=False."""
-        from painted.fidelity import detect_context
+        from painted.cli import detect_context
 
         monkeypatch.setattr("sys.stdout.isatty", lambda: True)
         ctx = detect_context(Zoom.SUMMARY, OutputMode.STATIC, force_plain=True)
@@ -190,7 +188,7 @@ class TestUseAnsiResolution:
 
     def test_tty_gives_ansi(self, monkeypatch):
         """TTY without force_plain produces use_ansi=True."""
-        from painted.fidelity import detect_context
+        from painted.cli import detect_context
 
         monkeypatch.setattr("sys.stdout.isatty", lambda: True)
         ctx = detect_context(Zoom.SUMMARY, OutputMode.STATIC)
@@ -198,7 +196,7 @@ class TestUseAnsiResolution:
 
     def test_pipe_gives_no_ansi(self, monkeypatch):
         """Pipe without force_plain produces use_ansi=False."""
-        from painted.fidelity import detect_context
+        from painted.cli import detect_context
 
         monkeypatch.setattr("sys.stdout.isatty", lambda: False)
         ctx = detect_context(Zoom.SUMMARY, OutputMode.STATIC)
@@ -206,7 +204,7 @@ class TestUseAnsiResolution:
 
     def test_interactive_always_ansi(self, monkeypatch):
         """INTERACTIVE mode forces use_ansi=True even on pipe."""
-        from painted.fidelity import detect_context
+        from painted.cli import detect_context
 
         monkeypatch.setattr("sys.stdout.isatty", lambda: False)
         ctx = detect_context(Zoom.SUMMARY, OutputMode.INTERACTIVE)
@@ -341,17 +339,6 @@ class TestCliContext:
 class TestCliRunner:
     """Tests for CliRunner class."""
 
-    @staticmethod
-    def _patch_print_block_to_current_stdout(monkeypatch):
-        from painted.core import writer as writer_mod
-
-        real_print_block = writer_mod.print_block
-
-        def print_block(block, stream=None, *, use_ansi=None):
-            return real_print_block(block, sys.stdout, use_ansi=use_ansi)
-
-        monkeypatch.setattr(writer_mod, "print_block", print_block)
-
     def test_static_output(self, monkeypatch):
         """Static mode uses print_block and returns 0."""
         monkeypatch.setattr("sys.stdout.isatty", lambda: False)
@@ -446,7 +433,6 @@ class TestCliRunner:
 
     def test_fetch_failure_static_renders_error_and_returns_1(self, capsys, monkeypatch):
         monkeypatch.setattr("sys.stdout.isatty", lambda: False)
-        self._patch_print_block_to_current_stdout(monkeypatch)
         render_called = False
 
         def render(ctx: CliContext, data: str) -> Block:
@@ -484,7 +470,6 @@ class TestCliRunner:
 
     def test_render_failure_static_renders_minimal_error_and_returns_2(self, capsys, monkeypatch):
         monkeypatch.setattr("sys.stdout.isatty", lambda: False)
-        self._patch_print_block_to_current_stdout(monkeypatch)
 
         def render(ctx: CliContext, data: str) -> Block:
             raise KeyError("kaboom")
@@ -575,7 +560,7 @@ class TestExtractAddArgsFlags:
 
 
 class TestBuildHelpDataAugmentation:
-    """Tests for _build_help_data including command args."""
+    """Tests for build_help_data including command args."""
 
     def test_no_command_args_min_zoom_minimal(self):
         """Without help_args/add_args, all groups have min_zoom=MINIMAL."""
@@ -584,7 +569,7 @@ class TestBuildHelpDataAugmentation:
             fetch=lambda: "ok",
             prog="test",
         )
-        data = _build_help_data(runner)
+        data = build_help_data(runner)
         for group in data.groups:
             assert group.min_zoom == Zoom.MINIMAL
 
@@ -599,7 +584,7 @@ class TestBuildHelpDataAugmentation:
                 HelpArg("--since", "Time range", default="7d"),
             ],
         )
-        data = _build_help_data(runner)
+        data = build_help_data(runner)
 
         # First group is command args (min_zoom=MINIMAL, no name)
         assert data.groups[0].min_zoom == Zoom.MINIMAL
@@ -625,7 +610,7 @@ class TestBuildHelpDataAugmentation:
             prog="test",
             add_args=add_args,
         )
-        data = _build_help_data(runner)
+        data = build_help_data(runner)
 
         # First group is command args (min_zoom=MINIMAL)
         assert data.groups[0].min_zoom == Zoom.MINIMAL
@@ -815,21 +800,9 @@ class TestRenderHelpAugmentation:
 class TestRunCliHelp:
     """Integration tests for --help with command args."""
 
-    @staticmethod
-    def _patch_print_block_to_current_stdout(monkeypatch):
-        from painted.core import writer as writer_mod
-
-        real_print_block = writer_mod.print_block
-
-        def print_block(block, stream=None, *, use_ansi=None):
-            return real_print_block(block, sys.stdout, use_ansi=use_ansi)
-
-        monkeypatch.setattr(writer_mod, "print_block", print_block)
-
     def test_help_with_help_args_shows_command_args(self, capsys, monkeypatch):
         """--help with help_args shows command args prominently."""
         monkeypatch.setattr("sys.stdout.isatty", lambda: False)
-        self._patch_print_block_to_current_stdout(monkeypatch)
 
         result = run_cli(
             ["--help"],
@@ -854,7 +827,6 @@ class TestRunCliHelp:
     def test_help_with_add_args_shows_command_args(self, capsys, monkeypatch):
         """--help with add_args shows registered args."""
         monkeypatch.setattr("sys.stdout.isatty", lambda: False)
-        self._patch_print_block_to_current_stdout(monkeypatch)
 
         def add_args(parser):
             parser.add_argument("file", help="Input file")
@@ -877,7 +849,6 @@ class TestRunCliHelp:
     def test_help_without_command_args_unchanged(self, capsys, monkeypatch):
         """--help without help_args/add_args shows rendering options as before."""
         monkeypatch.setattr("sys.stdout.isatty", lambda: False)
-        self._patch_print_block_to_current_stdout(monkeypatch)
 
         result = run_cli(
             ["--help"],

@@ -159,20 +159,20 @@ def test_block_rows_private_not_accessed_outside_block() -> None:
 
 
 def test_runtime_state_dataclasses_are_frozen() -> None:
-    from painted._components.data_explorer import DataExplorerState
-    from painted._components.list_view import ListState
-    from painted._components.progress import ProgressState
-    from painted._components.spinner import SpinnerState
-    from painted._components.table import TableState
-    from painted._components.text_input import TextInputState
+    from painted.views.components.data_explorer import DataExplorerState
+    from painted.views.components.list_view import ListState
+    from painted.views.components.progress import ProgressState
+    from painted.views.components.spinner import SpinnerState
+    from painted.views.components.table import TableState
+    from painted.views.components.text_input import TextInputState
     from painted.core.borders import BorderChars
     from painted.core.cell import Cell, Style
     from painted.cursor import Cursor
-    from painted.fidelity import CliContext
+    from painted.cli import CliContext
     from painted.focus import Focus
     from painted.icon_set import IconSet
     from painted.palette import Palette
-    from painted.region import Region
+    from painted.tui import Region
     from painted.search import Search
     from painted.core.span import Line, Span
     from painted.viewport import Viewport
@@ -212,13 +212,15 @@ def test_primitives_do_not_import_tui() -> None:
 def test_views_do_not_import_app() -> None:
     painted_root = Path(__file__).resolve().parents[2] / "src" / "painted"
     view_files: list[Path] = []
-    view_files.extend(sorted((painted_root / "_components").rglob("*.py")))
-    view_files.append(painted_root / "_lens.py")
-    view_files.append(painted_root / "big_text.py")
+    view_files.extend(sorted((painted_root / "views" / "components").rglob("*.py")))
+    view_files.extend(sorted((painted_root / "views" / "lens").rglob("*.py")))
+    view_files.append(painted_root / "views" / "big_text.py")
+    view_files.append(painted_root / "views" / "record.py")
+    view_files.append(painted_root / "views" / "profile.py")
     view_files.append(painted_root / "views" / "__init__.py")
 
     for py_file in view_files:
-        _assert_no_imports(py_file, {"painted.app"})
+        _assert_no_imports(py_file, {"painted.tui"})
 
 
 def test_tui_does_not_import_views() -> None:

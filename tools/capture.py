@@ -15,7 +15,7 @@ from pathlib import Path
 from types import ModuleType
 
 from painted import Block, CliContext, Zoom
-from painted.fidelity import OutputMode
+from painted.cli import OutputMode
 
 CaptureResult = Block | str
 
@@ -39,39 +39,27 @@ def import_module_by_path(path: str | Path, *, module_name: str | None = None) -
 
 
 @contextmanager
-def _patch_painted_output_to_sys_stdout():
-    """Make painted demos respect redirect_stdout by using sys.stdout dynamically.
+def _patch_show_to_sys_stdout():
+    """Make painted.show() respect redirect_stdout by using sys.stdout dynamically.
 
-    Many demos call `print_block()` / `show()` without passing a stream. Those
-    functions have defaults bound at import time, so redirect_stdout won't
-    capture them unless we temporarily wrap the call sites.
+    show() has file=sys.stdout as an early-bound default, so redirect_stdout
+    won't capture it unless we temporarily wrap the call site.
+    print_block() already resolves sys.stdout at call time — no patch needed.
     """
     import painted as _painted
-    import painted.core.writer as _writer
 
-    orig_print_block = _painted.print_block
     orig_show = _painted.show
-    orig_writer_print_block = _writer.print_block
-
-    def _print_block(block: Block, stream=None, *, use_ansi=None) -> None:
-        if stream is None:
-            stream = sys.stdout
-        orig_writer_print_block(block, stream, use_ansi=use_ansi)
 
     def _show(*args, **kwargs):
         if "file" not in kwargs:
             kwargs["file"] = sys.stdout
         return orig_show(*args, **kwargs)
 
-    _painted.print_block = _print_block  # type: ignore[assignment]
     _painted.show = _show  # type: ignore[assignment]
-    _writer.print_block = _print_block  # type: ignore[assignment]
     try:
         yield
     finally:
-        _painted.print_block = orig_print_block  # type: ignore[assignment]
         _painted.show = orig_show  # type: ignore[assignment]
-        _writer.print_block = orig_writer_print_block  # type: ignore[assignment]
 
 
 def capture_demo(
@@ -125,7 +113,7 @@ def capture_demo(
 
     fn_name = function_or_zoom
     buf = StringIO()
-    with _patch_painted_output_to_sys_stdout(), redirect_stdout(buf):
+    with _patch_show_to_sys_stdout(), redirect_stdout(buf):
         mod = import_module_by_path(demo_path, module_name=f"_demo_{Path(demo_path).stem}_output")
         if fn_name == "<module>":
             if data_attr is not None:

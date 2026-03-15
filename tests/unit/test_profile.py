@@ -1,6 +1,6 @@
 """Tests for profile bridge: cProfile → flame_lens dicts."""
 
-from painted._profile import ProfileResult, _stats_to_flame_dict, parse_collapsed, profile
+from painted.views.profile import ProfileResult, _stats_to_flame_dict, parse_collapsed, profile
 from painted.views import flame_lens
 
 

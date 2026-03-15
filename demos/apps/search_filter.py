@@ -28,7 +28,7 @@ import asyncio
 
 from painted import Style
 from painted.core.buffer import BufferView
-from painted.region import Region
+from painted.tui import Region
 from painted.tui import Search, Surface, filter_contains, filter_fuzzy, filter_prefix
 from painted.views import TextInputState, text_input
 

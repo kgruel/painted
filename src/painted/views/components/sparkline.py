@@ -14,13 +14,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from .._sparkline_core import sparkline_text
-from ..core.block import Block
-from ..core.cell import Style
+from ..._sparkline_core import sparkline_text
+from ...core.block import Block
+from ...core.cell import Style
 
 if TYPE_CHECKING:
-    from ..icon_set import IconSet
-    from ..palette import Palette
+    from ...icon_set import IconSet
+    from ...palette import Palette
 
 
 def sparkline(
@@ -51,8 +51,8 @@ def sparkline(
     if width <= 0:
         return Block.empty(0, 1)
 
-    from ..icon_set import current_icons
-    from ..palette import current_palette
+    from ...icon_set import current_icons
+    from ...palette import current_palette
 
     p = palette or current_palette()
     ic = icons or current_icons()
@@ -105,8 +105,8 @@ def sparkline_with_range(
     if width <= 0:
         return Block.empty(0, 1)
 
-    from ..icon_set import current_icons
-    from ..palette import current_palette
+    from ...icon_set import current_icons
+    from ...palette import current_palette
 
     p = palette or current_palette()
     ic = icons or current_icons()

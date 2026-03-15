@@ -2,11 +2,11 @@
 
 import pytest
 
-from painted._mouse import parse_sgr_mouse
-from painted.mouse import (
+from painted.tui.mouse import (
     MouseAction,
     MouseButton,
     MouseEvent,
+    parse_sgr_mouse,
 )
 
 

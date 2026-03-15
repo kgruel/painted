@@ -9,7 +9,7 @@ import importlib.util
 import sys
 from pathlib import Path
 
-from painted.mouse import MouseAction, MouseButton, MouseEvent
+from painted.tui import MouseAction, MouseButton, MouseEvent
 from painted.tui.testing import TestSurface
 
 _PROJECT = Path(__file__).resolve().parent.parent.parent

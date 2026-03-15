@@ -12,8 +12,8 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import TextIO
 
-from .._mouse import MouseEvent
-from ..app import Surface
+from .mouse import MouseEvent
+from .surface import Surface
 from ..core.buffer import Buffer, CellWrite
 from ..core.writer import ColorDepth, Writer
 

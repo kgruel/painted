@@ -9,7 +9,7 @@ from __future__ import annotations
 import io
 
 from painted import Block, Cell, CliContext, Style, Zoom
-from painted.fidelity import OutputMode
+from painted.cli import OutputMode
 from painted.core.writer import print_block
 
 

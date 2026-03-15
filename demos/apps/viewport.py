@@ -14,7 +14,7 @@ from __future__ import annotations
 import asyncio
 
 from painted import Line, Style
-from painted.region import Region
+from painted.tui import Region
 from painted.tui import Surface
 from painted.views import ListState, list_view
 

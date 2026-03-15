@@ -13,9 +13,9 @@ from __future__ import annotations
 
 from enum import Enum
 
-from .core.block import Block
-from .core.cell import Cell, Style
-from .core.compose import join_horizontal
+from ..core.block import Block
+from ..core.cell import Cell, Style
+from ..core.compose import join_horizontal
 
 
 class BigTextFormat(Enum):

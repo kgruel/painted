@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .core.buffer import Buffer, BufferView
+from ..core.buffer import Buffer, BufferView
 
 
 @dataclass(frozen=True, slots=True)

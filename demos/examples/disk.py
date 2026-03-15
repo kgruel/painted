@@ -27,10 +27,10 @@ import time
 from dataclasses import dataclass
 
 from painted import Block, Style
-from painted._components.spinner import SpinnerState
+from painted.views.components.spinner import SpinnerState
 from painted.inplace import InPlaceRenderer
 from painted.core.buffer import BufferView
-from painted.region import Region
+from painted.tui import Region
 from painted.tui import Surface
 from painted.views import ProgressState, chart_lens, flame_lens, progress_bar, tree_lens
 

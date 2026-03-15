@@ -36,7 +36,7 @@ from painted import (
     truncate,
     ROUNDED,
 )
-from painted.fidelity import (
+from painted.cli import (
     HelpData,
     HelpFlag,
     HelpGroup,

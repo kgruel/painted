@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import json
-import sys
 
 import pytest
 
 from painted import Block, Style
-from painted.fidelity import (
+from painted.cli import (
     CliContext,
     CliRunner,
     OutputMode,
@@ -51,17 +50,6 @@ class TestExceptionMessage:
 
 
 class TestCliRunnerModeInference:
-    @staticmethod
-    def _patch_print_block_to_current_stdout(monkeypatch):
-        from painted.core import writer as writer_mod
-
-        real_print_block = writer_mod.print_block
-
-        def print_block(block, stream=None, *, use_ansi=None):
-            return real_print_block(block, sys.stdout, use_ansi=use_ansi)
-
-        monkeypatch.setattr(writer_mod, "print_block", print_block)
-
     def test_fetch_stream_enables_live_mode(self, monkeypatch):
         """When fetch_stream is provided, LIVE mode is available."""
         monkeypatch.setattr("sys.stdout.isatty", lambda: False)
@@ -79,7 +67,7 @@ class TestCliRunnerModeInference:
         import argparse
 
         parser = argparse.ArgumentParser()
-        from painted.fidelity import add_cli_args
+        from painted.cli import add_cli_args
 
         modes = {OutputMode.STATIC, OutputMode.LIVE}
         add_cli_args(parser, modes=modes)
@@ -125,8 +113,6 @@ class TestCliRunnerModeInference:
     def test_plain_format_implies_static(self, capsys, monkeypatch):
         """--plain with AUTO mode resolves to STATIC."""
         monkeypatch.setattr("sys.stdout.isatty", lambda: False)
-        self._patch_print_block_to_current_stdout(monkeypatch)
-
         result = run_cli(
             ["--plain"],
             render=lambda ctx, data: Block.text("hello", Style()),
@@ -243,21 +229,9 @@ class TestCliRunnerErrorBlocks:
 
 
 class TestCliRunnerLiveFallback:
-    @staticmethod
-    def _patch_print_block_to_current_stdout(monkeypatch):
-        from painted.core import writer as writer_mod
-
-        real_print_block = writer_mod.print_block
-
-        def print_block(block, stream=None, *, use_ansi=None):
-            return real_print_block(block, sys.stdout, use_ansi=use_ansi)
-
-        monkeypatch.setattr(writer_mod, "print_block", print_block)
-
     def test_live_without_stream_renders_static(self, capsys, monkeypatch):
         """LIVE mode without fetch_stream falls back to fetch-and-render."""
         monkeypatch.setattr("sys.stdout.isatty", lambda: False)
-        self._patch_print_block_to_current_stdout(monkeypatch)
 
         ctx = CliContext(
             zoom=Zoom.SUMMARY,
@@ -279,7 +253,6 @@ class TestCliRunnerLiveFallback:
     def test_live_fetch_error(self, capsys, monkeypatch):
         """LIVE mode fetch error returns 1."""
         monkeypatch.setattr("sys.stdout.isatty", lambda: False)
-        self._patch_print_block_to_current_stdout(monkeypatch)
 
         ctx = CliContext(
             zoom=Zoom.SUMMARY,
@@ -299,7 +272,6 @@ class TestCliRunnerLiveFallback:
     def test_live_render_error(self, capsys, monkeypatch):
         """LIVE mode render error returns 2."""
         monkeypatch.setattr("sys.stdout.isatty", lambda: False)
-        self._patch_print_block_to_current_stdout(monkeypatch)
 
         ctx = CliContext(
             zoom=Zoom.SUMMARY,
@@ -323,7 +295,6 @@ class TestCliRunnerLiveFallback:
     def test_interactive_without_handler_falls_to_live(self, capsys, monkeypatch):
         """INTERACTIVE mode without custom handler falls through to _run_live."""
         monkeypatch.setattr("sys.stdout.isatty", lambda: False)
-        self._patch_print_block_to_current_stdout(monkeypatch)
 
         ctx = CliContext(
             zoom=Zoom.SUMMARY,

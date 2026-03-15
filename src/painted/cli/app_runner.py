@@ -5,7 +5,7 @@ a single command with zoom/mode/format; AppRunner routes between multiple
 commands and renders top-level help through painted.
 
 Usage:
-    from painted.app_runner import run_app, AppCommand
+    from painted.cli import run_app, AppCommand
 
     commands = [
         AppCommand("status", "Show store status", _run_status),
@@ -22,17 +22,16 @@ import sys
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from .fidelity import (
-    Format,
+from .help import (
     HelpArg,
     HelpData,
     HelpFlag,
     HelpGroup,
-    Zoom,
     help_args_to_flags,
     render_help,
     scan_help_args,
 )
+from .types import Format, Zoom
 
 
 @dataclass(frozen=True)
@@ -83,12 +82,12 @@ class AppRunner:
             return self._handle_help(argv)
 
         # Unknown command → error + help to stderr
-        from .core.block import Block
-        from .core.cell import Style
-        from .core.writer import print_block
+        from ..core.block import Block
+        from ..core.cell import Style
+        from ..core.writer import print_block
 
         try:
-            from .palette import current_palette
+            from ..palette import current_palette
 
             error_style = current_palette().error
         except Exception:
@@ -107,7 +106,7 @@ class AppRunner:
 
     def _handle_help(self, args: list[str]) -> int:
         """Render zoom-aware help and return 0."""
-        from .core.writer import print_block
+        from ..core.writer import print_block
 
         zoom, fmt = scan_help_args(args)
         help_data = self._build_help_data()
@@ -129,7 +128,7 @@ class AppRunner:
 
     def _handle_subcommand_help(self, cmd: AppCommand, args: list[str]) -> int:
         """Render zoom-aware help for a subcommand and return 0."""
-        from .core.writer import print_block
+        from ..core.writer import print_block
 
         zoom, fmt = scan_help_args(args)
         help_data = self._build_subcommand_help_data(cmd)

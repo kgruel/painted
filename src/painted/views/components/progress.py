@@ -5,12 +5,12 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
-from ..core.block import Block
-from ..core.cell import Cell, Style
+from ...core.block import Block
+from ...core.cell import Cell, Style
 
 if TYPE_CHECKING:
-    from ..icon_set import IconSet
-    from ..palette import Palette
+    from ...icon_set import IconSet
+    from ...palette import Palette
 
 
 @dataclass(frozen=True)
@@ -50,8 +50,8 @@ def progress_bar(
     Returns:
         Block with rendered progress bar.
     """
-    from ..icon_set import current_icons
-    from ..palette import current_palette
+    from ...icon_set import current_icons
+    from ...palette import current_palette
 
     p = palette or current_palette()
     ic = icons or current_icons()

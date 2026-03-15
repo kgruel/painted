@@ -29,7 +29,7 @@ from painted import (
     use_palette,
     vslice,
 )
-from painted.mouse import MouseEvent
+from painted.tui import MouseEvent
 from painted.tui import Surface
 from painted.views import ProgressState, SpinnerState, progress_bar, spinner
 
