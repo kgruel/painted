@@ -13,8 +13,8 @@ from wcwidth import wcwidth
 
 from .buffer import CellWrite
 from .cell import NAMED_COLORS, Style
-from ._color import _idx_to_rgb, _nearest_basic, _rgb_to_256, _rgb_to_basic
-from ._row_ops import iter_row_spans, row_visible_text
+from ._color import _nearest_basic, _rgb_to_256, _rgb_to_basic
+from ._row_ops import iter_trimmed_row_spans, row_visible_text
 
 if TYPE_CHECKING:
     from .block import Block
@@ -97,14 +97,25 @@ class Writer:
             return ""
         return f"\x1b[{';'.join(codes)}m"
 
-    def _color_codes(self, color: str | int, foreground: bool, *, depth: ColorDepth) -> list[str]:
+    def _color_codes(
+        self,
+        color: str | int,
+        foreground: bool,
+        *,
+        depth: ColorDepth | None = None,
+    ) -> list[str]:
         """Convert a color value to SGR parameter strings.
 
         Automatically downgrades colors when terminal color depth is limited:
         - Hex RGB -> truecolor / 256-color / 16-color, as needed
         - 256-color index -> 16-color, as needed
         - Named colors always emit as basic SGR (already safe)
+
+        ``depth`` is optional so direct callers can continue using the helper
+        without duplicating capability detection.
         """
+        if depth is None:
+            depth = self.detect_color_depth()
         base = 30 if foreground else 40
 
         if isinstance(color, int):
@@ -320,7 +331,7 @@ def write_block_ansi(block: Block, writer: Writer, stream: TextIO) -> None:
         parts: list[str] = []
         last_style: Style | None = None
 
-        for span in iter_row_spans(block.row(row_idx)):
+        for span in iter_trimmed_row_spans(block.row(row_idx)):
             cell = span.cells[0]
             if cell.style != last_style:
                 parts.append(writer.reset_style())

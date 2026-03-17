@@ -94,6 +94,31 @@ def row_visible_text(row: Sequence[Cell]) -> str:
     return "".join(span.cells[0].char for span in iter_row_spans(row))
 
 
+def iter_trimmed_row_spans(
+    row: Sequence[Cell],
+    ids: Sequence[str | None] | None = None,
+) -> Iterator[RowSpan]:
+    """Iterate visible spans, trimming trailing single-cell space padding.
+
+    Block composition pads rows to a uniform width. Writing those trailing
+    padding cells in ANSI mode can hit the terminal's last column and trigger
+    an unwanted auto-wrap before the explicit newline.
+
+    Wide-character placeholder cells are preserved because they are yielded as
+    width-2 spans by ``iter_row_spans()`` and therefore never match the
+    trimmed-single-space rule.
+    """
+    spans = list(iter_row_spans(row, ids))
+    end = len(spans)
+    while end > 0:
+        span = spans[end - 1]
+        if span.width == 1 and span.cells[0].char == " ":
+            end -= 1
+            continue
+        break
+    yield from spans[:end]
+
+
 def take_row_prefix(
     row: Sequence[Cell],
     max_width: int,

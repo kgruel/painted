@@ -6,7 +6,6 @@ from collections.abc import Sequence
 from dataclasses import dataclass, replace
 
 
-
 @dataclass(frozen=True, slots=True)
 class Search:
     """Immutable search state for filtered selection.

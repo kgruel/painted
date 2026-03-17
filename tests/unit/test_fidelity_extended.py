@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import json
 
-import pytest
-
 from painted import Block, Style
 from painted.cli import (
     CliContext,
@@ -57,7 +55,7 @@ class TestCliRunnerModeInference:
         async def fake_stream():
             yield "data"
 
-        runner = CliRunner(
+        CliRunner(
             render=lambda ctx, data: Block.text(str(data), Style()),
             fetch=lambda: "data",
             fetch_stream=fake_stream,
@@ -348,7 +346,7 @@ class TestCliRunnerLiveStreaming:
         ctx = CliContext(
             zoom=Zoom.SUMMARY,
             mode=OutputMode.LIVE,
-            use_ansi=False,
+            use_ansi=True,
             is_tty=False,
             width=40,
             height=5,
@@ -402,7 +400,7 @@ class TestCliRunnerLiveStreaming:
         ctx = CliContext(
             zoom=Zoom.SUMMARY,
             mode=OutputMode.LIVE,
-            use_ansi=False,
+            use_ansi=True,
             is_tty=False,
             width=40,
             height=5,
@@ -459,7 +457,7 @@ class TestCliRunnerLiveStreaming:
         ctx = CliContext(
             zoom=Zoom.SUMMARY,
             mode=OutputMode.LIVE,
-            use_ansi=False,
+            use_ansi=True,
             is_tty=False,
             width=40,
             height=5,

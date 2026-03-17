@@ -170,7 +170,7 @@ def _render_dict(d: dict, zoom: int, width: int) -> Block:
         return Block.text("{}", style, width=width)
 
     if len(d) == 1:
-        (key, value), = d.items()
+        ((key, value),) = d.items()
         key_style = Style(bold=True)
         key_text = f"{key}:"
         key_col_width = min(display_width(key_text) + 1, width // 2)

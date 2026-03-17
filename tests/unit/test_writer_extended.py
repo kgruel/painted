@@ -5,12 +5,11 @@ from __future__ import annotations
 import io
 import re
 
-import pytest
-
+from painted.core.block import Block
 from painted.core.buffer import CellWrite
 from painted.core.cell import Cell, Style
+from painted.core.compose import join_vertical
 from painted.core.writer import ColorDepth, ScrollOp, Writer, print_block
-from painted.core.block import Block
 
 
 # ---------------------------------------------------------------------------
@@ -232,18 +231,18 @@ class TestColorCodes:
     def test_256_color_fg_truecolor_depth(self):
         """256-color index emitted as 38;5;N at TRUECOLOR depth."""
         w, _ = _writer_with_buf(ColorDepth.TRUECOLOR)
-        codes = w._color_codes(100, foreground=True)
+        codes = w._color_codes(100, foreground=True, depth=ColorDepth.TRUECOLOR)
         assert codes == ["38", "5", "100"]
 
     def test_256_color_bg_truecolor_depth(self):
         w, _ = _writer_with_buf(ColorDepth.TRUECOLOR)
-        codes = w._color_codes(200, foreground=False)
+        codes = w._color_codes(200, foreground=False, depth=ColorDepth.TRUECOLOR)
         assert codes == ["48", "5", "200"]
 
     def test_256_color_downgrade_to_basic(self):
         """256-color index downgrades to basic 16 at BASIC depth."""
         w, _ = _writer_with_buf(ColorDepth.BASIC)
-        codes = w._color_codes(100, foreground=True)
+        codes = w._color_codes(100, foreground=True, depth=ColorDepth.BASIC)
         # Should be a single code in the 30-47 range
         assert len(codes) == 1
         code = int(codes[0])
@@ -252,18 +251,18 @@ class TestColorCodes:
     def test_hex_rgb_truecolor(self):
         """Hex RGB emits 38;2;r;g;b at TRUECOLOR depth."""
         w, _ = _writer_with_buf(ColorDepth.TRUECOLOR)
-        codes = w._color_codes("#ff8040", foreground=True)
+        codes = w._color_codes("#ff8040", foreground=True, depth=ColorDepth.TRUECOLOR)
         assert codes == ["38", "2", "255", "128", "64"]
 
     def test_hex_rgb_bg_truecolor(self):
         w, _ = _writer_with_buf(ColorDepth.TRUECOLOR)
-        codes = w._color_codes("#ff8040", foreground=False)
+        codes = w._color_codes("#ff8040", foreground=False, depth=ColorDepth.TRUECOLOR)
         assert codes == ["48", "2", "255", "128", "64"]
 
     def test_hex_rgb_downgrade_to_256(self):
         """Hex RGB downgrades to 256-color at EIGHT_BIT depth."""
         w, _ = _writer_with_buf(ColorDepth.EIGHT_BIT)
-        codes = w._color_codes("#ff0000", foreground=True)
+        codes = w._color_codes("#ff0000", foreground=True, depth=ColorDepth.EIGHT_BIT)
         assert codes[0] == "38"
         assert codes[1] == "5"
         # Should be a valid 256-color index
@@ -273,25 +272,25 @@ class TestColorCodes:
     def test_hex_rgb_downgrade_to_basic(self):
         """Hex RGB downgrades to basic 16 at BASIC depth."""
         w, _ = _writer_with_buf(ColorDepth.BASIC)
-        codes = w._color_codes("#ff0000", foreground=True)
+        codes = w._color_codes("#ff0000", foreground=True, depth=ColorDepth.BASIC)
         assert len(codes) == 1
         code = int(codes[0])
         assert 30 <= code <= 47
 
     def test_named_color_fg(self):
         w, _ = _writer_with_buf(ColorDepth.TRUECOLOR)
-        codes = w._color_codes("red", foreground=True)
+        codes = w._color_codes("red", foreground=True, depth=ColorDepth.TRUECOLOR)
         assert codes == ["31"]  # 30 + 1
 
     def test_named_color_bg(self):
         w, _ = _writer_with_buf(ColorDepth.TRUECOLOR)
-        codes = w._color_codes("cyan", foreground=False)
+        codes = w._color_codes("cyan", foreground=False, depth=ColorDepth.TRUECOLOR)
         assert codes == ["46"]  # 40 + 6
 
     def test_unknown_color_returns_empty(self):
         """Unknown color string returns empty list (line 205)."""
         w, _ = _writer_with_buf(ColorDepth.TRUECOLOR)
-        codes = w._color_codes("not_a_color", foreground=True)
+        codes = w._color_codes("not_a_color", foreground=True, depth=ColorDepth.TRUECOLOR)
         assert codes == []
 
 
@@ -393,6 +392,17 @@ class TestPrintBlock:
         output = buf.getvalue()
         assert "hi" in output
         assert "\x1b[" in output  # has escape sequences
+
+    def test_print_block_ansi_trims_trailing_pad_spaces(self):
+        """ANSI path trims rectangular row padding before writing newlines."""
+        block = join_vertical(
+            Block.text("abcdefghij", Style()),
+            Block.text("hi", Style()),
+        )
+        buf = io.StringIO()
+        print_block(block, buf, use_ansi=True)
+        visible = re.sub(r"\x1b\[[0-9;]*m", "", buf.getvalue())
+        assert visible == "abcdefghij\nhi\n"
 
     def test_print_block_auto_non_tty(self):
         """print_block auto-detects non-TTY -> plain text."""
