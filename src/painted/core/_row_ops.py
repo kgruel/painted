@@ -75,11 +75,22 @@ def row_visible_text(row: Sequence[Cell]) -> str:
 
     Fast path: if all characters are ASCII, there are no wide characters and
     therefore no placeholder cells — join directly without iter_row_spans.
+
+    Intermediate path: if non-ASCII chars are all width-1 (e.g. em-dash,
+    arrows, mathematical symbols), there are no placeholder cells either —
+    join directly without iter_row_spans.
+
+    Slow path: only when actual wide (2-cell) characters are present.
     """
     text = "".join(cell.char for cell in row)
     if text.isascii():
         return text
-    # Slow path: non-ASCII chars may be wide (2-cell); skip placeholder cells.
+    # Check if any non-ASCII char is actually wide (display width > 1).
+    # Width-1 non-ASCII chars (em-dash, arrows, etc.) have no placeholder cells
+    # and the joined text is already correct.
+    if all(char_width(c) <= 1 for c in text if not c.isascii()):
+        return text
+    # Slow path: wide (2-cell) chars present — skip placeholder cells.
     return "".join(span.cells[0].char for span in iter_row_spans(row))
 
 
