@@ -248,7 +248,7 @@ class Block:
             return Block([], 0, id=id)
 
         if width is None:
-            width = display_width(rows[0][0])
+            width = max(display_width(text) for text, _style in rows)
 
         cell_rows: list[list[Cell]] = []
         for text, style in rows:
