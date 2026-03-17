@@ -71,7 +71,15 @@ def iter_row_spans(
 
 
 def row_visible_text(row: Sequence[Cell]) -> str:
-    """Render a row's visible text, skipping wide-char placeholder cells."""
+    """Render a row's visible text, skipping wide-char placeholder cells.
+
+    Fast path: if all characters are ASCII, there are no wide characters and
+    therefore no placeholder cells — join directly without iter_row_spans.
+    """
+    text = "".join(cell.char for cell in row)
+    if text.isascii():
+        return text
+    # Slow path: non-ASCII chars may be wide (2-cell); skip placeholder cells.
     return "".join(span.cells[0].char for span in iter_row_spans(row))
 
 
