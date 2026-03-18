@@ -34,6 +34,7 @@ from painted import (
     Align,
     Block,
     CliContext,
+    Fidelity,
     Format,
     OutputMode,
     Style,
@@ -526,7 +527,7 @@ class ResponsiveSurface(Surface):
             return
         self._buf.fill(0, 0, self._width, self._height, " ", Style())
         ctx = CliContext(
-            zoom=self._zoom,
+            fidelity=Fidelity(depth=int(self._zoom)),
             mode=OutputMode.INTERACTIVE,
             format=Format.ANSI,
             is_tty=True,

@@ -11,6 +11,7 @@ from painted import Block, Style
 from painted.fidelity import (
     CliContext,
     CliRunner,
+    Fidelity,
     Format,
     OutputMode,
     Zoom,
@@ -189,7 +190,7 @@ class TestCliRunnerJsonPath:
 class TestCliRunnerErrorBlocks:
     def test_fetch_error_block_uses_palette(self):
         ctx = CliContext(
-            zoom=Zoom.SUMMARY,
+            fidelity=Fidelity(depth=1),
             mode=OutputMode.STATIC,
             format=Format.ANSI,
             is_tty=True,
@@ -202,7 +203,7 @@ class TestCliRunnerErrorBlocks:
 
     def test_render_error_block_includes_type(self):
         ctx = CliContext(
-            zoom=Zoom.SUMMARY,
+            fidelity=Fidelity(depth=1),
             mode=OutputMode.STATIC,
             format=Format.ANSI,
             is_tty=True,
@@ -215,7 +216,7 @@ class TestCliRunnerErrorBlocks:
 
     def test_render_error_block_empty_message(self):
         ctx = CliContext(
-            zoom=Zoom.SUMMARY,
+            fidelity=Fidelity(depth=1),
             mode=OutputMode.STATIC,
             format=Format.ANSI,
             is_tty=True,
@@ -228,7 +229,7 @@ class TestCliRunnerErrorBlocks:
 
     def test_fetch_error_block_narrow_width(self):
         ctx = CliContext(
-            zoom=Zoom.SUMMARY,
+            fidelity=Fidelity(depth=1),
             mode=OutputMode.STATIC,
             format=Format.ANSI,
             is_tty=True,
@@ -262,7 +263,7 @@ class TestCliRunnerLiveFallback:
         self._patch_print_block_to_current_stdout(monkeypatch)
 
         ctx = CliContext(
-            zoom=Zoom.SUMMARY,
+            fidelity=Fidelity(depth=1),
             mode=OutputMode.LIVE,
             format=Format.ANSI,
             is_tty=False,
@@ -284,7 +285,7 @@ class TestCliRunnerLiveFallback:
         self._patch_print_block_to_current_stdout(monkeypatch)
 
         ctx = CliContext(
-            zoom=Zoom.SUMMARY,
+            fidelity=Fidelity(depth=1),
             mode=OutputMode.LIVE,
             format=Format.ANSI,
             is_tty=False,
@@ -304,7 +305,7 @@ class TestCliRunnerLiveFallback:
         self._patch_print_block_to_current_stdout(monkeypatch)
 
         ctx = CliContext(
-            zoom=Zoom.SUMMARY,
+            fidelity=Fidelity(depth=1),
             mode=OutputMode.LIVE,
             format=Format.ANSI,
             is_tty=False,
@@ -328,7 +329,7 @@ class TestCliRunnerLiveFallback:
         self._patch_print_block_to_current_stdout(monkeypatch)
 
         ctx = CliContext(
-            zoom=Zoom.SUMMARY,
+            fidelity=Fidelity(depth=1),
             mode=OutputMode.INTERACTIVE,
             format=Format.ANSI,
             is_tty=False,
@@ -377,7 +378,7 @@ class TestCliRunnerLiveStreaming:
         monkeypatch.setattr(inplace_mod, "InPlaceRenderer", StubRenderer)
 
         ctx = CliContext(
-            zoom=Zoom.SUMMARY,
+            fidelity=Fidelity(depth=1),
             mode=OutputMode.LIVE,
             format=Format.PLAIN,
             is_tty=False,
@@ -431,7 +432,7 @@ class TestCliRunnerLiveStreaming:
         monkeypatch.setattr(inplace_mod, "InPlaceRenderer", StubRenderer)
 
         ctx = CliContext(
-            zoom=Zoom.SUMMARY,
+            fidelity=Fidelity(depth=1),
             mode=OutputMode.LIVE,
             format=Format.PLAIN,
             is_tty=False,
@@ -488,7 +489,7 @@ class TestCliRunnerLiveStreaming:
         monkeypatch.setattr(inplace_mod, "InPlaceRenderer", StubRenderer)
 
         ctx = CliContext(
-            zoom=Zoom.SUMMARY,
+            fidelity=Fidelity(depth=1),
             mode=OutputMode.LIVE,
             format=Format.PLAIN,
             is_tty=False,

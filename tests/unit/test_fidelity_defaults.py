@@ -5,7 +5,7 @@ Palette is never auto-set — it's a deliberate aesthetic choice.
 
 from __future__ import annotations
 
-from painted.fidelity import CliContext, Format, OutputMode, Zoom, setup_defaults
+from painted.fidelity import CliContext, Fidelity, Format, OutputMode, Zoom, setup_defaults
 from painted.icon_set import ASCII_ICONS, IconSet, current_icons, reset_icons
 from painted.palette import DEFAULT_PALETTE, current_palette, reset_palette
 
@@ -14,7 +14,7 @@ def test_plain_format_sets_ascii_icons():
     reset_palette()
     reset_icons()
     ctx = CliContext(
-        zoom=Zoom.SUMMARY,
+        fidelity=Fidelity(depth=1),
         mode=OutputMode.STATIC,
         format=Format.PLAIN,
         is_tty=False,
@@ -33,7 +33,7 @@ def test_ansi_format_keeps_default_icons():
     reset_palette()
     reset_icons()
     ctx = CliContext(
-        zoom=Zoom.SUMMARY,
+        fidelity=Fidelity(depth=1),
         mode=OutputMode.STATIC,
         format=Format.ANSI,
         is_tty=True,

@@ -46,8 +46,8 @@ def _block_to_text(block: Block) -> str:
     return buf.getvalue()
 
 def _ctx(zoom: Zoom) -> CliContext:
-    return CliContext(zoom=zoom, mode=OutputMode.STATIC, format=Format.PLAIN,
-                      is_tty=False, width=80, height=24)
+    return CliContext(fidelity=Fidelity(depth=int(zoom)), mode=OutputMode.STATIC,
+                      format=Format.PLAIN, is_tty=False, width=80, height=24)
 
 @pytest.mark.parametrize("zoom", list(Zoom), ids=lambda z: z.name)
 def test_<name>_demo(golden, zoom):

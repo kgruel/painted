@@ -67,9 +67,14 @@ run_cli(sys.argv[1:], render=render, fetch=fetch)
 You provide `render(ctx, data) → Block` and `fetch() → data`. The framework handles zoom/format/mode automatically.
 
 Three orthogonal dimensions:
-- **Zoom** (`-q`/`-v`/`-vv`): MINIMAL, SUMMARY, DETAILED, FULL
+- **Fidelity** — three-axis rendering specification:
+  - `depth` (`-q`/`-v`/`-vv`): 0=minimal, 1=summary, 2=detailed, 3=full
+  - `visible`: consumer-defined semantic layer tags (empty = show all)
+  - `chars`/`lines`: density budgets (0 = unlimited)
 - **Format** (`--json`/`--plain`): ANSI (TTY default), PLAIN (pipe default), JSON
 - **Mode** (`-i`/`--static`/`--live`): AUTO detects from TTY
+
+`Zoom` enum (MINIMAL/SUMMARY/DETAILED/FULL) is retained for backward compat. `Depth = Zoom` alias provides forward-looking naming. `ctx.zoom` returns `fidelity.depth` as a Zoom enum.
 
 Streaming: add `fetch_stream` for live updates.
 

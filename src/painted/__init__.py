@@ -46,16 +46,18 @@ from .cursor import Cursor, CursorMode
 from .fidelity import (
     CliContext,
     CliRunner,
+    Depth,
+    Fidelity,
     Format,
     HelpArg,
     HelpData,
     HelpFlag,
     HelpGroup,
     OutputMode,
-    # New API
     Zoom,
     add_cli_args,
     detect_context,
+    parse_fidelity,
     parse_format,
     parse_mode,
     parse_zoom,
@@ -98,6 +100,7 @@ def show(
     data: _Any = _MISSING,
     *,
     zoom: Zoom = Zoom.DETAILED,
+    fidelity: Fidelity | None = None,
     lens: _Callable[[_Any, int, int], "Block"] | None = None,
     format: Format = Format.AUTO,
     file: _TextIO = _sys.stdout,
@@ -112,7 +115,8 @@ def show(
 
     Args:
         data: Any Python value, or a pre-built Block. Omit for blank line.
-        zoom: Detail level (default SUMMARY).
+        zoom: Detail level (default DETAILED). Ignored if fidelity is provided.
+        fidelity: Three-axis fidelity spec (overrides zoom if provided).
         lens: Render function override (default: shape_lens).
         format: Force output format (default: auto-detect from TTY).
         file: Output stream (default: sys.stdout).
@@ -126,15 +130,17 @@ def show(
     from ._lens import shape_lens
     from .fidelity import setup_defaults
 
+    _fidelity = fidelity if fidelity is not None else Fidelity(depth=int(zoom))
+
     # Block passthrough — already rendered
     if isinstance(data, Block):
-        ctx = detect_context(zoom, OutputMode.AUTO, format)
+        ctx = detect_context(_fidelity, OutputMode.AUTO, format)
         setup_defaults(ctx)
         print_block(data, file, use_ansi=(ctx.format == Format.ANSI))
         return
 
     # Detect output context
-    ctx = detect_context(zoom, OutputMode.AUTO, format)
+    ctx = detect_context(_fidelity, OutputMode.AUTO, format)
     setup_defaults(ctx)
 
     # JSON path — serialize directly
@@ -153,7 +159,7 @@ def show(
 
     # Rendered path — lens to Block, then print
     render_fn = lens or shape_lens
-    block = render_fn(data, ctx.zoom, ctx.width)
+    block = render_fn(data, _fidelity.depth, ctx.width)
     print_block(block, file, use_ansi=(ctx.format == Format.ANSI))
 
 
@@ -193,6 +199,8 @@ __all__ = [
     "show",
     # Fidelity (new API)
     "Zoom",
+    "Depth",
+    "Fidelity",
     "OutputMode",
     "Format",
     "CliContext",
@@ -201,6 +209,7 @@ __all__ = [
     "run_cli",
     "add_cli_args",
     "parse_zoom",
+    "parse_fidelity",
     "parse_mode",
     "parse_format",
     "resolve_mode",

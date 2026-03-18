@@ -21,7 +21,7 @@ import json
 import shutil
 import sys
 from collections.abc import Callable
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field, replace
 from enum import Enum, IntEnum
 from typing import TYPE_CHECKING, Generic, TypeVar
 
@@ -48,6 +48,47 @@ class Zoom(IntEnum):
     FULL = 3  # All fields, full depth
 
 
+Depth = Zoom
+
+
+@dataclass(frozen=True)
+class Fidelity:
+    """Three-axis rendering specification.
+
+    Axes:
+      depth   — structural disclosure (0=minimal, 1=summary, 2=detailed, 3=full)
+      visible — which semantic layers are present (consumer-defined tags)
+      chars   — character budget per text block (0=unlimited)
+      lines   — line budget per section (0=unlimited)
+    """
+
+    depth: int = 1
+    visible: frozenset[str] = field(default_factory=frozenset)
+    chars: int = 0
+    lines: int = 0
+
+    def shows(self, tag: str) -> bool:
+        """True if tag is in visible set, or visible set is empty (show all)."""
+        return not self.visible or tag in self.visible
+
+    def with_depth(self, depth: int) -> Fidelity:
+        return replace(self, depth=depth)
+
+    def with_visible(self, *tags: str) -> Fidelity:
+        return replace(self, visible=frozenset(tags))
+
+    def with_density(self, *, chars: int = 0, lines: int = 0) -> Fidelity:
+        return replace(self, chars=chars, lines=lines)
+
+    @property
+    def has_char_limit(self) -> bool:
+        return self.chars > 0
+
+    @property
+    def has_line_limit(self) -> bool:
+        return self.lines > 0
+
+
 class OutputMode(Enum):
     """Delivery mechanism."""
 
@@ -70,12 +111,17 @@ class Format(Enum):
 class CliContext:
     """Resolved runtime context."""
 
-    zoom: Zoom
+    fidelity: Fidelity
     mode: OutputMode  # Resolved (never AUTO)
     format: Format  # Resolved (never AUTO)
     is_tty: bool
     width: int
     height: int
+
+    @property
+    def zoom(self) -> Zoom:
+        """Backward-compat: fidelity.depth as Zoom."""
+        return Zoom(min(self.fidelity.depth, 3))
 
 
 # =============================================================================
@@ -165,7 +211,7 @@ def resolve_format(requested: Format, is_tty: bool, mode: OutputMode) -> Format:
 
 
 def detect_context(
-    zoom: Zoom,
+    fidelity: Fidelity,
     mode: OutputMode,
     fmt: Format,
     default_mode: OutputMode = OutputMode.LIVE,
@@ -179,7 +225,7 @@ def detect_context(
 
     size = shutil.get_terminal_size()
     return CliContext(
-        zoom=zoom,
+        fidelity=fidelity,
         mode=resolved_mode,
         format=resolved_format,
         is_tty=is_tty,
@@ -258,16 +304,16 @@ def _build_help_data(runner: CliRunner[T]) -> HelpData:
     has_command_args = len(command_flags) > 0
     secondary = has_command_args  # rendering opts subordinate when command has its own args
 
-    # Zoom group — always present
-    zoom_flags = (
+    # Fidelity group — always present
+    fidelity_flags = (
         HelpFlag("-q", "--quiet", "Minimal output"),
         HelpFlag("-v", "--verbose", "Detailed (-v) or full (-vv)"),
     )
-    zoom_group = HelpGroup(
-        name="Zoom",
+    fidelity_group = HelpGroup(
+        name="Fidelity",
         hint="(what to show)",
         detail="Controls how much detail is rendered. Stackable: -v for detailed, -vv for full.",
-        flags=zoom_flags,
+        flags=fidelity_flags,
         secondary=secondary,
     )
 
@@ -317,7 +363,7 @@ def _build_help_data(runner: CliRunner[T]) -> HelpData:
     groups: list[HelpGroup] = []
     if command_flags:
         groups.append(HelpGroup(name="", flags=tuple(command_flags)))
-    groups.append(zoom_group)
+    groups.append(fidelity_group)
     if mode_group is not None:
         groups.append(mode_group)
     groups.append(format_group)
@@ -330,11 +376,11 @@ def _build_help_data(runner: CliRunner[T]) -> HelpData:
     )
 
 
-def _render_help(data: HelpData, zoom: Zoom, width: int, use_ansi: bool) -> Block:
+def _render_help(data: HelpData, depth: int, width: int, use_ansi: bool) -> Block:
     """Render help data as a composed Block.
 
     Groups with secondary=True are rendered dim and collapsed to a compact
-    single line at SUMMARY zoom. At DETAILED+, they expand fully but stay dim.
+    single line at SUMMARY depth. At DETAILED+, they expand fully but stay dim.
     Groups with secondary=False render at normal weight (backward-compatible).
     """
     from .block import Block
@@ -385,7 +431,7 @@ def _render_help(data: HelpData, zoom: Zoom, width: int, use_ansi: bool) -> Bloc
             rows.append(Block.text(group_label, header_style))
 
         # Group detail at DETAILED+
-        if zoom >= Zoom.DETAILED and group.detail:
+        if depth >= 2 and group.detail:
             rows.append(Block.text(f"  {group.detail}", dim))
 
         # Flags
@@ -400,7 +446,7 @@ def _render_help(data: HelpData, zoom: Zoom, width: int, use_ansi: bool) -> Bloc
             rows.append(Block.text(line, style))
 
             # Flag detail at DETAILED+
-            if zoom >= Zoom.DETAILED and flag.detail:
+            if depth >= 2 and flag.detail:
                 detail_indent = "  " + " " * col_width
                 rows.append(Block.text(f"{detail_indent}{flag.detail}", dim))
 
@@ -412,7 +458,7 @@ def _render_help(data: HelpData, zoom: Zoom, width: int, use_ansi: bool) -> Bloc
 
     # Render secondary groups
     if secondary:
-        if zoom <= Zoom.MINIMAL:
+        if depth <= 0:
             # Compact: single dim line listing all flags
             flag_names: list[str] = []
             for group in secondary:
@@ -424,13 +470,13 @@ def _render_help(data: HelpData, zoom: Zoom, width: int, use_ansi: bool) -> Bloc
         else:
             # Full rendering, dim at SUMMARY/DETAILED, normal at FULL
             dim_bold = Style(bold=True, dim=True) if use_ansi else normal
-            sec_style = dim if zoom < Zoom.FULL else normal
-            sec_header = dim_bold if zoom < Zoom.FULL else bold
+            sec_style = dim if depth < 3 else normal
+            sec_header = dim_bold if depth < 3 else bold
             for group in secondary:
                 _render_group(group, sec_style, sec_header)
 
     # Interaction rules at DETAILED+
-    if zoom >= Zoom.DETAILED:
+    if depth >= 2:
         rules_header = "Interaction rules"
         rules = [
             "--json and --plain imply --static (no animation).",
@@ -445,9 +491,9 @@ def _render_help(data: HelpData, zoom: Zoom, width: int, use_ansi: bool) -> Bloc
     return join_vertical(*rows)
 
 
-def _scan_help_args(args: list[str]) -> tuple[Zoom, Format]:
-    """Quick-scan args for zoom and format when --help is present."""
-    zoom = Zoom.SUMMARY
+def _scan_help_args(args: list[str]) -> tuple[int, Format]:
+    """Quick-scan args for depth and format when --help is present."""
+    depth = 1  # SUMMARY default
     fmt = Format.AUTO
 
     v_count = 0
@@ -455,7 +501,7 @@ def _scan_help_args(args: list[str]) -> tuple[Zoom, Format]:
         if arg == "-h" or arg == "--help":
             continue
         if arg == "-q" or arg == "--quiet":
-            zoom = Zoom.MINIMAL
+            depth = 0  # MINIMAL
         elif arg.startswith("-v"):
             # Count v's: -v, -vv, -vvv
             if arg.startswith("--verbose"):
@@ -467,10 +513,10 @@ def _scan_help_args(args: list[str]) -> tuple[Zoom, Format]:
         elif arg == "--plain":
             fmt = Format.PLAIN
 
-    if zoom != Zoom.MINIMAL and v_count > 0:
-        zoom = Zoom.FULL if v_count >= 2 else Zoom.DETAILED
+    if depth != 0 and v_count > 0:
+        depth = 3 if v_count >= 2 else 2
 
-    return zoom, fmt
+    return depth, fmt
 
 
 # =============================================================================
@@ -544,16 +590,26 @@ def add_cli_args(
     )
 
 
-def parse_zoom(args: argparse.Namespace, default: Zoom = Zoom.SUMMARY) -> Zoom:
-    """Parse zoom level from args."""
+def parse_depth(args: argparse.Namespace, default: int = 1) -> int:
+    """Parse depth from -q/-v args. Returns 0-3."""
     if getattr(args, "quiet", False):
-        return Zoom.MINIMAL
+        return 0
     verbose = getattr(args, "verbose", 0)
     if verbose >= 2:
-        return Zoom.FULL
+        return 3
     if verbose == 1:
-        return Zoom.DETAILED
+        return 2
     return default
+
+
+def parse_fidelity(args: argparse.Namespace, default: Fidelity | None = None) -> Fidelity:
+    """Parse fidelity from CLI args."""
+    base = default or Fidelity()
+    depth = parse_depth(args, default=base.depth)
+    return replace(base, depth=depth)
+
+
+parse_zoom = parse_depth
 
 
 def parse_mode(args: argparse.Namespace) -> OutputMode:
@@ -598,7 +654,7 @@ class CliRunner(Generic[T]):
     handlers: dict[OutputMode, Callable[[CliContext], R]] | None = None
 
     # Defaults
-    default_zoom: Zoom = Zoom.SUMMARY
+    default_fidelity: Fidelity = field(default_factory=Fidelity)
     default_mode: OutputMode = OutputMode.LIVE
 
     # Optional: description for help
@@ -641,21 +697,21 @@ class CliRunner(Generic[T]):
 
         parsed = parser.parse_args(args)
 
-        zoom = parse_zoom(parsed, self.default_zoom)
+        fidelity = parse_fidelity(parsed, default=self.default_fidelity)
         mode = parse_mode(parsed)
         fmt = parse_format(parsed)
 
-        # Non-animated formats and minimal zoom imply static mode
-        if mode == OutputMode.AUTO and (fmt in (Format.JSON, Format.PLAIN) or zoom == Zoom.MINIMAL):
+        # Non-animated formats and minimal depth imply static mode
+        if mode == OutputMode.AUTO and (fmt in (Format.JSON, Format.PLAIN) or fidelity.depth == 0):
             mode = OutputMode.STATIC
 
-        ctx = detect_context(zoom, mode, fmt, self.default_mode)
+        ctx = detect_context(fidelity, mode, fmt, self.default_mode)
 
         return self._dispatch(ctx)
 
     def _handle_help(self, args: list[str]) -> int:
-        """Render zoom-aware help and return 0."""
-        zoom, fmt = _scan_help_args(args)
+        """Render depth-aware help and return 0."""
+        depth, fmt = _scan_help_args(args)
         help_data = _build_help_data(self)
 
         if fmt == Format.JSON:
@@ -667,7 +723,7 @@ class CliRunner(Generic[T]):
             use_ansi = hasattr(sys.stdout, "isatty") and sys.stdout.isatty()
 
         width = shutil.get_terminal_size().columns
-        block = _render_help(help_data, zoom, width, use_ansi)
+        block = _render_help(help_data, depth, width, use_ansi)
 
         from .writer import print_block
 
@@ -829,6 +885,7 @@ def run_cli(
     *,
     fetch_stream: Callable[[], AsyncIterator[T]] | None = None,
     handlers: dict[OutputMode, Callable[[CliContext], R]] | None = None,
+    default_fidelity: Fidelity | None = None,
     default_zoom: Zoom = Zoom.SUMMARY,
     default_mode: OutputMode = OutputMode.LIVE,
     description: str | None = None,
@@ -836,7 +893,7 @@ def run_cli(
     add_args: Callable[[argparse.ArgumentParser], None] | None = None,
     help_args: list[HelpArg] | None = None,
 ) -> int:
-    """Run a CLI tool with zoom/mode/format handling.
+    """Run a CLI tool with fidelity/mode/format handling.
 
     Args:
         args: Command-line arguments (sys.argv[1:])
@@ -844,7 +901,8 @@ def run_cli(
         fetch: Function to fetch state (sync)
         fetch_stream: Optional async iterator for streaming updates
         handlers: Custom handlers for specific output modes
-        default_zoom: Default zoom level (SUMMARY)
+        default_fidelity: Default fidelity (overrides default_zoom if provided)
+        default_zoom: Default zoom/depth level (SUMMARY) — backward compat
         default_mode: Default mode for TTY when AUTO (LIVE)
         description: Help text description
         prog: Program name
@@ -854,12 +912,13 @@ def run_cli(
     Returns:
         Exit code (0 for success)
     """
+    fidelity = default_fidelity or Fidelity(depth=int(default_zoom))
     return CliRunner(
         render=render,
         fetch=fetch,
         fetch_stream=fetch_stream,
         handlers=handlers,  # type: ignore[arg-type]
-        default_zoom=default_zoom,
+        default_fidelity=fidelity,
         default_mode=default_mode,
         description=description,
         prog=prog,

@@ -10,19 +10,20 @@ from painted import Block, Style
 from painted.fidelity import (
     CliContext,
     CliRunner,
+    Fidelity,
     Format,
     HelpArg,
     HelpData,
     HelpFlag,
     HelpGroup,
     OutputMode,
-    # New API
     Zoom,
     _build_help_data,
     _extract_add_args_flags,
     _help_args_to_flags,
     _render_help,
     add_cli_args,
+    parse_fidelity,
     parse_format,
     parse_mode,
     parse_zoom,
@@ -136,15 +137,19 @@ class TestResolveMode:
 
     def test_auto_tty_with_default_mode_static(self):
         """AUTO on TTY respects default_mode override."""
-        assert resolve_mode(
-            OutputMode.AUTO, is_tty=True, is_pipe=False, default_mode=OutputMode.STATIC
-        ) == OutputMode.STATIC
+        assert (
+            resolve_mode(
+                OutputMode.AUTO, is_tty=True, is_pipe=False, default_mode=OutputMode.STATIC
+            )
+            == OutputMode.STATIC
+        )
 
     def test_auto_pipe_ignores_default_mode(self):
         """Pipe always gets STATIC regardless of default_mode."""
-        assert resolve_mode(
-            OutputMode.AUTO, is_tty=False, is_pipe=True, default_mode=OutputMode.LIVE
-        ) == OutputMode.STATIC
+        assert (
+            resolve_mode(OutputMode.AUTO, is_tty=False, is_pipe=True, default_mode=OutputMode.LIVE)
+            == OutputMode.STATIC
+        )
 
 
 # =============================================================================
@@ -302,7 +307,7 @@ class TestCliContext:
     def test_frozen(self):
         """CliContext is immutable."""
         ctx = CliContext(
-            zoom=Zoom.SUMMARY,
+            fidelity=Fidelity(depth=1),
             mode=OutputMode.STATIC,
             format=Format.ANSI,
             is_tty=True,
@@ -310,7 +315,126 @@ class TestCliContext:
             height=24,
         )
         with pytest.raises(AttributeError):
-            ctx.zoom = Zoom.FULL  # type: ignore
+            ctx.fidelity = Fidelity()  # type: ignore
+
+    def test_zoom_backward_compat(self):
+        """ctx.zoom returns fidelity.depth as Zoom enum."""
+        ctx = CliContext(
+            fidelity=Fidelity(depth=2),
+            mode=OutputMode.STATIC,
+            format=Format.ANSI,
+            is_tty=True,
+            width=80,
+            height=24,
+        )
+        assert ctx.zoom == Zoom.DETAILED
+        assert ctx.zoom == 2
+
+
+# =============================================================================
+# Fidelity Tests
+# =============================================================================
+
+
+class TestFidelity:
+    """Tests for Fidelity dataclass."""
+
+    def test_defaults(self):
+        """Default Fidelity has depth=1, empty visible, unlimited chars/lines."""
+        f = Fidelity()
+        assert f.depth == 1
+        assert f.visible == frozenset()
+        assert f.chars == 0
+        assert f.lines == 0
+
+    def test_shows_empty_visible_shows_all(self):
+        """Empty visible set means show everything."""
+        f = Fidelity()
+        assert f.shows("anything") is True
+        assert f.shows("metadata") is True
+
+    def test_shows_with_visible_set(self):
+        """Non-empty visible filters tags."""
+        f = Fidelity(visible=frozenset({"error", "warning"}))
+        assert f.shows("error") is True
+        assert f.shows("warning") is True
+        assert f.shows("info") is False
+
+    def test_with_depth(self):
+        """with_depth returns new Fidelity with updated depth."""
+        f = Fidelity()
+        f2 = f.with_depth(3)
+        assert f2.depth == 3
+        assert f.depth == 1  # original unchanged
+
+    def test_with_visible(self):
+        """with_visible returns new Fidelity with updated visible set."""
+        f = Fidelity()
+        f2 = f.with_visible("error", "warning")
+        assert f2.visible == frozenset({"error", "warning"})
+        assert f.visible == frozenset()  # original unchanged
+
+    def test_with_density(self):
+        """with_density returns new Fidelity with updated chars/lines."""
+        f = Fidelity()
+        f2 = f.with_density(chars=100, lines=20)
+        assert f2.chars == 100
+        assert f2.lines == 20
+        assert f.chars == 0  # original unchanged
+
+    def test_has_char_limit(self):
+        """has_char_limit is True when chars > 0."""
+        assert Fidelity().has_char_limit is False
+        assert Fidelity(chars=0).has_char_limit is False
+        assert Fidelity(chars=100).has_char_limit is True
+
+    def test_has_line_limit(self):
+        """has_line_limit is True when lines > 0."""
+        assert Fidelity().has_line_limit is False
+        assert Fidelity(lines=0).has_line_limit is False
+        assert Fidelity(lines=20).has_line_limit is True
+
+    def test_frozen(self):
+        """Fidelity is immutable."""
+        f = Fidelity()
+        with pytest.raises(AttributeError):
+            f.depth = 3  # type: ignore
+
+
+class TestParseFidelity:
+    """Tests for parse_fidelity function."""
+
+    def test_quiet_gives_depth_zero(self):
+        """-q gives depth 0."""
+        args = argparse.Namespace(quiet=True, verbose=0)
+        f = parse_fidelity(args)
+        assert f.depth == 0
+
+    def test_default(self):
+        """No flags gives depth 1 (default)."""
+        args = argparse.Namespace(quiet=False, verbose=0)
+        f = parse_fidelity(args)
+        assert f.depth == 1
+
+    def test_single_verbose(self):
+        """-v gives depth 2."""
+        args = argparse.Namespace(quiet=False, verbose=1)
+        f = parse_fidelity(args)
+        assert f.depth == 2
+
+    def test_double_verbose(self):
+        """-vv gives depth 3."""
+        args = argparse.Namespace(quiet=False, verbose=2)
+        f = parse_fidelity(args)
+        assert f.depth == 3
+
+    def test_custom_default(self):
+        """Custom default fidelity is respected."""
+        args = argparse.Namespace(quiet=False, verbose=0)
+        base = Fidelity(depth=2, chars=50)
+        f = parse_fidelity(args, default=base)
+        assert f.depth == 2
+        assert f.chars == 50  # preserved from base
 
 
 # =============================================================================
@@ -648,7 +772,7 @@ class TestRenderHelpAugmentation:
                 ),
             ),
         )
-        block = _render_help(data, Zoom.MINIMAL, 80, use_ansi=False)
+        block = _render_help(data, 0, 80, use_ansi=False)
         text = self._block_text(block)
 
         # Command arg should be present
@@ -662,7 +786,7 @@ class TestRenderHelpAugmentation:
         assert "Zoom" not in text
 
     def test_secondary_dim_at_summary(self):
-        """Secondary groups render fully but dim at SUMMARY zoom."""
+        """Secondary groups render fully but dim at SUMMARY depth."""
         data = HelpData(
             prog="myapp",
             description="A test app",
@@ -675,7 +799,7 @@ class TestRenderHelpAugmentation:
                 ),
             ),
         )
-        block = _render_help(data, Zoom.SUMMARY, 80, use_ansi=False)
+        block = _render_help(data, 1, 80, use_ansi=False)
         text = self._block_text(block)
 
         # Command arg present
@@ -687,7 +811,7 @@ class TestRenderHelpAugmentation:
         assert "Minimal" in text
 
     def test_secondary_expanded_at_detailed(self):
-        """Secondary groups expand fully at DETAILED zoom, with group headers."""
+        """Secondary groups expand fully at DETAILED depth, with group headers."""
         data = HelpData(
             prog="myapp",
             description=None,
@@ -701,7 +825,7 @@ class TestRenderHelpAugmentation:
                 ),
             ),
         )
-        block = _render_help(data, Zoom.DETAILED, 80, use_ansi=False)
+        block = _render_help(data, 2, 80, use_ansi=False)
         text = self._block_text(block)
 
         # Command arg present
@@ -728,7 +852,7 @@ class TestRenderHelpAugmentation:
                 HelpGroup(name="Help", flags=(HelpFlag("-h", "--help", "Show this help"),)),
             ),
         )
-        block = _render_help(data, Zoom.SUMMARY, 80, use_ansi=False)
+        block = _render_help(data, 1, 80, use_ansi=False)
         text = self._block_text(block)
 
         # All groups rendered fully (not collapsed)
@@ -818,5 +942,5 @@ class TestRunCliHelp:
         assert result == 0
         captured = capsys.readouterr()
         # Rendering groups shown with headers (not collapsed)
-        assert "Zoom" in captured.out
+        assert "Fidelity" in captured.out
         assert "-q, --quiet" in captured.out
