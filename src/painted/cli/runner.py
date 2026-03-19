@@ -16,10 +16,20 @@ from typing import TYPE_CHECKING, Generic, TypeVar
 
 from contextlib import nullcontext
 
-from .args import add_cli_args, parse_fidelity, parse_format, parse_mode, parse_zoom
-from .context import detect_context
+from .types import (
+    CliContext,
+    Fidelity,
+    Format,
+    OutputMode,
+    Zoom,
+    add_cli_args,
+    detect_context,
+    parse_fidelity,
+    parse_format,
+    parse_mode,
+    parse_zoom,
+)
 from .help import HelpArg, build_help_data, render_help, scan_help_args
-from .types import CliContext, Format, OutputMode, Zoom
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -75,7 +85,7 @@ class CliRunner(Generic[T]):
             zoom = self.default_zoom
             mode = OutputMode.AUTO
             fmt = Format.AUTO
-            fidelity = None
+            fidelity = Fidelity(depth=int(zoom))
         else:
             parser = self._get_parser()
             parsed = parser.parse_args(args)
@@ -83,7 +93,7 @@ class CliRunner(Generic[T]):
             zoom = parse_zoom(parsed, self.default_zoom)
             mode = parse_mode(parsed)
             fmt = parse_format(parsed)
-            fidelity = parse_fidelity(parsed)
+            fidelity = parse_fidelity(parsed, zoom)
 
         # JSON short-circuits — it's data export, not rendering
         is_json = fmt == Format.JSON
@@ -97,7 +107,7 @@ class CliRunner(Generic[T]):
             mode = OutputMode.STATIC
 
         ctx = detect_context(
-            zoom, mode, force_plain=force_plain, default_mode=self.default_mode, fidelity=fidelity
+            fidelity, mode, force_plain=force_plain, default_mode=self.default_mode
         )
 
         return self._dispatch(ctx)

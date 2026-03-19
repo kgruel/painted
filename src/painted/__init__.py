@@ -32,6 +32,7 @@ __all__ = [
     "Block",
     "Wrap",
     "Zoom",
+    "Depth",
     # Composition
     "Align",
     "join_horizontal",
@@ -107,6 +108,7 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "Block": (".core.block", "Block"),
     "Wrap": (".core.block", "Wrap"),
     "Zoom": (".core.zoom", "Zoom"),
+    "Depth": (".core.fidelity", "Depth"),
     "Align": (".core.compose", "Align"),
     "border": (".core.compose", "border"),
     "join_horizontal": (".core.compose", "join_horizontal"),

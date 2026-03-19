@@ -130,7 +130,7 @@ def _render_scalar(value: Any, zoom: int, width: int, fidelity: Fidelity | None 
         return Block.text(text, style, width=width)
 
     # zoom >= 2: full value (with length indicator for long strings)
-    max_str = fidelity.chars if fidelity and fidelity.chars is not None else _MAX_STR_DISPLAY
+    max_str = fidelity.chars if fidelity and fidelity.chars > 0 else _MAX_STR_DISPLAY
     text = _format_value(value)
     if isinstance(value, str) and display_width(text) > max_str:
         original_chars = len(value)
@@ -195,7 +195,7 @@ def _render_dict(d: dict, zoom: int, width: int, fidelity: Fidelity | None = Non
     key_style = Style(bold=True)
 
     # Sample items if too many
-    max_items = fidelity.lines if fidelity and fidelity.lines is not None else _MAX_DICT_ITEMS
+    max_items = fidelity.lines if fidelity and fidelity.lines > 0 else _MAX_DICT_ITEMS
     items = list(d.items())
     truncated = len(items) - max_items if len(items) > max_items else 0
     if truncated:
@@ -267,7 +267,7 @@ def _render_list(lst: list, zoom: int, width: int, fidelity: Fidelity | None = N
         return Block.text("[]", style, width=width)
 
     # Sample items if too many
-    max_items = fidelity.lines if fidelity and fidelity.lines is not None else _MAX_LIST_ITEMS
+    max_items = fidelity.lines if fidelity and fidelity.lines > 0 else _MAX_LIST_ITEMS
     truncated = len(lst) - max_items if len(lst) > max_items else 0
     visible = lst[:max_items] if truncated else lst
 
