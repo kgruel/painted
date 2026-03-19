@@ -301,9 +301,8 @@ def print_block(
     else:
         # Plain text: just characters, no styling
         for row_idx in range(block.height):
-            for cell in block.row(row_idx):
-                stream.write(cell.char)
-            stream.write("\n")
+            row_chars = "".join(cell.char for cell in block.row(row_idx))
+            stream.write(row_chars.rstrip() + "\n")
 
     stream.flush()
 
@@ -311,13 +310,21 @@ def print_block(
 def write_block_ansi(block: Block, writer: Writer, stream: TextIO) -> None:
     """Write a Block to a stream with ANSI styling, line-by-line.
 
+    Trailing space cells are stripped from each row so that blocks wider
+    than the terminal don't produce wrapped blank lines.
+
     Shared by `print_block` and `InPlaceRenderer`.
     """
     for row_idx in range(block.height):
+        cells = list(block.row(row_idx))
+        # Strip trailing space cells
+        while cells and cells[-1].char == " ":
+            cells.pop()
+
         parts: list[str] = []
         last_style: Style | None = None
 
-        for cell in block.row(row_idx):
+        for cell in cells:
             if cell.style != last_style:
                 parts.append(writer.reset_style())
                 sgr = writer.apply_style(cell.style)
