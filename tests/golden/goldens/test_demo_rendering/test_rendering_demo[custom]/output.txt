@@ -1,4 +1,15 @@
 
   custom lens: zoom 1 → bordered card
+╭────────────────────────────╮
+│  ! api-gateway (2/3 ready) │
+│  + worker (5/5 ready)      │
+╰────────────────────────────╯
 
   custom lens: zoom 2 → card with endpoint details
+╭───────────────────────────────╮
+│  ! api-gateway (2/3 ready)    │
+│    /health: 200 (12ms)        │
+│    /api/v1/auth: 503 (2100ms) │
+│  + worker (5/5 ready)         │
+│    queue: 142                 │
+╰───────────────────────────────╯

@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from ...core.fidelity import Fidelity
 
 from ...core._text_width import display_width, truncate, truncate_ellipsis
 from ...core.block import Block
@@ -40,6 +43,7 @@ def flame_lens(
     *,
     height: int | None = None,
     colors: tuple[str, ...] | None = None,
+    fidelity: Fidelity | None = None,
 ) -> Block:
     """Render hierarchical data as proportional segments (flame graph style).
 

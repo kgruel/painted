@@ -5,6 +5,9 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
+if TYPE_CHECKING:
+    from ...core.fidelity import Fidelity
+
 from ...core._text_width import display_width, truncate_ellipsis, truncate
 from ...core.block import Block
 from ...core.cell import EMPTY_CELL, Style
@@ -32,6 +35,7 @@ def tree_lens(
     *,
     node_renderer: NodeRenderer | None = None,
     icons: IconSet | None = None,
+    fidelity: Fidelity | None = None,
 ) -> Block:
     """Render hierarchical data as an indented tree with branch characters.
 

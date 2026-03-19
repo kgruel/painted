@@ -60,6 +60,7 @@ __all__ = [
     # CLI framework
     "OutputMode",
     "Format",
+    "Fidelity",
     "CliContext",
     "CliRunner",
     "HelpArg",
@@ -74,6 +75,7 @@ __all__ = [
     "parse_zoom",
     "parse_mode",
     "parse_format",
+    "parse_fidelity",
     "resolve_mode",
     "detect_context",
     # In-place rendering
@@ -129,6 +131,7 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     # CLI
     "CliContext": (".cli", "CliContext"),
     "CliRunner": (".cli", "CliRunner"),
+    "Fidelity": (".cli", "Fidelity"),
     "Format": (".cli", "Format"),
     "HelpArg": (".cli", "HelpArg"),
     "HelpData": (".cli", "HelpData"),
@@ -137,6 +140,7 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "OutputMode": (".cli", "OutputMode"),
     "add_cli_args": (".cli", "add_cli_args"),
     "detect_context": (".cli", "detect_context"),
+    "parse_fidelity": (".cli", "parse_fidelity"),
     "parse_format": (".cli", "parse_format"),
     "parse_mode": (".cli", "parse_mode"),
     "parse_zoom": (".cli", "parse_zoom"),

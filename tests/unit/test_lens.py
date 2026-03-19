@@ -1,7 +1,9 @@
-"""Tests for lens functions (shape, tree, chart)."""
+"""Tests for lens functions (shape, tree, chart, flame)."""
 
+from painted.core.fidelity import Fidelity
 from painted.views import (
     chart_lens,
+    flame_lens,
     shape_lens,
     tree_lens,
 )
@@ -647,3 +649,104 @@ class TestShapeLensAutoDispatchTree:
         text = block_to_text(block)
         # Empty containers don't count as hierarchical
         assert "├" not in text and "└" not in text
+
+
+# ---------------------------------------------------------------------------
+# Fidelity-driven density tests
+# ---------------------------------------------------------------------------
+
+
+class TestShapeLensFidelityLines:
+    """Tests for shape_lens respecting fidelity.lines."""
+
+    def test_dict_fidelity_limits_items(self):
+        """Fidelity.lines overrides _MAX_DICT_ITEMS."""
+        d = {f"key_{i}": f"val_{i}" for i in range(10)}
+        fid = Fidelity(lines=3)
+        block = shape_lens(d, 2, 60, fidelity=fid)
+        text = block_to_text(block)
+        assert "+7 more" in text
+
+    def test_dict_fidelity_none_uses_default(self):
+        """Fidelity with lines=None uses the default limit (20)."""
+        d = {f"key_{i}": f"val_{i}" for i in range(25)}
+        fid = Fidelity(lines=None)
+        block = shape_lens(d, 2, 60, fidelity=fid)
+        text = block_to_text(block)
+        assert "+5 more" in text
+
+    def test_list_fidelity_limits_items(self):
+        """Fidelity.lines overrides _MAX_LIST_ITEMS for lists."""
+        lst = [f"item_{i}" for i in range(15)]
+        fid = Fidelity(lines=5)
+        block = shape_lens(lst, 2, 40, fidelity=fid)
+        text = block_to_text(block)
+        assert "+10 more" in text
+
+    def test_no_fidelity_uses_defaults(self):
+        """Without fidelity, default limits apply."""
+        d = {f"key_{i}": f"val_{i}" for i in range(25)}
+        block = shape_lens(d, 2, 60)
+        text = block_to_text(block)
+        assert "+5 more" in text  # default _MAX_DICT_ITEMS=20
+
+    def test_fidelity_lines_larger_than_data(self):
+        """Fidelity.lines larger than collection size shows everything."""
+        d = {f"key_{i}": f"val_{i}" for i in range(5)}
+        fid = Fidelity(lines=100)
+        block = shape_lens(d, 2, 60, fidelity=fid)
+        text = block_to_text(block)
+        assert "more" not in text
+
+
+class TestShapeLensFidelityChars:
+    """Tests for shape_lens respecting fidelity.chars."""
+
+    def test_string_fidelity_limits_display(self):
+        """Fidelity.chars overrides _MAX_STR_DISPLAY."""
+        s = "x" * 500
+        fid = Fidelity(chars=50)
+        block = shape_lens(s, 2, 300, fidelity=fid)
+        text = block_to_text(block)
+        assert "500 chars" in text
+        # The truncation happens at chars=50, not the default 200
+
+    def test_string_fidelity_none_uses_default(self):
+        """Fidelity with chars=None uses the default limit (200)."""
+        s = "x" * 500
+        fid = Fidelity(chars=None)
+        block = shape_lens(s, 2, 300, fidelity=fid)
+        text = block_to_text(block)
+        assert "500 chars" in text
+
+    def test_short_string_not_truncated(self):
+        """String within fidelity.chars budget is not truncated."""
+        s = "hello world"
+        fid = Fidelity(chars=50)
+        block = shape_lens(s, 2, 300, fidelity=fid)
+        text = block_to_text(block)
+        assert "chars" not in text
+        assert "hello world" in text
+
+
+class TestLensFidelityKwargAccepted:
+    """All four lenses accept the fidelity kwarg without error."""
+
+    def test_shape_lens_accepts_fidelity(self):
+        shape_lens({"a": 1}, 2, 40, fidelity=Fidelity(lines=5))
+
+    def test_tree_lens_accepts_fidelity(self):
+        tree_lens({"a": {"b": 1}}, 2, 40, fidelity=Fidelity(lines=5))
+
+    def test_chart_lens_accepts_fidelity(self):
+        chart_lens([1, 2, 3], 2, 40, fidelity=Fidelity(lines=5))
+
+    def test_flame_lens_accepts_fidelity(self):
+        flame_lens({"a": 10, "b": 20}, 2, 40, fidelity=Fidelity(lines=5))
+
+    def test_all_lenses_accept_none_fidelity(self):
+        """None fidelity (default) works for all lenses."""
+        shape_lens({"a": 1}, 2, 40, fidelity=None)
+        tree_lens({"a": 1}, 2, 40, fidelity=None)
+        chart_lens([1, 2], 2, 40, fidelity=None)
+        flame_lens({"a": 10}, 2, 40, fidelity=None)

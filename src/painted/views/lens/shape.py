@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
-from typing import Any
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
 
 from ...core._text_width import display_width, truncate, truncate_ellipsis
+
+if TYPE_CHECKING:
+    from ...core.fidelity import Fidelity
 from ...core.block import Block
 from ...core.cell import Style
 from ...core.compose import join_horizontal, join_vertical
@@ -36,7 +41,7 @@ def _is_hierarchical(data: Any) -> bool:
     return any(isinstance(v, (dict, list)) and v for v in data.values())
 
 
-def shape_lens(content: Any, zoom: int, width: int) -> Block:
+def shape_lens(content: Any, zoom: int, width: int, *, fidelity: Fidelity | None = None) -> Block:
     """Auto-dispatching renderer: picks the best strategy based on data shape.
 
     Dispatch rules:
@@ -56,14 +61,14 @@ def shape_lens(content: Any, zoom: int, width: int) -> Block:
         return Block.empty(0, 1)
 
     if content is None:
-        return _render_scalar(content, zoom, width)
+        return _render_scalar(content, zoom, width, fidelity)
 
     if isinstance(content, bool):
         # Check bool before int since bool is subclass of int
-        return _render_scalar(content, zoom, width)
+        return _render_scalar(content, zoom, width, fidelity)
 
     if isinstance(content, (str, int, float)):
-        return _render_scalar(content, zoom, width)
+        return _render_scalar(content, zoom, width, fidelity)
 
     # Auto-dispatch for dicts in one pass over values
     if isinstance(content, dict):
@@ -83,32 +88,32 @@ def shape_lens(content: Any, zoom: int, width: int) -> Block:
             if all_numeric:
                 from .chart import chart_lens
 
-                return chart_lens(content, zoom, width)
+                return chart_lens(content, zoom, width, fidelity=fidelity)
 
             if any_nested:
                 from .tree import tree_lens
 
-                return tree_lens(content, zoom, width)
+                return tree_lens(content, zoom, width, fidelity=fidelity)
 
-        return _render_dict(content, zoom, width)
+        return _render_dict(content, zoom, width, fidelity)
 
     # Auto-dispatch: numeric sequences -> chart
     if _is_numeric_sequence(content):
         from .chart import chart_lens
 
-        return chart_lens(content, zoom, width)
+        return chart_lens(content, zoom, width, fidelity=fidelity)
 
     if isinstance(content, list):
-        return _render_list(content, zoom, width)
+        return _render_list(content, zoom, width, fidelity)
 
     if isinstance(content, set):
         return _render_set(content, zoom, width)
 
     # Fallback: treat as string representation
-    return _render_scalar(str(content), zoom, width)
+    return _render_scalar(str(content), zoom, width, fidelity)
 
 
-def _render_scalar(value: Any, zoom: int, width: int) -> Block:
+def _render_scalar(value: Any, zoom: int, width: int, fidelity: Fidelity | None = None) -> Block:
     """Render scalar values (str, int, float, bool, None) at zoom levels."""
     style = Style()
 
@@ -125,10 +130,11 @@ def _render_scalar(value: Any, zoom: int, width: int) -> Block:
         return Block.text(text, style, width=width)
 
     # zoom >= 2: full value (with length indicator for long strings)
+    max_str = fidelity.chars if fidelity and fidelity.chars is not None else _MAX_STR_DISPLAY
     text = _format_value(value)
-    if isinstance(value, str) and display_width(text) > _MAX_STR_DISPLAY:
+    if isinstance(value, str) and display_width(text) > max_str:
         original_chars = len(value)
-        text = truncate(text, _MAX_STR_DISPLAY) + f"... [{original_chars} chars]"
+        text = truncate(text, max_str) + f"... [{original_chars} chars]"
     if display_width(text) > width:
         text = truncate_ellipsis(text, width) if width > 1 else truncate(text, width)
     return Block.text(text, style, width=width)
@@ -145,7 +151,7 @@ def _format_value(value: Any) -> str:
     return str(value)
 
 
-def _render_dict(d: dict, zoom: int, width: int) -> Block:
+def _render_dict(d: dict, zoom: int, width: int, fidelity: Fidelity | None = None) -> Block:
     """Render dict at zoom levels."""
     style = Style()
 
@@ -182,17 +188,18 @@ def _render_dict(d: dict, zoom: int, width: int) -> Block:
             )
         val_col_width = max(1, width - key_col_width)
         key_block = Block.text(key_text, key_style, width=key_col_width)
-        val_block = shape_lens(value, max(0, zoom - 1), val_col_width)
+        val_block = shape_lens(value, max(0, zoom - 1), val_col_width, fidelity=fidelity)
         return join_horizontal(key_block, val_block)
 
     rows: list[Block] = []
     key_style = Style(bold=True)
 
     # Sample items if too many
+    max_items = fidelity.lines if fidelity and fidelity.lines is not None else _MAX_DICT_ITEMS
     items = list(d.items())
-    truncated = len(items) - _MAX_DICT_ITEMS if len(items) > _MAX_DICT_ITEMS else 0
+    truncated = len(items) - max_items if len(items) > max_items else 0
     if truncated:
-        items = items[:_MAX_DICT_ITEMS]
+        items = items[:max_items]
 
     # Calculate key column width (max key length + 2 for ": ")
     max_key_len = max((display_width(str(k)) for k, _ in items), default=0)
@@ -211,7 +218,7 @@ def _render_dict(d: dict, zoom: int, width: int) -> Block:
 
         # Render value recursively with reduced zoom
         nested_zoom = max(0, zoom - 1)
-        val_block = shape_lens(value, nested_zoom, val_col_width)
+        val_block = shape_lens(value, nested_zoom, val_col_width, fidelity=fidelity)
 
         row = join_horizontal(key_block, val_block)
         rows.append(row)
@@ -226,7 +233,7 @@ def _render_dict(d: dict, zoom: int, width: int) -> Block:
     return join_vertical(*rows)
 
 
-def _render_list(lst: list, zoom: int, width: int) -> Block:
+def _render_list(lst: list, zoom: int, width: int, fidelity: Fidelity | None = None) -> Block:
     """Render list at zoom levels."""
     style = Style()
 
@@ -260,8 +267,9 @@ def _render_list(lst: list, zoom: int, width: int) -> Block:
         return Block.text("[]", style, width=width)
 
     # Sample items if too many
-    truncated = len(lst) - _MAX_LIST_ITEMS if len(lst) > _MAX_LIST_ITEMS else 0
-    visible = lst[:_MAX_LIST_ITEMS] if truncated else lst
+    max_items = fidelity.lines if fidelity and fidelity.lines is not None else _MAX_LIST_ITEMS
+    truncated = len(lst) - max_items if len(lst) > max_items else 0
+    visible = lst[:max_items] if truncated else lst
 
     rows: list[Block] = []
     prefix_width = 2  # "- "
@@ -270,7 +278,7 @@ def _render_list(lst: list, zoom: int, width: int) -> Block:
     for item in visible:
         # Render item recursively with reduced zoom
         nested_zoom = max(0, zoom - 1)
-        item_block = shape_lens(item, nested_zoom, item_width)
+        item_block = shape_lens(item, nested_zoom, item_width, fidelity=fidelity)
 
         # Prefix with "- "
         prefix_block = Block.text("- ", Style(dim=True))

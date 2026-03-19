@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 
+from ..core.fidelity import Fidelity
 from ..core.zoom import Zoom
 
 
@@ -41,3 +42,4 @@ class CliContext:
     is_tty: bool
     width: int
     height: int
+    fidelity: Fidelity | None = None

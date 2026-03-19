@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 
+from ..core.fidelity import Fidelity
 from .types import Format, OutputMode, Zoom
 
 
@@ -75,6 +76,22 @@ def add_cli_args(
         help="Plain text, no ANSI codes",
     )
 
+    # Density
+    parser.add_argument(
+        "--max-chars",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Max display width for string values",
+    )
+    parser.add_argument(
+        "--max-lines",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Max items to show for collections",
+    )
+
 
 def parse_zoom(args: argparse.Namespace, default: Zoom = Zoom.SUMMARY) -> Zoom:
     """Parse zoom level from args."""
@@ -106,3 +123,15 @@ def parse_format(args: argparse.Namespace) -> Format:
     if getattr(args, "plain", False):
         return Format.PLAIN
     return Format.AUTO
+
+
+def parse_fidelity(args: argparse.Namespace) -> Fidelity | None:
+    """Parse density limits from args.
+
+    Returns Fidelity when at least one density flag is set, else None.
+    """
+    max_chars = getattr(args, "max_chars", None)
+    max_lines = getattr(args, "max_lines", None)
+    if max_chars is None and max_lines is None:
+        return None
+    return Fidelity(chars=max_chars, lines=max_lines)

@@ -6,6 +6,7 @@ import json
 import pytest
 
 from painted import Block, Style
+from painted.core.fidelity import Fidelity
 from painted.cli import (
     CliContext,
     CliRunner,
@@ -19,6 +20,7 @@ from painted.cli import (
     help_args_to_flags,
     render_help,
     add_cli_args,
+    parse_fidelity,
     parse_format,
     parse_mode,
     parse_zoom,
@@ -171,6 +173,44 @@ class TestParseFormat:
         assert parse_format(args) == Format.AUTO
 
 
+class TestParseFidelity:
+    """Tests for parse_fidelity function."""
+
+    def test_no_flags_returns_none(self):
+        """No density flags gives None."""
+        args = argparse.Namespace(max_chars=None, max_lines=None)
+        assert parse_fidelity(args) is None
+
+    def test_max_chars_only(self):
+        """--max-chars without --max-lines gives Fidelity with chars set."""
+        args = argparse.Namespace(max_chars=50, max_lines=None)
+        fid = parse_fidelity(args)
+        assert fid is not None
+        assert fid.chars == 50
+        assert fid.lines is None
+
+    def test_max_lines_only(self):
+        """--max-lines without --max-chars gives Fidelity with lines set."""
+        args = argparse.Namespace(max_chars=None, max_lines=10)
+        fid = parse_fidelity(args)
+        assert fid is not None
+        assert fid.lines == 10
+        assert fid.chars is None
+
+    def test_both_flags(self):
+        """Both --max-chars and --max-lines produces Fidelity with both."""
+        args = argparse.Namespace(max_chars=100, max_lines=5)
+        fid = parse_fidelity(args)
+        assert fid is not None
+        assert fid.chars == 100
+        assert fid.lines == 5
+
+    def test_missing_attrs_returns_none(self):
+        """Namespace without density attrs returns None."""
+        args = argparse.Namespace()
+        assert parse_fidelity(args) is None
+
+
 class TestUseAnsiResolution:
     """Tests for use_ansi resolution via detect_context.
 
@@ -292,6 +332,32 @@ class TestAddCliArgs:
         args = parser.parse_args(["--plain"])
         assert args.plain is True
 
+    def test_density_args(self):
+        """Density arguments are added correctly."""
+        parser = argparse.ArgumentParser()
+        add_cli_args(parser)
+
+        args = parser.parse_args(["--max-chars", "50"])
+        assert args.max_chars == 50
+        assert args.max_lines is None
+
+        args = parser.parse_args(["--max-lines", "10"])
+        assert args.max_lines == 10
+        assert args.max_chars is None
+
+        args = parser.parse_args(["--max-chars", "100", "--max-lines", "5"])
+        assert args.max_chars == 100
+        assert args.max_lines == 5
+
+    def test_density_args_defaults(self):
+        """Density arguments default to None."""
+        parser = argparse.ArgumentParser()
+        add_cli_args(parser)
+
+        args = parser.parse_args([])
+        assert args.max_chars is None
+        assert args.max_lines is None
+
     def test_zoom_mutual_exclusion(self):
         """Cannot combine -q and -v."""
         parser = argparse.ArgumentParser()
@@ -329,6 +395,34 @@ class TestCliContext:
         )
         with pytest.raises(AttributeError):
             ctx.zoom = Zoom.FULL  # type: ignore
+
+    def test_fidelity_field_default_none(self):
+        """CliContext.fidelity defaults to None."""
+        ctx = CliContext(
+            zoom=Zoom.SUMMARY,
+            mode=OutputMode.STATIC,
+            use_ansi=True,
+            is_tty=True,
+            width=80,
+            height=24,
+        )
+        assert ctx.fidelity is None
+
+    def test_fidelity_field_set(self):
+        """CliContext.fidelity carries Fidelity value."""
+        fid = Fidelity(chars=50, lines=10)
+        ctx = CliContext(
+            zoom=Zoom.SUMMARY,
+            mode=OutputMode.STATIC,
+            use_ansi=True,
+            is_tty=True,
+            width=80,
+            height=24,
+            fidelity=fid,
+        )
+        assert ctx.fidelity is fid
+        assert ctx.fidelity.chars == 50
+        assert ctx.fidelity.lines == 10
 
 
 # =============================================================================
@@ -407,6 +501,44 @@ class TestCliRunner:
         )
 
         assert received_zoom == Zoom.DETAILED
+
+    def test_fidelity_passed_to_render(self, monkeypatch):
+        """Fidelity from --max-chars/--max-lines is passed to render function."""
+        monkeypatch.setattr("sys.stdout.isatty", lambda: False)
+        received_fidelity = None
+
+        def render(ctx: CliContext, data: str) -> Block:
+            nonlocal received_fidelity
+            received_fidelity = ctx.fidelity
+            return Block.text(data, Style())
+
+        run_cli(
+            ["--max-chars", "50", "--max-lines", "10"],
+            render=render,
+            fetch=lambda: "data",
+        )
+
+        assert received_fidelity is not None
+        assert received_fidelity.chars == 50
+        assert received_fidelity.lines == 10
+
+    def test_no_fidelity_flags_gives_none(self, monkeypatch):
+        """Without density flags, ctx.fidelity is None."""
+        monkeypatch.setattr("sys.stdout.isatty", lambda: False)
+        received_fidelity = "sentinel"
+
+        def render(ctx: CliContext, data: str) -> Block:
+            nonlocal received_fidelity
+            received_fidelity = ctx.fidelity
+            return Block.text(data, Style())
+
+        run_cli(
+            [],
+            render=render,
+            fetch=lambda: "data",
+        )
+
+        assert received_fidelity is None
 
     def test_custom_handler(self, monkeypatch):
         """Custom handler is called for matching mode."""

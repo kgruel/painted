@@ -129,6 +129,7 @@ def test_state_dataclasses_declared_frozen() -> None:
         "Cursor",
         "Viewport",
         "CliContext",
+        "Fidelity",
         "Palette",
         "IconSet",
     }
@@ -169,6 +170,7 @@ def test_runtime_state_dataclasses_are_frozen() -> None:
     from painted.core.cell import Cell, Style
     from painted.cursor import Cursor
     from painted.cli import CliContext
+    from painted.core.fidelity import Fidelity
     from painted.focus import Focus
     from painted.icon_set import IconSet
     from painted.palette import Palette
@@ -189,6 +191,7 @@ def test_runtime_state_dataclasses_are_frozen() -> None:
         Cursor,
         Viewport,
         CliContext,
+        Fidelity,
         Palette,
         IconSet,
         SpinnerState,

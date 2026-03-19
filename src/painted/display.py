@@ -49,9 +49,11 @@ def show(
     zoom: int | None = None,
     lens: "Callable[[Any, int, int], Block] | None" = None,
     format: Any = "auto",
-    file: TextIO = sys.stdout,
+    file: TextIO | None = None,
 ) -> None:
     """Display data with auto-detected formatting."""
+    if file is None:
+        file = sys.stdout
     if zoom is None:
         zoom = 2  # Zoom.DETAILED
 

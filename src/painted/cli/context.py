@@ -12,6 +12,7 @@ import sys
 
 _ENV_SIZE_CACHE: tuple[str | None, str | None, tuple[int, int] | None] = (None, None, None)
 
+from ..core.fidelity import Fidelity
 from .types import CliContext, OutputMode, Zoom
 
 
@@ -68,6 +69,7 @@ def detect_context(
     *,
     force_plain: bool = False,
     default_mode: OutputMode = OutputMode.LIVE,
+    fidelity: Fidelity | None = None,
 ) -> CliContext:
     """Detect and resolve full runtime context.
 
@@ -97,4 +99,5 @@ def detect_context(
         is_tty=is_tty,
         width=width,
         height=height,
+        fidelity=fidelity,
     )

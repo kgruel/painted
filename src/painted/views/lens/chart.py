@@ -12,6 +12,7 @@ from ...core.cell import Style
 from ...core.compose import join_vertical
 
 if TYPE_CHECKING:
+    from ...core.fidelity import Fidelity
     from ...icon_set import IconSet
 
 
@@ -29,6 +30,7 @@ def chart_lens(
     width: int,
     *,
     icons: IconSet | None = None,
+    fidelity: Fidelity | None = None,
 ) -> Block:
     """Render numeric data as text-based charts.
 
