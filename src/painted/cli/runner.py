@@ -72,6 +72,9 @@ class CliRunner(Generic[T]):
     # Optional: describe pre-parsed args for help rendering
     help_args: list[HelpArg] | None = None
 
+    # Optional: transform Fidelity after parsing (e.g. to inject visible tags)
+    build_fidelity: Callable[[argparse.Namespace, Fidelity], Fidelity] | None = None
+
     # Internal parser cache for repeated invocations
     _parser_cache: argparse.ArgumentParser | None = field(default=None, init=False, repr=False)
 
@@ -94,6 +97,8 @@ class CliRunner(Generic[T]):
             mode = parse_mode(parsed)
             fmt = parse_format(parsed)
             fidelity = parse_fidelity(parsed, zoom)
+            if self.build_fidelity is not None:
+                fidelity = self.build_fidelity(parsed, fidelity)
 
         # JSON short-circuits — it's data export, not rendering
         is_json = fmt == Format.JSON
@@ -349,6 +354,7 @@ def run_cli(
     prog: str | None = None,
     add_args: Callable[[argparse.ArgumentParser], None] | None = None,
     help_args: list[HelpArg] | None = None,
+    build_fidelity: Callable[[argparse.Namespace, Fidelity], Fidelity] | None = None,
 ) -> int:
     """Run a CLI tool with zoom/mode/format handling.
 
@@ -364,6 +370,7 @@ def run_cli(
         prog: Program name
         add_args: Callback to add custom arguments
         help_args: Describe pre-parsed args for help rendering
+        build_fidelity: Transform Fidelity after parsing (e.g. inject visible tags)
 
     Returns:
         Exit code (0 for success)
@@ -379,4 +386,5 @@ def run_cli(
         prog=prog,
         add_args=add_args,
         help_args=help_args,
+        build_fidelity=build_fidelity,
     ).run(args)

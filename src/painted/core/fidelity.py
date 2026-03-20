@@ -7,7 +7,7 @@ Fidelity encodes *how much* to show across three independent dimensions:
              where they previously received zoom.
 
   visible — which semantic layers are present (consumer-defined tags).
-             Empty frozenset means "show all". Use fidelity.shows(tag) to test.
+             Empty frozenset means "nothing extra". Use fidelity.shows(tag) to test.
 
   chars   — max display width for string values (0 = unlimited).
   lines   — max items to show per collection (0 = unlimited).
@@ -45,8 +45,8 @@ class Fidelity:
     lines: int = 0
 
     def shows(self, tag: str) -> bool:
-        """True if tag is in visible set, or visible set is empty (show all)."""
-        return not self.visible or tag in self.visible
+        """True if tag is explicitly in the visible set. Empty set = nothing extra."""
+        return tag in self.visible
 
     def with_depth(self, depth: int) -> Fidelity:
         return replace(self, depth=depth)
