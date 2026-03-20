@@ -238,15 +238,20 @@ class TestEdgeCases:
         data_text = row_text(blk, 2)
         assert "x" in data_text
 
-    def test_custom_separator(self) -> None:
+    def test_custom_borders(self) -> None:
+        from painted.core.borders import HEAVY
+
         cols = _make_columns(["A", "B"], [3, 3])
         rows = _make_rows([["x", "y"]])
         state = TableState()
 
-        blk = table(state, cols, rows, visible_height=2, separator=" | ")
+        blk = table(state, cols, rows, visible_height=2, borders=HEAVY)
 
         header = row_text(blk, 0)
-        assert " | " in header
+        assert "┃" in header  # HEAVY vertical
+        sep_row = row_text(blk, 1)
+        assert "━" in sep_row  # HEAVY horizontal
+        assert "╋" in sep_row  # HEAVY crossing
 
     def test_header_style_applied(self) -> None:
         cols = _make_columns(["Name"], [6])

@@ -132,6 +132,7 @@ def test_state_dataclasses_declared_frozen() -> None:
         "Fidelity",
         "Palette",
         "IconSet",
+        "Theme",
     }
 
     for py_file in painted_root.rglob("*.py"):
@@ -174,6 +175,7 @@ def test_runtime_state_dataclasses_are_frozen() -> None:
     from painted.focus import Focus
     from painted.icon_set import IconSet
     from painted.palette import Palette
+    from painted.theme import Theme
     from painted.tui import Region
     from painted.search import Search
     from painted.core.span import Line, Span
@@ -194,6 +196,7 @@ def test_runtime_state_dataclasses_are_frozen() -> None:
         Fidelity,
         Palette,
         IconSet,
+        Theme,
         SpinnerState,
         ProgressState,
         ListState,

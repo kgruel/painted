@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+from typing import TYPE_CHECKING
 
 from ...core.block import Block
 from ...core.buffer import Buffer
@@ -10,6 +11,10 @@ from ...core.cell import Style
 from ...cursor import Cursor
 from ...core.span import Line, Span
 from ...viewport import Viewport
+
+if TYPE_CHECKING:
+    from ...icon_set import IconSet
+    from ...palette import Palette
 
 
 @dataclass(frozen=True)
@@ -71,12 +76,33 @@ def list_view(
     visible_height: int,
     *,
     width: int | None = None,
-    selected_style: Style = Style(reverse=True),
-    cursor_char: str = "▸",
+    selected_style: Style | None = None,
+    cursor_char: str | None = None,
+    palette: Palette | None = None,
+    icons: IconSet | None = None,
 ) -> Block:
-    """Render a scrollable list with selection highlight."""
+    """Render a scrollable list with selection highlight.
+
+    Styling is derived from the ambient Palette and IconSet by default.
+    Explicit arguments override the ambient values.
+
+    Args:
+        selected_style: Style for selected row. Defaults to reverse.
+        cursor_char: Selection indicator character. Defaults to icons.check glyph prefix.
+        palette: Optional Palette override (uses ambient if None).
+        icons: Optional IconSet override (uses ambient if None).
+    """
+    from ...icon_set import current_icons
+    from ...palette import current_palette
+
     if not items:
         return Block.empty(1, visible_height)
+
+    p = palette or current_palette()
+    ic = icons or current_icons()
+
+    ss = selected_style or Style(reverse=True)
+    prefix = cursor_char or "▸"
 
     vp = state.viewport.with_visible(visible_height).with_content(len(items))
     cursor = state.cursor.with_count(len(items))
@@ -95,15 +121,15 @@ def list_view(
 
     for row_idx, i in enumerate(range(start, end)):
         is_selected = i == cursor.index
-        prefix_char = cursor_char if is_selected else " "
+        prefix_char = prefix if is_selected else " "
 
         # Build a Line: cursor prefix + item spans
-        prefix_span = Span(prefix_char + " ", selected_style if is_selected else Style())
+        prefix_span = Span(prefix_char + " ", ss if is_selected else Style())
         if is_selected:
             # Merge selected_style as base onto item spans
             row_line = Line(
                 spans=(prefix_span,) + items[i].spans,
-                style=selected_style,
+                style=ss,
             )
         else:
             row_line = Line(
@@ -117,7 +143,7 @@ def list_view(
         # Fill remainder with selected_style if selected
         filled = row_line.width
         if filled < max_width:
-            fill_style = selected_style if is_selected else Style()
+            fill_style = ss if is_selected else Style()
             buf.fill(filled, row_idx, max_width - filled, 1, " ", fill_style)
 
     # Extract rows from buffer into Block
