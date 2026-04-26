@@ -84,7 +84,7 @@ class CliRunner(Generic[T]):
         if "-h" in args or "--help" in args:
             return self._handle_help(args)
 
-        if not args and self.add_args is None:
+        if not args and self.add_args is None and self.build_fidelity is None:
             zoom = self.default_zoom
             mode = OutputMode.AUTO
             fmt = Format.AUTO
