@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from __future__ import annotations
-
 from typing import TYPE_CHECKING, Any
 
 from ...core._text_width import display_width, truncate, truncate_ellipsis

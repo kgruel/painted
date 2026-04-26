@@ -154,7 +154,7 @@ def _chart_bars_themed(
         labels = [str(i) for i in range(len(values))]
 
     # Calculate column widths
-    max_label = max(len(lbl) for lbl in labels)
+    max_label = max(display_width(lbl) for lbl in labels)
     label_col = min(max_label + 1, width // 3)  # cap at 1/3 of width
 
     # Value suffix: " XXX%" or " XXX.X" — reserve 6 chars

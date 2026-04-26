@@ -231,8 +231,6 @@ def pad(
         rows.append([space] * new_width)
         ids_rows.append([None] * new_width)
 
-    if ids_rows is None:
-        return Block(rows, new_width, id=block.id)
     return Block(rows, new_width, ids=ids_rows)
 
 
