@@ -179,7 +179,9 @@ def _chart_bars_themed(
     rows = []
     for lbl, val in zip(labels, values):
         # Label column (right-padded)
-        lbl_text = _truncate_ellipsis(lbl, label_col - 1).ljust(label_col)
+        truncated = _truncate_ellipsis(lbl, label_col - 1)
+        pad_needed = label_col - display_width(truncated)
+        lbl_text = truncated + " " * max(0, pad_needed)
 
         # Bar
         if span > 0:

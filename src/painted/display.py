@@ -99,7 +99,7 @@ def show(
     from .views.lens.shape import shape_lens
 
     render_fn = lens or shape_lens
-    if not use_ansi and lens is not None:
+    if not use_ansi:
         from .icon_set import ASCII_ICONS, use_icons
 
         with use_icons(ASCII_ICONS):

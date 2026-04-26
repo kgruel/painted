@@ -1,12 +1,9 @@
 [
-  { "step": "Upgrade Fidelity to three-axis model in core/fidelity.py", "done": true },
-  { "step": "Update CliContext: fidelity as primary field, zoom as property", "done": true },
-  { "step": "Consolidate cli/ from 6 files to 4 (merge types+context+args)", "done": true },
-  { "step": "Update runner.py to build full Fidelity from zoom+density", "done": true },
-  { "step": "Update lenses to use new Fidelity API (0=unlimited, not None)", "done": true },
-  { "step": "Update __init__.py exports (Fidelity, Depth, parse_fidelity)", "done": true },
-  { "step": "Verify trailing whitespace fix is already in place", "done": true },
-  { "step": "Bump version to 0.1.5 in pyproject.toml", "done": false },
-  { "step": "Run ./dev check and fix any failures", "done": true },
-  { "step": "Commit and push to painted remote", "done": false }
+  { "step": "Bug 1: Fix display.py:102 ASCII icon override condition", "done": true },
+  { "step": "Bug 2: Fix record.py:294 use display_width for threshold", "done": true },
+  { "step": "Bug 3: Fix chart.py:182 display-width-aware ljust", "done": true },
+  { "step": "Bug 4: Fix tree.py:174,199 use take_row_prefix", "done": true },
+  { "step": "Bug 5: Fix _timer.py:45 dead conditional", "done": true },
+  { "step": "Run ./dev check", "done": true },
+  { "step": "Commit", "done": false }
 ]

@@ -291,7 +291,10 @@ def record_line(
             if v is None or v == "":
                 continue
             sv = str(v)
-            if k in ("description", "message", "body", "response", "output") or len(sv) > 40:
+            if (
+                k in ("description", "message", "body", "response", "output")
+                or display_width(sv) > 40
+            ):
                 field_text = f"{indent}{k}: {sv}"
                 if display_width(field_text) > width:
                     field_text = truncate_ellipsis(field_text, width)

@@ -13,10 +13,10 @@ cpu:    0.45
 - cache
 
 root
-├─ cluster
-│  ├─ prod-1 [2]
-│  └─ prod-2 [2]
-└─ version: 2.4.1
++-- cluster
+|   +-- prod-1 [2]
+|   `-- prod-2 [2]
+`-- version: 2.4.1
 
 [12 values, 1–10]
-▂▅▁▇▄▆▁▄▃█▂▅
+.^_#~*_~-@.^
