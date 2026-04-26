@@ -26,7 +26,7 @@ from ..core.cell import Style
 from ..core.compose import join_horizontal, join_vertical, pad, truncate
 from ..core.zoom import Zoom
 from ..palette import current_palette
-from ..core._text_width import display_width
+from ..core._text_width import display_width, truncate_ellipsis
 
 
 # ---------------------------------------------------------------------------
@@ -206,6 +206,8 @@ def record_line(
         summary = _default_payload_summary(kind, payload)
         if payload_lens:
             result = payload_lens(kind, payload, zoom)
+            # MINIMAL is a single-line text summary; if a lens returns a Block,
+            # we intentionally drop it and fall back to the default summary.
             summary = result if isinstance(result, str) else summary
         return Block.text(summary, Style(), width=width)
 
@@ -253,8 +255,8 @@ def record_line(
         if isinstance(content, Block):
             segments.append(truncate(content, content_width))
         else:
-            if len(content_str) > content_width:
-                content_str = content_str[: content_width - 1] + "…"
+            if display_width(content_str) > content_width:
+                content_str = truncate_ellipsis(content_str, content_width)
             segments.append(Block.text(content_str, Style()))
 
         return join_horizontal(*segments)
@@ -275,8 +277,8 @@ def record_line(
             segments.append(truncate(content, content_width))
         else:
             primary = str(content)
-            if len(primary) > content_width:
-                primary = primary[: content_width - 1] + "…"
+            if display_width(primary) > content_width:
+                primary = truncate_ellipsis(primary, content_width)
             segments.append(Block.text(primary, Style()))
 
         primary_line = join_horizontal(*segments)
@@ -291,8 +293,8 @@ def record_line(
             sv = str(v)
             if k in ("description", "message", "body", "response", "output") or len(sv) > 40:
                 field_text = f"{indent}{k}: {sv}"
-                if len(field_text) > width:
-                    field_text = field_text[: width - 1] + "…"
+                if display_width(field_text) > width:
+                    field_text = truncate_ellipsis(field_text, width)
                 lines.append(Block.text(field_text, p.muted))
 
         return join_vertical(*lines)
@@ -303,7 +305,14 @@ def record_line(
         segments.append(Block.text(f"{ts_str:<{ts_w}}", p.muted))
     segments.append(Block.text("[", p.muted))
     segments.append(Block.text(label_text, kind_s))
-    segments.append(Block.text("]", p.muted))
+    segments.append(Block.text("] ", p.muted))
+
+    # Render lens content (Block or str) into the header. FULL shows complete
+    # values, so do not truncate.
+    if isinstance(content, Block):
+        segments.append(content)
+    else:
+        segments.append(Block.text(str(content), Style()))
 
     header_line = join_horizontal(*segments)
     lines = [header_line]
@@ -437,8 +446,8 @@ def apply_attention(
     else:
         # Collapse to dim one-liner regardless of zoom
         summary = _default_payload_summary(kind, payload)
-        if len(summary) > width - 10:
-            summary = summary[: width - 11] + "…"
+        if display_width(summary) > width - 10:
+            summary = truncate_ellipsis(summary, width - 10)
         ts_str = ts.strftime("%H:%M") if ts else ""
         prefix = f"{ts_str} " if ts_str else ""
         return Block.text(f"· {prefix}{kind}: {summary}", p.muted, width=width)
