@@ -193,14 +193,18 @@ def _flame_render_row(
     # Build segment blocks with per-label color
     blocks: list[Block] = []
     prev_color_idx = -1
+    used_width = 0
     for (label, _v), seg_w in zip(segments, seg_widths):
+        seg_w = max(0, min(seg_w, width - used_width))
+        used_width += seg_w
         if seg_w <= 0:
             continue
         color_idx = _flame_color_for_label(label, prev_color_idx, palette)
         prev_color_idx = color_idx
         style = Style(fg=palette[color_idx], reverse=True)
         text = truncate(label, seg_w) if display_width(label) > seg_w else label
-        text = text.ljust(seg_w)
+        pad_needed = seg_w - display_width(text)
+        text = text + " " * max(0, pad_needed)
         blocks.append(Block.text(text, style))
 
     if not blocks:
@@ -251,7 +255,8 @@ def _flame_render_levels(
             prev_color_idx = color_idx
             child_style = Style(fg=palette[color_idx], reverse=True)
             text = truncate(label, seg_w) if display_width(label) > seg_w else label
-            text = text.ljust(seg_w)
+            pad_needed = seg_w - display_width(text)
+            text = text + " " * max(0, pad_needed)
             child_blocks.append(Block.text(text, child_style))
 
     if child_blocks:
@@ -354,7 +359,13 @@ def _flame_render_vertical(
 
         # Label row (bottom)
         label_text = truncate(label, cw) if display_width(label) > cw else label
-        label_centered = label_text.center(cw)[:cw]
+        if display_width(label_text) == len(label_text):
+            label_centered = label_text.center(cw)[:cw]
+        else:
+            pad_total = max(0, cw - display_width(label_text))
+            left = pad_total // 2
+            right = pad_total - left
+            label_centered = " " * left + label_text + " " * right
         label_block = Block.text(label_centered, Style(dim=True), width=cw)
 
         parts: list[Block] = []
