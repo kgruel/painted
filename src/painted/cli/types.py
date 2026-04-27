@@ -257,7 +257,7 @@ def add_cli_args(
         type=int,
         default=None,
         metavar="N",
-        help="Max display width for string values",
+        help="Max display width for string values. Truncates mid-content — prefer --max-lines for surfaced contexts (e.g. SessionStart hooks) where truncation reads as completeness.",
     )
     parser.add_argument(
         "--max-lines",
