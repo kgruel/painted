@@ -1,0 +1,16 @@
+iteration	type	hypothesis	result	severity	location	description
+1	hypothesis	build_fidelity skipped on empty-args fast path	confirmed	MEDIUM	cli/runner.py:87-101	build_fidelity callback never called when args=[] and add_args=None
+2	hypothesis	record.py len() vs display_width() for truncation	confirmed	MEDIUM	views/record.py:256-295,440	5 sites use len() and char-slicing instead of display_width() and truncate_ellipsis()
+3	hypothesis	payload_lens result ignored at FULL zoom	confirmed	MEDIUM	views/record.py:301-325	content variable from payload_lens computed but never referenced in FULL zoom path
+4	hypothesis	IndexError in truncate() when src_ids indexed by used > len(src_ids)	disproven	-	-	prefix_budget < block.width = len(src_ids) always holds — safe
+5	hypothesis	border() title overwrites top_right corner	disproven	-	-	pos > block.width guard prevents it; top_right at block.width+1 always protected
+6	hypothesis	chart.py len() vs display_width() for label column	confirmed	LOW	views/lens/chart.py:157	max_label uses len() not display_width() for CJK labels
+7	discovery	duplicate from __future__ import annotations	new_lead	LOW	views/lens/shape.py:3,5	duplicate import (no functional impact)
+8	hypothesis	duplicate import in shape.py is harmless	confirmed	LOW	views/lens/shape.py:3,5	Python silently ignores duplicate __future__ imports — dead code only
+9	hypothesis	_cells_from_text inner pop/break dead code	confirmed	LOW	core/block.py:441-443	outer guard ensures used+w<=max_width; inner check always False
+10	hypothesis	pad() final ids_rows is None branch is unreachable	confirmed	LOW	core/compose.py:234-235	fast path returns at line 207 for None case; final check is dead code
+11	hypothesis	infinite loop in _word_wrap with all-wide chars at width=1	disproven	-	-	word=word[1:] advances even when consumed=0; loop exits when word=''
+12	hypothesis	Surface scroll optimization out-of-bounds line hash access	disproven	-	-	y+n bounds proven valid for both n>0 and n<0 cases
+13	hypothesis	pad() loses block.id in ids path (semantic bug)	disproven	-	-	intentional — per-cell ids take precedence; consistent pattern across compose.py
+14	hypothesis	TextInputState cursor misaligns for wide char insert	disproven	-	-	cursor is code-point index throughout; display cols only used in _ensure_visible scroll math
+15	hypothesis	record_line MINIMAL silently drops Block from payload_lens	confirmed	LOW	views/record.py:207-210	isinstance check only uses str result; Block returned by lens is silently dropped at MINIMAL zoom
