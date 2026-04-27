@@ -6,8 +6,21 @@ and lifecycle management for CLI tools built on painted's renderer.
     from painted.cli import run_cli, CliContext, Zoom
 """
 
-from .args import add_cli_args, parse_fidelity, parse_format, parse_mode, parse_zoom
-from .context import detect_context, resolve_mode
+from .types import (
+    Depth,
+    Fidelity,
+    Zoom,
+    OutputMode,
+    Format,
+    CliContext,
+    resolve_mode,
+    detect_context,
+    add_cli_args,
+    parse_zoom,
+    parse_mode,
+    parse_format,
+    parse_fidelity,
+)
 from .help import (
     HelpArg,
     HelpData,
@@ -18,11 +31,11 @@ from .help import (
     scan_help_args,
 )
 from .runner import CliRunner, run_cli
-from .types import CliContext, Fidelity, Format, OutputMode, Zoom
 from .app_runner import AppCommand, AppRunner, run_app
 
 __all__ = [
     # Types
+    "Depth",
     "Zoom",
     "OutputMode",
     "Format",

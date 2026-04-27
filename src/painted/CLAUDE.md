@@ -79,7 +79,7 @@ run_cli(sys.argv[1:], render=render, fetch=fetch)
 You provide `render(ctx, data) → Block` and `fetch() → data`. The framework handles zoom/format/mode automatically.
 
 Three orthogonal dimensions:
-- **Zoom** (`-q`/`-v`/`-vv`): MINIMAL, SUMMARY, DETAILED, FULL
+- **Fidelity** (`-q`/`-v`/`-vv`): `ctx.fidelity` is the canonical field — `depth` (0–3), plus optional `visible` tag set and `chars`/`lines` density budgets. `ctx.zoom` returns `Zoom(fidelity.depth)` for backward compat.
 - **Format** (`--json`/`--plain`): ANSI (TTY default), PLAIN (pipe default), JSON
 - **Mode** (`-i`/`--static`/`--live`): AUTO detects from TTY
 
@@ -130,11 +130,13 @@ See `tui/CLAUDE.md` for the interactive app subsystem.
 
 ## Data rendering
 
-For lenses (auto-dispatch, tree, chart, flame) and components (spinner, progress, list, table, text input):
+For lenses (auto-dispatch, tree, chart, flame) and components (spinner, progress, list, table, text input, data explorer):
 
 ```python
 from painted.views import shape_lens, tree_lens, chart_lens, flame_lens
-from painted.views import spinner, list_view, progress_bar, table, text_input
+from painted.views import sparkline, sparkline_with_range
+from painted.views import spinner, list_view, progress_bar, table, text_input, data_explorer
+from painted.views import render_big, BigTextFormat
 ```
 
 See `views/CLAUDE.md` for details.

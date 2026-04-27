@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from ...core.fidelity import Fidelity
 
+from ...core._row_ops import take_row_prefix
 from ...core._text_width import display_width, truncate_ellipsis, truncate
 from ...core.block import Block
 from ...core.cell import EMPTY_CELL, Style
@@ -171,7 +172,8 @@ def _tree_render_children_themed(
                     Block.text(branch_prefix, Style(), width=display_width(branch_prefix)).row(0)
                 )
                 # Add content (truncated if needed)
-                for cell in content_block.row(0)[:content_width]:
+                prefix_cells, _, _ = take_row_prefix(content_block.row(0), content_width)
+                for cell in prefix_cells:
                     row_cells.append(cell)
                 # Pad to full width
                 while len(row_cells) < width:
@@ -196,7 +198,8 @@ def _tree_render_children_themed(
                 row_cells = list(
                     Block.text(branch_prefix, Style(), width=display_width(branch_prefix)).row(0)
                 )
-                for cell in content_block.row(0)[:content_width]:
+                prefix_cells, _, _ = take_row_prefix(content_block.row(0), content_width)
+                for cell in prefix_cells:
                     row_cells.append(cell)
                 # Pad to full width
                 while len(row_cells) < width:

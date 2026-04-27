@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import io
 
-from painted import Block, Cell, CliContext, Style, Zoom
+from painted import Block, Cell, CliContext, Fidelity, Style, Zoom
 from painted.cli import OutputMode
 from painted.core.writer import print_block
 
@@ -16,7 +16,7 @@ from painted.core.writer import print_block
 def static_ctx(zoom: Zoom) -> CliContext:
     """Build a deterministic CliContext for golden/snapshot testing."""
     return CliContext(
-        zoom=zoom,
+        fidelity=Fidelity(depth=int(zoom)),
         mode=OutputMode.STATIC,
         use_ansi=False,
         is_tty=False,

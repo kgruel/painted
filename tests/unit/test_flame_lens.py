@@ -93,3 +93,9 @@ class TestFlameLensEdgeCases:
         data = {"a": 30, "b": 70}
         block = flame_lens(data, 1, 50)
         assert block.width == 50
+
+    def test_more_segments_than_columns(self):
+        """When segments outnumber columns, output still fits requested width."""
+        data = {"a": 1, "b": 1, "c": 1, "d": 1, "e": 1}
+        block = flame_lens(data, 1, 3)
+        assert block.width == 3

@@ -176,39 +176,46 @@ class TestParseFormat:
 class TestParseFidelity:
     """Tests for parse_fidelity function."""
 
-    def test_no_flags_returns_none(self):
-        """No density flags gives None."""
+    def test_no_flags_gives_zero_limits(self):
+        """No density flags gives Fidelity with chars=0, lines=0 (unlimited)."""
         args = argparse.Namespace(max_chars=None, max_lines=None)
-        assert parse_fidelity(args) is None
+        fid = parse_fidelity(args)
+        assert fid.chars == 0
+        assert fid.lines == 0
 
     def test_max_chars_only(self):
-        """--max-chars without --max-lines gives Fidelity with chars set."""
+        """--max-chars without --max-lines gives Fidelity with chars set, lines=0."""
         args = argparse.Namespace(max_chars=50, max_lines=None)
         fid = parse_fidelity(args)
-        assert fid is not None
         assert fid.chars == 50
-        assert fid.lines is None
+        assert fid.lines == 0
 
     def test_max_lines_only(self):
-        """--max-lines without --max-chars gives Fidelity with lines set."""
+        """--max-lines without --max-chars gives Fidelity with lines set, chars=0."""
         args = argparse.Namespace(max_chars=None, max_lines=10)
         fid = parse_fidelity(args)
-        assert fid is not None
         assert fid.lines == 10
-        assert fid.chars is None
+        assert fid.chars == 0
 
     def test_both_flags(self):
         """Both --max-chars and --max-lines produces Fidelity with both."""
         args = argparse.Namespace(max_chars=100, max_lines=5)
         fid = parse_fidelity(args)
-        assert fid is not None
         assert fid.chars == 100
         assert fid.lines == 5
 
-    def test_missing_attrs_returns_none(self):
-        """Namespace without density attrs returns None."""
+    def test_missing_attrs_gives_zero_limits(self):
+        """Namespace without density attrs gives Fidelity with zeros."""
         args = argparse.Namespace()
-        assert parse_fidelity(args) is None
+        fid = parse_fidelity(args)
+        assert fid.chars == 0
+        assert fid.lines == 0
+
+    def test_depth_from_zoom(self):
+        """parse_fidelity picks up depth from the zoom argument."""
+        args = argparse.Namespace(max_chars=None, max_lines=None)
+        fid = parse_fidelity(args, Zoom.DETAILED)
+        assert fid.depth == int(Zoom.DETAILED)
 
 
 class TestUseAnsiResolution:
@@ -223,7 +230,7 @@ class TestUseAnsiResolution:
         from painted.cli import detect_context
 
         monkeypatch.setattr("sys.stdout.isatty", lambda: True)
-        ctx = detect_context(Zoom.SUMMARY, OutputMode.STATIC, force_plain=True)
+        ctx = detect_context(Fidelity(depth=int(Zoom.SUMMARY)), OutputMode.STATIC, force_plain=True)
         assert ctx.use_ansi is False
 
     def test_tty_gives_ansi(self, monkeypatch):
@@ -231,7 +238,7 @@ class TestUseAnsiResolution:
         from painted.cli import detect_context
 
         monkeypatch.setattr("sys.stdout.isatty", lambda: True)
-        ctx = detect_context(Zoom.SUMMARY, OutputMode.STATIC)
+        ctx = detect_context(Fidelity(depth=int(Zoom.SUMMARY)), OutputMode.STATIC)
         assert ctx.use_ansi is True
 
     def test_pipe_gives_no_ansi(self, monkeypatch):
@@ -239,7 +246,7 @@ class TestUseAnsiResolution:
         from painted.cli import detect_context
 
         monkeypatch.setattr("sys.stdout.isatty", lambda: False)
-        ctx = detect_context(Zoom.SUMMARY, OutputMode.STATIC)
+        ctx = detect_context(Fidelity(depth=int(Zoom.SUMMARY)), OutputMode.STATIC)
         assert ctx.use_ansi is False
 
     def test_interactive_always_ansi(self, monkeypatch):
@@ -247,7 +254,7 @@ class TestUseAnsiResolution:
         from painted.cli import detect_context
 
         monkeypatch.setattr("sys.stdout.isatty", lambda: False)
-        ctx = detect_context(Zoom.SUMMARY, OutputMode.INTERACTIVE)
+        ctx = detect_context(Fidelity(depth=int(Zoom.SUMMARY)), OutputMode.INTERACTIVE)
         assert ctx.use_ansi is True
 
 
@@ -384,9 +391,9 @@ class TestCliContext:
     """Tests for CliContext dataclass."""
 
     def test_frozen(self):
-        """CliContext is immutable."""
+        """CliContext is immutable (zoom property has no setter)."""
         ctx = CliContext(
-            zoom=Zoom.SUMMARY,
+            fidelity=Fidelity(depth=int(Zoom.SUMMARY)),
             mode=OutputMode.STATIC,
             use_ansi=True,
             is_tty=True,
@@ -396,29 +403,28 @@ class TestCliContext:
         with pytest.raises(AttributeError):
             ctx.zoom = Zoom.FULL  # type: ignore
 
-    def test_fidelity_field_default_none(self):
-        """CliContext.fidelity defaults to None."""
+    def test_zoom_property_returns_correct_level(self):
+        """ctx.zoom is a backward-compat property derived from fidelity.depth."""
         ctx = CliContext(
-            zoom=Zoom.SUMMARY,
+            fidelity=Fidelity(depth=int(Zoom.SUMMARY)),
             mode=OutputMode.STATIC,
             use_ansi=True,
             is_tty=True,
             width=80,
             height=24,
         )
-        assert ctx.fidelity is None
+        assert ctx.zoom == Zoom.SUMMARY
 
-    def test_fidelity_field_set(self):
-        """CliContext.fidelity carries Fidelity value."""
-        fid = Fidelity(chars=50, lines=10)
+    def test_fidelity_is_primary_field(self):
+        """CliContext.fidelity is the canonical field, always set."""
+        fid = Fidelity(depth=1, chars=50, lines=10)
         ctx = CliContext(
-            zoom=Zoom.SUMMARY,
+            fidelity=fid,
             mode=OutputMode.STATIC,
             use_ansi=True,
             is_tty=True,
             width=80,
             height=24,
-            fidelity=fid,
         )
         assert ctx.fidelity is fid
         assert ctx.fidelity.chars == 50
@@ -522,10 +528,10 @@ class TestCliRunner:
         assert received_fidelity.chars == 50
         assert received_fidelity.lines == 10
 
-    def test_no_fidelity_flags_gives_none(self, monkeypatch):
-        """Without density flags, ctx.fidelity is None."""
+    def test_no_fidelity_flags_gives_zero_limits(self, monkeypatch):
+        """Without density flags, ctx.fidelity.chars and .lines are 0 (unlimited)."""
         monkeypatch.setattr("sys.stdout.isatty", lambda: False)
-        received_fidelity = "sentinel"
+        received_fidelity = None
 
         def render(ctx: CliContext, data: str) -> Block:
             nonlocal received_fidelity
@@ -538,7 +544,9 @@ class TestCliRunner:
             fetch=lambda: "data",
         )
 
-        assert received_fidelity is None
+        assert received_fidelity is not None
+        assert received_fidelity.chars == 0
+        assert received_fidelity.lines == 0
 
     def test_custom_handler(self, monkeypatch):
         """Custom handler is called for matching mode."""

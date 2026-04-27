@@ -33,7 +33,7 @@ tour.py is a ~2880-line interactive teaching platform implementing:
 
 **Not actually missing — tour.py is functionally complete.** The gaps are pedagogical rather than structural:
 
-1. **Mouse input**: No slides covering `painted.mouse`. The framework supports mouse but tour.py doesn't demonstrate it. Consider adding a "mouse" slide pointing to `demo_mouse.py`.
+1. **Mouse input**: No slides covering mouse input (`painted.tui.MouseEvent`). The framework supports mouse but tour.py doesn't demonstrate it. Consider adding a "mouse" slide pointing to `demos/apps/mouse.py`.
 
 2. **Lens primitives**: No coverage of `painted.views` (shape_lens, tree_lens, chart_lens). These render arbitrary Python data at different zoom levels. Could add a "lens" slide between "buffer" and "app".
 
@@ -54,90 +54,39 @@ tour.py is the primary teaching platform (renamed from bench.py). The missing pi
 
 ## 2. Demo Directory Organization
 
-### Current Structure (20 files)
+### Current Structure
 
-```
-demos/
-├── demo_01_cell.py       # CLI primitive
-├── demo_02_buffer.py     # CLI primitive
-├── demo_03_buffer_view.py # CLI primitive
-├── demo_04_block.py      # CLI primitive
-├── demo_05_compose.py    # CLI primitive
-├── demo_06_span_line.py  # CLI primitive
-├── demo_07_app.py        # TUI minimal
-├── demo_08_components.py # TUI widgets
-├── demo_09_layer.py      # TUI layer stack
-├── demo_10_lens.py       # Data rendering
-├── demo_big_text.py      # Effects
-├── demo_lenses.py        # Interactive lens demo
-├── demo_mouse.py         # Mouse input
-├── demo_fidelity.py     # CLI→TUI spectrum
-├── demo_fidelity_disk.py    # Variant
-├── demo_fidelity_health.py  # Variant
-├── demo_utils.py         # Helper
-├── slide_loader.py       # Helper
-└── tour.py               # Teaching platform
-```
-
-### Issues
-
-1. **Mixed naming conventions**
-   - Numbered: `demo_01_*` through `demo_10_*` (learning path)
-   - Feature-named: `demo_mouse.py`, `demo_lenses.py`, `demo_big_text.py`
-   - Variants: `demo_fidelity*.py` (3 files, one pattern)
-
-2. **Unclear categories**
-   - CLI-only demos mixed with TUI demos
-   - Teaching tools (tour) mixed with examples
-   - Helpers (demo_utils, slide_loader) in same directory
-
-3. **Redundancy**
-   - `demo_10_lens.py` and `demo_lenses.py` overlap
-
-### Recommended Structure
+The recommended restructure has landed. Demos are organized by complexity:
 
 ```
 demos/
 ├── README.md                    # Demo index with descriptions
 │
 ├── primitives/                  # CLI-level (run and exit)
-│   ├── 01_cell_style.py        # Cell, Style
-│   ├── 02_span_line.py         # Span, Line
-│   ├── 03_block.py             # Block
-│   ├── 04_buffer.py            # Buffer, BufferView
-│   └── 05_compose.py           # join, pad, border
+│   ├── cell.py                 # Cell, Style
+│   ├── span_line.py            # Span, Line
+│   ├── compose.py              # join, pad, border
+│   └── show.py                 # show() auto-dispatch
 │
 ├── apps/                        # TUI applications (interactive)
 │   ├── minimal.py              # Simplest Surface subclass
 │   ├── layers.py               # Layer stack pattern
 │   ├── widgets.py              # Component showcase
 │   ├── mouse.py                # Mouse input
-│   └── lenses.py               # Data visualization
+│   ├── animation.py            # Animated updates
+│   ├── focus_form.py           # Focus capture
+│   ├── search_filter.py        # Search layer
+│   └── viewport.py             # Scrolling viewport
 │
 ├── patterns/                    # Real-world patterns
 │   ├── fidelity.py            # CLI→TUI spectrum
-│   ├── fidelity_disk.py       # Variant: disk monitor
-│   └── fidelity_health.py     # Variant: health checker
+│   ├── profiler.py             # Profiling + flame graph
+│   ├── responsive.py           # Responsive layout
+│   └── ...                     # Other patterns
 │
-└── tour.py                      # Teaching platform (keep at top level)
+├── slide_loader.py              # Helper
+└── tour.py                      # Teaching platform (top level)
 ```
-
-### Migration Strategy
-
-1. **Keep tour.py at top level** — it's the primary entry point
-3. **Rename numbered demos** — use descriptive names
-4. **Group by complexity** — primitives (CLI) vs apps (TUI) vs patterns (real-world)
-5. **Add README.md** — index with run commands and descriptions
-
-### Naming Convention
-
-| Category | Pattern | Example |
-|----------|---------|---------|
-| Primitives | `{concept}.py` | `block.py` |
-| Apps | `{feature}.py` | `layers.py` |
-| Patterns | `{pattern}_{variant}.py` | `fidelity_disk.py` |
-
-No numbered prefixes — use README for learning path ordering.
 
 ---
 
@@ -145,7 +94,7 @@ No numbered prefixes — use README for learning path ordering.
 
 ### The Canonical Structure
 
-Based on tour.py, demo_09_layer.py, and demo_lenses.py, the pattern for TUI apps using painted submodules:
+Based on tour.py, demos/apps/layers.py, and demos/apps/widgets.py, the pattern for TUI apps using painted submodules:
 
 ```python
 #!/usr/bin/env python3
@@ -175,9 +124,9 @@ from painted.tui import (
 from painted.views import spinner, progress_bar, list_view
 
 # Optional imports based on features
-# from painted.views import shape_lens, tree_lens
-# from painted.mouse import MouseEvent, MouseButton
-# from painted.views import render_big
+# from painted.views import shape_lens, tree_lens, flame_lens
+# from painted.tui import MouseEvent, MouseButton   # mouse is in painted.tui
+# from painted.views import render_big, sparkline
 
 
 # ─── State ───────────────────────────────────────────────────────────
@@ -279,10 +228,10 @@ from painted import Block, Style, Span, Line, print_block
 from painted.tui import Surface, Layer, Focus, Search
 
 # Tier 3: Optional extensions
-from painted.views import spinner, list_view, progress_bar
-from painted.views import shape_lens, tree_lens
-from painted.mouse import MouseEvent, MouseButton
-from painted.views import render_big
+from painted.views import spinner, list_view, progress_bar, table
+from painted.views import shape_lens, tree_lens, chart_lens, flame_lens
+from painted.views import sparkline, data_explorer, render_big
+from painted.tui import MouseEvent, MouseButton, MouseAction  # mouse lives in tui
 ```
 
 ### Simpler Pattern (No Layers)

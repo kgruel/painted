@@ -16,10 +16,20 @@ from typing import TYPE_CHECKING, Generic, TypeVar
 
 from contextlib import nullcontext
 
-from .args import add_cli_args, parse_fidelity, parse_format, parse_mode, parse_zoom
-from .context import detect_context
+from .types import (
+    CliContext,
+    Fidelity,
+    Format,
+    OutputMode,
+    Zoom,
+    add_cli_args,
+    detect_context,
+    parse_fidelity,
+    parse_format,
+    parse_mode,
+    parse_zoom,
+)
 from .help import HelpArg, build_help_data, render_help, scan_help_args
-from .types import CliContext, Format, OutputMode, Zoom
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -62,6 +72,9 @@ class CliRunner(Generic[T]):
     # Optional: describe pre-parsed args for help rendering
     help_args: list[HelpArg] | None = None
 
+    # Optional: transform Fidelity after parsing (e.g. to inject visible tags)
+    build_fidelity: Callable[[argparse.Namespace, Fidelity], Fidelity] | None = None
+
     # Internal parser cache for repeated invocations
     _parser_cache: argparse.ArgumentParser | None = field(default=None, init=False, repr=False)
 
@@ -71,11 +84,11 @@ class CliRunner(Generic[T]):
         if "-h" in args or "--help" in args:
             return self._handle_help(args)
 
-        if not args and self.add_args is None:
+        if not args and self.add_args is None and self.build_fidelity is None:
             zoom = self.default_zoom
             mode = OutputMode.AUTO
             fmt = Format.AUTO
-            fidelity = None
+            fidelity = Fidelity(depth=int(zoom))
         else:
             parser = self._get_parser()
             parsed = parser.parse_args(args)
@@ -83,7 +96,9 @@ class CliRunner(Generic[T]):
             zoom = parse_zoom(parsed, self.default_zoom)
             mode = parse_mode(parsed)
             fmt = parse_format(parsed)
-            fidelity = parse_fidelity(parsed)
+            fidelity = parse_fidelity(parsed, zoom)
+            if self.build_fidelity is not None:
+                fidelity = self.build_fidelity(parsed, fidelity)
 
         # JSON short-circuits — it's data export, not rendering
         is_json = fmt == Format.JSON
@@ -97,7 +112,7 @@ class CliRunner(Generic[T]):
             mode = OutputMode.STATIC
 
         ctx = detect_context(
-            zoom, mode, force_plain=force_plain, default_mode=self.default_mode, fidelity=fidelity
+            fidelity, mode, force_plain=force_plain, default_mode=self.default_mode
         )
 
         return self._dispatch(ctx)
@@ -339,6 +354,7 @@ def run_cli(
     prog: str | None = None,
     add_args: Callable[[argparse.ArgumentParser], None] | None = None,
     help_args: list[HelpArg] | None = None,
+    build_fidelity: Callable[[argparse.Namespace, Fidelity], Fidelity] | None = None,
 ) -> int:
     """Run a CLI tool with zoom/mode/format handling.
 
@@ -354,6 +370,7 @@ def run_cli(
         prog: Program name
         add_args: Callback to add custom arguments
         help_args: Describe pre-parsed args for help rendering
+        build_fidelity: Transform Fidelity after parsing (e.g. inject visible tags)
 
     Returns:
         Exit code (0 for success)
@@ -369,4 +386,5 @@ def run_cli(
         prog=prog,
         add_args=add_args,
         help_args=help_args,
+        build_fidelity=build_fidelity,
     ).run(args)

@@ -14,7 +14,7 @@ from io import StringIO
 from pathlib import Path
 from types import ModuleType
 
-from painted import Block, CliContext, Zoom
+from painted import Block, CliContext, Fidelity, Zoom
 from painted.cli import OutputMode
 
 CaptureResult = Block | str
@@ -99,7 +99,7 @@ def capture_demo(
             data = fetch()
 
         ctx = CliContext(
-            zoom=zoom,
+            fidelity=Fidelity(depth=int(zoom)),
             mode=OutputMode.STATIC,
             use_ansi=False,
             is_tty=False,

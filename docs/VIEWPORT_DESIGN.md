@@ -230,9 +230,13 @@ def move_down(state: ListViewState) -> ListViewState:
 
 ## Location
 
-`libs/painted/src/painted/viewport.py` — new file in the CLI core layer (no TUI dependencies).
+Implemented at `src/painted/viewport.py` — no TUI dependencies (imports only from core).
 
-Export from `painted/__init__.py` alongside `Block`, `Span`, etc.
+Exported from `painted/__init__.py` alongside `Block`, `Span`, etc.:
+
+```python
+from painted import Viewport
+```
 
 ## Why Not Extend ListState/TableState?
 

@@ -667,10 +667,10 @@ class TestShapeLensFidelityLines:
         text = block_to_text(block)
         assert "+7 more" in text
 
-    def test_dict_fidelity_none_uses_default(self):
-        """Fidelity with lines=None uses the default limit (20)."""
+    def test_dict_fidelity_zero_uses_default(self):
+        """Fidelity with lines=0 (unlimited) uses the default limit (20)."""
         d = {f"key_{i}": f"val_{i}" for i in range(25)}
-        fid = Fidelity(lines=None)
+        fid = Fidelity(lines=0)
         block = shape_lens(d, 2, 60, fidelity=fid)
         text = block_to_text(block)
         assert "+5 more" in text
@@ -711,10 +711,10 @@ class TestShapeLensFidelityChars:
         assert "500 chars" in text
         # The truncation happens at chars=50, not the default 200
 
-    def test_string_fidelity_none_uses_default(self):
-        """Fidelity with chars=None uses the default limit (200)."""
+    def test_string_fidelity_zero_uses_default(self):
+        """Fidelity with chars=0 (unlimited) uses the default limit (200)."""
         s = "x" * 500
-        fid = Fidelity(chars=None)
+        fid = Fidelity(chars=0)
         block = shape_lens(s, 2, 300, fidelity=fid)
         text = block_to_text(block)
         assert "500 chars" in text

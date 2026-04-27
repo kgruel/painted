@@ -439,9 +439,6 @@ def _cells_from_text(text: str, style: Style, *, max_width: int | None = None) -
                 m[ch] = cell
             append(cell)
             if w == 2:
-                if max_width is not None and used + 2 > max_width:
-                    cells.pop()
-                    break
                 space = m_get(" ")
                 if space is None:
                     space = Cell(" ", style)

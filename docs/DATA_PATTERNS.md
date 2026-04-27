@@ -70,24 +70,38 @@ def border(block: Block, chars: BorderChars, style: Style) -> Block: ...
 
 ### 3. Components
 
-**Purpose:** Stateful UI elements (spinner, list, text input).
+**Purpose:** Stateful UI elements (spinner, list, text input, data explorer, etc.).
+
+Components live in `views/components/`. Import from `painted.views`.
 
 **Pattern:** State dataclass + pure functions.
 
 ```python
 # State: frozen dataclass with all component data
 @dataclass(frozen=True, slots=True)
-class ListViewState:
+class ListState:
     selected: int = 0
     scroll_offset: int = 0
 
 # Render: state → Block (pure)
-def render(state: ListViewState, items: list[str], visible: int) -> Block: ...
+def list_view(state: ListState, items: list[str], visible: int) -> Block: ...
 
 # Update: (state, input) → state (pure)
-def select_next(state: ListViewState, item_count: int) -> ListViewState:
+def select_next(state: ListState, item_count: int) -> ListState:
     return replace(state, selected=min(state.selected + 1, item_count - 1))
 ```
+
+**Available components:**
+
+| Component | State | Render fn | Purpose |
+|-----------|-------|-----------|---------|
+| Spinner | `SpinnerState` | `spinner()` | Animated spinner |
+| Progress | `ProgressState` | `progress_bar()` | Horizontal progress bar |
+| List | `ListState` | `list_view()` | Scrollable list with selection |
+| Table | `TableState` | `table()` | Scrollable table with headers |
+| Text input | `TextInputState` | `text_input()` | Single-line input with cursor |
+| Data explorer | `DataExplorerState` | `data_explorer()` | Interactive browser for nested data |
+| Sparkline | (stateless) | `sparkline()` | Inline mini-chart from numeric sequence |
 
 **Key traits:**
 - State is a value, not an object with identity

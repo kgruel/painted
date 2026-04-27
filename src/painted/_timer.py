@@ -42,7 +42,7 @@ class FrameTimer:
         self._current: FrameRecord | None = None
         self._frame_start: float = 0.0
         self._profile = profile
-        self._log: list[FrameRecord] = [] if profile else []
+        self._log: list[FrameRecord] = []
 
     def begin_frame(self) -> None:
         self._current = FrameRecord(timestamp=time.time())

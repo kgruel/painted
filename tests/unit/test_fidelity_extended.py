@@ -8,6 +8,7 @@ from painted import Block, Style
 from painted.cli import (
     CliContext,
     CliRunner,
+    Fidelity,
     OutputMode,
     Zoom,
     resolve_mode,
@@ -171,7 +172,7 @@ class TestCliRunnerJsonPath:
 class TestCliRunnerErrorBlocks:
     def test_fetch_error_block_uses_palette(self):
         ctx = CliContext(
-            zoom=Zoom.SUMMARY,
+            fidelity=Fidelity(depth=int(Zoom.SUMMARY)),
             mode=OutputMode.STATIC,
             use_ansi=True,
             is_tty=True,
@@ -184,7 +185,7 @@ class TestCliRunnerErrorBlocks:
 
     def test_render_error_block_includes_type(self):
         ctx = CliContext(
-            zoom=Zoom.SUMMARY,
+            fidelity=Fidelity(depth=int(Zoom.SUMMARY)),
             mode=OutputMode.STATIC,
             use_ansi=True,
             is_tty=True,
@@ -197,7 +198,7 @@ class TestCliRunnerErrorBlocks:
 
     def test_render_error_block_empty_message(self):
         ctx = CliContext(
-            zoom=Zoom.SUMMARY,
+            fidelity=Fidelity(depth=int(Zoom.SUMMARY)),
             mode=OutputMode.STATIC,
             use_ansi=True,
             is_tty=True,
@@ -210,7 +211,7 @@ class TestCliRunnerErrorBlocks:
 
     def test_fetch_error_block_narrow_width(self):
         ctx = CliContext(
-            zoom=Zoom.SUMMARY,
+            fidelity=Fidelity(depth=int(Zoom.SUMMARY)),
             mode=OutputMode.STATIC,
             use_ansi=True,
             is_tty=True,
@@ -232,7 +233,7 @@ class TestCliRunnerLiveFallback:
         monkeypatch.setattr("sys.stdout.isatty", lambda: False)
 
         ctx = CliContext(
-            zoom=Zoom.SUMMARY,
+            fidelity=Fidelity(depth=int(Zoom.SUMMARY)),
             mode=OutputMode.LIVE,
             use_ansi=True,
             is_tty=False,
@@ -253,7 +254,7 @@ class TestCliRunnerLiveFallback:
         monkeypatch.setattr("sys.stdout.isatty", lambda: False)
 
         ctx = CliContext(
-            zoom=Zoom.SUMMARY,
+            fidelity=Fidelity(depth=int(Zoom.SUMMARY)),
             mode=OutputMode.LIVE,
             use_ansi=True,
             is_tty=False,
@@ -272,7 +273,7 @@ class TestCliRunnerLiveFallback:
         monkeypatch.setattr("sys.stdout.isatty", lambda: False)
 
         ctx = CliContext(
-            zoom=Zoom.SUMMARY,
+            fidelity=Fidelity(depth=int(Zoom.SUMMARY)),
             mode=OutputMode.LIVE,
             use_ansi=True,
             is_tty=False,
@@ -295,7 +296,7 @@ class TestCliRunnerLiveFallback:
         monkeypatch.setattr("sys.stdout.isatty", lambda: False)
 
         ctx = CliContext(
-            zoom=Zoom.SUMMARY,
+            fidelity=Fidelity(depth=int(Zoom.SUMMARY)),
             mode=OutputMode.INTERACTIVE,
             use_ansi=True,
             is_tty=False,
@@ -344,7 +345,7 @@ class TestCliRunnerLiveStreaming:
         monkeypatch.setattr(inplace_mod, "InPlaceRenderer", StubRenderer)
 
         ctx = CliContext(
-            zoom=Zoom.SUMMARY,
+            fidelity=Fidelity(depth=int(Zoom.SUMMARY)),
             mode=OutputMode.LIVE,
             use_ansi=True,
             is_tty=False,
@@ -398,7 +399,7 @@ class TestCliRunnerLiveStreaming:
         monkeypatch.setattr(inplace_mod, "InPlaceRenderer", StubRenderer)
 
         ctx = CliContext(
-            zoom=Zoom.SUMMARY,
+            fidelity=Fidelity(depth=int(Zoom.SUMMARY)),
             mode=OutputMode.LIVE,
             use_ansi=True,
             is_tty=False,
@@ -455,7 +456,7 @@ class TestCliRunnerLiveStreaming:
         monkeypatch.setattr(inplace_mod, "InPlaceRenderer", StubRenderer)
 
         ctx = CliContext(
-            zoom=Zoom.SUMMARY,
+            fidelity=Fidelity(depth=int(Zoom.SUMMARY)),
             mode=OutputMode.LIVE,
             use_ansi=True,
             is_tty=False,

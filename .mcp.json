@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "comms": {
+      "type": "http",
+      "url": "https://comms.gruel.network/mcp",
+      "env": {
+        "COMMS_AGENT_NAME": "lens",
+        "COMMS_AGENT_TOKEN": "93QzOIu2rFUyZMVPuvjTPUa_VN-vJyQc64M7YwX9o1Q",
+        "COMMS_AUTO_JOIN": "design"
+      }
+    }
+  }
+}

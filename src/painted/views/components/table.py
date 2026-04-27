@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+from typing import TYPE_CHECKING
 
 from ...core.block import Block
 from ...core.buffer import Buffer
@@ -11,6 +12,10 @@ from ...core.compose import Align, truncate
 from ...cursor import Cursor
 from ...core.span import Line, Span
 from ...viewport import Viewport
+
+if TYPE_CHECKING:
+    from ...core.borders import BorderChars
+    from ...palette import Palette
 
 
 @dataclass(frozen=True)
@@ -103,13 +108,38 @@ def table(
     visible_height: int,
     *,
     width: int | None = None,
-    header_style: Style = Style(bold=True),
-    selected_style: Style = Style(reverse=True),
-    separator: str = "│",
+    header_style: Style | None = None,
+    selected_style: Style | None = None,
+    separator_style: Style | None = None,
+    palette: Palette | None = None,
+    borders: BorderChars | None = None,
 ) -> Block:
-    """Render a table with headers, scrolling, and row selection."""
+    """Render a table with headers, scrolling, and row selection.
+
+    Styling is derived from the ambient Palette and BorderChars by default.
+    Explicit style/border arguments override the ambient values.
+
+    Args:
+        header_style: Style for header row. Defaults to palette.accent + bold.
+        selected_style: Style for selected data row. Defaults to reverse.
+        separator_style: Style for the separator line. Defaults to palette.muted.
+        palette: Optional Palette override (uses ambient if None).
+        borders: Optional BorderChars override (uses ambient if None).
+    """
+    from ...core.borders import current_borders
+    from ...palette import current_palette
+
     if not columns:
         return Block.empty(1, visible_height + 2)
+
+    p = palette or current_palette()
+    b = borders or current_borders()
+
+    hs = header_style or p.accent.merge(Style(bold=True))
+    ss = selected_style or Style(reverse=True)
+    sep_style = separator_style or p.muted
+
+    separator = b.vertical
 
     vp = state.viewport.with_visible(visible_height).with_content(len(rows))
     cursor = state.cursor.with_count(len(rows))
@@ -125,22 +155,22 @@ def table(
     # -- Header row --
     col_x = 0
     for i, col in enumerate(columns):
-        header_line = _pad_line(col.header, col.width, col.align, header_style)
-        header_line = Line(spans=header_line.spans, style=header_style)
+        header_line = _pad_line(col.header, col.width, col.align, hs)
+        header_line = Line(spans=header_line.spans, style=hs)
         view = buf.region(col_x, 0, col.width, 1)
         header_line.paint(view, 0, 0)
         col_x += col.width
         if i < len(columns) - 1:
-            buf.put_text(col_x, 0, separator, header_style)
+            buf.put_text(col_x, 0, separator, hs)
             col_x += sep_width
 
     # -- Separator line --
     col_x = 0
     for i, col in enumerate(columns):
-        buf.put_text(col_x, 1, "─" * col.width, Style())
+        buf.put_text(col_x, 1, b.horizontal * col.width, sep_style)
         col_x += col.width
         if i < len(columns) - 1:
-            buf.put_text(col_x, 1, "┼" * sep_width, Style())
+            buf.put_text(col_x, 1, b.crossing * sep_width, sep_style)
             col_x += sep_width
 
     # -- Data rows (visible window) --
@@ -150,7 +180,7 @@ def table(
     for row_offset, row_idx in enumerate(range(start, end)):
         row_data = rows[row_idx] if row_idx < len(rows) else []
         is_selected = row_idx == cursor.index
-        row_style = selected_style if is_selected else Style()
+        row_style = ss if is_selected else Style()
         buf_y = 2 + row_offset
 
         col_x = 0
