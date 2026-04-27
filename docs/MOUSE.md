@@ -1,6 +1,11 @@
 # Mouse Input in Terminal UIs
 
-Research findings on terminal mouse protocols and recommendations for painted.
+Terminal mouse protocol reference and painted implementation notes.
+
+Mouse support is fully implemented. Types live in `tui/mouse.py`, keyboard
+integration in `tui/keyboard.py`, Writer mouse control in `core/writer.py`,
+and Surface exposes `on_mouse()`. All mouse types are re-exported from
+`painted.tui`.
 
 ## Protocol Overview
 
@@ -141,293 +146,81 @@ configuration.
 5. **Capture mode** — one widget can claim all mouse events temporarily
 6. **Scroll → deltas** — scroll events become +1/-1 deltas for Viewport
 
-## Recommended Approach for painted
+## Implementation in painted
 
-### Design Principles
+### Module Locations
 
-1. **Parallel to keyboard** — `MouseInput` context manager alongside `KeyboardInput`
-2. **Same reader** — parse mouse sequences in the same stdin reader (they interleave)
-3. **Typed events** — `MouseEvent` dataclass, not raw strings like keyboard
-4. **Layer integration** — layers receive both key strings and mouse events
-5. **Coordinate translation** — BufferView translates to local coordinates
+| Concern | Module |
+|---------|--------|
+| Types and parsing | `tui/mouse.py` |
+| Keyboard integration | `tui/keyboard.py` |
+| Writer mouse control | `core/writer.py` |
+| Surface callback | `tui/surface.py` |
 
-### Proposed Types
+All three mouse types are re-exported from `painted.tui`:
 
 ```python
-# libs/painted/src/painted/mouse.py
-
-from dataclasses import dataclass
-from enum import Enum, auto
-
-
-class MouseButton(Enum):
-    LEFT = 0
-    MIDDLE = 1
-    RIGHT = 2
-    SCROLL_UP = 64
-    SCROLL_DOWN = 65
-    SCROLL_LEFT = 66
-    SCROLL_RIGHT = 67
-    NONE = -1  # motion without button
-
-
-class MouseAction(Enum):
-    PRESS = auto()
-    RELEASE = auto()
-    MOVE = auto()      # motion (drag or hover if mode 1003)
-    SCROLL = auto()    # wheel event
-
-
-@dataclass(frozen=True, slots=True)
-class MouseEvent:
-    """A mouse event with position, button, and modifiers."""
-
-    action: MouseAction
-    button: MouseButton
-    x: int              # 0-indexed column
-    y: int              # 0-indexed row
-    shift: bool = False
-    meta: bool = False
-    ctrl: bool = False
-
-    @property
-    def is_scroll(self) -> bool:
-        return self.action == MouseAction.SCROLL
-
-    @property
-    def is_click(self) -> bool:
-        return self.action == MouseAction.PRESS and self.button in (
-            MouseButton.LEFT, MouseButton.MIDDLE, MouseButton.RIGHT
-        )
-
-    def translate(self, dx: int, dy: int) -> "MouseEvent":
-        """Return event with translated coordinates."""
-        return MouseEvent(
-            action=self.action,
-            button=self.button,
-            x=self.x - dx,
-            y=self.y - dy,
-            shift=self.shift,
-            meta=self.meta,
-            ctrl=self.ctrl,
-        )
-
-
-def parse_sgr_mouse(params: str, final: str) -> MouseEvent | None:
-    """Parse SGR mouse sequence parameters.
-
-    Args:
-        params: The parameter string (e.g., "0;10;5")
-        final: The final byte ('M' for press, 'm' for release)
-
-    Returns:
-        MouseEvent or None if malformed.
-    """
-    parts = params.split(";")
-    if len(parts) != 3:
-        return None
-
-    try:
-        cb = int(parts[0])
-        cx = int(parts[1]) - 1  # Convert to 0-indexed
-        cy = int(parts[2]) - 1
-    except ValueError:
-        return None
-
-    # Decode modifiers
-    shift = bool(cb & 4)
-    meta = bool(cb & 8)
-    ctrl = bool(cb & 16)
-    motion = bool(cb & 32)
-
-    # Decode button
-    button_bits = cb & 3
-    high_bits = cb & 192  # bits 6-7
-
-    if high_bits == 64:
-        # Scroll wheel
-        button = MouseButton.SCROLL_UP if button_bits == 0 else MouseButton.SCROLL_DOWN
-        action = MouseAction.SCROLL
-    elif motion:
-        # Motion event
-        button = MouseButton(button_bits) if button_bits < 3 else MouseButton.NONE
-        action = MouseAction.MOVE
-    else:
-        # Regular button
-        button = MouseButton(button_bits) if button_bits < 3 else MouseButton.NONE
-        action = MouseAction.RELEASE if final == "m" else MouseAction.PRESS
-
-    return MouseEvent(
-        action=action,
-        button=button,
-        x=cx,
-        y=cy,
-        shift=shift,
-        meta=meta,
-        ctrl=ctrl,
-    )
+from painted.tui import MouseEvent, MouseButton, MouseAction
 ```
+
+### Types
+
+`MouseEvent`, `MouseButton`, and `MouseAction` are implemented as described in the
+Proposed Types section above. `MouseButton.NONE = 3` (motion without button).
+`MouseEvent` adds a `scroll_delta` property: `-1` for scroll up, `+1` for scroll
+down, `0` for non-scroll.
 
 ### Keyboard Integration
 
-Extend `KeyboardInput` to recognize mouse sequences:
+`KeyboardInput` detects the `CSI <` prefix in the stdin stream and delegates to
+`parse_sgr_mouse()` (in `tui/mouse.py`). The `Input` union type (`str | MouseEvent`)
+is exported from `painted.tui`.
 
-```python
-# In keyboard.py, extend _read_csi()
+### Writer Mouse Control
 
-def _read_csi(self) -> str | MouseEvent:
-    """Read a CSI sequence, returning key name or MouseEvent."""
-    params: list[bytes] = []
-    while True:
-        b = self._read_byte(_ESC_TIMEOUT)
-        if b is None:
-            return "escape"
-        code = b[0]
-
-        # Check for SGR mouse prefix '<'
-        if code == 0x3C and not params:  # '<'
-            return self._read_sgr_mouse()
-
-        if 0x40 <= code <= 0x7E:
-            # Final byte — existing key handling
-            ...
-        params.append(b)
-
-def _read_sgr_mouse(self) -> MouseEvent | str:
-    """Read SGR mouse sequence after '<'."""
-    params: list[bytes] = []
-    while True:
-        b = self._read_byte(_ESC_TIMEOUT)
-        if b is None:
-            return "escape"
-        code = b[0]
-        if code in (0x4D, 0x6D):  # 'M' or 'm'
-            param_str = b"".join(params).decode("ascii", errors="replace")
-            event = parse_sgr_mouse(param_str, chr(code))
-            return event if event else "escape"
-        params.append(b)
-```
-
-### Input Union Type
-
-```python
-# The input reader returns either:
-Input = str | MouseEvent
-
-# Layer handles both:
-@dataclass(frozen=True, slots=True)
-class Layer(Generic[S]):
-    handle: Callable[[Input, S, Any], tuple[S, Any, Action]]
-    # Or keep separate handlers:
-    handle_key: Callable[[str, S, Any], tuple[S, Any, Action]]
-    handle_mouse: Callable[[MouseEvent, S, Any], tuple[S, Any, Action]] | None
-```
-
-### Writer Mouse Mode Control
-
-```python
-# In writer.py
-
-def enable_mouse(self, tracking: int = 1003, encoding: int = 1006) -> None:
-    """Enable mouse tracking with SGR encoding."""
-    self._stream.write(f"\x1b[?{tracking}h")  # Any-event or button-event
-    self._stream.write(f"\x1b[?{encoding}h")  # SGR encoding
-    self._stream.flush()
-
-def disable_mouse(self, tracking: int = 1003, encoding: int = 1006) -> None:
-    """Disable mouse tracking."""
-    self._stream.write(f"\x1b[?{tracking}l")
-    self._stream.write(f"\x1b[?{encoding}l")
-    self._stream.flush()
-```
+`Writer.enable_mouse(*, all_motion=False)` and `Writer.disable_mouse()` are
+implemented in `core/writer.py`. They write SGR mode sequences (`?1002h`/`?1003h`
+for tracking, `?1006h` for SGR encoding).
 
 ### Surface Integration
 
+`Surface` accepts `enable_mouse=True` (and `mouse_all_motion=True` for mode 1003).
+The main loop dispatches `MouseEvent` objects to `on_mouse()`. Override to handle:
+
 ```python
-# In app.py
-
-class Surface:
-    def __init__(self, *, enable_mouse: bool = False, ...):
-        self._enable_mouse = enable_mouse
-
-    async def run(self):
-        if self._enable_mouse:
-            self._writer.enable_mouse()
-        try:
-            # ... main loop
-            while self._running:
-                while True:
-                    inp = self._keyboard.get_input()  # str | MouseEvent | None
-                    if inp is None:
-                        break
-                    if isinstance(inp, str):
-                        self.on_key(inp)
-                        self.emit("ui.key", key=inp)
-                    else:
-                        self.on_mouse(inp)
-                        self.emit("ui.mouse", **inp.__dict__)
-                    self._dirty = True
-        finally:
-            if self._enable_mouse:
-                self._writer.disable_mouse()
-            # ... cleanup
-
+class MyApp(Surface):
     def on_mouse(self, event: MouseEvent) -> None:
-        """Override to handle mouse events."""
-        pass
+        if event.is_scroll:
+            self._viewport = self._viewport.scroll(event.scroll_delta)
 ```
 
 ### Viewport Scroll Integration
 
-The immediate use case from HANDOFF.md: scroll events → Viewport offset changes.
-
 ```python
-# In a scrollable component
+from painted.tui import MouseEvent, MouseButton
+from painted import Viewport
 
-def handle_mouse(event: MouseEvent, state: ViewportState, app) -> tuple[...]:
+def on_mouse(self, event: MouseEvent) -> None:
     if event.is_scroll:
-        delta = -1 if event.button == MouseButton.SCROLL_UP else 1
-        new_offset = state.viewport.scroll(delta)
-        return replace(state, viewport=new_offset), app, Stay()
-    return state, app, Stay()
+        self._viewport = self._viewport.scroll(event.scroll_delta)
 ```
 
-## Implementation Order
+See [VIEWPORT_DESIGN.md](VIEWPORT_DESIGN.md) for `Viewport` API.
 
-1. **MouseEvent types** — `mouse.py` with dataclasses and parsing
-2. **Keyboard extension** — detect `CSI <` prefix, delegate to SGR parser
-3. **Writer control** — `enable_mouse()` / `disable_mouse()`
-4. **Surface plumbing** — opt-in mouse mode, `on_mouse()` callback
-5. **Viewport integration** — scroll events adjust offset
+## Remaining Open Questions
 
-## Open Questions
+1. **Coordinate translation for layers** — Mouse events are screen-absolute.
+   `Surface.hit_test(x, y)` returns a semantic id at a coordinate, but per-layer
+   local coordinate translation is not automatic.
 
-1. **Separate vs unified handler** — Should Layer have one `handle(Input)` or
-   separate `handle_key`/`handle_mouse`? Unified is cleaner but changes the
-   signature.
+2. **Click chain detection** — Double-click requires state and timing logic.
+   Not implemented; single press/release is the current granularity.
 
-2. **Click detection** — Textual tracks `chain` (double-click). Do we need
-   this? Requires state and timing logic.
+3. **Mouse capture mode** — A widget claiming all mouse events for drag
+   operations is not implemented.
 
-3. **Capture mode** — Should a widget be able to claim all mouse events?
-   Useful for drag operations. Adds complexity.
-
-4. **Hover/motion** — Mode 1003 reports all motion. High volume. When is this
-   useful? Probably opt-in per component.
-
-5. **Coordinate systems** — Mouse events are screen-absolute. Layer/component
-   may want local coordinates. BufferView already does translation — extend
-   to MouseEvent?
-
-## Trade-offs
-
-| Approach | Pro | Con |
-|----------|-----|-----|
-| Mouse as opt-in | No overhead when unused | Extra flag to enable |
-| Unified Input type | Clean API | Changes existing Layer signature |
-| Separate handlers | Backward compatible | Two callback sites |
-| Full motion tracking | Hover effects possible | High event volume |
-| Button-event only | Lower overhead | No hover |
+4. **Hover/motion in components** — Mode 1003 (all motion) is available via
+   `mouse_all_motion=True` on Surface, but no built-in component uses it.
 
 ## References
 

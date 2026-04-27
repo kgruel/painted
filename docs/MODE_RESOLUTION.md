@@ -2,10 +2,12 @@
 
 How `CliRunner` resolves the output mode when the user doesn't explicitly choose one.
 
+Types live in `cli/types.py`. `CliRunner` and `run_cli` live in `cli/runner.py`.
+
 ## The Three Axes
 
 ```
-ZOOM (what to show)              OUTPUT MODE (how to deliver)
+ZOOM / FIDELITY (what to show)   OUTPUT MODE (how to deliver)
 ├─ 0: MINIMAL (-q/--quiet)       ├─ STATIC: print and scroll
 ├─ 1: SUMMARY (default)          ├─ LIVE: cursor-controlled updates
 ├─ 2: DETAILED (-v)              └─ INTERACTIVE: alt screen + keyboard
@@ -17,7 +19,12 @@ FORMAT (serialization)
 └─ JSON: machine-readable (--json)
 ```
 
-Zoom, mode, and format are orthogonal in principle. Mode resolution is where
+`Zoom` is a flat integer (0–3). `Fidelity` is a richer alternative that bundles
+depth (same int as Zoom), a `visible` tag set for semantic layers, and `chars`/`lines`
+density budgets. `CliContext` carries `Fidelity` as its canonical field; `ctx.zoom`
+is a backward-compat property returning `Zoom(fidelity.depth)`.
+
+Zoom/fidelity, mode, and format are orthogonal in principle. Mode resolution is where
 they interact — certain zoom/format choices constrain which modes make sense.
 
 ## Mode Resolution

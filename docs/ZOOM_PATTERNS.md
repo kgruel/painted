@@ -4,16 +4,22 @@ Research on zoom management in multi-lens applications.
 
 ## Context
 
-The painted lens system provides three lens functions:
+The painted lens system provides four lens functions (in `views/lens/`):
 - `shape_lens`: convention-based rendering of Python data structures
 - `tree_lens`: hierarchical tree visualization
 - `chart_lens`: sparklines and bar charts
+- `flame_lens`: proportional flame graph visualization
 
 All share the signature `(data, zoom, width) -> Block`, where:
 - `zoom`: integer detail level (0=minimal, 1=summary, 2+=full)
 - `width`: available horizontal space
 
-The `Lens` dataclass bundles a render function with `max_zoom` metadata.
+Lenses are plain functions. There is no `Lens` dataclass in the library — the
+experiments below use their own `Lens` type (different namespace). The richer
+alternative to flat zoom is `Fidelity(depth, visible, chars, lines)` — it carries
+the same depth integer plus semantic layer tags and density budgets. `CliContext`
+uses `Fidelity` as its canonical field; `ctx.zoom` returns `Zoom(fidelity.depth)`
+for backward compatibility.
 
 ## Question 1: Global vs Independent Zoom
 
@@ -181,15 +187,15 @@ doesn't have space. Options:
 
 ### Observed Pattern
 
-`_lens.py` truncates with ellipsis:
+`views/lens/` functions truncate with ellipsis via `core/_text_width.py`:
 
 ```python
-def _truncate_ellipsis(text: str, width: int) -> str:
-    if len(text) <= width:
+def truncate_ellipsis(text: str, width: int) -> str:
+    if display_width(text) <= width:
         return text
     if width <= 1:
         return text[:width]
-    return text[: width - 1] + "…"
+    return take_prefix(text, width - 1) + "…"
 ```
 
 **This is the right default.** Truncation preserves user intent (they asked for
@@ -224,39 +230,47 @@ block = shape_lens(data, effective_zoom, width)
 
 ### Current Design
 
+Lenses are plain functions. The library has no `Lens` dataclass — callers always
+provide zoom explicitly. The caller always controls zoom; lenses express no
+preference.
+
 ```python
-@dataclass(frozen=True, slots=True)
-class Lens(Generic[T]):
-    render: Callable[[T, int, int], Block]
-    max_zoom: int = 2
+# All four lenses have the same signature
+block = shape_lens(data, zoom, width)
+block = tree_lens(data, zoom, width)
+block = chart_lens(data, zoom, width)
+block = flame_lens(data, zoom, width)
 ```
 
-`max_zoom` is metadata about capability, not a default. The caller always
-provides zoom explicitly.
+For richer rendering control, `Fidelity` is the preferred alternative to flat zoom:
+
+```python
+from painted import Fidelity
+
+fidelity = Fidelity(depth=2, visible=frozenset({"timing"}), chars=80)
+# Lens depth is fidelity.depth
+block = shape_lens(data, fidelity.depth, width)
+# Use fidelity.shows("timing") to gate optional sections
+```
 
 ### Options for Default Zoom
 
 | Option | Signature | Trade-off |
 |--------|-----------|-----------|
-| No default | `lens.render(data, zoom, width)` | Explicit, caller controls |
-| Default on Lens | `Lens(render, max_zoom=2, default_zoom=1)` | Lens carries preference |
-| Default via wrapper | `def auto_lens(data, width): return lens.render(data, lens.default, width)` | Separation of concerns |
+| No default | `lens_fn(data, zoom, width)` | Explicit, caller controls |
+| Wrapper | `def auto_lens(data, width): return lens_fn(data, 1, width)` | Separation of concerns |
+| Fidelity | `lens_fn(data, fidelity.depth, width)` | Richer context, same fn signature |
 
 ### Analysis
 
-**Arguments for Lens carrying default**:
-- Some lenses have natural defaults (tree_lens makes sense at zoom=1)
-- Reduces boilerplate when using lenses
-- Per-lens customization without composition layer logic
-
-**Arguments against**:
+**Arguments for callers setting defaults**:
 - Zoom is context-dependent, not lens-dependent
 - Same lens might want different defaults in different contexts
-- Adds state to a stateless transformation
+- Stateless functions are simpler to test and compose
 
 ### Observed Pattern
 
-The experiment in `review_lens.py` puts defaults on **Peer, not Lens**:
+The experiment in `review_lens.py` puts defaults on **Peer, not the lens function**:
 
 ```python
 PEER_LENS: dict[str, Lens] = {
@@ -265,36 +279,26 @@ PEER_LENS: dict[str, Lens] = {
 }
 ```
 
-This separates:
-- `painted.views.Lens`: render function + capability metadata
-- `experiments.Lens`: zoom + scope (view configuration)
-
-Two different types with the same name. The experiment's Lens is richer — it
-carries presentation state. The library's Lens is minimal — it's just a
-render function wrapper.
+The experiment's `Lens` is an application-level type (zoom + scope). The library's
+lens functions are minimal — pure transformations with no attached metadata.
 
 ### Recommendation
 
-**Keep library Lens minimal. Add `default_zoom` as optional metadata, not behavior.**
-
-```python
-@dataclass(frozen=True, slots=True)
-class Lens(Generic[T]):
-    render: Callable[[T, int, int], Block]
-    max_zoom: int = 2
-    default_zoom: int = 1  # optional hint, not enforced
-```
+**Keep lens functions stateless. Put defaults on the caller or in Fidelity.**
 
 Usage:
 ```python
-# Caller can use default or override
-zoom = user_zoom if user_zoom is not None else lens.default_zoom
-block = lens.render(data, zoom, width)
+# Caller decides default
+effective_zoom = user_zoom if user_zoom is not None else 1
+block = shape_lens(data, effective_zoom, width)
+
+# Or use Fidelity for richer context
+block = shape_lens(data, ctx.fidelity.depth, ctx.width)
 ```
 
 This:
-- Keeps Lens stateless (hint, not state)
-- Allows per-lens defaults when useful
+- Keeps lens functions stateless (no hidden defaults)
+- Allows per-lens defaults when useful (caller-side)
 - Doesn't change the calling convention
 - Composition layer still controls
 
@@ -305,7 +309,7 @@ This:
 | Global vs independent zoom | Global with per-lens overrides |
 | Zoom state location | Vertex state (folds, persists) |
 | Zoom-width interaction | Orthogonal; truncate, don't auto-reduce |
-| Lens default zoom | Optional `default_zoom` metadata |
+| Lens default zoom | Caller-side; use Fidelity for richer context |
 
 ### Pattern: Zoom Propagation Model
 

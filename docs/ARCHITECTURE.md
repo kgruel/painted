@@ -11,7 +11,7 @@ Data-flow reference for the painted TUI framework.
 ├─────────────────────────────────────────────────────────────┤
 │  Writer                                                     │
 │  Translates Cell changes → ANSI sequences                   │
-│  Detects terminal size                                      │
+│  Detects terminal size, controls mouse mode                 │
 ├─────────────────────────────────────────────────────────────┤
 │  Buffer (diff engine)                                       │
 │  2D grid of Cells                                           │
@@ -186,6 +186,56 @@ Pop()               # remove from stack
 Pop(result=value)   # remove and return result
 Push(layer)         # add new layer on top
 ```
+
+## Module Map
+
+The source is organized into four subsystems. Layer boundaries are enforced by architecture tests: `core/` is self-contained; `views/`, `cli/`, and `tui/` each import only from `core/` and root-level modules.
+
+| Subsystem | Module | Responsibility |
+|-----------|--------|---------------|
+| **core/** | `cell.py` | Cell, Style, Color, EMPTY_CELL |
+| **core/** | `span.py` | Span, Line |
+| **core/** | `block.py` | Block, Wrap |
+| **core/** | `compose.py` | join_horizontal, join_vertical, join_responsive, pad, border, truncate, vslice, Align |
+| **core/** | `writer.py` | Writer, ColorDepth, print_block, write_block_ansi |
+| **core/** | `fidelity.py` | Fidelity(depth, visible, chars, lines), Depth alias |
+| **core/** | `zoom.py` | Zoom IntEnum: MINIMAL(0) SUMMARY(1) DETAILED(2) FULL(3) |
+| **core/** | `buffer.py` | Buffer, BufferView, CellWrite |
+| **core/** | `borders.py` | BorderChars presets, current_borders(), use_borders() |
+| **core/** | `html.py` | render_html(block) → str |
+| **core/** | `_text_width.py` | display_width, char_width, truncate, truncate_ellipsis |
+| **cli/** | `runner.py` | CliRunner, run_cli |
+| **cli/** | `types.py` | OutputMode, Format, CliContext, resolve_mode, detect_context, add_cli_args, parse_* |
+| **cli/** | `app_runner.py` | AppCommand, AppRunner, run_app |
+| **cli/** | `help.py` | HelpFlag, HelpGroup, HelpData, HelpArg, render_help, build_help_data |
+| **views/** | `record.py` | record_line, record_timeline, PayloadLens, GutterFn, gutter_lifecycle, etc. |
+| **views/lens/** | `chart.py` | chart_lens(data, zoom, width) → Block |
+| **views/lens/** | `flame.py` | flame_lens(data, zoom, width, ...) → Block |
+| **views/lens/** | `shape.py` | shape_lens(content, zoom, width) → Block (auto-dispatch) |
+| **views/lens/** | `tree.py` | tree_lens(data, zoom, width) → Block |
+| **views/components/** | `list_view.py` | ListState, list_view() |
+| **views/components/** | `table.py` | Column, TableState, table() |
+| **views/components/** | `spinner.py` | SpinnerState, spinner() |
+| **views/components/** | `progress.py` | ProgressState, progress_bar() |
+| **views/components/** | `sparkline.py` | sparkline(), sparkline_with_range() |
+| **views/components/** | `text_input.py` | TextInputState, text_input() |
+| **views/components/** | `data_explorer.py` | DataNode, DataExplorerState, data_explorer() |
+| **views/** | `profile.py` | profile(), parse_collapsed(), ProfileResult |
+| **views/** | `big_text.py` | render_big(), BigTextFormat |
+| **tui/** | `surface.py` | Surface (base class), Emit, LifecycleHook |
+| **tui/** | `layer.py` | Layer, Stay, Pop, Push, Quit, process_key, render_layers |
+| **tui/** | `keyboard.py` | KeyboardInput, Input |
+| **tui/** | `mouse.py` | MouseEvent, MouseButton, MouseAction, parse_sgr_mouse |
+| **tui/** | `region.py` | Region |
+| **tui/** | `testing.py` | TestSurface, CapturedFrame |
+| **root** | `palette.py` | Palette, current_palette(), use_palette(), DEFAULT_PALETTE, NORD_PALETTE, MONO_PALETTE |
+| **root** | `icon_set.py` | IconSet, current_icons(), use_icons(), ASCII_ICONS |
+| **root** | `theme.py` | Theme, use_theme(), DEFAULT_THEME, NORD_THEME, MONO_THEME |
+| **root** | `inplace.py` | InPlaceRenderer |
+| **root** | `viewport.py` | Viewport |
+| **root** | `display.py` | show() |
+| **root** | `focus.py` | Focus, ring_next, ring_prev |
+| **root** | `search.py` | Search, filter_contains, filter_prefix, filter_fuzzy |
 
 ## Quick Reference
 

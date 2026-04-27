@@ -193,22 +193,73 @@ item = search.selected_item(matches)
 
 ## Lens Functions
 
-Three built-in strategies, all `(data, zoom, width) -> Block`:
+Four built-in strategies. Lenses are plain functions `(data, zoom, width) -> Block`. All are importable from `painted.views`.
 
 - **shape_lens** — Auto-dispatches by data shape. Numeric sequences → chart_lens. Hierarchical dicts → tree_lens. Everything else uses built-in shape rendering (zoom 0: type/count, zoom 1: summary, zoom 2: full).
 - **tree_lens** — Hierarchical data with branch characters. Supports dicts, tuples, node protocol.
 - **chart_lens** — Numeric data as sparklines (zoom 1) or bar charts (zoom 2).
+- **flame_lens** — Proportional width visualization. Nested dicts → flame graph rows.
 
 ```python
-from painted.views import shape_lens, tree_lens, chart_lens
+from painted.views import shape_lens, tree_lens, chart_lens, flame_lens
 
 block = shape_lens({"name": "Alice", "age": 30}, zoom=1, width=40)  # keys
 block = shape_lens([10, 20, 30], zoom=1, width=40)                  # sparkline
 block = tree_lens({"src": {"main.py": None}}, zoom=2, width=40)     # tree
 block = chart_lens({"cpu": 70, "mem": 50}, zoom=2, width=40)        # bars
+block = flame_lens(profile_dict, zoom=2, width=80)                  # flame graph
 ```
 
-**Connects to:** Produces Blocks. Nested structures reduce zoom at each level.
+**Sparklines** — stateless inline mini-charts, distinct from chart_lens:
+
+```python
+from painted.views import sparkline, sparkline_with_range
+
+block = sparkline([12, 15, 23, 45, 67], width=20)
+block = sparkline_with_range([12, 15, 23, 45, 67], width=20, min_val=0, max_val=100)
+```
+
+**Connects to:** Produces Blocks. Nested structures reduce zoom at each level. Source modules: `views/lens/chart.py`, `views/lens/flame.py`, `views/lens/shape.py`, `views/lens/tree.py`, `views/components/sparkline.py`.
+
+---
+
+## Components
+
+Stateful view elements. Pattern: frozen `State` dataclass + pure `render_fn(state, ...) → Block`. All importable from `painted.views`.
+
+| Import | State | Purpose |
+|--------|-------|---------|
+| `spinner, SpinnerState` | `SpinnerState(frame)` | Animated spinner |
+| `progress_bar, ProgressState` | `ProgressState(value, total)` | Horizontal progress bar |
+| `list_view, ListState` | `ListState(cursor, viewport)` — `.selected` property | Scrollable list with selection |
+| `table, TableState, Column` | `TableState(cursor, viewport)` — `.selected_row` property | Scrollable table with headers |
+| `text_input, TextInputState` | `TextInputState(text, cursor, scroll_offset)` | Single-line input with cursor |
+| `data_explorer, DataExplorerState` | `DataExplorerState(...)` | Interactive data browser for nested structures |
+
+```python
+from painted.views import spinner, SpinnerState, DOTS
+from painted.views import progress_bar, ProgressState
+from painted.views import data_explorer, DataExplorerState
+
+state = SpinnerState(frames=DOTS, frame=0)
+block = spinner(state)
+
+state = ProgressState(value=0.42)  # 0.0-1.0
+block = progress_bar(state, width=40)
+```
+
+State is owned by the caller. Update with `dataclasses.replace()`.
+
+**Visual effects:**
+
+```python
+from painted.views import render_big, BigTextFormat
+
+block = render_big("OK", style=Style(fg="green"))
+block = render_big("DONE", fmt=BigTextFormat.OUTLINE)
+```
+
+Source modules: `views/components/`, `views/big_text.py`.
 
 ---
 
@@ -220,9 +271,11 @@ Not a primitive, but essential for combining Blocks.
 |----------|-------------|
 | `join_horizontal(*blocks, gap=, align=)` | Left-to-right |
 | `join_vertical(*blocks, align=)` | Top-to-bottom |
+| `join_responsive(*blocks, available_width, gap=)` | Horizontal if blocks fit in available_width, else vertical |
 | `pad(block, left=, right=, top=, bottom=)` | Add spacing |
 | `border(block, chars=, style=, title=)` | Wrap with border |
 | `truncate(block, width)` | Clip with ellipsis |
+| `vslice(block, offset, visible)` | Vertical slice for scrolling |
 
 ```python
 panel = border(pad(content, left=1, right=1), title="Info")
@@ -230,3 +283,5 @@ layout = join_horizontal(sidebar, main, gap=1)
 ```
 
 **Align:** `Align.START`, `Align.CENTER`, `Align.END`
+
+All composition functions are importable directly from `painted`.
