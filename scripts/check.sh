@@ -1,7 +1,22 @@
 #!/usr/bin/env bash
-# DESC: Fast-fail gate: arch → lint → unit → golden
+# DESC: Fast-fail gate: arch → lint → smoke → unit → property → golden → outputgen
 # Usage: ./dev check [-v]
+#
+# Tiered staircase, ordered by cost × blast-radius — cheapest / most fundamental
+# failures abort first, so you never read noise from a downstream tier when the
+# foundation is broken:
+#   0. Static    arch invariants (AST only) + ty + ruff — no code executes
+#   1. Smoke     import every submodule (the cheapest test that can FAIL; arch
+#                only parses, never imports — this catches cycles / lazy-import rot)
+#   2. Unit      pure unit tests (arch excluded — it ran in tier 0)
+#   3. Property  Hypothesis laws (width-awareness, compose arithmetic, ...)
+#   4. Golden    appearance snapshots
+#   5. Outputgen demo → HTML → markdown integration
+# Budget (coverage ≥93%, perf, mutation) is intentionally NOT here — run `./dev cov`.
 source "$(dirname "$0")/lib/dev.sh"
+
+# Unit tier re-running the arch file would duplicate tier 0; skip it there.
+UNIT_ARGS=(tests/unit/ --ignore=tests/unit/test_architecture_invariants.py)
 
 main() {
     local verbose=0
@@ -27,8 +42,14 @@ main() {
         run_uv ty check src/
         run_uv ruff format --check src/ tests/
         echo ""
+        echo -e "${BOLD}=== Smoke ===${NC}"
+        run_uv pytest tests/smoke/ -v --tb=short
+        echo ""
         echo -e "${BOLD}=== Unit ===${NC}"
-        run_uv pytest tests/unit/ -v --tb=short
+        run_uv pytest "${UNIT_ARGS[@]}" -v --tb=short
+        echo ""
+        echo -e "${BOLD}=== Property ===${NC}"
+        run_uv pytest tests/property/ -v --tb=short
         echo ""
         echo -e "${BOLD}=== Golden ===${NC}"
         run_uv pytest tests/golden/ -v --tb=short
@@ -42,8 +63,14 @@ main() {
         step "Lint"
         run_uv ty check src/ > /dev/null 2>&1 && run_uv ruff format --check src/ tests/ > /dev/null 2>&1 && ok || { fail; run_uv ty check src/; run_uv ruff format --check src/ tests/; exit 1; }
 
+        step "Smoke"
+        run_uv pytest tests/smoke/ -q --tb=line > /dev/null 2>&1 && ok || { fail; run_uv pytest tests/smoke/ -q --tb=short; exit 1; }
+
         step "Unit"
-        run_uv pytest tests/unit/ -q --tb=line > /dev/null 2>&1 && ok || { fail; run_uv pytest tests/unit/ -q --tb=short; exit 1; }
+        run_uv pytest "${UNIT_ARGS[@]}" -q --tb=line > /dev/null 2>&1 && ok || { fail; run_uv pytest "${UNIT_ARGS[@]}" -q --tb=short; exit 1; }
+
+        step "Property"
+        run_uv pytest tests/property/ -q --tb=line > /dev/null 2>&1 && ok || { fail; run_uv pytest tests/property/ -q --tb=short; exit 1; }
 
         step "Golden"
         run_uv pytest tests/golden/ -q --tb=line > /dev/null 2>&1 && ok || { fail; run_uv pytest tests/golden/ -q --tb=short; exit 1; }

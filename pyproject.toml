@@ -30,6 +30,7 @@ Issues = "https://github.com/kgruel/painted/issues"
 
 [dependency-groups]
 dev = [
+    "hypothesis>=6.0",
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
     "pytest-cov>=6.0",
