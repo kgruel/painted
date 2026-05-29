@@ -7,7 +7,7 @@ argument introspection utilities.
 from __future__ import annotations
 
 import argparse
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -71,7 +71,7 @@ class HelpArg:
 # =============================================================================
 
 
-def help_args_to_flags(help_args: list[HelpArg]) -> tuple[HelpFlag, ...]:
+def help_args_to_flags(help_args: Sequence[HelpArg]) -> tuple[HelpFlag, ...]:
     """Convert HelpArgs to HelpFlags for rendering."""
     flags: list[HelpFlag] = []
     for arg in help_args:

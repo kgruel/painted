@@ -1,10 +1,15 @@
 from __future__ import annotations
 
 import ast
+import sys
 from dataclasses import is_dataclass
 from pathlib import Path
 
 import pytest
+
+
+def _painted_root() -> Path:
+    return Path(__file__).resolve().parents[2] / "src" / "painted"
 
 
 def _module_name_for_file(src_root: Path, py_file: Path) -> str:
@@ -325,3 +330,226 @@ def test_public_modules_do_not_import_private_symbols_from_siblings() -> None:
     assert not violations, "Public modules import private sibling symbols:\n" + "\n".join(
         violations
     )
+
+
+# =============================================================================
+# Invariant audit remediation guards (docs/plans/2026-05-29-invariant-audit-remediation.md)
+#
+# These mechanize three documented invariants the checks above did not cover.
+# Each is the generalized form: it catches the whole class, with an explicit
+# allowlist for deliberate exceptions, so a future regression fails loudly.
+# =============================================================================
+
+
+# --- Test A: zero runtime dependencies beyond the vetted exception ----------
+#
+# CLAUDE.md: "Zero runtime dependencies beyond wcwidth (the single vetted
+# exception)." wcwidth is the only third-party package painted may import at
+# runtime; everything else must be stdlib or painted itself. Type-only imports
+# under `if TYPE_CHECKING:` are exempt (they never execute at runtime).
+_ALLOWED_RUNTIME_DEPS = {"wcwidth"}
+
+
+def _is_type_checking_test(expr: ast.expr) -> bool:
+    if isinstance(expr, ast.Name):
+        return expr.id == "TYPE_CHECKING"
+    if isinstance(expr, ast.Attribute):
+        return expr.attr == "TYPE_CHECKING"
+    return False
+
+
+def _iter_runtime_imports(node: ast.AST):
+    """Yield Import/ImportFrom nodes that execute at runtime.
+
+    Descends into functions/classes (lazy imports count) but skips the body of
+    `if TYPE_CHECKING:` blocks, while still visiting their runtime else-branch.
+    """
+    for child in ast.iter_child_nodes(node):
+        if isinstance(child, ast.If) and _is_type_checking_test(child.test):
+            for sub in child.orelse:
+                yield from _iter_runtime_imports(sub)
+            continue
+        if isinstance(child, (ast.Import, ast.ImportFrom)):
+            yield child
+        yield from _iter_runtime_imports(child)
+
+
+def _runtime_top_packages(py_file: Path) -> set[str]:
+    tree = ast.parse(py_file.read_text(encoding="utf-8"), filename=str(py_file))
+    packages: set[str] = set()
+    for node in _iter_runtime_imports(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                packages.add(alias.name.split(".")[0])
+        elif isinstance(node, ast.ImportFrom):
+            # Relative imports (level > 0) are always painted-internal.
+            if node.level == 0 and node.module:
+                packages.add(node.module.split(".")[0])
+    return packages
+
+
+def test_runtime_imports_are_stdlib_or_allowlisted() -> None:
+    painted_root = _painted_root()
+    violations: list[str] = []
+    for py_file in sorted(painted_root.rglob("*.py")):
+        for pkg in sorted(_runtime_top_packages(py_file)):
+            if pkg in sys.stdlib_module_names:
+                continue
+            if pkg == "painted" or pkg in _ALLOWED_RUNTIME_DEPS:
+                continue
+            violations.append(f"{py_file.relative_to(painted_root.parent)} imports {pkg}")
+
+    assert not violations, (
+        "Non-stdlib runtime imports outside the allowlist "
+        f"{sorted(_ALLOWED_RUNTIME_DEPS)}:\n" + "\n".join(violations)
+    )
+
+
+# --- Test B: dataclasses frozen unless explicitly allowlisted as mutable -----
+#
+# Inverts the blind spot in test_state_dataclasses_declared_frozen (which only
+# inspects names ending in "State" or a hardcoded set). Here EVERY dataclass is
+# frozen-or-fail; only deliberately-mutable types are named.
+_MUTABLE_DATACLASSES = {
+    "FrameRecord",  # _timer.py — per-frame timing accumulator, mutated in place
+    "CliRunner",  # cli/runner.py — runtime parser cache + callable handler holder
+}
+
+
+def test_dataclasses_frozen_unless_allowlisted() -> None:
+    painted_root = _painted_root()
+    violations: list[str] = []
+    for py_file in painted_root.rglob("*.py"):
+        tree = ast.parse(py_file.read_text(encoding="utf-8"), filename=str(py_file))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.ClassDef):
+                continue
+            frozen = _dataclass_frozen_from_decorators(node)
+            # None => not a dataclass; True => frozen; False => mutable dataclass.
+            if frozen is False and node.name not in _MUTABLE_DATACLASSES:
+                violations.append(
+                    f"{py_file.relative_to(painted_root.parent)}: {node.name} "
+                    "is a dataclass but not frozen (add frozen=True, or allowlist "
+                    "if intentionally mutable)"
+                )
+
+    assert not violations, "Non-frozen dataclasses outside the allowlist:\n" + "\n".join(violations)
+
+
+# --- Test C: frozen dataclasses must guard mutable-collection fields ---------
+#
+# A frozen dataclass storing a caller-supplied list/dict/set is still mutable
+# through that reference (cf. test_block_defensively_freezes_rows). Such a field
+# must be coerced to an immutable form in __post_init__, OR be allowlisted when
+# true immutability is impractical. Fields declared init=False are internal
+# (caches) — not part of the constructor contract — so they're exempt.
+_MUTABLE_COLLECTION_HEADS = {
+    "list",
+    "dict",
+    "set",
+    "List",
+    "Dict",
+    "Set",
+    "Sequence",
+    "Mapping",
+    "MutableSequence",
+    "MutableMapping",
+}
+_FROZEN_FIELD_ALLOWLIST = {
+    # nested arbitrary structure produced internally by profile(); deep-freeze
+    # is impractical and a shallow proxy would fake immutability.
+    ("ProfileResult", "flame_dict"),
+}
+
+
+def _annotation_container_heads(ann: ast.expr) -> list[str]:
+    """Top-level container type names in an annotation (descends unions only)."""
+    if isinstance(ann, ast.BinOp) and isinstance(ann.op, ast.BitOr):
+        return _annotation_container_heads(ann.left) + _annotation_container_heads(ann.right)
+    if isinstance(ann, ast.Subscript):
+        head = ann.value
+        if isinstance(head, ast.Name):
+            return [head.id]
+        if isinstance(head, ast.Attribute):
+            return [head.attr]
+    if isinstance(ann, ast.Name):
+        return [ann.id]
+    if isinstance(ann, ast.Attribute):
+        return [ann.attr]
+    return []
+
+
+def _field_is_init_false(value: ast.expr | None) -> bool:
+    if not isinstance(value, ast.Call):
+        return False
+    func = value.func
+    is_field = (isinstance(func, ast.Name) and func.id == "field") or (
+        isinstance(func, ast.Attribute) and func.attr == "field"
+    )
+    if not is_field:
+        return False
+    return any(
+        kw.arg == "init" and isinstance(kw.value, ast.Constant) and kw.value.value is False
+        for kw in value.keywords
+    )
+
+
+def test_frozen_dataclasses_guard_mutable_collection_fields() -> None:
+    painted_root = _painted_root()
+    violations: list[str] = []
+    for py_file in painted_root.rglob("*.py"):
+        tree = ast.parse(py_file.read_text(encoding="utf-8"), filename=str(py_file))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.ClassDef):
+                continue
+            if _dataclass_frozen_from_decorators(node) is not True:
+                continue
+            # __post_init__ is the static proxy for "coerces its inputs".
+            has_post_init = any(
+                isinstance(m, ast.FunctionDef) and m.name == "__post_init__" for m in node.body
+            )
+            if has_post_init:
+                continue
+            for stmt in node.body:
+                if not isinstance(stmt, ast.AnnAssign) or not isinstance(stmt.target, ast.Name):
+                    continue
+                if _field_is_init_false(stmt.value):
+                    continue
+                field_name = stmt.target.id
+                if (node.name, field_name) in _FROZEN_FIELD_ALLOWLIST:
+                    continue
+                heads = _annotation_container_heads(stmt.annotation)
+                if any(h in _MUTABLE_COLLECTION_HEADS for h in heads):
+                    violations.append(
+                        f"{py_file.relative_to(painted_root.parent)}: "
+                        f"{node.name}.{field_name} is a mutable-collection field on a "
+                        "frozen dataclass without __post_init__ coercion (coerce to a "
+                        "tuple/immutable form, or allowlist)"
+                    )
+
+    assert not violations, (
+        "Unguarded mutable-collection fields on frozen dataclasses:\n" + "\n".join(violations)
+    )
+
+
+def test_frozen_collection_fields_defensively_copied() -> None:
+    """Runtime companion to Test C: caller-owned sequences are coerced to tuples.
+
+    Mirrors test_block_defensively_freezes_rows for the two types fixed in the
+    invariant-audit remediation.
+    """
+    from painted.cli import AppCommand
+    from painted.icon_set import IconSet
+    from painted.cli.help import HelpArg
+
+    args = [HelpArg(name="--since")]
+    cmd = AppCommand("log", "show log", lambda argv: 0, help_args=args)
+    assert isinstance(cmd.help_args, tuple)
+    args.append(HelpArg(name="--until"))
+    assert len(cmd.help_args) == 1  # caller mutation does not leak in
+
+    frames = ["a", "b", "c"]
+    icons = IconSet(spinner=frames)
+    assert isinstance(icons.spinner, tuple)
+    frames.append("d")
+    assert len(icons.spinner) == 3

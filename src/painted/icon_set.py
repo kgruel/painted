@@ -53,6 +53,13 @@ class IconSet:
     bar_fill: str = "█"
     bar_empty: str = "░"
 
+    def __post_init__(self) -> None:
+        # Coerce a caller-owned sequence to a tuple so this frozen value cannot
+        # be mutated through a retained reference (the value is indexed at
+        # render time, so post-construction mutation would be observable).
+        if not isinstance(self.spinner, tuple):
+            object.__setattr__(self, "spinner", tuple(self.spinner))
+
 
 ASCII_ICONS = IconSet(
     spinner=("-", "\\", "|", "/"),

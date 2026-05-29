@@ -131,8 +131,24 @@ def _ts_width(zoom: Zoom) -> int:
 _SUMMARY_KEYS = ("topic", "message", "name", "title", "summary", "description", "text")
 
 
+def _oneline(text: str) -> str:
+    """Collapse any embedded newlines so a summary stays a single line.
+
+    The PayloadLens/summary contract is single-line ("No multiline"). A raw
+    payload value (log/commit message, multi-line description) carrying a '\\n'
+    would otherwise be emitted into a single Block row as a literal control
+    character, breaking the gutter rail. Joining splitlines() with a space
+    keeps the gist on one line.
+    """
+    return " ".join(text.splitlines())
+
+
 def _default_payload_summary(kind: str, payload: dict) -> str:
     """Extract a one-line summary from payload using well-known keys."""
+    return _oneline(_payload_summary_raw(kind, payload))
+
+
+def _payload_summary_raw(kind: str, payload: dict) -> str:
     parts: list[str] = []
 
     # Kind-specific patterns
@@ -290,7 +306,11 @@ def record_line(
         for k, v in payload.items():
             if v is None or v == "":
                 continue
-            sv = str(v)
+            # DETAILED renders one truncated continuation line per field, so a
+            # multiline value must be collapsed — otherwise the embedded '\n'
+            # lands in a single row and breaks the gutter rail. (FULL splits
+            # into real rows instead; see below.)
+            sv = _oneline(str(v))
             if (
                 k in ("description", "message", "body", "response", "output")
                 or display_width(sv) > 40

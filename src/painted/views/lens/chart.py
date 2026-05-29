@@ -199,7 +199,10 @@ def _chart_bars_themed(
             val_text = f"{val:.4g}".rjust(value_col)
 
         row_text = lbl_text + bar + val_text
-        rows.append(Block.text(row_text[:width], Style(), width=width))
+        # Block.text truncates width-aware to `width`; a codepoint slice here
+        # ([:width]) would drop trailing content for emoji/combining-mark labels
+        # where len(row_text) > display width.
+        rows.append(Block.text(row_text, Style(), width=width))
 
     return join_vertical(*rows)
 

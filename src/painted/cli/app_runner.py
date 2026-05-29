@@ -19,7 +19,7 @@ from __future__ import annotations
 import json
 import shutil
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
 from .help import (
@@ -46,7 +46,13 @@ class AppCommand:
     description: str  # "Show store status"
     handler: Callable[[list[str]], int]  # receives argv[1:], returns exit code
     detail: str | None = None  # shown at DETAILED+ zoom, e.g. usage hint
-    help_args: list[HelpArg] | None = None  # when set, AppRunner intercepts -h
+    help_args: Sequence[HelpArg] | None = None  # when set, AppRunner intercepts -h
+
+    def __post_init__(self) -> None:
+        # Defensively coerce a caller-owned sequence to a tuple so this frozen
+        # value cannot be mutated through a retained reference (cf. Block).
+        if self.help_args is not None and not isinstance(self.help_args, tuple):
+            object.__setattr__(self, "help_args", tuple(self.help_args))
 
 
 @dataclass(frozen=True)

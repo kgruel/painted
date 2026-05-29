@@ -138,7 +138,7 @@ Key patterns:
 - `shape_lens` auto-dispatches by data shape: numeric → chart, hierarchical → tree, else built-in rendering.
 - Width-aware everywhere: wcwidth handles emoji/CJK. Display width ≠ `len()`.
 - Style is composable: `Style(fg="green", bold=True)`.
-- Zero runtime dependencies beyond standard library.
+- Zero runtime dependencies beyond `wcwidth` (the single vetted exception, for display-width measurement). Enforced by `test_runtime_imports_are_stdlib_or_allowlisted`.
 
 ## Documentation
 

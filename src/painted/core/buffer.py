@@ -11,7 +11,7 @@ from ._row_ops import blank_cell
 from .cell import EMPTY_CELL, Cell, Style
 
 
-@dataclass(slots=True)
+@dataclass(frozen=True, slots=True)
 class CellWrite:
     """A single cell change: position + new cell value."""
 

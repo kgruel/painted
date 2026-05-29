@@ -9,6 +9,7 @@ from ...core.block import Block
 from ...core.buffer import Buffer
 from ...core.cell import Style
 from ...core.compose import Align, truncate
+from ...core._text_width import display_width
 from ...cursor import Cursor
 from ...core.span import Line, Span
 from ...viewport import Viewport
@@ -144,8 +145,9 @@ def table(
     vp = state.viewport.with_visible(visible_height).with_content(len(rows))
     cursor = state.cursor.with_count(len(rows))
 
-    # Calculate total width: sum of column widths + separators
-    sep_width = len(separator)
+    # Calculate total width: sum of column widths + separators.
+    # Display columns, not codepoints — separator is caller-overridable via borders=.
+    sep_width = display_width(separator)
     total_width = sum(c.width for c in columns) + sep_width * (len(columns) - 1)
 
     # Total rows: header + separator + visible data
