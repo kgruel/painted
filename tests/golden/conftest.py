@@ -14,18 +14,9 @@ import pytest
 
 GOLDENS_DIR = Path(__file__).parent / "goldens"
 
-
-@pytest.fixture(autouse=True)
-def _reset_ambient():
-    """Reset icon/palette ContextVars so test order doesn't matter."""
-    from painted.icon_set import reset_icons
-    from painted.palette import reset_palette
-
-    reset_icons()
-    reset_palette()
-    yield
-    reset_icons()
-    reset_palette()
+# Ambient state (palette/icons/borders) is reset around every test by the
+# suite-wide `_reset_ambient_state` fixture in the root `tests/conftest.py`,
+# which also covers borders that the old local fixture here missed.
 
 
 @dataclass

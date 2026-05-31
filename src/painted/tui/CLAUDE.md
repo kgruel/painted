@@ -90,12 +90,14 @@ block.paint(view, 0, 0)  # paints at (5, 2) in buffer coordinates
 ```python
 from painted.tui import TestSurface, CapturedFrame
 
-surface = TestSurface(MyApp(), keys=["j", "j", "enter", "q"])
-frames: list[CapturedFrame] = surface.run()
+harness = TestSurface(MyApp(), width=20, height=5, input_queue=["j", "j", "enter", "q"])
+frames: list[CapturedFrame] = harness.run_to_completion()
 assert "expected text" in frames[-1].text
 ```
 
-`TestSurface` replays keys, captures frames and emissions. No real terminal needed.
+`TestSurface` replays the `input_queue` (keys and `MouseEvent`s) against a fixed
+`width`×`height` buffer, captures frames and emissions, and exposes each frame's
+diff in `frame.writes`. No real terminal needed.
 
 ## Exports
 

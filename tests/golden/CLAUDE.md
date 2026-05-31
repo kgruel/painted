@@ -87,8 +87,9 @@ which uses `SAMPLE_DISK` rather than calling `_fetch()`.
 
 - `conftest.py` — `Golden` class + `golden` fixture (auto-discovered by pytest)
 - `tests/helpers.py` — shared test utilities: `static_ctx(zoom)`, `block_to_text(block)`
-- `_reset_ambient` autouse fixture — resets icon/palette ContextVars before
-  each test so test execution order doesn't matter (demos can mutate these)
+- Ambient reset — the suite-wide `_reset_ambient_state` fixture in the root
+  `tests/conftest.py` resets palette/icons/borders before each test so test
+  execution order doesn't matter (demos can mutate these)
 - `--update-goldens` flag — registered in root `tests/conftest.py` (pytest
   requires early hook registration, before collection reaches subdirectories)
 - Demo imports use `importlib.util.spec_from_file_location` — no `sys.path`

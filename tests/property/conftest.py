@@ -12,28 +12,14 @@ from __future__ import annotations
 
 import os
 
-import pytest
 from hypothesis import HealthCheck, settings
 
-from painted import reset_borders, reset_icons, reset_palette
-
-
-@pytest.fixture(autouse=True)
-def _default_ambient_state():
-    """Pin palette/icons/borders to their defaults around every property test.
-
-    The width laws here are stated for the DEFAULT glyph set; a wide custom icon
-    or border could legitimately change a lens's output width. Without this, a
-    golden/unit test that sets ambient state globally and forgets to reset it
-    would make these properties order-dependent in a single-process run.
-    """
-    reset_palette()
-    reset_icons()
-    reset_borders()
-    yield
-    reset_palette()
-    reset_icons()
-    reset_borders()
+# Ambient state (palette/icons/borders) is reset around every test by the
+# suite-wide `_reset_ambient_state` fixture in the root `tests/conftest.py`.
+# The width laws here assume the DEFAULT glyph set, so that reset is what keeps
+# them order-independent — it just lives one level up now. Note that reset is
+# per-test, not per-Hypothesis-example: a @given body must not leave ambient
+# state mutated across examples — wrap any such mutation in a `with use_*(...)`.
 
 
 settings.register_profile(

@@ -12,7 +12,8 @@
 #   3. Property  Hypothesis laws (width-awareness, compose arithmetic, ...)
 #   4. Golden    appearance snapshots
 #   5. Outputgen demo → HTML → markdown integration
-# Budget (coverage ≥93%, perf, mutation) is intentionally NOT here — run `./dev cov`.
+# Budget (coverage, perf, mutation) is intentionally NOT here — run `./dev cov`.
+# Coverage is informational and not gated (no --cov-fail-under floor today).
 source "$(dirname "$0")/lib/dev.sh"
 
 # Unit tier re-running the arch file would duplicate tier 0; skip it there.

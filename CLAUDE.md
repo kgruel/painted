@@ -23,7 +23,7 @@ painted is consumed by every app in the monorepo. It doesn't know about loops co
 ./dev check              # success gate: arch → ty + format → unit → golden
 ./dev test [-v]          # pytest wrapper, passthrough args
 ./dev lint               # ty check + ruff format check
-./dev cov [--html]       # coverage report (target: ≥93%)
+./dev cov [--html]       # coverage report (not gated — informational; ~88% today)
 ./dev fmt                # auto-format (ruff)
 ```
 
@@ -134,6 +134,7 @@ Key patterns:
 ## Key invariants
 
 - All state types frozen. Components follow `State + render_fn(state, ...) → Block`.
+- **Stability tiers** (one package, differential guarantees): `painted.core` + `painted.views` are the **semver-stable** library surface — a renderer is a thing you *call*, so its surface is held maximally stable. Removing or renaming any name in their `__all__` is a semver-MAJOR break, guarded by `tests/unit/test_public_api.py` (additions are fine — extend the snapshot when you intend to commit to them). `painted.cli` + `painted.tui` are the **evolving** framework surface — they *call you*, and churn as apps' needs change. This resolves the library-vs-framework version tension without splitting the package.
 - Surface diff-renders: only changed cells written to terminal.
 - `shape_lens` auto-dispatches by data shape: numeric → chart, hierarchical → tree, else built-in rendering.
 - Width is a two-part contract, both tested in `tests/property/`. **Width-aware**: wcwidth measures display columns, so display width ≠ `len()` (emoji/CJK). **Honors width**: a passed `width` is *exact* (`block.width == width`) — content reflows to more rows rather than overflowing horizontally; omit `width` for natural (content) sizing. Exactness is what lets composition subdivide a width budget and trust the pieces tile. `fit_to_width` is the block-level realization.
