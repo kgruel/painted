@@ -394,6 +394,26 @@ def truncate(block: Block, width: int, ellipsis: str = "…") -> Block:
     return Block(rows, width, ids=ids_rows)
 
 
+def fit_to_width(block: Block, width: int) -> Block:
+    """Resize a block to EXACTLY ``width`` columns.
+
+    Truncate (with ellipsis) if wider, pad with spaces on the right if narrower,
+    identity if already exact. The block-level realization of painted's width
+    contract — a passed width is exact (see docs/PRIMITIVES.md). Height is
+    unchanged: this is a horizontal-only fit, so it clips rather than reflows. To
+    grow height instead of clipping, wrap the content first via
+    ``Block.text(..., width=width, wrap=...)`` (which pads each wrapped row to
+    width), then this is a no-op. Dissolves to ``compose(truncate, pad)``.
+    """
+    if width < 0:
+        width = 0
+    if block.width == width:
+        return block
+    if block.width > width:
+        return truncate(block, width)
+    return pad(block, right=width - block.width)
+
+
 def vslice(block: Block, offset: int, height: int) -> Block:
     """Extract a vertical slice of rows [offset, offset+height) from a block.
 

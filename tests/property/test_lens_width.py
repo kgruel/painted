@@ -1,20 +1,16 @@
 """Property tier — lens width contract (generalizes the seeded chart regression).
 
-Every lens must honor its width budget for ALL data shapes and zoom levels:
-`lens(data, zoom=z, width=w).width == w`. Lenses build via join_* and manual
-`Block(row, width)` on recursive calls, so a width-loss bug is plausible and
-invisible to the constructor (which would instead raise — still caught here, as
-an error rather than an assertion).
-
-Empirically established carve-out: shape_lens over a LIST at zoom>=2 floors its
-width at 3, so the universal law is asserted for width>=3; the sub-3 floor is
-documented separately as a regression guard.
+Every lens honors width EXACTLY for ALL data shapes and zoom levels:
+`lens(data, zoom=z, width=w).width == w` for w>=1. Lenses build via join_* and
+manual `Block(row, width)` on recursive calls, so a width-loss (under-fill) or
+width-gain (overflow) bug is plausible and invisible to the constructor (which
+would instead raise on a ragged row — still caught here, as an error). This is
+the "honors width" half of painted's width contract (see docs/PRIMITIVES.md).
 """
 
 from __future__ import annotations
 
-import pytest
-from hypothesis import given
+from hypothesis import example, given
 from hypothesis import strategies as st
 
 from painted.views import chart_lens, flame_lens, shape_lens, tree_lens
@@ -91,33 +87,18 @@ def test_flame_lens_honors_width(data, z: int, w: int) -> None:
 @given(
     data=_shape_data,
     z=st.integers(min_value=0, max_value=3),
-    w=st.integers(min_value=8, max_value=80),
+    w=st.integers(min_value=1, max_value=80),
 )
+# The gate runs derandomize=True (no exploration), so the narrow-width corners the
+# old floor guards covered must be PINNED — sampling will not re-find them. These
+# four are the exact inputs that overflowed (string list -> 3, nested list -> 5);
+# w=4 nested is the closest miss (5 vs 4), the highest-teeth example.
+@example(data=["x", "y", "z"], z=2, w=1)
+@example(data=["x", "y", "z"], z=3, w=2)
+@example(data=[[None]], z=3, w=1)
+@example(data=[[None]], z=3, w=4)
 def test_shape_lens_honors_width(data, z: int, w: int) -> None:
-    # Domain w>=8: shape_lens dispatches by shape and floors the width at a small
-    # structure-dependent minimum (max observed 5, for a nested list at zoom 3 —
-    # see the floor guards below). Above that floor it honors width exactly; w>=8
-    # clears it with margin. The sub-floor behavior is pinned deterministically.
+    # Exact for every shape down to width 1. The list branch used to overflow its
+    # budget at narrow widths by summing an unbudgeted "- " prefix onto floored
+    # content; the contract is now exact, enforced here with no carve-out.
     assert shape_lens(data, zoom=z, width=w).width == w
-
-
-@pytest.mark.parametrize("z", [2, 3])
-@pytest.mark.parametrize("w", [1, 2])
-def test_shape_lens_string_list_floors_width_at_three(z: int, w: int) -> None:
-    """KNOWN EDGE: a list of strings renders via a path with a 3-column floor, so it
-    does NOT honor sub-3 widths (integer lists DO — they route to the chart lens).
-
-    Deterministic regression guard: documents the floor and fails loudly if it is
-    ever fixed (so this marker can be removed) or changed.
-    """
-    assert shape_lens(["x", "y", "z"], zoom=z, width=w).width == 3
-
-
-@pytest.mark.parametrize("w", [1, 2, 3, 4])
-def test_shape_lens_nested_list_floors_width_at_five(w: int) -> None:
-    """KNOWN EDGE: a nested list at zoom 3 floors its width at 5 (the deepest floor
-    shape_lens exhibits; it saturates there regardless of nesting depth).
-
-    Deterministic regression guard, companion to the string-list floor above.
-    """
-    assert shape_lens([[None]], zoom=3, width=w).width == 5

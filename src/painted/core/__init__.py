@@ -24,6 +24,7 @@ __all__ = [
     "pad",
     "border",
     "truncate",
+    "fit_to_width",
     "vslice",
     # Borders
     "BorderChars",
@@ -64,6 +65,7 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "pad": (".compose", "pad"),
     "border": (".compose", "border"),
     "truncate": (".compose", "truncate"),
+    "fit_to_width": (".compose", "fit_to_width"),
     "vslice": (".compose", "vslice"),
     "BorderChars": (".borders", "BorderChars"),
     "ROUNDED": (".borders", "ROUNDED"),

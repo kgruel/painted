@@ -10,6 +10,8 @@ A single registered profile keeps runs deterministic-ish and CI-stable:
 
 from __future__ import annotations
 
+import os
+
 import pytest
 from hypothesis import HealthCheck, settings
 
@@ -46,5 +48,12 @@ settings.register_profile(
     # not a sign of a broken strategy.
     suppress_health_check=[HealthCheck.too_slow],
 )
-settings.register_profile("thorough", max_examples=1000, deadline=None)
-settings.load_profile("painted")
+settings.register_profile(
+    "thorough",
+    max_examples=1000,
+    deadline=None,
+    suppress_health_check=[HealthCheck.too_slow],
+)
+# Honor HYPOTHESIS_PROFILE so the documented `thorough` sweep is actually reachable
+# (it was registered but never loaded — load_profile was hardcoded to "painted").
+settings.load_profile(os.environ.get("HYPOTHESIS_PROFILE", "painted"))
