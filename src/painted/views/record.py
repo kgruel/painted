@@ -21,9 +21,9 @@ from collections.abc import Callable
 from datetime import datetime
 from typing import Protocol
 
-from ..core.block import Block
+from ..core.block import Block, Wrap
 from ..core.cell import Style
-from ..core.compose import join_horizontal, join_vertical, pad, truncate
+from ..core.compose import fit_to_width, join_horizontal, join_vertical, pad, truncate
 from ..core.zoom import Zoom
 from ..palette import current_palette
 from ..core._text_width import display_width, truncate_ellipsis
@@ -245,7 +245,10 @@ def record_line(
 
     # Calculate content width
     meta_width = ts_w + display_width(label_text) + 3  # 3 = "[] " around label + space after
-    content_width = max(width - meta_width, 10)
+    # Content budget = width remaining after meta. The assembled line is fitted to the
+    # exact requested width below (fit_to_width), so this only needs a positive floor —
+    # the old floor of 10 forced overflow when width < meta_width + 10.
+    content_width = max(width - meta_width, 1)
 
     # --- SUMMARY: single line ---
     if zoom <= Zoom.SUMMARY:
@@ -275,7 +278,8 @@ def record_line(
                 content_str = truncate_ellipsis(content_str, content_width)
             segments.append(Block.text(content_str, Style()))
 
-        return join_horizontal(*segments)
+        # Fit to exact width: pads a short summary, clips a meta-overflow at tiny widths.
+        return fit_to_width(join_horizontal(*segments), width)
 
     # --- DETAILED: summary + secondary fields on continuation lines ---
     if zoom <= Zoom.DETAILED:
@@ -320,7 +324,7 @@ def record_line(
                     field_text = truncate_ellipsis(field_text, width)
                 lines.append(Block.text(field_text, p.muted))
 
-        return join_vertical(*lines)
+        return fit_to_width(join_vertical(*lines), width)
 
     # --- FULL: ISO timestamp + every field on own line ---
     segments = []
@@ -330,31 +334,35 @@ def record_line(
     segments.append(Block.text(label_text, kind_s))
     segments.append(Block.text("] ", p.muted))
 
-    # Render lens content (Block or str) into the header. FULL shows complete
-    # values, so do not truncate.
+    # Render lens content (Block or str) into the header. The header is a summary;
+    # the complete values live in the per-field lines below, so the header is fitted
+    # (not grown) to the requested width.
     if isinstance(content, Block):
         segments.append(content)
     else:
         segments.append(Block.text(str(content), Style()))
 
-    header_line = join_horizontal(*segments)
+    header_line = fit_to_width(join_horizontal(*segments), width)
     lines = [header_line]
 
     # Shallow indent — gutter rail provides visual continuity to parent.
-    # FULL zoom: show complete values without truncation. Long lines may
-    # wrap in the terminal, but data completeness wins at this zoom level.
+    # FULL shows complete values; long lines WRAP to the exact width (grow height)
+    # rather than overflowing — data completeness AND width-exactness both hold.
     indent = "  "
     for k, v in payload.items():
         if v is None or v == "":
             continue
         sv = str(v)
-        # Split multiline values into individual lines
+        # Each value line wraps to the exact width; Wrap.WORD hard-breaks over-long
+        # tokens, so no data is lost.
         value_lines = sv.splitlines()
-        lines.append(Block.text(f"{indent}{k}: {value_lines[0]}", p.muted))
+        lines.append(
+            Block.text(f"{indent}{k}: {value_lines[0]}", p.muted, width=width, wrap=Wrap.WORD)
+        )
         for vl in value_lines[1:]:
-            lines.append(Block.text(vl, p.muted))
+            lines.append(Block.text(vl, p.muted, width=width, wrap=Wrap.WORD))
 
-    return join_vertical(*lines)
+    return fit_to_width(join_vertical(*lines), width)
 
 
 # ---------------------------------------------------------------------------
@@ -403,7 +411,8 @@ def record_timeline(
             indented = pad(line, left=2)
             all_blocks.append(indented)
 
-    return join_vertical(*all_blocks, gap=0)
+    # Date headers are natural-width; fit the stack to the exact requested width.
+    return fit_to_width(join_vertical(*all_blocks, gap=0), width)
 
 
 # ---------------------------------------------------------------------------
@@ -520,7 +529,10 @@ def record_line_composed(
     if gutter_fn:
         block = apply_gutter(block, kind, payload, gutter_fn)
 
-    return block
+    # Modifiers add unbudgeted columns (attention marker, gutter rail), so fit the
+    # composed result back to the exact requested width — the composer honors its own
+    # width arg even though the leaf was rendered into a reserved inner width.
+    return fit_to_width(block, width)
 
 
 # ---------------------------------------------------------------------------
@@ -644,7 +656,9 @@ def record_map(
         # Gap between top-level groups
         all_blocks.append(Block.text("", Style()))
 
-    return join_vertical(*all_blocks)
+    # Group/sub-group headers are natural-width and composed lines carry modifier
+    # columns; fit the assembled map to the exact requested width.
+    return fit_to_width(join_vertical(*all_blocks), width)
 
 
 # ---------------------------------------------------------------------------

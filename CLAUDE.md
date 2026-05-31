@@ -136,7 +136,7 @@ Key patterns:
 - All state types frozen. Components follow `State + render_fn(state, ...) → Block`.
 - Surface diff-renders: only changed cells written to terminal.
 - `shape_lens` auto-dispatches by data shape: numeric → chart, hierarchical → tree, else built-in rendering.
-- Width-aware everywhere: wcwidth handles emoji/CJK. Display width ≠ `len()`.
+- Width is a two-part contract, both tested in `tests/property/`. **Width-aware**: wcwidth measures display columns, so display width ≠ `len()` (emoji/CJK). **Honors width**: a passed `width` is *exact* (`block.width == width`) — content reflows to more rows rather than overflowing horizontally; omit `width` for natural (content) sizing. Exactness is what lets composition subdivide a width budget and trust the pieces tile. `fit_to_width` is the block-level realization.
 - Style is composable: `Style(fg="green", bold=True)`.
 - Zero runtime dependencies beyond `wcwidth` (the single vetted exception, for display-width measurement). Enforced by `test_runtime_imports_are_stdlib_or_allowlisted`.
 

@@ -10,7 +10,7 @@ if TYPE_CHECKING:
     from ...core.fidelity import Fidelity
 from ...core.block import Block
 from ...core.cell import Style
-from ...core.compose import join_horizontal, join_vertical
+from ...core.compose import fit_to_width, join_horizontal, join_vertical
 
 # Sampling limits for large data at zoom >= 2
 _MAX_DICT_ITEMS = 20
@@ -302,7 +302,9 @@ def _render_list(lst: list, zoom: int, width: int, fidelity: Fidelity | None = N
         footer = Block.text(f"... +{truncated} more", Style(dim=True), width=width)
         rows.append(footer)
 
-    return join_vertical(*rows)
+    # Fit to exact width: the "- " prefix can push a row past its budget at narrow
+    # widths; this clamps every row (and, via recursion, nested lists) to the contract.
+    return fit_to_width(join_vertical(*rows), width)
 
 
 def _render_set(s: set, zoom: int, width: int) -> Block:

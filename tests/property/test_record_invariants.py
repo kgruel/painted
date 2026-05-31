@@ -1,13 +1,15 @@
 """Property tier — record_line invariants (generalizes the seeded newline regression).
 
-CRITICAL: `record_line(...).width == width` is NOT universally true. At FULL the
-untruncated header grows past `width`; at SUMMARY/DETAILED a short summary
-under-fills (the content segment is `Block.text(content_str)` with no width arg).
-So the universally-quantified laws are:
-  (a) the block is always rectangular (every row == block.width),
-  (b) no embedded-newline cell at MINIMAL/SUMMARY/DETAILED, and FULL fans
+record_line honors width EXACTLY at every zoom: `record_line(...).width == width`
+(the "honors width" contract — see docs/PRIMITIVES.md). The universally-quantified
+laws are:
+  (a) width is exact at every zoom (block.width == width),
+  (b) the block is always rectangular (every row == block.width),
+  (c) no embedded-newline cell at MINIMAL/SUMMARY/DETAILED, and FULL fans
       multiline values into real rows,
-  (c) MINIMAL is a single row and honors width exactly (Block.text(width=width)).
+  (d) MINIMAL is a single row,
+  (e) FULL preserves complete data by WRAPPING wide values (grow height), not
+      truncating — a value wider than `width` survives in full at exact width.
 """
 
 from __future__ import annotations
@@ -22,6 +24,9 @@ from painted.views import (
     gutter_lifecycle,
     gutter_pass_fail,
     record_line,
+    record_line_composed,
+    record_map,
+    record_timeline,
 )
 
 from tests.helpers import block_to_text
@@ -105,6 +110,38 @@ def test_record_line_minimal_single_row_honors_width(kind, payload, width, ts) -
 
 
 @given(
+    zoom=st.sampled_from(list(Zoom)),
+    kind=st.sampled_from(_KINDS),
+    payload=_record_payloads(),
+    width=st.integers(min_value=10, max_value=80),
+    ts=st.datetimes(),
+)
+def test_record_line_honors_width_all_zoom(zoom, kind, payload, width, ts) -> None:
+    # The "honors width" contract: exact at EVERY zoom. Was false at
+    # SUMMARY/DETAILED (under-fill: content segment built with no width arg) and
+    # FULL (overflow: untruncated header/fields). See docs/PRIMITIVES.md.
+    b = record_line(ts, kind, payload, zoom, width)
+    assert b.width == width
+
+
+@given(
+    width=st.integers(min_value=30, max_value=70),
+    kind=st.sampled_from(_KINDS),
+    ts=st.datetimes(),
+)
+def test_record_line_full_wraps_wide_value_preserves_all_content(width, kind, ts) -> None:
+    # FULL = data completeness AT exact width: a value far wider than `width` must
+    # WRAP (grow height), never truncate. A "fit everything to width" fix that
+    # truncated would pass exact-width yet silently drop data — this test forces
+    # wrap, not truncate, by checking every marker char survives.
+    b = record_line(ts, kind, {"message": "Z" * 200}, Zoom.FULL, width)
+    assert b.width == width
+    for y in range(b.height):
+        assert len(b.row(y)) == b.width
+    assert block_to_text(b).count("Z") >= 200
+
+
+@given(
     block=no_id_blocks(min_w=1, max_h=10),
     kind=st.sampled_from(["task", "error"]),
     payload=_record_payloads(),
@@ -116,3 +153,65 @@ def test_apply_gutter_adds_two_columns(block, kind, payload, gutter_fn) -> None:
     assert r.height == block.height
     for y in range(r.height):
         assert len(r.row(y)) == r.width
+
+
+# --- Composition-level width law ---------------------------------------------
+# record_line is exact, but the COMPOSERS are where the real misalignment annoyances
+# live: apply_attention prepends an UNBUDGETED marker, apply_gutter adds 2, and
+# headers/pads are natural-width. Each composer must honor its own width arg — the
+# direct analog of the leaf law, one level up (where leaf-exactness does NOT just
+# "propagate" through untested composition).
+
+
+def _attn_high(kind: str, payload: dict) -> float:
+    return 0.9
+
+
+def _attn_mid(kind: str, payload: dict) -> float:
+    return 0.5
+
+
+def _attn_low(kind: str, payload: dict) -> float:
+    return 0.1
+
+
+_records_st = st.lists(
+    st.tuples(st.datetimes(), st.sampled_from(_KINDS), _record_payloads()),
+    min_size=1,
+    max_size=4,
+)
+
+
+@given(
+    zoom=st.sampled_from([Zoom.SUMMARY, Zoom.DETAILED, Zoom.FULL]),
+    kind=st.sampled_from(_KINDS),
+    payload=_record_payloads(),
+    width=st.integers(min_value=20, max_value=80),
+    ts=st.datetimes(),
+    attn=st.sampled_from([None, _attn_low, _attn_mid, _attn_high]),
+    gutter=st.sampled_from([None, gutter_lifecycle]),
+)
+def test_record_line_composed_honors_width(zoom, kind, payload, width, ts, attn, gutter) -> None:
+    b = record_line_composed(ts, kind, payload, zoom, width, gutter_fn=gutter, attention_fn=attn)
+    assert b.width == width
+
+
+@given(
+    zoom=st.sampled_from([Zoom.MINIMAL, Zoom.SUMMARY, Zoom.DETAILED, Zoom.FULL]),
+    records=_records_st,
+    width=st.integers(min_value=20, max_value=80),
+)
+def test_record_timeline_honors_width(zoom, records, width) -> None:
+    assert record_timeline(records, zoom, width).width == width
+
+
+@given(
+    zoom=st.sampled_from([Zoom.MINIMAL, Zoom.SUMMARY, Zoom.DETAILED, Zoom.FULL]),
+    records=_records_st,
+    width=st.integers(min_value=20, max_value=80),
+    attn=st.sampled_from([None, _attn_mid]),
+    gutter=st.sampled_from([None, gutter_lifecycle]),
+)
+def test_record_map_honors_width(zoom, records, width, attn, gutter) -> None:
+    b = record_map(records, zoom, width, gutter_fn=gutter, attention_fn=attn)
+    assert b.width == width

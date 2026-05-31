@@ -123,7 +123,7 @@ See `tui/CLAUDE.md` for the interactive app subsystem.
 ## Key invariants
 
 - **Frozen types**: all types are immutable. Create new instances, don't mutate.
-- **Width-aware**: wcwidth handles emoji/CJK. Display width ≠ `len()`.
+- **Width is a two-part contract**: *width-aware* — wcwidth measures display columns, so display width ≠ `len()`; *honors width* — a passed `width` is exact (`block.width == width`), content reflows to more rows rather than overflowing sideways, and omitting `width` sizes to content. Pass a width → get exactly that width.
 - **Style is composable**: `Style(fg="green", bold=True)`.
 - **Zoom propagates**: render functions receive zoom level, bifurcate detail.
 - **Format auto-detects**: TTY → ANSI, pipe → PLAIN.

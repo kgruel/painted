@@ -10,7 +10,7 @@ if TYPE_CHECKING:
 from ...core._text_width import display_width, truncate, truncate_ellipsis
 from ...core.block import Block
 from ...core.cell import Style
-from ...core.compose import join_horizontal, join_vertical
+from ...core.compose import fit_to_width, join_horizontal, join_vertical
 
 
 def _flame_palette_colors() -> tuple[str, ...]:
@@ -90,18 +90,23 @@ def flame_lens(
 
     if height is not None:
         # Vertical orientation
-        return _flame_render_vertical(segments, total, width, height, zoom, palette)
+        return fit_to_width(
+            _flame_render_vertical(segments, total, width, height, zoom, palette), width
+        )
 
     if zoom == 1:
-        # Single row: top-level segments only
-        return _flame_render_row(segments, total, width, palette=palette)
+        # Single row: top-level segments only. Floored proportional widths (and a
+        # val<=0 last segment) can sum to < width, so fit to the exact contract width.
+        return fit_to_width(_flame_render_row(segments, total, width, palette=palette), width)
 
     # zoom >= 2: expand children into additional rows
     rows: list[Block] = []
     _flame_render_levels(segments, total, width, zoom, rows=rows, palette=palette)
     if not rows:
         return Block.text("(no data)", Style(), width=width)
-    return join_vertical(*rows)
+    # Per-row widths can drift below width (floored allocation, skipped 0-width
+    # segments); fit the assembled rows to the exact contract width.
+    return fit_to_width(join_vertical(*rows), width)
 
 
 def _flame_extract(data: Any) -> list[tuple[str, Any]]:
