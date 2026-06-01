@@ -1,17 +1,19 @@
 #!/usr/bin/env bash
-# DESC: Fast-fail gate: arch → lint → smoke → unit → property → golden → outputgen
+# DESC: Fast-fail gate: arch → lint → smoke → unit → property → appearance → golden → outputgen
 # Usage: ./dev check [-v]
 #
 # Tiered staircase, ordered by cost × blast-radius — cheapest / most fundamental
 # failures abort first, so you never read noise from a downstream tier when the
 # foundation is broken:
-#   0. Static    arch invariants (AST only) + ty + ruff — no code executes
-#   1. Smoke     import every submodule (the cheapest test that can FAIL; arch
-#                only parses, never imports — this catches cycles / lazy-import rot)
-#   2. Unit      pure unit tests (arch excluded — it ran in tier 0)
-#   3. Property  Hypothesis laws (width-awareness, compose arithmetic, ...)
-#   4. Golden    appearance snapshots
-#   5. Outputgen demo → HTML → markdown integration
+#   0. Static     arch invariants (AST only) + ty + ruff — no code executes
+#   1. Smoke      import every submodule + demo/tour/slide liveness (cheapest tests
+#                 that can FAIL; arch only parses, never imports — catches cycle rot)
+#   2. Unit       pure unit tests (arch excluded — it ran in tier 0)
+#   3. Property   Hypothesis laws (width-awareness, compose arithmetic, writer totality)
+#   4. Appearance structured char+style snapshots (the styled-layer contract)
+#   5. Golden     legacy demo text snapshots (color-stripped; being retired by the
+#                 by-axis migration — see golden-migration-plan.md)
+#   6. Outputgen  demo → HTML → markdown integration
 # Budget (coverage, perf, mutation) is intentionally NOT here — run `./dev cov`.
 # Coverage is informational and not gated (no --cov-fail-under floor today).
 source "$(dirname "$0")/lib/dev.sh"
@@ -52,6 +54,9 @@ main() {
         echo -e "${BOLD}=== Property ===${NC}"
         run_uv pytest tests/property/ -v --tb=short
         echo ""
+        echo -e "${BOLD}=== Appearance ===${NC}"
+        run_uv pytest tests/appearance/ -v --tb=short
+        echo ""
         echo -e "${BOLD}=== Golden ===${NC}"
         run_uv pytest tests/golden/ -v --tb=short
         echo ""
@@ -72,6 +77,9 @@ main() {
 
         step "Property"
         run_uv pytest tests/property/ -q --tb=line > /dev/null 2>&1 && ok || { fail; run_uv pytest tests/property/ -q --tb=short; exit 1; }
+
+        step "Appearance"
+        run_uv pytest tests/appearance/ -q --tb=line > /dev/null 2>&1 && ok || { fail; run_uv pytest tests/appearance/ -q --tb=short; exit 1; }
 
         step "Golden"
         run_uv pytest tests/golden/ -q --tb=line > /dev/null 2>&1 && ok || { fail; run_uv pytest tests/golden/ -q --tb=short; exit 1; }

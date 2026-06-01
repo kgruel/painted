@@ -12,6 +12,12 @@ def pytest_addoption(parser):
         default=False,
         help="Regenerate golden files instead of comparing against them",
     )
+    parser.addoption(
+        "--update-appearance",
+        action="store_true",
+        default=False,
+        help="Regenerate appearance snapshots (structured char+style) instead of comparing",
+    )
 
 
 @pytest.fixture(autouse=True)

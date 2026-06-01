@@ -1,0 +1,30 @@
+{
+  "width": 14,
+  "height": 2,
+  "rows": [
+    [
+      {
+        "text": "PASS",
+        "fg": "green",
+        "bold": true
+      },
+      {
+        "text": " 12 世    "
+      }
+    ],
+    [
+      {
+        "text": "FAIL",
+        "fg": "red",
+        "reverse": true
+      },
+      {
+        "text": " 1 bad",
+        "dim": true
+      },
+      {
+        "text": "    "
+      }
+    ]
+  ]
+}
