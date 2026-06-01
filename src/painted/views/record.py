@@ -334,9 +334,13 @@ def record_line(
     segments.append(Block.text(label_text, kind_s))
     segments.append(Block.text("] ", p.muted))
 
-    # Render lens content (Block or str) into the header. The header is a summary;
-    # the complete values live in the per-field lines below, so the header is fitted
-    # (not grown) to the requested width.
+    # Render lens content (Block or str) into the header, fitted (not grown) to the
+    # requested width per the width-exact contract. For the default summary — and any
+    # PayloadLens deriving its summary from payload keys — fitting loses nothing: every
+    # value reappears verbatim in the per-field lines below. A custom PayloadLens that
+    # returns a *computed/aggregated* summary absent from payload.items() has no such
+    # field-line backstop, so its header can be clipped at narrow widths; aggregating
+    # lenses that need full-width headers should emit the aggregate as a payload field.
     if isinstance(content, Block):
         segments.append(content)
     else:
