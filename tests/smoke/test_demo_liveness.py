@@ -129,14 +129,27 @@ def test_app_demo_renders(rel: str, cls: str, keys: list[str]) -> None:
 
 
 def test_example_disk_renders() -> None:
-    """disk.py scans the real filesystem (open decision #4: included as-is, no-raise only).
+    """disk.py rendered against SYNTHETIC volumes — never the real filesystem.
 
-    We feed it real `_scan()` output rather than synthetic volumes so the liveness
-    check exercises the demo's actual construction path. It asserts only that the
-    scan + render does not raise — not any particular content.
+    Resolves open-decision #4: disk's `_scan()` walks real mounts following
+    symlinks, which is non-deterministic and can hang a gate (it did). DiskApp's
+    ctor seeds `current_entries` from `volumes[0]` and only re-scans on navigation,
+    so synthetic volumes + an immediate quit render the demo's view with zero FS
+    access. Liveness asserts the render path runs; the real scan is exercised by
+    running the demo, not the gate.
     """
     mod = _load("examples/disk.py")
-    volumes = mod._scan()
+    volumes = (
+        mod.Volume(
+            mount="/synthetic",
+            total_bytes=1_000_000,
+            used_bytes=400_000,
+            entries=(
+                mod.DirEntry("docs", 250_000, is_dir=True, children=()),
+                mod.DirEntry("notes.txt", 150_000),
+            ),
+        ),
+    )
     app = mod.DiskApp(volumes=volumes)
     frames = TestSurface(app, width=80, height=24, input_queue=["q"]).run_to_completion()
     assert frames, "examples/disk.py captured no frames"
