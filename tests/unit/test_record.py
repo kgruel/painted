@@ -603,6 +603,32 @@ class TestRecordLineComposed:
         text = block_to_text(block)
         assert "◆" in text
 
+    def test_attention_marker_reserves_its_own_columns(self):
+        """The marker's 2 cols are budgeted into inner_width; the final
+        fit_to_width is a no-op, never a clipper (regression: #3).
+
+        Buggy behavior rendered the base at the *full* width, prepended the 2-col
+        marker (overflowing to width+2), then re-fit — emitting a spurious '…'
+        over the padding for short content and clipping real content cells for
+        full-width content. The fix budgets the marker into inner_width, so the
+        composed content is exactly the inner-width render with the marker
+        prepended — nothing corrupted, nothing dropped.
+        """
+        width = 30
+        payload = {"message": "hello world"}  # fits within inner width
+        composed = record_line_composed(
+            _ts(),
+            "log",
+            payload,
+            Zoom.SUMMARY,
+            width,
+            attention_fn=lambda k, p: 1.0,  # score >= 0.7 → ◆ marker
+        )
+        base = record_line(_ts(), "log", payload, Zoom.SUMMARY, width - 2)
+        assert composed.width == width
+        assert block_to_text(composed) == "◆ " + block_to_text(base)
+        assert "…" not in block_to_text(composed)  # no spurious ellipsis on pad
+
     def test_with_gutter_and_attention(self):
         block = record_line_composed(
             _ts(),

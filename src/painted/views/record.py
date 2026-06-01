@@ -506,8 +506,18 @@ def record_line_composed(
     Composition order: record_line → attention → gutter (outside-in).
     Gutter is outermost because it's a visual frame.
     """
-    # Reserve width for gutter if present
-    inner_width = width - 2 if gutter_fn else width
+    # Reserve width for every modifier that prepends columns, so the composed
+    # block lands at exactly `width` and the final fit_to_width is a no-op rather
+    # than a right-edge clipper that would silently drop content cells.
+    gutter_cols = 2 if gutter_fn else 0
+
+    # The attention marker prepends 2 cols ("◆ " at score>=0.7, "  " at >=0.3).
+    # The <0.3 collapse path builds its own block at the passed width and prepends
+    # nothing, so it needs no reservation. attention_fn is a pure 0-1 score, so
+    # calling it here (and again inside apply_attention) is safe.
+    marker_cols = 2 if attention_fn and attention_fn(kind, payload) >= 0.3 else 0
+
+    inner_width = width - gutter_cols - marker_cols
 
     # Base render
     block = record_line(ts, kind, payload, zoom, inner_width, payload_lens=payload_lens)
@@ -529,9 +539,9 @@ def record_line_composed(
     if gutter_fn:
         block = apply_gutter(block, kind, payload, gutter_fn)
 
-    # Modifiers add unbudgeted columns (attention marker, gutter rail), so fit the
-    # composed result back to the exact requested width — the composer honors its own
-    # width arg even though the leaf was rendered into a reserved inner width.
+    # Modifiers prepend exactly the columns reserved above, so the composed block
+    # is already `width` wide. This fit is a defensive no-op that guarantees the
+    # composer honors its width arg — it must never clip content cells.
     return fit_to_width(block, width)
 
 
