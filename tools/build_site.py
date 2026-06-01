@@ -1,8 +1,22 @@
+"""Static docs-site generator — PAUSED pending a site redesign (2026-06-01).
+
+This emits only the five `site/docs/*.html` pages from the markdown guides. The
+site *shell* and assets (`site/index.html`, `style.css`, `site.js`, `.nojekyll`)
+used to be hand-maintained tracked files; `site/` is now untracked and gitignored,
+so this generator alone does NOT produce a deployable site — the generated pages
+link to shell assets that no longer exist in-tree.
+
+Kept as reference for the upcoming site redesign. Before relying on it again,
+either regenerate/copy the full shell + assets here, or replace this tooling. See
+the deploy note in CHANGELOG 0.2.0.
+"""
+
 from __future__ import annotations
 
 import argparse
 import html
 import re
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -281,6 +295,12 @@ def main(argv: list[str] | None = None) -> int:
     print("Wrote:")
     for p in rel:
         print(f"  - {p}")
+    print(
+        "\nWARNING: site tooling is PAUSED (see module docstring). These pages link "
+        "to site/index.html, style.css, site.js, and .nojekyll, which are no longer "
+        "tracked — the result is NOT a deployable site without the shell + assets.",
+        file=sys.stderr,
+    )
     return 0
 
 

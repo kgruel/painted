@@ -14,6 +14,10 @@ breaking changes.
   no longer resolve. **The public names are unchanged** — import them through the
   `painted.views` facade (e.g. `from painted.views import table, spinner, profile`),
   which has always been the supported path.
+- **Bundled static docs site.** `site/` is no longer tracked, and the site
+  generator (`tools/build_site.py`) is paused pending a redesign — it currently
+  emits only the docs pages and not the shell/assets, so it does not build a
+  deployable site on its own. The markdown sources under `docs/` are unchanged.
 
 ### Changed
 
