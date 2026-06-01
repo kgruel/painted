@@ -72,7 +72,7 @@ block.paint(buf, 5, 3)
 
 **Wrap modes:** `Wrap.NONE`, `Wrap.CHAR`, `Wrap.WORD`, `Wrap.ELLIPSIS`
 
-**Width contract** — a Block's `width` is **exact**. Pass `width=N` and the result is exactly `N` columns: shorter content is padded, longer content reflows to more rows; it never overflows horizontally. Omit `width` and the block sizes to its content (natural). Two distinct guarantees both hold and are easy to conflate: *width-aware* = wcwidth counts display columns (so `width != len()` for emoji/CJK); *honors width* = the output's width equals the width you requested. Exactness is what lets composition carve a budget (`60 + gutter + 60 = 124`) and trust the pieces tile with no gap or overflow, at any terminal size. `fit_to_width(block, w)` is the block-level realization (truncate if wide, pad if narrow).
+**Width contract** — a Block's `width` is **exact**. Pass `width=N` and the result is exactly `N` columns: shorter content is padded, longer content is clipped by default (pass `wrap=Wrap.CHAR`/`WORD` to reflow into more rows instead); it never overflows horizontally. Omit `width` and the block sizes to its content (natural). Two distinct guarantees both hold and are easy to conflate: *width-aware* = wcwidth counts display columns (so `width != len()` for emoji/CJK); *honors width* = the output's width equals the width you requested. Exactness is what lets composition carve a budget (`60 + gutter + 60 = 124`) and trust the pieces tile with no gap or overflow, at any terminal size. `fit_to_width(block, w)` is the block-level realization (truncate if wide, pad if narrow).
 
 **Connects to:** Composed via `join_horizontal`, `join_vertical`, `pad`, `border`, `truncate`, `fit_to_width`. Paints to Buffer/BufferView.
 

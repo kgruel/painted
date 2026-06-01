@@ -124,7 +124,7 @@ See `tui/CLAUDE.md` for the interactive app subsystem.
 
 - **Frozen types**: all types are immutable. Create new instances, don't mutate.
 - **Stability tiers**: `painted.core` and `painted.views` are the semver-stable surface — depend on them freely; names are not removed or renamed without a major version. `painted.cli` and `painted.tui` are the evolving framework surface and may change across minor versions. One install, differential guarantees.
-- **Width is a two-part contract**: *width-aware* — wcwidth measures display columns, so display width ≠ `len()`; *honors width* — a passed `width` is exact (`block.width == width`), content reflows to more rows rather than overflowing sideways, and omitting `width` sizes to content. Pass a width → get exactly that width.
+- **Width is a two-part contract**: *width-aware* — wcwidth measures display columns, so display width ≠ `len()`; *honors width* — a passed `width` is exact (`block.width == width`): too-wide content is clipped (padded if short) by default, or pass `wrap=Wrap.CHAR`/`WORD` to reflow into more rows; omit `width` for natural (content) sizing. Pass a width → get exactly that width.
 - **Style is composable**: `Style(fg="green", bold=True)`.
 - **Zoom propagates**: render functions receive zoom level, bifurcate detail.
 - **Format auto-detects**: TTY → ANSI, pipe → PLAIN.

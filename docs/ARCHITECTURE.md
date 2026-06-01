@@ -213,14 +213,14 @@ The source is organized into four subsystems. Layer boundaries are enforced by a
 | **views/lens/** | `flame.py` | flame_lens(data, zoom, width, ...) → Block |
 | **views/lens/** | `shape.py` | shape_lens(content, zoom, width) → Block (auto-dispatch) |
 | **views/lens/** | `tree.py` | tree_lens(data, zoom, width) → Block |
-| **views/components/** | `list_view.py` | ListState, list_view() |
-| **views/components/** | `table.py` | Column, TableState, table() |
-| **views/components/** | `spinner.py` | SpinnerState, spinner() |
+| **views/components/** | `_list_view.py` | ListState, list_view() |
+| **views/components/** | `_table.py` | Column, TableState, table() |
+| **views/components/** | `_spinner.py` | SpinnerState, spinner() |
 | **views/components/** | `progress.py` | ProgressState, progress_bar() |
-| **views/components/** | `sparkline.py` | sparkline(), sparkline_with_range() |
-| **views/components/** | `text_input.py` | TextInputState, text_input() |
-| **views/components/** | `data_explorer.py` | DataNode, DataExplorerState, data_explorer() |
-| **views/** | `profile.py` | profile(), parse_collapsed(), ProfileResult |
+| **views/components/** | `_sparkline.py` | sparkline(), sparkline_with_range() |
+| **views/components/** | `_text_input.py` | TextInputState, text_input() |
+| **views/components/** | `_data_explorer.py` | DataNode, DataExplorerState, data_explorer() |
+| **views/** | `_profile.py` | profile(), parse_collapsed(), ProfileResult |
 | **views/** | `big_text.py` | render_big(), BigTextFormat |
 | **tui/** | `surface.py` | Surface (base class), Emit, LifecycleHook |
 | **tui/** | `layer.py` | Layer, Stay, Pop, Push, Quit, process_key, render_layers |
