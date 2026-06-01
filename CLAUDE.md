@@ -20,7 +20,7 @@ painted is consumed by every app in the monorepo. It doesn't know about loops co
 **Trigger**: I need to make a change to painted.
 
 ```bash
-./dev check              # 7-tier gate: arch → lint → smoke → unit → property → appearance → outputgen
+./dev check              # 8-tier gate: arch → lint → smoke → unit → property → appearance → integration → outputgen
 ./dev test [-v]          # pytest wrapper, passthrough args
 ./dev lint               # ty check + ruff format check
 ./dev cov [--html]       # coverage report (not gated — informational; ~88% today)
@@ -43,7 +43,7 @@ painted is consumed by every app in the monorepo. It doesn't know about loops co
 
 2. **The CLI Framework** — argument parsing, context detection, mode dispatch, lifecycle management. Sits on top of the renderer. Connects user intent (`-v`, `--json`, pipe detection) to rendering.
 
-They live in one package because CLI and TUI are fidelity levels of the same lens — not different apps. But the boundary is real: `fidelity.py` has zero module-level imports from painted's rendering modules. All imports are lazy, inside functions.
+They live in one package because CLI and TUI are fidelity levels of the same lens — not different apps. But the boundary is real: `core/fidelity.py` has zero module-level imports from painted's rendering modules. All imports are lazy, inside functions.
 
 **The Renderer** (bottom to top):
 
@@ -57,8 +57,8 @@ writer / InPlaceRenderer    # delivery: dump to stdout or cursor-controlled rewr
 **The CLI Framework** (on top of the renderer):
 
 ```
-fidelity.py                 # run_cli — zoom/mode/format parsing, context detection, dispatch
-app_runner.py               # run_app — multi-command routing through run_cli
+core/fidelity.py            # run_cli — zoom/mode/format parsing, context detection, dispatch
+cli/app_runner.py           # run_app — multi-command routing through run_cli
 ```
 
 **The TUI Subsystem** (a separate interactive delivery mechanism):
@@ -71,20 +71,20 @@ Surface + Layer             # alt-screen TUI with keyboard + diff rendering
 
 | Concern | Module | Responsibility |
 |---------|--------|---------------|
-| Renderer | `cell.py` | Cell, Style, EMPTY_CELL |
-| Renderer | `span.py` | Span, Line |
-| Renderer | `block.py` | Block, Wrap |
-| Renderer | `compose.py` | join, pad, border, truncate, Align |
-| Renderer | `writer.py` | Writer, ColorDepth, print_block |
+| Renderer | `core/cell.py` | Cell, Style, EMPTY_CELL |
+| Renderer | `core/span.py` | Span, Line |
+| Renderer | `core/block.py` | Block, Wrap |
+| Renderer | `core/compose.py` | join, pad, border, truncate, Align |
+| Renderer | `core/writer.py` | Writer, ColorDepth, print_block |
 | Renderer | `inplace.py` | InPlaceRenderer |
 | Renderer | `palette.py` | Palette (5 semantic Style roles), presets |
 | Renderer | `icon_set.py` | IconSet (glyph vocabulary), ASCII fallback |
-| Renderer | `_record.py` | record_line, PayloadLens, GutterFn |
-| Renderer | `_lens.py` | shape_lens, tree_lens, chart_lens, flame_lens |
-| Renderer | `_components/` | Stateful view components (spinner, progress, list, table, etc.) |
+| Renderer | `views/record.py` | record_line, PayloadLens, GutterFn |
+| Renderer | `views/lens/` | shape_lens, tree_lens, chart_lens, flame_lens |
+| Renderer | `views/components/` | Stateful view components (spinner, progress, list, table, etc.) |
 | Renderer | `views/` | Public view-layer namespace (re-exports lenses + components) |
-| Framework | `fidelity.py` | Zoom, OutputMode, Format, CliContext, run_cli |
-| Framework | `app_runner.py` | AppCommand, run_app (multi-command dispatch) |
+| Framework | `core/fidelity.py` | Zoom, OutputMode, Format, CliContext, run_cli |
+| Framework | `cli/app_runner.py` | AppCommand, run_app (multi-command dispatch) |
 | TUI | `tui/` | Surface, Layer, Focus, Search, Buffer, KeyboardInput |
 
 **Don't reach for yet**: record_line internals, TUI subsystem, mouse protocol.
@@ -95,20 +95,20 @@ Surface + Layer             # alt-screen TUI with keyboard + diff rendering
 
 **Trigger**: I need to modify rendering behavior, the CLI harness, or a component.
 
-**`run_cli` flow** (`fidelity.py`):
+**`run_cli` flow** (`core/fidelity.py`):
 1. Create `CliRunner(render, fetch, ...)` internally
 2. Intercept `-h`/`--help` → painted help with zoom awareness
 3. Parse framework args (`-q`, `-v`, `-vv`, `--json`, `--plain`, `--static`, `--live`, `-i`)
 4. `detect_context()` resolves Zoom/Mode/Format from args and TTY state
 5. Dispatch by mode: STATIC (`print_block`) → LIVE (`InPlaceRenderer`) → INTERACTIVE (custom handler)
 
-**`record_line` pattern** (`_record.py`):
+**`record_line` pattern** (`views/record.py`):
 - `record_line()` owns structure, `PayloadLens` interprets domain content
 - Lens contract: return summary (str or styled Block). No multiline.
 - `record_line` handles continuation lines at DETAILED (well-known keys) and FULL (all fields)
 - Gutter contract: continuous vertical rail, never breaks. Color encodes ONE dimension.
 
-**Component pattern** (`_components/`):
+**Component pattern** (`views/components/`):
 - Frozen `State` dataclass + pure `render_fn(state, ...) → Block`
 - State created via constructor, updated via `dataclasses.replace()`
 - Components are stateless renderers — the caller owns state transitions
@@ -121,7 +121,7 @@ Surface + Layer             # alt-screen TUI with keyboard + diff rendering
 
 **Trigger**: I need to modify the full-screen interactive subsystem.
 
-See `tui/CLAUDE.md` for the interactive app primitives (Surface, Layer, Focus, Search). See `views/CLAUDE.md` for the data rendering components. See `_components/CLAUDE.md` for internal implementation details.
+See `tui/CLAUDE.md` for the interactive app primitives (Surface, Layer, Focus, Search). See `views/CLAUDE.md` for the data rendering components. See `views/components/CLAUDE.md` for internal implementation details.
 
 Key patterns:
 - Surface diff-renders: only changed cells written to terminal
