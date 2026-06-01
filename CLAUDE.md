@@ -20,7 +20,7 @@ painted is consumed by every app in the monorepo. It doesn't know about loops co
 **Trigger**: I need to make a change to painted.
 
 ```bash
-./dev check              # 8-tier gate: arch → lint → smoke → unit → property → appearance → integration → outputgen
+./dev check              # 9-tier gate: arch → lint → smoke → unit → property → appearance → integration → cohesion → outputgen
 ./dev test [-v]          # pytest wrapper, passthrough args
 ./dev lint               # ty check + ruff format check
 ./dev cov [--html]       # coverage report (not gated — informational; ~88% today)

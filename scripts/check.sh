@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# DESC: Fast-fail gate: arch → lint → smoke → unit → property → appearance → integration → outputgen
+# DESC: Fast-fail gate: arch → lint → smoke → unit → property → appearance → integration → cohesion → outputgen
 # Usage: ./dev check [-v]
 #
 # Tiered staircase, ordered by cost × blast-radius — cheapest / most fundamental
@@ -13,7 +13,12 @@
 #   4. Appearance structured char+style snapshots (the styled-layer contract; the
 #                 successor to the retired demo-text goldens — see golden-migration-plan.md)
 #   5. Integration end-to-end run_cli/run_app dispatch through the real CLI path
-#   6. Outputgen  demo → HTML → markdown integration
+#   6. Cohesion   the WHOLE suite in ONE process — tiers 1-5 run in separate pytest
+#                 processes, so a cross-test leak (sys.modules / lazy-facade / ContextVar
+#                 pollution) can be green per-tier yet red in the single-process run that
+#                 `./dev test`, CI, and IDEs actually do. This backstop is redundant by
+#                 design: it re-runs everything to assert the tiers cohere as one process.
+#   7. Outputgen  demo → HTML → markdown integration
 # Budget (coverage, perf, mutation) is intentionally NOT here — run `./dev cov`.
 # Coverage is informational and not gated (no --cov-fail-under floor today).
 source "$(dirname "$0")/lib/dev.sh"
@@ -60,6 +65,9 @@ main() {
         echo -e "${BOLD}=== Integration ===${NC}"
         run_uv pytest tests/integration/ -v --tb=short
         echo ""
+        echo -e "${BOLD}=== Cohesion (whole suite, one process) ===${NC}"
+        run_uv pytest tests/ --tb=short
+        echo ""
         echo -e "${BOLD}=== Outputgen ===${NC}"
         run_uv python -m tools.outputgen --check
     else
@@ -83,6 +91,9 @@ main() {
 
         step "Integration"
         run_uv pytest tests/integration/ -q --tb=line > /dev/null 2>&1 && ok || { fail; run_uv pytest tests/integration/ -q --tb=short; exit 1; }
+
+        step "Cohesion"
+        run_uv pytest tests/ -q --tb=line > /dev/null 2>&1 && ok || { fail; run_uv pytest tests/ -q --tb=short; exit 1; }
 
         step "Outputgen"
         run_uv python -m tools.outputgen --check > /dev/null 2>&1 && ok || { fail; run_uv python -m tools.outputgen --check; exit 1; }
