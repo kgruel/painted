@@ -1,9 +1,0 @@
-[
-  { "step": "Bug 1: Fix display.py:102 ASCII icon override condition", "done": true },
-  { "step": "Bug 2: Fix record.py:294 use display_width for threshold", "done": true },
-  { "step": "Bug 3: Fix chart.py:182 display-width-aware ljust", "done": true },
-  { "step": "Bug 4: Fix tree.py:174,199 use take_row_prefix", "done": true },
-  { "step": "Bug 5: Fix _timer.py:45 dead conditional", "done": true },
-  { "step": "Run ./dev check", "done": true },
-  { "step": "Commit", "done": false }
-]

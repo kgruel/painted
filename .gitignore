@@ -15,3 +15,8 @@ htmlcov/
 HANDOFF.md
 LOG.md
 .loops/
+docs/dev/
+.hypothesis/
+.ruff_cache/
+site/
+tapes/
