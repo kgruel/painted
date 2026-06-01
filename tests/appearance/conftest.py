@@ -108,12 +108,26 @@ class Appearance:
 
         path = SNAPSHOTS_DIR / self.test_module / self.test_name / f"{name}.json"
 
-        if not path.exists() or self.update:
+        if self.update:
+            # Explicit regeneration (--update): write and pass.
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(text)
-            if not self.update:
-                return  # first run — bootstrap, pass
             return
+
+        if not path.exists():
+            # Bootstrap a missing snapshot as a reviewable artifact, then FAIL.
+            # Auto-passing here would let a new scenario, a typo'd name=, or a
+            # deleted snapshot go green on first run with no red→green transition
+            # proving the assertion binds — breaking "git diff is the review".
+            # Writing then failing yields the artifact AND the proof: review the
+            # new <name>.json, commit it, re-run to green.
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(text)
+            pytest.fail(
+                f"Appearance snapshot bootstrapped (first run): {path}\n"
+                f"Review the new snapshot and re-run — it must transition red→green "
+                f"to prove the assertion binds. Use --update to regenerate silently."
+            )
 
         expected = path.read_text()
         if text != expected:
