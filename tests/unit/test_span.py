@@ -4,6 +4,30 @@ from painted import Line, Span, Style
 from painted.tui import Buffer
 
 
+class TestStyleMerge:
+    """Style.merge precedence — overlay wins on set fields, base attrs survive.
+
+    `base.merge(overlay)`: color fields take overlay when overlay sets them
+    (non-None), else keep base; boolean attrs are OR'd, so a base attribute is
+    never dropped by an overlay that simply doesn't set it. This is the rule the
+    cell.py demo exercised; pinned here directly instead of via a stripped golden.
+    """
+
+    def test_overlay_overrides_color_attrs_applied_base_bold_survives(self):
+        base = Style(fg="blue", bold=True)
+        overlay = Style(fg="red", italic=True)
+        merged = base.merge(overlay)
+        assert merged.fg == "red"  # overlay color wins
+        assert merged.italic  # overlay attribute applied
+        assert merged.bold  # base attribute retained (OR semantics)
+        assert merged.bg is None  # neither set bg
+
+    def test_overlay_unset_color_keeps_base(self):
+        merged = Style(fg="green").merge(Style(bold=True))
+        assert merged.fg == "green"  # overlay left fg=None -> base kept
+        assert merged.bold
+
+
 class TestSpanWidth:
     def test_ascii(self):
         assert Span("hello").width == 5

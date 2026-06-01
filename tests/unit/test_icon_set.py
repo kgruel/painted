@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import dataclasses
+
 import pytest
 
 from painted.icon_set import (
@@ -75,3 +77,18 @@ def test_reset_icons_restores_default():
     use_icons(ASCII_ICONS)
     reset_icons()
     assert current_icons().check == "✓"
+
+
+def test_ascii_icons_are_pure_ascii():
+    """Every glyph in ASCII_ICONS is <=127 — the capability-fallback guarantee.
+
+    ASCII_ICONS exists so painted renders on terminals that can't show Unicode;
+    a single non-ASCII glyph sneaking into a slot would silently defeat that.
+    Asserted at the source value (not via a rendered canary) so it's order- and
+    render-path-independent.
+    """
+    for field in dataclasses.fields(ASCII_ICONS):
+        value = getattr(ASCII_ICONS, field.name)
+        glyphs = value if isinstance(value, (tuple, list)) else [value]
+        for glyph in glyphs:
+            assert glyph.isascii(), f"ASCII_ICONS.{field.name}={glyph!r} is not ASCII"
