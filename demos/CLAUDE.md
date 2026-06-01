@@ -35,7 +35,10 @@ Three tiers, distinguished by where state lives and how you test them.
 Output via `print_block` / `show`. The output is the lesson.
 
 **Patterns** are runnable examples with CLI flags — the invocation IS the lesson.
-They expose `_fetch()` and `_render(ctx, data) → Block` for golden testing.
+They expose `_fetch()` and `_render(ctx, data) → Block`, exercised by the liveness
+smoke (`tests/smoke/test_demo_liveness.py`) — every pattern renders at every zoom
+without raising. Styled/invariant contracts live in the appearance/property tiers,
+not in per-demo snapshots.
 A pattern may offer `-i` interactive mode **only** when it's a live frame around
 the same `_render` function (e.g. responsive.py). If `-i` introduces new state
 or its own render pipeline, it's an app.
@@ -76,7 +79,8 @@ patterns/
   help.py           Zoom-aware help: HelpData rendered at each zoom level ✓
 
 apps/
-  (not yet graduated to golden tests — needs TestSurface integration)
+  (behavior graduated to tests/unit/test_*_app.py — TestSurface drives keys,
+   tests assert app state + emissions, not frame-text snapshots)
 
 examples/
   disk.py           Real filesystem disk usage visualization    ✓
