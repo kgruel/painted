@@ -7,7 +7,7 @@ semantics (terminal columns), not code-point counts.
 from __future__ import annotations
 
 from painted import Block, Style, Wrap, border
-from painted.views.components.text_input import TextInputState, text_input
+from painted.views import TextInputState, text_input
 from painted.core._text_width import display_width
 from painted.core.block import _word_wrap
 

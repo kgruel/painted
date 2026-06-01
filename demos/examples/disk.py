@@ -27,7 +27,7 @@ import time
 from dataclasses import dataclass
 
 from painted import Block, Style
-from painted.views.components.spinner import SpinnerState
+from painted.views import SpinnerState
 from painted.inplace import InPlaceRenderer
 from painted.core.buffer import BufferView
 from painted.tui import Region

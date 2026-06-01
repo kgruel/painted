@@ -87,9 +87,9 @@ The flame graph answers "where does time go?" at a glance:
 
 ## Background: Why This Exists
 
-`flame_lens` is a composable `(data, zoom, width) -> Block` renderer, but without an intake path you had to hand-build the nested dict. `views/profile.py` closes that gap: cProfile data in, flame_lens dict out.
+`flame_lens` is a composable `(data, zoom, width) -> Block` renderer, but without an intake path you had to hand-build the nested dict. `views/_profile.py` closes that gap: cProfile data in, flame_lens dict out.
 
-`_timer.py` (FrameTimer) is complementary — it captures per-frame phase timing within the render loop. `views/profile.py` wraps arbitrary code via cProfile's instrumentation profiler. Use FrameTimer for live performance monitoring, `profile()` for post-hoc analysis.
+`_timer.py` (FrameTimer) is complementary — it captures per-frame phase timing within the render loop. `views/_profile.py` wraps arbitrary code via cProfile's instrumentation profiler. Use FrameTimer for live performance monitoring, `profile()` for post-hoc analysis.
 
 ## Example: Profiling a Surface App
 

@@ -1,12 +1,12 @@
 """Interactive component primitives for the cell-buffer rendering layer."""
 
-from .data_explorer import DataExplorerState, DataNode, data_explorer, flatten
-from .list_view import ListState, list_view
+from ._data_explorer import DataExplorerState, DataNode, data_explorer, flatten
+from ._list_view import ListState, list_view
 from .progress import ProgressState, progress_bar
-from .sparkline import sparkline, sparkline_with_range
-from .spinner import BRAILLE, DOTS, LINE, SpinnerFrames, SpinnerState, spinner
-from .table import Column, TableState, table
-from .text_input import TextInputState, text_input
+from ._sparkline import sparkline, sparkline_with_range
+from ._spinner import BRAILLE, DOTS, LINE, SpinnerFrames, SpinnerState, spinner
+from ._table import Column, TableState, table
+from ._text_input import TextInputState, text_input
 
 __all__ = [
     "SpinnerState",

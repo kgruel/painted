@@ -221,7 +221,7 @@ block = sparkline([12, 15, 23, 45, 67], width=20)
 block = sparkline_with_range([12, 15, 23, 45, 67], width=20, min_val=0, max_val=100)
 ```
 
-**Connects to:** Produces Blocks. Nested structures reduce zoom at each level. Source modules: `views/lens/chart.py`, `views/lens/flame.py`, `views/lens/shape.py`, `views/lens/tree.py`, `views/components/sparkline.py`.
+**Connects to:** Produces Blocks. Nested structures reduce zoom at each level. Source modules: `views/lens/chart.py`, `views/lens/flame.py`, `views/lens/shape.py`, `views/lens/tree.py`, `views/components/_sparkline.py`.
 
 ---
 

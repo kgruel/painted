@@ -153,6 +153,49 @@ def test_state_dataclasses_declared_frozen() -> None:
                 )
 
 
+def test_public_names_do_not_shadow_submodules() -> None:
+    """No package may re-export a public name that collides with one of its own
+    submodule filenames (review #1 — closes the class, not just the instance).
+
+    A collision is a latent import-order trap: ``from pkg import name`` consults
+    ``pkg.__dict__`` first, so once *anything* imports the like-named submodule,
+    the binding flips to the module and permanently shadows the re-exported
+    function — e.g. ``from painted.views import profile`` returned the
+    ``profile.py`` module instead of the ``profile()`` context manager after any
+    ``import painted.views.profile``. The structural fix is to keep the public
+    surface and the file namespace disjoint: backing submodules are private
+    (``_name.py``). This guard fails the moment a future name re-collides.
+    """
+    import importlib
+    import pkgutil
+
+    import painted
+
+    collisions: dict[str, list[str]] = {}
+
+    def _check(pkg) -> None:
+        path = getattr(pkg, "__path__", None)
+        if path is None:
+            return  # a module, not a package — no submodules to shadow
+        public = set(getattr(pkg, "__all__", ()))
+        submodules = {m.name for m in pkgutil.iter_modules(path)}
+        shadowed = sorted(public & submodules)
+        if shadowed:
+            collisions[pkg.__name__] = shadowed
+
+    _check(painted)
+    for info in pkgutil.walk_packages(painted.__path__, prefix="painted."):
+        if not info.ispkg:
+            continue
+        _check(importlib.import_module(info.name))
+
+    assert not collisions, (
+        "public __all__ names collide with submodule files (latent import-order "
+        f"shadow): {collisions}. Rename each backing submodule to _name.py so the "
+        "public surface and file namespace stay disjoint (review #1)."
+    )
+
+
 def test_block_rows_private_not_accessed_outside_block() -> None:
     painted_root = Path(__file__).resolve().parents[2] / "src" / "painted"
     block_files = {painted_root / "core" / "block.py"}
@@ -166,12 +209,14 @@ def test_block_rows_private_not_accessed_outside_block() -> None:
 
 
 def test_runtime_state_dataclasses_are_frozen() -> None:
-    from painted.views.components.data_explorer import DataExplorerState
-    from painted.views.components.list_view import ListState
-    from painted.views.components.progress import ProgressState
-    from painted.views.components.spinner import SpinnerState
-    from painted.views.components.table import TableState
-    from painted.views.components.text_input import TextInputState
+    from painted.views import (
+        DataExplorerState,
+        ListState,
+        ProgressState,
+        SpinnerState,
+        TableState,
+        TextInputState,
+    )
     from painted.core.borders import BorderChars
     from painted.core.cell import Cell, Style
     from painted.cursor import Cursor

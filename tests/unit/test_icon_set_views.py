@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from painted.views.components.spinner import SpinnerState, spinner
+from painted.views import SpinnerState, spinner
 from painted.core.cell import Style
 from painted.icon_set import ASCII_ICONS, reset_icons, use_icons
 from painted.views import chart_lens, tree_lens

@@ -11,7 +11,7 @@ State fields verified against `demos/apps/focus_form.py`:
   (constructed line 61; `Focus` defined in `src/painted/focus.py`).
 - `app.hostname` / `app.port` / `app.username` are `TextInputState` with
   `.text: str` (constructed lines 63-65; `TextInputState.text` defined in
-  `src/painted/views/components/text_input.py:16`).
+  `src/painted/views/components/_text_input.py:16`).
 - `app.last_submit: str` — set by `_submit()` (lines 67, 143-148).
 
 Emissions fallback NOT used: the app never calls `self.emit()`

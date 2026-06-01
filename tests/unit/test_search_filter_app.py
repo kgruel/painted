@@ -17,7 +17,7 @@ State fields verified-exist by reading source:
 - `app.search` (painted Search) with `.query`/`.selected`
   (src/painted/search.py:16-17)
 - `app.input_state` (TextInputState) with `.text`
-  (src/painted/views/components/text_input.py:16)
+  (src/painted/views/components/_text_input.py:16)
 - `app.filter_idx` and the `_filter_name`/`_filtered()` helpers
   (demos/apps/search_filter.py:79, 88-94)
 - `app.picked` (demos/apps/search_filter.py:80)

@@ -10,11 +10,11 @@ State fields exercised here are all verified against source:
 - ``app.progress_state.value`` — ``ProgressState.value: float`` clamped 0-1
   by ``.set`` (views/components/progress.py:20-24).
 - ``app.list_state.selected`` / ``.scroll_offset`` — read-only properties over
-  cursor/viewport (views/components/list_view.py:32-43).
+  cursor/viewport (views/components/_list_view.py:32-43).
 - ``app.text_state.text`` / ``.cursor`` — ``TextInputState`` fields
-  (views/components/text_input.py:13-18).
+  (views/components/_text_input.py:13-18).
 - ``app.spinner_state.frame`` — ``SpinnerState.frame: int``
-  (views/components/spinner.py:32).
+  (views/components/_spinner.py:32).
 
 The harness re-emits a ``("ui.key", {"key": ...})`` tuple per replayed key
 (tui/testing.py:141), which we use as the emissions fallback assertion.

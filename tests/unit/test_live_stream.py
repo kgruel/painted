@@ -23,7 +23,7 @@ from pathlib import Path
 
 import pytest
 
-from painted.views.components.spinner import DOTS, SpinnerState, spinner
+from painted.views import DOTS, SpinnerState, spinner
 
 # Import the demo without sys.path mutation (mirrors the golden harness).
 _PROJECT = Path(__file__).resolve().parent.parent.parent

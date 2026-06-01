@@ -16,7 +16,7 @@ from painted import Block, Style, Zoom
 from painted.core.borders import BorderChars
 from painted.core.span import Line
 from painted.views import chart_lens, table
-from painted.views.components.table import Column, TableState
+from painted.views import Column, TableState
 from painted.views.record import record_line
 
 from tests.helpers import block_to_text
