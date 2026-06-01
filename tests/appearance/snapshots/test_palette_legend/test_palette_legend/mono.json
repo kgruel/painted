@@ -1,0 +1,46 @@
+{
+  "width": 9,
+  "height": 5,
+  "rows": [
+    [
+      {
+        "text": "■ success",
+        "bold": true
+      }
+    ],
+    [
+      {
+        "text": "■ warning",
+        "underline": true
+      }
+    ],
+    [
+      {
+        "text": "■ error",
+        "bold": true,
+        "reverse": true
+      },
+      {
+        "text": "  "
+      }
+    ],
+    [
+      {
+        "text": "■ accent",
+        "bold": true
+      },
+      {
+        "text": " "
+      }
+    ],
+    [
+      {
+        "text": "■ muted",
+        "dim": true
+      },
+      {
+        "text": "  "
+      }
+    ]
+  ]
+}

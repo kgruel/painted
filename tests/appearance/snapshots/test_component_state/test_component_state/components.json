@@ -1,0 +1,36 @@
+{
+  "width": 20,
+  "height": 3,
+  "rows": [
+    [
+      {
+        "text": "⠹",
+        "fg": "cyan",
+        "bold": true
+      },
+      {
+        "text": "                   "
+      }
+    ],
+    [
+      {
+        "text": "loading",
+        "dim": true
+      },
+      {
+        "text": "             "
+      }
+    ],
+    [
+      {
+        "text": "████████████",
+        "fg": "cyan",
+        "bold": true
+      },
+      {
+        "text": "░░░░░░░░",
+        "dim": true
+      }
+    ]
+  ]
+}

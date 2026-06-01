@@ -1,0 +1,106 @@
+{
+  "width": 41,
+  "height": 6,
+  "rows": [
+    [
+      {
+        "text": "╭─ files ──────────╮",
+        "fg": "cyan"
+      },
+      {
+        "text": " "
+      },
+      {
+        "text": "╭─ input ──────────╮",
+        "dim": true
+      }
+    ],
+    [
+      {
+        "text": "│",
+        "fg": "cyan"
+      },
+      {
+        "text": "alpha             "
+      },
+      {
+        "text": "│",
+        "fg": "cyan"
+      },
+      {
+        "text": " "
+      },
+      {
+        "text": "│",
+        "dim": true
+      },
+      {
+        "text": "name: ab"
+      },
+      {
+        "text": "c",
+        "reverse": true
+      },
+      {
+        "text": "         "
+      },
+      {
+        "text": "│",
+        "dim": true
+      }
+    ],
+    [
+      {
+        "text": "│",
+        "fg": "cyan"
+      },
+      {
+        "text": "beta              ",
+        "reverse": true
+      },
+      {
+        "text": "│",
+        "fg": "cyan"
+      },
+      {
+        "text": " "
+      },
+      {
+        "text": "╰──────────────────╯",
+        "dim": true
+      }
+    ],
+    [
+      {
+        "text": "│",
+        "fg": "cyan"
+      },
+      {
+        "text": "gamma             "
+      },
+      {
+        "text": "│",
+        "fg": "cyan"
+      },
+      {
+        "text": "                     "
+      }
+    ],
+    [
+      {
+        "text": "╰──────────────────╯",
+        "fg": "cyan"
+      },
+      {
+        "text": "                     "
+      }
+    ],
+    [
+      {
+        "text": " READY                                   ",
+        "fg": "black",
+        "bg": "white"
+      }
+    ]
+  ]
+}

@@ -1,0 +1,144 @@
+{
+  "width": 24,
+  "height": 15,
+  "rows": [
+    [
+      {
+        "text": "bold",
+        "bold": true
+      },
+      {
+        "text": "                    "
+      }
+    ],
+    [
+      {
+        "text": "italic",
+        "italic": true
+      },
+      {
+        "text": "                  "
+      }
+    ],
+    [
+      {
+        "text": "underline",
+        "underline": true
+      },
+      {
+        "text": "               "
+      }
+    ],
+    [
+      {
+        "text": "dim",
+        "dim": true
+      },
+      {
+        "text": "                     "
+      }
+    ],
+    [
+      {
+        "text": "reverse",
+        "reverse": true
+      },
+      {
+        "text": "                 "
+      }
+    ],
+    [
+      {
+        "text": "fg red",
+        "fg": "red"
+      },
+      {
+        "text": "                  "
+      }
+    ],
+    [
+      {
+        "text": "fg green",
+        "fg": "green"
+      },
+      {
+        "text": "                "
+      }
+    ],
+    [
+      {
+        "text": "fg yellow",
+        "fg": "yellow"
+      },
+      {
+        "text": "               "
+      }
+    ],
+    [
+      {
+        "text": "fg blue",
+        "fg": "blue"
+      },
+      {
+        "text": "                 "
+      }
+    ],
+    [
+      {
+        "text": "fg magenta",
+        "fg": "magenta"
+      },
+      {
+        "text": "              "
+      }
+    ],
+    [
+      {
+        "text": "fg cyan",
+        "fg": "cyan"
+      },
+      {
+        "text": "                 "
+      }
+    ],
+    [
+      {
+        "text": "fg white",
+        "fg": "white"
+      },
+      {
+        "text": "                "
+      }
+    ],
+    [
+      {
+        "text": "fg black",
+        "fg": "black"
+      },
+      {
+        "text": "                "
+      }
+    ],
+    [
+      {
+        "text": "fg+bg",
+        "fg": "white",
+        "bg": "blue"
+      },
+      {
+        "text": "                   "
+      }
+    ],
+    [
+      {
+        "text": "merged",
+        "fg": "red",
+        "bold": true,
+        "italic": true
+      },
+      {
+        "text": "                  "
+      }
+    ]
+  ]
+}

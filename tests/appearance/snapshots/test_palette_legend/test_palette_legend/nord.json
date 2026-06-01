@@ -1,0 +1,45 @@
+{
+  "width": 9,
+  "height": 5,
+  "rows": [
+    [
+      {
+        "text": "■ success",
+        "fg": 108
+      }
+    ],
+    [
+      {
+        "text": "■ warning",
+        "fg": 179
+      }
+    ],
+    [
+      {
+        "text": "■ error",
+        "fg": 174
+      },
+      {
+        "text": "  "
+      }
+    ],
+    [
+      {
+        "text": "■ accent",
+        "fg": 110
+      },
+      {
+        "text": " "
+      }
+    ],
+    [
+      {
+        "text": "■ muted",
+        "fg": 60
+      },
+      {
+        "text": "  "
+      }
+    ]
+  ]
+}

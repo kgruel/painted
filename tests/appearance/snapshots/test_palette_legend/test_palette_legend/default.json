@@ -1,0 +1,45 @@
+{
+  "width": 9,
+  "height": 5,
+  "rows": [
+    [
+      {
+        "text": "■ success",
+        "fg": "green"
+      }
+    ],
+    [
+      {
+        "text": "■ warning",
+        "fg": "yellow"
+      }
+    ],
+    [
+      {
+        "text": "■ error",
+        "fg": "red"
+      },
+      {
+        "text": "  "
+      }
+    ],
+    [
+      {
+        "text": "■ accent",
+        "fg": "cyan"
+      },
+      {
+        "text": " "
+      }
+    ],
+    [
+      {
+        "text": "■ muted",
+        "dim": true
+      },
+      {
+        "text": "  "
+      }
+    ]
+  ]
+}
