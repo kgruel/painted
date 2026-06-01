@@ -388,7 +388,8 @@ def record_timeline(
       SUMMARY+ — date-grouped record lines
     """
     if not records:
-        return Block.text("(no records)", current_palette().muted)
+        # Honor the exact-width contract even when empty (pad/clip to width).
+        return Block.text("(no records)", current_palette().muted, width=width)
 
     # --- MINIMAL: counts ---
     if zoom <= Zoom.MINIMAL:
@@ -461,6 +462,7 @@ def apply_attention(
     width: int,
     ts: datetime | None = None,
     payload_lens: PayloadLens | None = None,
+    score: float | None = None,
 ) -> Block:
     """Apply attention modifier: high-attention records render fully,
     low-attention records collapse to a dimmed one-liner.
@@ -468,8 +470,13 @@ def apply_attention(
     Args:
         width: Target width. Required because the low-attention collapse path
             creates a Block at this width.
+        score: Pre-computed attention score. Pass it when the caller has already
+            evaluated ``attention_fn`` (e.g. record_line_composed reserves marker
+            width from it) so the callback runs exactly once — the AttentionFn
+            protocol does not promise purity, so a second call could disagree.
     """
-    score = attention_fn(kind, payload)
+    if score is None:
+        score = attention_fn(kind, payload)
     p = current_palette()
 
     if score >= 0.7:
@@ -515,11 +522,16 @@ def record_line_composed(
     # than a right-edge clipper that would silently drop content cells.
     gutter_cols = 2 if gutter_fn else 0
 
-    # The attention marker prepends 2 cols ("◆ " at score>=0.7, "  " at >=0.3).
-    # The <0.3 collapse path builds its own block at the passed width and prepends
-    # nothing, so it needs no reservation. attention_fn is a pure 0-1 score, so
-    # calling it here (and again inside apply_attention) is safe.
-    marker_cols = 2 if attention_fn and attention_fn(kind, payload) >= 0.3 else 0
+    # Evaluate the attention score ONCE. The AttentionFn protocol does not promise
+    # purity/idempotence, so a stateful/time/random callback could score differently
+    # on a second call — and the marker-width reservation here MUST match what the
+    # renderer draws. Thread the single score into apply_attention below.
+    score = attention_fn(kind, payload) if attention_fn else None
+
+    # The marker prepends 2 cols ("◆ " at score>=0.7, "  " at >=0.3). The <0.3
+    # collapse path builds its own block at the passed width and prepends nothing,
+    # so it needs no reservation.
+    marker_cols = 2 if score is not None and score >= 0.3 else 0
 
     inner_width = width - gutter_cols - marker_cols
 
@@ -537,6 +549,7 @@ def record_line_composed(
             width=inner_width,
             ts=ts,
             payload_lens=payload_lens,
+            score=score,
         )
 
     # Apply gutter (outermost)
@@ -577,7 +590,8 @@ def record_map(
       FULL     — group headers + all records fully expanded
     """
     if not records:
-        return Block.text("(no records)", current_palette().muted)
+        # Honor the exact-width contract even when empty (pad/clip to width).
+        return Block.text("(no records)", current_palette().muted, width=width)
 
     p = current_palette()
 

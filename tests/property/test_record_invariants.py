@@ -177,7 +177,7 @@ def _attn_low(kind: str, payload: dict) -> float:
 
 _records_st = st.lists(
     st.tuples(st.datetimes(), st.sampled_from(_KINDS), _record_payloads()),
-    min_size=1,
+    min_size=0,  # include the empty list — the empty branch must honor width too
     max_size=4,
 )
 

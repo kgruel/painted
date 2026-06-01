@@ -256,6 +256,11 @@ class TestRecordTimeline:
         text = block_to_text(block)
         assert "no records" in text
 
+    def test_empty_records_honors_width(self):
+        """The empty branch honors the exact-width contract too (regression)."""
+        for width in (20, 40, 80):
+            assert record_timeline([], Zoom.SUMMARY, width).width == width
+
     def test_minimal_shows_counts(self):
         records = [
             (_ts(0), "decision", {"topic": "A"}),
@@ -603,6 +608,22 @@ class TestRecordLineComposed:
         text = block_to_text(block)
         assert "◆" in text
 
+    def test_attention_fn_evaluated_once(self):
+        """The AttentionFn callback runs exactly once per composed record. The
+        protocol doesn't promise purity, so the marker-width reservation and the
+        render must share a single score (regression: it was called twice).
+        """
+        calls = []
+
+        def counting_attn(kind: str, payload: dict) -> float:
+            calls.append(kind)
+            return 1.0
+
+        record_line_composed(
+            _ts(), "decision", {"topic": "x"}, Zoom.SUMMARY, 40, attention_fn=counting_attn
+        )
+        assert len(calls) == 1
+
     def test_attention_marker_reserves_its_own_columns(self):
         """The marker's 2 cols are budgeted into inner_width; the final
         fit_to_width is a no-op, never a clipper (regression: #3).
@@ -658,6 +679,11 @@ class TestRecordMap:
         block = record_map([], Zoom.SUMMARY, 80)
         text = block_to_text(block)
         assert "no records" in text
+
+    def test_empty_records_honors_width(self):
+        """The empty branch honors the exact-width contract too (regression)."""
+        for width in (20, 40, 80):
+            assert record_map([], Zoom.SUMMARY, width).width == width
 
     def test_minimal_shows_group_counts(self):
         records = [
