@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# DESC: Fast-fail gate: arch → lint → smoke → unit → property → appearance → golden → outputgen
+# DESC: Fast-fail gate: arch → lint → smoke → unit → property → appearance → outputgen
 # Usage: ./dev check [-v]
 #
 # Tiered staircase, ordered by cost × blast-radius — cheapest / most fundamental
@@ -10,10 +10,9 @@
 #                 that can FAIL; arch only parses, never imports — catches cycle rot)
 #   2. Unit       pure unit tests (arch excluded — it ran in tier 0)
 #   3. Property   Hypothesis laws (width-awareness, compose arithmetic, writer totality)
-#   4. Appearance structured char+style snapshots (the styled-layer contract)
-#   5. Golden     legacy demo text snapshots (color-stripped; being retired by the
-#                 by-axis migration — see golden-migration-plan.md)
-#   6. Outputgen  demo → HTML → markdown integration
+#   4. Appearance structured char+style snapshots (the styled-layer contract; the
+#                 successor to the retired demo-text goldens — see golden-migration-plan.md)
+#   5. Outputgen  demo → HTML → markdown integration
 # Budget (coverage, perf, mutation) is intentionally NOT here — run `./dev cov`.
 # Coverage is informational and not gated (no --cov-fail-under floor today).
 source "$(dirname "$0")/lib/dev.sh"
@@ -57,9 +56,6 @@ main() {
         echo -e "${BOLD}=== Appearance ===${NC}"
         run_uv pytest tests/appearance/ -v --tb=short
         echo ""
-        echo -e "${BOLD}=== Golden ===${NC}"
-        run_uv pytest tests/golden/ -v --tb=short
-        echo ""
         echo -e "${BOLD}=== Outputgen ===${NC}"
         run_uv python -m tools.outputgen --check
     else
@@ -80,9 +76,6 @@ main() {
 
         step "Appearance"
         run_uv pytest tests/appearance/ -q --tb=line > /dev/null 2>&1 && ok || { fail; run_uv pytest tests/appearance/ -q --tb=short; exit 1; }
-
-        step "Golden"
-        run_uv pytest tests/golden/ -q --tb=line > /dev/null 2>&1 && ok || { fail; run_uv pytest tests/golden/ -q --tb=short; exit 1; }
 
         step "Outputgen"
         run_uv python -m tools.outputgen --check > /dev/null 2>&1 && ok || { fail; run_uv python -m tools.outputgen --check; exit 1; }

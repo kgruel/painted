@@ -27,7 +27,7 @@ def _sample_rows() -> list[Line]:
         ("bash", "-lc ./dev check"),
         ("postgres", "-D /usr/local/var/postgres"),
         ("redis-server", "127.0.0.1:6379"),
-        ("python3", "-m pytest tests/golden -q"),
+        ("python3", "-m pytest tests/appearance -q"),
         ("python3", "-m painted.demo --interactive"),
         ("git", "status --porcelain=v1"),
         ("ssh", "prod-web-02 tail -f /var/log/nginx/access.log"),
