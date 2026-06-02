@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# DESC: Fast-fail gate: arch → lint → smoke → unit → property → appearance → integration → cohesion → outputgen
+# DESC: Fast-fail gate: arch → lint → smoke → unit → property → appearance → integration → cohesion → outputgen → docs
 # Usage: ./dev check [-v]
 #
 # Tiered staircase, ordered by cost × blast-radius — cheapest / most fundamental
@@ -19,6 +19,9 @@
 #                 `./dev test`, CI, and IDEs actually do. This backstop is redundant by
 #                 design: it re-runs everything to assert the tiers cohere as one process.
 #   7. Outputgen  demo → HTML → markdown integration
+#   8. Docs       fragment bodies not drifted (docgen --update is current) + consumer-guide
+#                 README<->CLAUDE.md symlinks present. Scoped to docs-system managed
+#                 surfaces (the legacy guide/slide selectors are repaired in a later pass).
 # Budget (coverage, perf, mutation) is intentionally NOT here — run `./dev cov`.
 # Coverage is informational and not gated (no --cov-fail-under floor today).
 source "$(dirname "$0")/lib/dev.sh"
@@ -70,6 +73,9 @@ main() {
         echo ""
         echo -e "${BOLD}=== Outputgen ===${NC}"
         run_uv python -m tools.outputgen --check
+        echo ""
+        echo -e "${BOLD}=== Docs ===${NC}"
+        bash "$PROJECT_ROOT/scripts/docs.sh" --check
     else
         step "Arch"
         run_uv pytest tests/unit/test_architecture_invariants.py -q --tb=line > /dev/null 2>&1 && ok || { fail; run_uv pytest tests/unit/test_architecture_invariants.py -v --tb=short; exit 1; }
@@ -97,6 +103,9 @@ main() {
 
         step "Outputgen"
         run_uv python -m tools.outputgen --check > /dev/null 2>&1 && ok || { fail; run_uv python -m tools.outputgen --check; exit 1; }
+
+        step "Docs"
+        bash "$PROJECT_ROOT/scripts/docs.sh" --check > /dev/null 2>&1 && ok || { fail; bash "$PROJECT_ROOT/scripts/docs.sh" --check; exit 1; }
     fi
 
     echo -e "\n${GREEN}All checks passed${NC}"

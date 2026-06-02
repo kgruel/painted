@@ -248,14 +248,23 @@ def check_doc(doc: str, *, repo_root: Path) -> list[str]:
 
 
 def _iter_doc_files(repo_root: Path, roots: list[str]) -> list[Path]:
+    # Dedup by resolved inode so a symlinked CLAUDE.md -> README.md is visited
+    # once (as the real file), not twice.
     out: list[Path] = []
+    seen: set[Path] = set()
     for root in roots:
         p = (repo_root / root).resolve()
         if p.is_file() and p.suffix.lower() == ".md":
-            out.append(p)
+            if p not in seen:
+                seen.add(p)
+                out.append(p)
             continue
         if p.is_dir():
-            out.extend(sorted(p.rglob("*.md")))
+            for md in sorted(p.rglob("*.md")):
+                real = md.resolve()
+                if real not in seen:
+                    seen.add(real)
+                    out.append(real)
     return out
 
 

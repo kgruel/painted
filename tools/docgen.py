@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-Kind = Literal["definition", "signature", "docstring", "region"]
+Kind = Literal["definition", "signature", "docstring", "region", "fragment"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -142,6 +142,9 @@ def index_painted_sources(*, repo_root: Path) -> dict[tuple[str, str], NodeInfo]
 
 
 def _parse_selector(raw: str) -> tuple[str, Kind]:
+    # frag: selectors carry no #kind — the fragment id is the whole base.
+    if raw.startswith("frag:"):
+        return raw, "fragment"
     if "#" not in raw:
         raise ValueError(f"Selector missing #kind: {raw!r}")
     base, kind = raw.split("#", 1)
@@ -215,6 +218,29 @@ def extract_region(
 
     source = _slice_lines(lines, start_line, end_line)
     origin = Origin(path=rel_path, start_line=start_line, end_line=end_line)
+    return source, origin
+
+
+_FRAG_ID_RE = re.compile(r"[\w.-]+")
+
+
+def extract_fragment(*, repo_root: Path, frag_id: str) -> tuple[str, Origin]:
+    """Read an authored prose fragment from ``docs/_fragments/<frag_id>.md``.
+
+    Fragments are the single canonical home for cross-cutting authored prose
+    (invariants, concepts). They are injected raw — no code fence — so a fragment
+    is plain markdown that lands verbatim inside every surface that includes it.
+    """
+    if not _FRAG_ID_RE.fullmatch(frag_id):
+        raise ValueError(f"Bad fragment id {frag_id!r} (allowed: word chars, '.', '-')")
+    rel_path = f"docs/_fragments/{frag_id}.md"
+    path = (repo_root / rel_path).resolve()
+    if not path.exists():
+        raise FileNotFoundError(f"Fragment not found: {rel_path}")
+
+    source = _read_text(path).rstrip() + "\n"
+    end_line = source.count("\n")
+    origin = Origin(path=rel_path, start_line=1, end_line=max(end_line, 1))
     return source, origin
 
 
@@ -362,6 +388,20 @@ def build_snippet_store(
             )
             continue
 
+        if base.startswith("frag:"):
+            frag_id = base[len("frag:") :]
+            source, origin = extract_fragment(repo_root=repo_root, frag_id=frag_id)
+            snippet_id = f"{base}#{kind}"
+            out[snippet_id] = Snippet(
+                id=snippet_id,
+                kind=kind,
+                language="markdown",
+                title=frag_id,
+                source=source,
+                origin=origin,
+            )
+            continue
+
         raise ValueError(f"Unknown selector scheme: {raw!r}")
 
     return out
@@ -379,8 +419,8 @@ def find_docgen_selectors(markdown: str) -> list[str]:
 
 
 def _render_snippet_block(snippet: Snippet) -> str:
-    if snippet.language == "text":
-        # Docstrings are inserted as plain text blocks (no fences).
+    if snippet.language in ("text", "markdown"):
+        # Docstrings ("text") and prose fragments ("markdown") inject raw — no fence.
         return snippet.source.rstrip() + "\n"
     return f"```{snippet.language}\n{snippet.source.rstrip()}\n```\n"
 
@@ -487,6 +527,8 @@ def write_snippet_store(
 
 
 def _iter_markdown_files(repo_root: Path, roots: list[str]) -> Iterator[Path]:
+    # Dedup by resolved inode so a symlinked CLAUDE.md -> README.md in a scanned
+    # tree is assembled/checked once (as the real file), not twice.
     seen: set[Path] = set()
     for root in roots:
         p = (repo_root / root).resolve()
@@ -497,9 +539,10 @@ def _iter_markdown_files(repo_root: Path, roots: list[str]) -> Iterator[Path]:
             continue
         if p.is_dir():
             for md in sorted(p.rglob("*.md")):
-                if md not in seen:
-                    seen.add(md)
-                    yield md
+                real = md.resolve()
+                if real not in seen:
+                    seen.add(real)
+                    yield real
 
 
 def main(argv: list[str]) -> int:

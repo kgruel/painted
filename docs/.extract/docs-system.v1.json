@@ -1,0 +1,18 @@
+{
+  "generated_at": "2026-06-02T07:17:40+00:00",
+  "snippets": {
+    "frag:frozen-state#fragment": {
+      "id": "frag:frozen-state#fragment",
+      "kind": "fragment",
+      "language": "markdown",
+      "origin": {
+        "end_line": 4,
+        "path": "docs/_fragments/frozen-state.md",
+        "start_line": 1
+      },
+      "source": "All state types are frozen \u2014 immutable dataclasses. State is created through its\nconstructor and updated with `dataclasses.replace()`, which returns *new* state; it is\nnever mutated in place. Rendering is a pure function of that state \u2014\n`render_fn(state, ...) \u2192 Block`: same inputs, same output, no side effects.\n",
+      "title": "frozen-state"
+    }
+  },
+  "version": 1
+}
