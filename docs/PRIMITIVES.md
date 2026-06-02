@@ -72,7 +72,17 @@ block.paint(buf, 5, 3)
 
 **Wrap modes:** `Wrap.NONE`, `Wrap.CHAR`, `Wrap.WORD`, `Wrap.ELLIPSIS`
 
-**Width contract** — a Block's `width` is **exact**. Pass `width=N` and the result is exactly `N` columns: shorter content is padded, longer content is clipped by default (pass `wrap=Wrap.CHAR`/`WORD` to reflow into more rows instead); it never overflows horizontally. Omit `width` and the block sizes to its content (natural). Two distinct guarantees both hold and are easy to conflate: *width-aware* = wcwidth counts display columns (so `width != len()` for emoji/CJK); *honors width* = the output's width equals the width you requested. Exactness is what lets composition carve a budget (`60 + gutter + 60 = 124`) and trust the pieces tile with no gap or overflow, at any terminal size. `fit_to_width(block, w)` is the block-level realization (truncate if wide, pad if narrow).
+**Width contract.**
+
+<!-- docgen:begin frag:width-contract#full -->
+width is a two-part contract, and the two guarantees are distinct and easy to conflate.
+
+**Width-aware**: wcwidth measures display columns, so a block's display width is not `len()` — wide characters such as CJK and many emoji count as two columns (and some marks, like combining accents and variation selectors, as zero), and that column count is what the width math uses.
+
+**Honors width**: a passed `width` is *exact* — `block.width == width`. Shorter content is padded, too-wide content is clipped by default (it never overflows horizontally); pass `wrap=Wrap.CHAR`/`Wrap.WORD` to reflow into more rows instead. Omit `width` and the block sizes to its content (natural). Exactness is what lets composition carve up a width budget and trust the pieces tile with no gap or overflow, at any terminal size. `fit_to_width(block, width)` is the block-level realization: truncate if wide, pad if narrow, identity if exact — horizontal-only, so it clips rather than reflows.
+<!-- docgen:end -->
+
+Concretely, a 124-column row carves as `60 + gutter + 60`, and the pieces tile with no gap or overflow.
 
 **Connects to:** Composed via `join_horizontal`, `join_vertical`, `pad`, `border`, `truncate`, `fit_to_width`. Paints to Buffer/BufferView.
 
@@ -227,7 +237,14 @@ block = sparkline_with_range([12, 15, 23, 45, 67], width=20, min_val=0, max_val=
 
 ## Components
 
-Stateful view elements. Pattern: frozen `State` dataclass + pure `render_fn(state, ...) → Block`. All importable from `painted.views`.
+Stateful view elements, all importable from `painted.views`.
+
+<!-- docgen:begin frag:frozen-state#full -->
+All state types are frozen — immutable dataclasses. State is created through its
+constructor and updated with `dataclasses.replace()`, which returns *new* state; it is
+never mutated in place. Rendering is a pure function of that state —
+`render_fn(state, ...) → Block`: same inputs, same output, no side effects.
+<!-- docgen:end -->
 
 | Import | State | Purpose |
 |--------|-------|---------|
@@ -250,7 +267,7 @@ state = ProgressState(value=0.42)  # 0.0-1.0
 block = progress_bar(state, width=40)
 ```
 
-State is owned by the caller. Update with `dataclasses.replace()`.
+State is owned by the caller.
 
 **Visual effects:**
 

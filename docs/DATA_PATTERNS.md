@@ -6,7 +6,7 @@ This document captures the data modeling patterns used throughout painted. When 
 
 **Frozen state + pure functions.**
 
-<!-- docgen:begin frag:frozen-state -->
+<!-- docgen:begin frag:frozen-state#full -->
 All state types are frozen — immutable dataclasses. State is created through its
 constructor and updated with `dataclasses.replace()`, which returns *new* state; it is
 never mutated in place. Rendering is a pure function of that state —

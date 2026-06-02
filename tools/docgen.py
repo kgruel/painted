@@ -224,12 +224,24 @@ def extract_region(
 _FRAG_ID_RE = re.compile(r"[\w.-]+")
 
 
-def extract_fragment(*, repo_root: Path, frag_id: str) -> tuple[str, Origin]:
+_FRAG_REGION_BEGIN_RE = re.compile(r"^\s*<!--\s*region:(?P<id>[\w.-]+)\s*-->\s*$")
+_FRAG_REGION_END_RE = re.compile(r"^\s*<!--\s*/region\s*-->\s*$")
+
+
+def extract_fragment(
+    *, repo_root: Path, frag_id: str, region: str | None = None
+) -> tuple[str, Origin]:
     """Read an authored prose fragment from ``docs/_fragments/<frag_id>.md``.
 
     Fragments are the single canonical home for cross-cutting authored prose
     (invariants, concepts). They are injected raw — no code fence — so a fragment
     is plain markdown that lands verbatim inside every surface that includes it.
+
+    A fragment may carry named **regions** so one fact can serve two registers
+    (e.g. a terse ``summary`` for an invariants list, a ``full`` body for a
+    reference page), delimited by ``<!-- region:NAME -->`` / ``<!-- /region -->``.
+    Pass ``region`` to inject just that span; omit it to inject the whole file
+    (region markers stripped, so they stay invisible at the include site).
     """
     if not _FRAG_ID_RE.fullmatch(frag_id):
         raise ValueError(f"Bad fragment id {frag_id!r} (allowed: word chars, '.', '-')")
@@ -238,9 +250,33 @@ def extract_fragment(*, repo_root: Path, frag_id: str) -> tuple[str, Origin]:
     if not path.exists():
         raise FileNotFoundError(f"Fragment not found: {rel_path}")
 
-    source = _read_text(path).rstrip() + "\n"
-    end_line = source.count("\n")
-    origin = Origin(path=rel_path, start_line=1, end_line=max(end_line, 1))
+    lines = _read_text(path).splitlines()
+
+    if region is None:
+        kept = [
+            ln
+            for ln in lines
+            if not (_FRAG_REGION_BEGIN_RE.match(ln) or _FRAG_REGION_END_RE.match(ln))
+        ]
+        source = "\n".join(kept).strip() + "\n"
+        origin = Origin(path=rel_path, start_line=1, end_line=max(len(lines), 1))
+        return source, origin
+
+    start = end = None
+    for i, ln in enumerate(lines):
+        m = _FRAG_REGION_BEGIN_RE.match(ln)
+        if m and m.group("id") == region:
+            start = i + 1
+            continue
+        if start is not None and end is None and _FRAG_REGION_END_RE.match(ln):
+            end = i
+            break
+    if start is None:
+        raise KeyError(f"Region {region!r} not found in fragment {frag_id!r}")
+    if end is None:
+        raise ValueError(f"Region {region!r} missing <!-- /region --> in fragment {frag_id!r}")
+    source = "\n".join(lines[start:end]).strip() + "\n"
+    origin = Origin(path=rel_path, start_line=start + 1, end_line=end)
     return source, origin
 
 
@@ -389,8 +425,11 @@ def build_snippet_store(
             continue
 
         if base.startswith("frag:"):
-            frag_id = base[len("frag:") :]
-            source, origin = extract_fragment(repo_root=repo_root, frag_id=frag_id)
+            rest = base[len("frag:") :]
+            frag_id, sep, region = rest.partition("#")
+            source, origin = extract_fragment(
+                repo_root=repo_root, frag_id=frag_id, region=region if sep else None
+            )
             snippet_id = f"{base}#{kind}"
             out[snippet_id] = Snippet(
                 id=snippet_id,

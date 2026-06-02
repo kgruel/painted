@@ -4,12 +4,14 @@ Terminal UI framework built on cell buffers. Start at Level 0. Only escalate whe
 
 **You are here** in the abstraction chain:
 
+<!-- docgen:begin frag:abstraction-chain -->
 ```
 atoms (data)  →  engine (runtime)  →  painted (surface)  →  apps (CLI)
-Fact, Spec        Tick, Vertex         Block, Lens, run_cli   loops/hlab/strange-loops
+Fact, Spec        Tick, Vertex         Block, Lens          loops/hlab/strange-loops
 ```
 
-painted is consumed by every app in the monorepo. It doesn't know about loops concepts — just data shapes, zoom levels, and terminal cells.
+Below painted in the monorepo: `libs/atoms/` defines Facts and Specs; `libs/engine/` produces Ticks and stores. Above: `apps/loops/`, `apps/hlab/`, and `apps/strange-loops/` use painted's entry points and lenses for all display. painted renders whatever comes out — it doesn't know about loops concepts, just data shapes, zoom levels, and terminal cells.
+<!-- docgen:end -->
 
 **Two audiences**: If you're *using* painted in an app, see `src/painted/CLAUDE.md` for the consumer API guide. This file is for *contributing to* painted itself.
 
@@ -110,8 +112,12 @@ Surface + Layer             # alt-screen TUI with keyboard + diff rendering
 - Gutter contract: continuous vertical rail, never breaks. Color encodes ONE dimension.
 
 **Component pattern** (`views/components/`):
-- Frozen `State` dataclass + pure `render_fn(state, ...) → Block`
-- State created via constructor, updated via `dataclasses.replace()`
+<!-- docgen:begin frag:frozen-state#full -->
+All state types are frozen — immutable dataclasses. State is created through its
+constructor and updated with `dataclasses.replace()`, which returns *new* state; it is
+never mutated in place. Rendering is a pure function of that state —
+`render_fn(state, ...) → Block`: same inputs, same output, no side effects.
+<!-- docgen:end -->
 - Components are stateless renderers — the caller owns state transitions
 
 **Don't reach for yet**: TUI Surface internals, mouse protocol, viewport scroll math.
@@ -134,11 +140,17 @@ Key patterns:
 
 ## Key invariants
 
-- All state types frozen. Components follow `State + render_fn(state, ...) → Block`.
-- **Stability tiers** (one package, differential guarantees): `painted.core` + `painted.views` are the **semver-stable** library surface — a renderer is a thing you *call*, so its surface is held maximally stable. Removing or renaming any name in their `__all__` is a semver-MAJOR break, guarded by `tests/unit/test_public_api.py` (additions are fine — extend the snapshot when you intend to commit to them). `painted.cli` + `painted.tui` are the **evolving** framework surface — they *call you*, and churn as apps' needs change. This resolves the library-vs-framework version tension without splitting the package.
+<!-- docgen:begin frag:frozen-state#summary -->
+All state types are frozen; update with `dataclasses.replace()` (which returns new state), and render is a pure function `render_fn(state, ...) → Block`.
+<!-- docgen:end -->
+<!-- docgen:begin frag:stability-tiers#summary -->
+`painted.core` + `painted.views` are the **semver-stable** library surface (removing or renaming an `__all__` name is semver-MAJOR, guarded by `tests/unit/test_public_api.py`); `painted.cli` + `painted.tui` are the **evolving** framework surface that may change across minor versions.
+<!-- docgen:end -->
 - Surface diff-renders: only changed cells written to terminal.
 - `shape_lens` auto-dispatches by data shape: numeric → chart, hierarchical → tree, else built-in rendering.
-- Width is a two-part contract, both tested in `tests/property/`. **Width-aware**: wcwidth measures display columns, so display width ≠ `len()` (emoji/CJK). **Honors width**: a passed `width` is *exact* (`block.width == width`) — too-wide content is clipped (padded if short) to that width by default; pass `wrap=Wrap.CHAR`/`WORD` to reflow into more rows instead. Omit `width` for natural (content) sizing. Exactness is what lets composition subdivide a width budget and trust the pieces tile; `fit_to_width` is the block-level realization (horizontal-only — it clips, never reflows).
+<!-- docgen:begin frag:width-contract#summary -->
+width is a two-part contract: *width-aware* — wcwidth counts display columns, so a block's display width is not `len()`; and *honors-width* — a passed `width` is *exact*, clipping or padding by default (pass `wrap=Wrap.CHAR`/`Wrap.WORD` to reflow), omitted for natural sizing.
+<!-- docgen:end -->
 - Style is composable: `Style(fg="green", bold=True)`.
 - Zero runtime dependencies beyond `wcwidth` (the single vetted exception, for display-width measurement). Enforced by `test_runtime_imports_are_stdlib_or_allowlisted`.
 
@@ -149,7 +161,7 @@ docs/
   ARCHITECTURE.md     # Stack visualization, data flow, layer pattern
   PRIMITIVES.md       # Quick reference for all primitives
   DATA_PATTERNS.md    # Frozen state + pure functions patterns
-  MOUSE.md            # Terminal mouse protocol research
+  MOUSE.md            # Terminal mouse protocol + painted's mouse API (shipped)
   VIEWPORT_DESIGN.md  # Scroll state management
   ZOOM_PATTERNS.md    # Lens zoom propagation patterns
   MODE_RESOLUTION.md  # AUTO mode collapse rules, capability filtering

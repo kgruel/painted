@@ -1,17 +1,77 @@
 {
-  "generated_at": "2026-06-02T07:26:14+00:00",
+  "generated_at": "2026-06-02T08:50:54+00:00",
   "snippets": {
-    "frag:frozen-state#fragment": {
-      "id": "frag:frozen-state#fragment",
+    "frag:abstraction-chain#fragment": {
+      "id": "frag:abstraction-chain#fragment",
       "kind": "fragment",
       "language": "markdown",
       "origin": {
-        "end_line": 4,
-        "path": "docs/_fragments/frozen-state.md",
+        "end_line": 6,
+        "path": "docs/_fragments/abstraction-chain.md",
         "start_line": 1
+      },
+      "source": "```\natoms (data)  \u2192  engine (runtime)  \u2192  painted (surface)  \u2192  apps (CLI)\nFact, Spec        Tick, Vertex         Block, Lens          loops/hlab/strange-loops\n```\n\nBelow painted in the monorepo: `libs/atoms/` defines Facts and Specs; `libs/engine/` produces Ticks and stores. Above: `apps/loops/`, `apps/hlab/`, and `apps/strange-loops/` use painted's entry points and lenses for all display. painted renders whatever comes out \u2014 it doesn't know about loops concepts, just data shapes, zoom levels, and terminal cells.\n",
+      "title": "abstraction-chain"
+    },
+    "frag:frozen-state#full#fragment": {
+      "id": "frag:frozen-state#full#fragment",
+      "kind": "fragment",
+      "language": "markdown",
+      "origin": {
+        "end_line": 9,
+        "path": "docs/_fragments/frozen-state.md",
+        "start_line": 6
       },
       "source": "All state types are frozen \u2014 immutable dataclasses. State is created through its\nconstructor and updated with `dataclasses.replace()`, which returns *new* state; it is\nnever mutated in place. Rendering is a pure function of that state \u2014\n`render_fn(state, ...) \u2192 Block`: same inputs, same output, no side effects.\n",
       "title": "frozen-state"
+    },
+    "frag:frozen-state#summary#fragment": {
+      "id": "frag:frozen-state#summary#fragment",
+      "kind": "fragment",
+      "language": "markdown",
+      "origin": {
+        "end_line": 2,
+        "path": "docs/_fragments/frozen-state.md",
+        "start_line": 2
+      },
+      "source": "All state types are frozen; update with `dataclasses.replace()` (which returns new state), and render is a pure function `render_fn(state, ...) \u2192 Block`.\n",
+      "title": "frozen-state"
+    },
+    "frag:stability-tiers#summary#fragment": {
+      "id": "frag:stability-tiers#summary#fragment",
+      "kind": "fragment",
+      "language": "markdown",
+      "origin": {
+        "end_line": 2,
+        "path": "docs/_fragments/stability-tiers.md",
+        "start_line": 2
+      },
+      "source": "`painted.core` + `painted.views` are the **semver-stable** library surface (removing or renaming an `__all__` name is semver-MAJOR, guarded by `tests/unit/test_public_api.py`); `painted.cli` + `painted.tui` are the **evolving** framework surface that may change across minor versions.\n",
+      "title": "stability-tiers"
+    },
+    "frag:width-contract#full#fragment": {
+      "id": "frag:width-contract#full#fragment",
+      "kind": "fragment",
+      "language": "markdown",
+      "origin": {
+        "end_line": 10,
+        "path": "docs/_fragments/width-contract.md",
+        "start_line": 6
+      },
+      "source": "width is a two-part contract, and the two guarantees are distinct and easy to conflate.\n\n**Width-aware**: wcwidth measures display columns, so a block's display width is not `len()` \u2014 wide characters such as CJK and many emoji count as two columns (and some marks, like combining accents and variation selectors, as zero), and that column count is what the width math uses.\n\n**Honors width**: a passed `width` is *exact* \u2014 `block.width == width`. Shorter content is padded, too-wide content is clipped by default (it never overflows horizontally); pass `wrap=Wrap.CHAR`/`Wrap.WORD` to reflow into more rows instead. Omit `width` and the block sizes to its content (natural). Exactness is what lets composition carve up a width budget and trust the pieces tile with no gap or overflow, at any terminal size. `fit_to_width(block, width)` is the block-level realization: truncate if wide, pad if narrow, identity if exact \u2014 horizontal-only, so it clips rather than reflows.\n",
+      "title": "width-contract"
+    },
+    "frag:width-contract#summary#fragment": {
+      "id": "frag:width-contract#summary#fragment",
+      "kind": "fragment",
+      "language": "markdown",
+      "origin": {
+        "end_line": 2,
+        "path": "docs/_fragments/width-contract.md",
+        "start_line": 2
+      },
+      "source": "width is a two-part contract: *width-aware* \u2014 wcwidth counts display columns, so a block's display width is not `len()`; and *honors-width* \u2014 a passed `width` is *exact*, clipping or padding by default (pass `wrap=Wrap.CHAR`/`Wrap.WORD` to reflow), omitted for natural sizing.\n",
+      "title": "width-contract"
     }
   },
   "version": 1

@@ -37,7 +37,7 @@ from painted.views import DataExplorerState, data_explorer
 - **`text_input(state) → Block`** — single-line input with cursor.
 - **`data_explorer(state) → Block`** — interactive data browser.
 
-<!-- docgen:begin frag:frozen-state -->
+<!-- docgen:begin frag:frozen-state#full -->
 All state types are frozen — immutable dataclasses. State is created through its
 constructor and updated with `dataclasses.replace()`, which returns *new* state; it is
 never mutated in place. Rendering is a pure function of that state —
