@@ -1,0 +1,137 @@
+/* colors_and_type.css — painted design tokens
+   BOOTSTRAP COPY extracted from 'painted Design System (standalone).html' (Jun 1).
+   Source of truth is Claude Design; replace wholesale when the packaged file lands.
+   ANSI-16 block is byte-exact to painted core/_color.py _BASIC_RGB. */
+
+:root {
+  /* ---------------------------------------------------------------------- */
+  /* ANSI 16 — authoritative (painted core/_color.py _BASIC_RGB)            */
+  /* The exact RGB painted maps named/indexed colors to. Source of truth.   */
+  /* ---------------------------------------------------------------------- */
+  --ansi-black:           #000000;  /* 0  */
+  --ansi-red:             #800000;  /* 1  */
+  --ansi-green:           #008000;  /* 2  */
+  --ansi-yellow:          #808000;  /* 3  */
+  --ansi-blue:            #000080;  /* 4  */
+  --ansi-magenta:         #800080;  /* 5  */
+  --ansi-cyan:            #008080;  /* 6  */
+  --ansi-white:           #c0c0c0;  /* 7  */
+  --ansi-bright-black:    #808080;  /* 8  (gray) */
+  --ansi-bright-red:      #ff0000;  /* 9  */
+  --ansi-bright-green:    #00ff00;  /* 10 */
+  --ansi-bright-yellow:   #ffff00;  /* 11 */
+  --ansi-bright-blue:     #0000ff;  /* 12 */
+  --ansi-bright-magenta:  #ff00ff;  /* 13 */
+  --ansi-bright-cyan:     #00ffff;  /* 14 */
+  --ansi-bright-white:    #ffffff;  /* 15 */
+
+  /* ---------------------------------------------------------------------- */
+  /* painted theme — curated reference rendering (dark, colorful, fun)      */
+  /* Each token notes its ANSI origin. Hues preserved, lifted for legibility */
+  /* on ink. This is the "house terminal" painted is designed to look best in.*/
+  /* ---------------------------------------------------------------------- */
+
+  /* Surfaces — the ink painted paints on. (ANSI black, designed depth.) */
+  --ink:        #0c0e16;  /* canvas / alt-screen background           */
+  --panel:      #151823;  /* a bordered Block / card                  */
+  --overlay:    #1e2230;  /* Layer / modal stack on top of base       */
+  --line:       #2b3142;  /* hairline / inactive box-drawing chrome   */
+  --line-bold:  #3b4258;  /* active / focused box-drawing chrome      */
+
+  /* Foreground — text on ink. (ANSI white / bright-black.) */
+  --fg:         #f4f2ea;  /* primary text (bright white, warmed)      */
+  --fg-2:       #c3c7d1;  /* secondary text                           */
+  --fg-dim:     #79808f;  /* muted / dim (ANSI bright-black) — Palette.muted */
+
+  /* Vivid hues — refined ANSI bright. The fun. */
+  --red:        #ff5b6a;  /* ANSI bright-red    — Palette.error       */
+  --green:      #4fdc82;  /* ANSI bright-green  — Palette.success     */
+  --yellow:     #f5cf52;  /* ANSI bright-yellow — Palette.warning     */
+  --blue:       #5aa7ff;  /* ANSI bright-blue                         */
+  --magenta:    #ff74c8;  /* ANSI bright-magenta                      */
+  --cyan:       #44e0e0;  /* ANSI bright-cyan   — Palette.accent      */
+  --orange:     #ff9d4d;  /* derived warm (256-cube territory)        */
+
+  /* Selection / reverse-video swatch (painted uses reverse for emphasis) */
+  --reverse-fg: var(--ink);
+  --reverse-bg: var(--cyan);
+
+  /* ---------------------------------------------------------------------- */
+  /* Semantic Palette — painted's 5 roles (palette.py DEFAULT_PALETTE)      */
+  /* ---------------------------------------------------------------------- */
+  --role-success: var(--green);
+  --role-warning: var(--yellow);
+  --role-error:   var(--red);
+  --role-accent:  var(--cyan);
+  --role-muted:   var(--fg-dim);
+
+  /* NORD preset (palette.py NORD_PALETTE — 256-index → rgb) */
+  --nord-success: #87af87;  /* 108 */
+  --nord-warning: #d7af5f;  /* 179 */
+  --nord-error:   #d78787;  /* 174 */
+  --nord-accent:  #87afd7;  /* 110 */
+  --nord-muted:   #5f5f5f;  /*  60 */
+
+  /* html.py bridge tokens (core/html.py expects these for <pre> output) */
+  --painted-fg: var(--fg);
+  --painted-bg: var(--ink);
+  --text:       var(--fg);
+  --code-bg:    var(--ink);
+
+  /* ---------------------------------------------------------------------- */
+  /* Type — monospace, always. The grid is the medium.                      */
+  /* ---------------------------------------------------------------------- */
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', 'Cascadia Code',
+               'Fira Code', Menlo, Consolas, monospace;
+
+  /* The terminal cell. Everything is measured in cells.
+     A cell is 1ch wide; row height is the cell line-height. */
+  --cell-w: 1ch;
+  --cell-lh: 1.4;          /* row height multiplier for body terminal text */
+  --cell-lh-tight: 1.0;    /* block-glyph / big-text art (no inter-row gap) */
+
+  /* Type scale (px). Terminal text wants generous size — 24px+ at display. */
+  --t-display: 64px;       /* big-text block wordmark / hero               */
+  --t-h1:      32px;
+  --t-h2:      24px;
+  --t-h3:      19px;
+  --t-body:    16px;       /* doc prose                                    */
+  --t-cell:    15px;       /* the terminal grid itself                     */
+  --t-small:   13px;
+  --t-caption: 12px;
+
+  /* Weights — mono carries weight well; bold is the workhorse emphasis. */
+  --w-regular: 400;
+  --w-medium:  500;
+  --w-bold:    700;
+  --w-black:   800;
+
+  /* ---------------------------------------------------------------------- */
+  /* Spacing — cell multiples. Layout snaps to the grid.                    */
+  /* ---------------------------------------------------------------------- */
+  --sp-0:  0;
+  --sp-1:  4px;
+  --sp-2:  8px;
+  --sp-3:  12px;
+  --sp-4:  16px;
+  --sp-5:  24px;
+  --sp-6:  32px;
+  --sp-7:  48px;
+  --sp-8:  64px;
+
+  /* ---------------------------------------------------------------------- */
+  /* Chrome — corners are CHARACTERS, not radii. Depth is dim/reverse, not  */
+  /* shadow. The terminal has no blur, no gradient, no drop-shadow.         */
+  /* ---------------------------------------------------------------------- */
+  --radius: 0;                       /* the grid is square                  */
+  --border: 1px solid var(--line);   /* web stand-in for a box-drawing edge */
+  --border-bold: 1px solid var(--line-bold);
+  --dim-opacity: 0.6;                /* Style(dim=True) → opacity 0.6       */
+
+  /* Box-drawing character reference (borders.py charsets) */
+  --box-rounded: '╭ ╮ ╰ ╯ ─ │ ┼';
+  --box-heavy:   '┏ ┓ ┗ ┛ ━ ┃ ╋';
+  --box-double:  '╔ ╗ ╚ ╝ ═ ║ ╬';
+  --box-light:   '┌ ┐ └ ┘ ─ │ ┼';
+  --box-ascii:   '+ + + + - | +';
+}

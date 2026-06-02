@@ -1,0 +1,47 @@
+---
+// Base.astro — the site shell. Pulls in the painted design tokens and sets the
+// terminal-native defaults (monospace everywhere, ink canvas, ligatures off).
+import "../styles/colors_and_type.css";
+
+interface Props {
+  title?: string;
+}
+const { title = "painted" } = Astro.props;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="generator" content={Astro.generator} />
+    <title>{title}</title>
+  </head>
+  <body>
+    <slot />
+  </body>
+</html>
+
+<style is:global>
+  html,
+  body {
+    margin: 0;
+    background: var(--ink);
+  }
+  body {
+    font-family: var(--font-mono);
+    font-variant-ligatures: none;
+    color: var(--fg);
+    -webkit-font-smoothing: antialiased;
+    font-size: var(--t-body);
+    line-height: var(--cell-lh);
+  }
+  ::selection {
+    background: var(--cyan);
+    color: var(--ink);
+  }
+  a {
+    color: var(--cyan);
+  }
+</style>

@@ -1,0 +1,63 @@
+---
+// Landing page — thin Phase-2 vertical slice. Static shell + one hydrated
+// React island in the hero slot. Reference panels (real painted output via
+// outputgen), guides, and search come in later slices.
+import Base from "../layouts/Base.astro";
+import HeroIsland from "../components/HeroIsland.jsx";
+---
+
+<Base title="painted — terminal rendering library">
+  <main>
+    <header>
+      <div class="wordmark">painted</div>
+      <p class="tagline">
+        Python data → terminal pixels. The medium is the monospace cell grid:
+        ANSI color, box-drawing characters, composable Blocks.
+      </p>
+    </header>
+
+    <section class="hero-slot">
+      <HeroIsland client:load />
+    </section>
+
+    <footer>
+      <span class="dim">scaffold slice</span> · tokens wired · hero island live ·
+      reference panels + guides next
+    </footer>
+  </main>
+</Base>
+
+<style>
+  main {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: var(--sp-8) var(--sp-5);
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-7);
+  }
+  .wordmark {
+    font-size: var(--t-display);
+    font-weight: var(--w-black);
+    color: var(--cyan);
+    line-height: var(--cell-lh-tight);
+  }
+  .tagline {
+    font-size: var(--t-h3);
+    color: var(--fg-2);
+    max-width: 60ch;
+    margin: var(--sp-3) 0 0;
+  }
+  .hero-slot {
+    display: flex;
+  }
+  footer {
+    font-size: var(--t-small);
+    color: var(--fg-dim);
+    border-top: 1px solid var(--line);
+    padding-top: var(--sp-3);
+  }
+  .dim {
+    color: var(--fg-dim);
+  }
+</style>
