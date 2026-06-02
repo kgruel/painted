@@ -15,8 +15,18 @@
 # §5) and are repaired in Phase 1 before a full-tree check is gated.
 source "$(dirname "$0")/lib/dev.sh"
 
-# Markdown roots scanned for frag:/docgen markers.
-DOCS_ROOTS=(src)
+# Markdown roots scanned for frag:/docgen markers. Curated to the docs-system MANAGED
+# surfaces and deliberately EXCLUDING the legacy docs/guides + demos/slides trees (their
+# stale py: selectors crash docgen — repaired in Phase 1) and docs/dev scratch. Pre-listed
+# so Phase-1 workers never edit this file to register their target; a file without frag
+# markers is scanned as a harmless no-op.
+DOCS_ROOTS=(
+    README.md CLAUDE.md
+    src
+    demos/CLAUDE.md
+    docs/PRIMITIVES.md docs/DATA_PATTERNS.md docs/ARCHITECTURE.md
+    docs/ZOOM_PATTERNS.md docs/MODE_RESOLUTION.md docs/DEMO_PATTERNS.md
+)
 # Dedicated snippet store, kept separate from the orphaned docs/.extract/snippets.v1.json.
 DOCS_STORE="docs/.extract/docs-system.v1.json"
 # Consumer guides: README.md is the real body; CLAUDE.md is a symlink to it.

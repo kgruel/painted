@@ -6,7 +6,12 @@ This document captures the data modeling patterns used throughout painted. When 
 
 **Frozen state + pure functions.**
 
-All state is immutable (frozen dataclasses). State changes produce new state. Functions are pure: same inputs → same outputs, no side effects.
+<!-- docgen:begin frag:frozen-state -->
+All state types are frozen — immutable dataclasses. State is created through its
+constructor and updated with `dataclasses.replace()`, which returns *new* state; it is
+never mutated in place. Rendering is a pure function of that state —
+`render_fn(state, ...) → Block`: same inputs, same output, no side effects.
+<!-- docgen:end -->
 
 This enables:
 - Predictable rendering (state → visual output)
