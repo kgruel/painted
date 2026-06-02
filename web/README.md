@@ -6,25 +6,32 @@ with **React islands**. This is a **separate publish pipeline** — it has its o
 Node toolchain and is **NOT** part of `./dev check` (the package keeps its
 zero-runtime-dependency invariant; this directory never touches it).
 
-## Status — scaffold slice
+## Status — landing slice (real Design hero integrated)
 
-A thin vertical slice that **builds and serves**:
+A vertical slice that **builds and serves**, now on Claude Design's canonical kit:
 
 - `src/styles/colors_and_type.css` — the painted design tokens (81 custom props).
-  **Bootstrap copy**, extracted + un-escaped from `painted Design System
-  (standalone).html`. The ANSI-16 block is byte-exact to `core/_color.py`.
-  *Replace wholesale when Claude Design ships the standalone `colors_and_type.css`.*
-- `src/layouts/Base.astro` — the shell: tokens + terminal defaults (monospace,
-  ink canvas, ligatures off).
-- `src/components/HeroIsland.jsx` — **placeholder** hero island (`client:load`).
-  Proves React hydration + tokens. *Swap for Design's designated, polished hero*
-  (the no-cliffs CLI→TUI walkthrough or the system-monitor Surface).
-- `src/pages/index.astro` — landing page wiring the above.
+  **Vendored from Claude Design** (`painted-design-kit/colors_and_type.css`,
+  `painted Design System-6.zip`, 2026-06-02). The ANSI-16 block is byte-exact to
+  `core/_color.py`. The Google-Fonts `@import` was removed; the face loads via a
+  `<link>` in `Base.astro` (faster, no double-fetch — see the kit's `fonts/README.md`).
+- `src/components/PaintedSurface.jsx` — **the designated hero**, vendored verbatim
+  from the kit: a self-contained ESM React island (the system-monitor Surface),
+  `import React` + `export default`, scoped keyboard, injects its own tokens.
+  Mounted `client:visible` in `index.astro`. SSRs + hydrates.
+- `src/layouts/Base.astro` — the shell: tokens + terminal defaults + the
+  JetBrains Mono `<link>`.
+- `src/pages/index.astro` — wordmark + tagline + the hero island.
+
+Source of truth for the kit: `painted-design-kit/` (the Design package). When
+Design re-iterates, re-vendor `colors_and_type.css` and `hero/PaintedSurface.jsx`.
 
 ## Not yet built (next slices)
 
-Reference panels (real painted output via the `outputgen` cells→HTML path),
-guides as content collections, API tables, Pagefind search.
+- **Fonts hardening:** self-host via `@fontsource/jetbrains-mono` (no third-party
+  request, no CLS) — currently the Google-Fonts CDN `<link>`.
+- Reference panels (real painted output via the `outputgen` cells→HTML path),
+  guides as content collections, API tables, Pagefind search.
 
 ## Laning rule (load-bearing)
 

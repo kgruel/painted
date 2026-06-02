@@ -1,7 +1,25 @@
-/* colors_and_type.css — painted design tokens
-   BOOTSTRAP COPY extracted from 'painted Design System (standalone).html' (Jun 1).
-   Source of truth is Claude Design; replace wholesale when the packaged file lands.
-   ANSI-16 block is byte-exact to painted core/_color.py _BASIC_RGB. */
+/* VENDORED from Claude Design 'painted-design-kit/colors_and_type.css' (painted Design System-6.zip, 2026-06-02).
+   Canonical token source. The Google-Fonts @import was removed — the face loads via a <link> in Base.astro
+   <head> (faster than @import; avoids double-fetch). See fonts/README.md in the kit. */
+/* ============================================================================
+   painted — Design System Foundations
+   Colors, type, spacing, and box-chrome tokens.
+
+   painted is a cell-buffer terminal UI library. Its native medium is the
+   terminal: a monospace grid painted with ANSI colors and box-drawing
+   characters. These tokens translate that medium to the web faithfully.
+
+   Two color layers live here:
+     1. ANSI 16  — the AUTHORITATIVE values painted emits (from core/_color.py).
+                   The terminal owns the final rendering; these are the spec.
+     2. painted theme — a curated, refined-vivid terminal scheme for rendering
+                   painted output on the web. Colorful, fun, legible on ink.
+
+   Font note: the repo ships NO font (the terminal supplies one). We standardise
+   on JetBrains Mono as the reference face — full box-drawing + block coverage.
+   Flagged as a substitution; swap for your preferred mono.
+   ============================================================================ */
+
 
 :root {
   /* ---------------------------------------------------------------------- */
@@ -135,3 +153,51 @@
   --box-light:   '┌ ┐ └ ┘ ─ │ ┼';
   --box-ascii:   '+ + + + - | +';
 }
+
+/* ============================================================================
+   Semantic element styles — the painted "stylesheet" for the web.
+   Apply on a dark (--ink) surface.
+   ============================================================================ */
+
+.painted-root {
+  background: var(--ink);
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: var(--t-body);
+  line-height: var(--cell-lh);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  font-variant-ligatures: none;   /* terminals don't ligate */
+}
+
+h1, .h1 { font-size: var(--t-h1); font-weight: var(--w-bold);  line-height: 1.2; letter-spacing: -0.01em; margin: 0; }
+h2, .h2 { font-size: var(--t-h2); font-weight: var(--w-bold);  line-height: 1.25; margin: 0; }
+h3, .h3 { font-size: var(--t-h3); font-weight: var(--w-medium); line-height: 1.3; margin: 0; }
+p,  .p  { font-size: var(--t-body); line-height: 1.6; margin: 0; color: var(--fg-2); }
+small, .caption { font-size: var(--t-caption); color: var(--fg-dim); }
+
+/* The grid surface — where painted output lives */
+.term, .painted-output {
+  font-family: var(--font-mono);
+  font-size: var(--t-cell);
+  line-height: var(--cell-lh);
+  white-space: pre;
+  tab-size: 4;
+  background: var(--ink);
+  color: var(--fg);
+  margin: 0;
+}
+
+/* ANSI Style() flag → CSS mapping (mirrors core/html.py _style_to_css) */
+.s-bold      { font-weight: var(--w-bold); }
+.s-italic    { font-style: italic; }
+.s-underline { text-decoration: underline; }
+.s-dim       { opacity: var(--dim-opacity); }
+.s-reverse   { color: var(--reverse-fg); background: var(--reverse-bg); }
+
+/* Palette role → fg color */
+.fg-success { color: var(--role-success); }
+.fg-warning { color: var(--role-warning); }
+.fg-error   { color: var(--role-error); }
+.fg-accent  { color: var(--role-accent); }
+.fg-muted   { color: var(--role-muted); }

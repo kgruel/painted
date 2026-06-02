@@ -1,9 +1,12 @@
 ---
-// Landing page — thin Phase-2 vertical slice. Static shell + one hydrated
-// React island in the hero slot. Reference panels (real painted output via
-// outputgen), guides, and search come in later slices.
+// Landing page — static shell + the real Design hero island (the system-monitor
+// Surface). Reference panels (real painted output via outputgen), guides, and
+// search come in later slices.
+//
+// Laning: PaintedSurface is a COSMETIC brand recreation, not painted's renderer.
+// Anywhere the site shows genuine product output, render it via the library.
 import Base from "../layouts/Base.astro";
-import HeroIsland from "../components/HeroIsland.jsx";
+import PaintedSurface from "../components/PaintedSurface.jsx";
 ---
 
 <Base title="painted — terminal rendering library">
@@ -17,24 +20,24 @@ import HeroIsland from "../components/HeroIsland.jsx";
     </header>
 
     <section class="hero-slot">
-      <HeroIsland client:load />
+      <PaintedSurface client:visible initialView="Status" />
     </section>
 
     <footer>
-      <span class="dim">scaffold slice</span> · tokens wired · hero island live ·
-      reference panels + guides next
+      <span class="dim">cosmetic hero — recreation, not the renderer.</span> Real
+      output renders through painted itself · reference panels + guides next.
     </footer>
   </main>
 </Base>
 
 <style>
   main {
-    max-width: 960px;
+    max-width: 1100px;
     margin: 0 auto;
     padding: var(--sp-8) var(--sp-5);
     display: flex;
     flex-direction: column;
-    gap: var(--sp-7);
+    gap: var(--sp-6);
   }
   .wordmark {
     font-size: var(--t-display);
@@ -48,7 +51,9 @@ import HeroIsland from "../components/HeroIsland.jsx";
     max-width: 60ch;
     margin: var(--sp-3) 0 0;
   }
+  /* Sized wrapper for the island — it fills its container (minHeight 520). */
   .hero-slot {
+    height: min(80vh, 720px);
     display: flex;
   }
   footer {
