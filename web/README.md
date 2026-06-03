@@ -26,12 +26,18 @@ A vertical slice that **builds and serves**, now on Claude Design's canonical ki
 Source of truth for the kit: `painted-design-kit/` (the Design package). When
 Design re-iterates, re-vendor `colors_and_type.css` and `hero/PaintedSurface.jsx`.
 
+## Built
+
+- **`/walkthrough`** — the "no cliffs" continuum, 7 real `monitor_*` panels.
+- **`/reference`** — the catalog: 21 real specimens (one per Design preview card the
+  renderer can produce) from `tools/reference_specimens.py`, via the `outputgen`
+  cells→HTML path; 2 cards marked cosmetic (CSS surfaces / web font).
+
 ## Not yet built (next slices)
 
 - **Fonts hardening:** self-host via `@fontsource/jetbrains-mono` (no third-party
   request, no CLS) — currently the Google-Fonts CDN `<link>`.
-- Reference panels (real painted output via the `outputgen` cells→HTML path),
-  guides as content collections, API tables, Pagefind search.
+- Guides as content collections, API tables, Pagefind search.
 
 ## Laning rule (load-bearing)
 
