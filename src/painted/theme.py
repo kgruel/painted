@@ -21,9 +21,16 @@ from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
 
 from .core.borders import BorderChars, ROUNDED, use_borders, reset_borders
-from .core.cell import Style
 from .icon_set import IconSet, use_icons, reset_icons
-from .palette import Palette, use_palette, reset_palette
+from .palette import (
+    Palette,
+    DEFAULT_PALETTE,
+    NORD_PALETTE,
+    MONO_PALETTE,
+    PAINTED_PALETTE,
+    use_palette,
+    reset_palette,
+)
 
 
 @dataclass(frozen=True)
@@ -41,29 +48,20 @@ class Theme:
 
 
 # --- Presets ---
+# Themes COMPOSE palette presets; they never redefine palette colors inline.
+# An inline copy would silently desync from palette.py (e.g. the `series` ramp),
+# so the palette module stays the single source of truth.
 
-DEFAULT_THEME = Theme()
+DEFAULT_THEME = Theme(palette=DEFAULT_PALETTE)
 
-NORD_THEME = Theme(
-    palette=Palette(
-        success=Style(fg=108),
-        warning=Style(fg=179),
-        error=Style(fg=174),
-        accent=Style(fg=110),
-        muted=Style(fg=60),
-    ),
-)
+NORD_THEME = Theme(palette=NORD_PALETTE)
 
 MONO_THEME = Theme(
-    palette=Palette(
-        success=Style(bold=True),
-        warning=Style(underline=True),
-        error=Style(bold=True, reverse=True),
-        accent=Style(bold=True),
-        muted=Style(dim=True),
-    ),
+    palette=MONO_PALETTE,
     borders=BorderChars("+", "+", "+", "+", "-", "|", "+"),
 )
+
+PAINTED_THEME = Theme(palette=PAINTED_PALETTE)
 
 
 # --- ContextVar delivery ---

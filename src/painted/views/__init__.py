@@ -9,6 +9,7 @@ __all__ = [
     "DEFAULT_PALETTE",
     "NORD_PALETTE",
     "MONO_PALETTE",
+    "PAINTED_PALETTE",
     "current_palette",
     "use_palette",
     "reset_palette",
@@ -32,6 +33,7 @@ __all__ = [
     "DEFAULT_THEME",
     "NORD_THEME",
     "MONO_THEME",
+    "PAINTED_THEME",
     "use_theme",
     "reset_theme",
     # Stateless views
@@ -94,6 +96,7 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "DEFAULT_PALETTE": ("..palette", "DEFAULT_PALETTE"),
     "NORD_PALETTE": ("..palette", "NORD_PALETTE"),
     "MONO_PALETTE": ("..palette", "MONO_PALETTE"),
+    "PAINTED_PALETTE": ("..palette", "PAINTED_PALETTE"),
     "current_palette": ("..palette", "current_palette"),
     "use_palette": ("..palette", "use_palette"),
     "reset_palette": ("..palette", "reset_palette"),
@@ -117,6 +120,7 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "DEFAULT_THEME": ("..theme", "DEFAULT_THEME"),
     "NORD_THEME": ("..theme", "NORD_THEME"),
     "MONO_THEME": ("..theme", "MONO_THEME"),
+    "PAINTED_THEME": ("..theme", "PAINTED_THEME"),
     "use_theme": ("..theme", "use_theme"),
     "reset_theme": ("..theme", "reset_theme"),
     # Stateless views

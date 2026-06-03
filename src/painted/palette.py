@@ -1,7 +1,8 @@
-"""Palette: semantic Style roles for aesthetic personalization.
+"""Palette: ambient color policy — semantic roles + a categorical ramp.
 
-5 roles mapping to Style (not Color) — carries both color and modifier
-fallbacks for monochrome output.
+Five semantic roles (meaning -> style) plus ``series``, a categorical
+ramp (position -> style) for visually separating N peers. Both are Styles
+(not Colors) so monochrome palettes differentiate with modifiers.
 
 Usage:
     from painted.palette import current_palette, use_palette, MONO_PALETTE
@@ -28,10 +29,24 @@ from .core.cell import Style
 
 @dataclass(frozen=True)
 class Palette:
-    """Semantic style roles for aesthetic personalization.
+    """Ambient color policy: semantic roles plus a categorical ramp.
 
-    Each role is a Style (not a Color) so that monochrome palettes can
-    use modifiers (bold, reverse, dim) for differentiation.
+    Two distinct color concepts, both delivered as Styles (not Colors) so
+    monochrome palettes can differentiate with modifiers (bold, underline,
+    dim) instead of hue:
+
+    * **Semantic roles** (``success``/``warning``/``error``/``accent``/
+      ``muted``) map *meaning* to style — "what does this value signify?"
+    * **``series``** is a *categorical* (qualitative) ramp — distinct,
+      "just-different" styles indexed by *position*, with no inherent
+      meaning — "make these N peers visually separable."
+
+    The two are independent: a palette's ``series`` need not relate to its
+    roles. (That DEFAULT's first four happen to echo the role hues is a
+    historical coincidence — it reproduces the original flame cycle — not a
+    coupling.) The label->index assignment that consumes ``series`` lives in
+    ``flame_lens`` today; it is the general form a reusable ramp helper would
+    factor out, once a second consumer exists.
     """
 
     success: Style = field(default_factory=lambda: Style(fg="green"))
@@ -39,6 +54,14 @@ class Palette:
     error: Style = field(default_factory=lambda: Style(fg="red"))
     accent: Style = field(default_factory=lambda: Style(fg="cyan"))
     muted: Style = field(default_factory=lambda: Style(dim=True))
+    series: tuple[Style, ...] = field(
+        default_factory=lambda: (
+            Style(fg="red"),
+            Style(fg="yellow"),
+            Style(fg="green"),
+            Style(fg="cyan"),
+        )
+    )
 
 
 # --- Presets ---
@@ -51,6 +74,9 @@ NORD_PALETTE = Palette(
     error=Style(fg=174),
     accent=Style(fg=110),
     muted=Style(fg=60),
+    # Nord-hued categorical ramp (error/warning/success/accent order) — keeps
+    # flame segments in the Nord palette rather than the default warm cycle.
+    series=(Style(fg=174), Style(fg=179), Style(fg=108), Style(fg=110)),
 )
 
 MONO_PALETTE = Palette(
@@ -59,6 +85,39 @@ MONO_PALETTE = Palette(
     error=Style(bold=True, reverse=True),
     accent=Style(bold=True),
     muted=Style(dim=True),
+    # Honest monochrome: categorical separation via modifiers, never hue. Flame
+    # segments already carry reverse=True, so these layer on top of it (reverse
+    # itself is omitted — double-reverse is a no-op). All four carry an explicit
+    # attribute (dim/bold are intensity opposites) so no pair collapses to a bare
+    # reversed cell on terminals where bold-on-reverse reads like plain.
+    series=(
+        Style(dim=True),
+        Style(bold=True),
+        Style(underline=True),
+        Style(italic=True),
+    ),
+)
+
+# The painted display palette: vivid, truecolor-first hues for the docs site and
+# any truecolor terminal. The honest default (DEFAULT_PALETTE — named colors that
+# downsample to what a real terminal shows) stays the default; this is the opt-in
+# / live-toggle vivid skin. The hex VALUES are tunable; the NAME is the contract.
+PAINTED_PALETTE = Palette(
+    success=Style(fg="#4fdc82"),
+    warning=Style(fg="#f5cf52"),
+    error=Style(fg="#ff5b6a"),
+    accent=Style(fg="#44e0e0"),
+    muted=Style(fg="#79808f"),
+    # Categorical ramp: the four role hues, then three more to extend the cycle.
+    series=(
+        Style(fg="#4fdc82"),  # green
+        Style(fg="#f5cf52"),  # yellow
+        Style(fg="#ff5b6a"),  # red
+        Style(fg="#44e0e0"),  # cyan
+        Style(fg="#5aa7ff"),  # blue
+        Style(fg="#ff74c8"),  # magenta
+        Style(fg="#ff9d4d"),  # orange
+    ),
 )
 
 # --- ContextVar delivery ---

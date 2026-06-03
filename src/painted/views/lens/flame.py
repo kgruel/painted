@@ -13,23 +13,13 @@ from ...core.cell import Style
 from ...core.compose import fit_to_width, join_horizontal, join_vertical
 
 
-def _flame_palette_colors() -> tuple[str, ...]:
-    """Extract fg colors from Palette roles for flame segments.
+def _flame_color_for_label(label: str, prev_idx: int, palette: tuple[Style, ...]) -> int:
+    """Stable ramp index for a segment label, with adjacent-collision avoidance.
 
-    Falls back to warm color cycle when palette roles lack fg (e.g. MONO_PALETTE).
+    This is the categorical-ramp assignment that consumes ``Palette.series``
+    (position -> style). It is the general form a reusable ramp helper would
+    factor out, once a second lens needs categorical coloring.
     """
-    from ...palette import current_palette
-
-    p = current_palette()
-    colors: list[str] = []
-    for role in (p.error, p.warning, p.success, p.accent):
-        if role.fg is not None:
-            colors.append(str(role.fg))
-    return tuple(colors) if colors else ("red", "yellow", "green", "cyan")
-
-
-def _flame_color_for_label(label: str, prev_idx: int, palette: tuple[str, ...]) -> int:
-    """Stable color index for a segment label, with adjacent-collision avoidance."""
     idx = hash(label) % len(palette)
     if idx == prev_idx:
         idx = (idx + 1) % len(palette)
@@ -67,12 +57,19 @@ def flame_lens(
         zoom: Zoom level (0+).
         width: Available width in characters.
         height: When set, render vertical columns with this total height.
-        colors: Optional color cycle tuple; defaults to palette-derived colors.
+        colors: Optional per-call ramp as color strings (wrapped to Styles);
+            defaults to the ambient palette's ``series`` categorical ramp.
 
     Returns:
         Block with rendered flame chart.
     """
-    palette = colors if colors is not None else _flame_palette_colors()
+    palette: tuple[Style, ...]
+    if colors is not None:
+        palette = tuple(Style(fg=c) for c in colors)
+    else:
+        from ...palette import current_palette
+
+        palette = current_palette().series
     if width <= 0:
         return Block.empty(0, 1)
 
@@ -187,7 +184,7 @@ def _flame_render_row(
     segments: list[tuple[str, Any]],
     total: float,
     width: int,
-    palette: tuple[str, ...],
+    palette: tuple[Style, ...],
 ) -> Block:
     """Build one row of proportional segments with per-label coloring."""
     if width <= 0:
@@ -206,7 +203,7 @@ def _flame_render_row(
             continue
         color_idx = _flame_color_for_label(label, prev_color_idx, palette)
         prev_color_idx = color_idx
-        style = Style(fg=palette[color_idx], reverse=True)
+        style = palette[color_idx].merge(Style(reverse=True))
         text = truncate(label, seg_w) if display_width(label) > seg_w else label
         pad_needed = seg_w - display_width(text)
         text = text + " " * max(0, pad_needed)
@@ -223,7 +220,7 @@ def _flame_render_levels(
     width: int,
     remaining_zoom: int,
     rows: list[Block],
-    palette: tuple[str, ...],
+    palette: tuple[Style, ...],
 ) -> None:
     """Recursively render flame rows, one per depth level."""
     if not segments or width <= 0:
@@ -258,7 +255,7 @@ def _flame_render_levels(
             # Leaf at this level — per-label color
             color_idx = _flame_color_for_label(label, prev_color_idx, palette)
             prev_color_idx = color_idx
-            child_style = Style(fg=palette[color_idx], reverse=True)
+            child_style = palette[color_idx].merge(Style(reverse=True))
             text = truncate(label, seg_w) if display_width(label) > seg_w else label
             pad_needed = seg_w - display_width(text)
             text = text + " " * max(0, pad_needed)
@@ -278,7 +275,7 @@ def _flame_expand_deeper(
     width: int,
     remaining_zoom: int,
     rows: list[Block],
-    palette: tuple[str, ...],
+    palette: tuple[Style, ...],
 ) -> None:
     """Expand deeper levels for segments with grandchildren."""
     seg_widths = _flame_allocate_widths(segments, total, width)
@@ -329,7 +326,7 @@ def _flame_render_vertical(
     width: int,
     height: int,
     zoom: int,
-    palette: tuple[str, ...],
+    palette: tuple[Style, ...],
 ) -> Block:
     """Render segments as vertical columns (height = cost)."""
     n = len(segments)
@@ -360,7 +357,7 @@ def _flame_render_vertical(
 
         color_idx = _flame_color_for_label(label, prev_color_idx, palette)
         prev_color_idx = color_idx
-        bar_style = Style(fg=palette[color_idx], reverse=True)
+        bar_style = palette[color_idx].merge(Style(reverse=True))
 
         # Label row (bottom)
         label_text = truncate(label, cw) if display_width(label) > cw else label

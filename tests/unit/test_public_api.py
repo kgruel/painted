@@ -90,6 +90,7 @@ STABLE_VIEWS_SURFACE = frozenset(
         "DEFAULT_PALETTE",
         "NORD_PALETTE",
         "MONO_PALETTE",
+        "PAINTED_PALETTE",
         "current_palette",
         "use_palette",
         "reset_palette",
@@ -113,6 +114,7 @@ STABLE_VIEWS_SURFACE = frozenset(
         "DEFAULT_THEME",
         "NORD_THEME",
         "MONO_THEME",
+        "PAINTED_THEME",
         "use_theme",
         "reset_theme",
         # Stateless views

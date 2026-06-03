@@ -99,3 +99,68 @@ class TestFlameLensEdgeCases:
         data = {"a": 1, "b": 1, "c": 1, "d": 1, "e": 1}
         block = flame_lens(data, 1, 3)
         assert block.width == 3
+
+
+class TestFlameLensPalette:
+    """flame_lens colors segments from the ambient palette's `series` ramp."""
+
+    _DATA = {"main": {"render": 45, "diff": 30, "flush": 25}}
+
+    @staticmethod
+    def _cells(block):
+        return [(c.char, c.style) for y in range(block.height) for c in block.row(y)]
+
+    def test_default_flame_matches_legacy_cycle(self):
+        """DEFAULT flame is byte-identical to the pre-`series` warm cycle.
+
+        Parity is by construction, hash-seed independent: DEFAULT_PALETTE.series
+        carries the exact (red, yellow, green, cyan) Styles the old
+        `_flame_palette_colors()` derived from roles, and flame now applies
+        `series[idx].merge(Style(reverse=True))` — the same Style the old
+        `Style(fg=color, reverse=True)` produced. Same tuple + same index fn =>
+        identical output regardless of PYTHONHASHSEED.
+        """
+        ambient = flame_lens(self._DATA, 2, 60)
+        legacy = flame_lens(self._DATA, 2, 60, colors=("red", "yellow", "green", "cyan"))
+        assert self._cells(ambient) == self._cells(legacy)
+
+    def test_mono_flame_uses_no_color(self):
+        """Honest monochrome: under MONO_PALETTE, flame segments carry no fg."""
+        from painted.views import MONO_PALETTE, use_palette
+
+        with use_palette(MONO_PALETTE):
+            block = flame_lens(self._DATA, 2, 60)
+        fgs = {c.style.fg for y in range(block.height) for c in block.row(y)}
+        assert fgs == {None}, f"MONO flame leaked color: {fgs}"
+
+    def test_painted_flame_uses_vivid_hex(self):
+        """PAINTED_PALETTE routes vivid truecolor hexes into flame segments."""
+        from painted.views import PAINTED_PALETTE, use_palette
+
+        with use_palette(PAINTED_PALETTE):
+            block = flame_lens(self._DATA, 2, 60)
+        hexes = {
+            c.style.fg
+            for y in range(block.height)
+            for c in block.row(y)
+            if isinstance(c.style.fg, str) and c.style.fg.startswith("#")
+        }
+        assert hexes, "PAINTED flame produced no hex colors"
+        assert hexes <= {s.fg for s in PAINTED_PALETTE.series}
+
+    def test_nord_flame_uses_nord_hues(self):
+        """NORD flame routes the Nord 256-color indices (ints) into segments.
+
+        Guards the fix: the pre-`series` path stringified role fg, so "174"
+        rendered as no color and NORD flame was effectively colorless. With
+        int-valued `series`, segments carry real Nord hues again.
+        """
+        from painted.views import NORD_PALETTE, use_palette
+
+        with use_palette(NORD_PALETTE):
+            block = flame_lens(self._DATA, 2, 60)
+        fgs = {
+            c.style.fg for y in range(block.height) for c in block.row(y) if c.style.fg is not None
+        }
+        assert fgs, "NORD flame produced no colored segments"
+        assert fgs <= {174, 179, 108, 110}

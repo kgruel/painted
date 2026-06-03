@@ -17,9 +17,14 @@ from __future__ import annotations
 from painted import (
     ASCII_ICONS,
     DEFAULT_PALETTE,
+    DEFAULT_THEME,
     HEAVY,
     MONO_PALETTE,
     MONO_THEME,
+    NORD_PALETTE,
+    NORD_THEME,
+    PAINTED_PALETTE,
+    PAINTED_THEME,
     ROUNDED,
     current_borders,
     current_icons,
@@ -73,3 +78,17 @@ def test_use_theme_scoped_restores_all_three_on_exit() -> None:
     # All three restored after the block.
     assert current_palette() == DEFAULT_PALETTE
     assert current_borders() is ROUNDED
+
+
+def test_themes_reference_palette_presets_not_inline_copies() -> None:
+    """Themes COMPOSE palette presets; they never redefine colors inline.
+
+    Inline palette copies in theme.py would silently desync from palette.py
+    (notably the `series` ramp), so each preset theme must hold the *same object*
+    as its palette preset. Pin identity so a regression to inline definitions —
+    the exact drift vector this dedup removed — goes red.
+    """
+    assert DEFAULT_THEME.palette is DEFAULT_PALETTE
+    assert NORD_THEME.palette is NORD_PALETTE
+    assert MONO_THEME.palette is MONO_PALETTE
+    assert PAINTED_THEME.palette is PAINTED_PALETTE
