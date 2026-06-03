@@ -27,8 +27,15 @@ def _color_to_css(color: str | int | None) -> str | None:
     if isinstance(color, str):
         if color.startswith("#") and len(color) == 7:
             return color
-        if color.lower() in NAMED_COLORS:
-            return color.lower()
+        name = color.lower()
+        if name in NAMED_COLORS:
+            # A named color IS its ANSI index — resolve it through painted's own
+            # color table (same path as an int), not the browser's CSS keyword.
+            # CSS keywords disagree with painted's _BASIC_RGB (e.g. keyword "red"
+            # is #FF0000 but painted red is #800000), so keyword passthrough was
+            # unfaithful to what painted actually renders.
+            r, g, b = _idx_to_rgb(NAMED_COLORS[name])
+            return f"#{r:02x}{g:02x}{b:02x}"
     return None
 
 

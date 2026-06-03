@@ -234,35 +234,35 @@ painted deliberately pushes complexity *up* the stack:
                             
 <span style="opacity: 0.6">  foreground</span>                
                             
-<span style="color: red">  red       </span>                
-<span style="color: green">  green     </span>                
-<span style="color: blue">  blue      </span>                
-<span style="color: yellow">  yellow    </span>                
-<span style="color: cyan">  cyan      </span>                
-<span style="color: magenta">  magenta   </span>                
+<span style="color: #800000">  red       </span>                
+<span style="color: #008000">  green     </span>                
+<span style="color: #000080">  blue      </span>                
+<span style="color: #808000">  yellow    </span>                
+<span style="color: #008080">  cyan      </span>                
+<span style="color: #800080">  magenta   </span>                
                             
 <span style="opacity: 0.6">  background</span>                
                             
-<span style="color: white; background-color: red">  red       </span>                
-<span style="color: black; background-color: green">  green     </span>                
-<span style="color: white; background-color: blue">  blue      </span>                
-<span style="color: black; background-color: yellow">  yellow    </span>                
-<span style="color: black; background-color: cyan">  cyan      </span>                
-<span style="color: white; background-color: magenta">  magenta   </span>                
+<span style="color: #c0c0c0; background-color: #800000">  red       </span>                
+<span style="color: #000000; background-color: #008000">  green     </span>                
+<span style="color: #c0c0c0; background-color: #000080">  blue      </span>                
+<span style="color: #000000; background-color: #808000">  yellow    </span>                
+<span style="color: #000000; background-color: #008080">  cyan      </span>                
+<span style="color: #c0c0c0; background-color: #800080">  magenta   </span>                
                             
 <span style="opacity: 0.6">  combinations</span>              
                             
-<span style="color: green; font-weight: bold">  bold + green     deploy OK</span>
+<span style="color: #008000; font-weight: bold">  bold + green     deploy OK</span>
 <span style="font-style: italic; opacity: 0.6">  dim + italic     deploy OK</span>
-<span style="color: var(--painted-bg, var(--code-bg)); background-color: cyan">  reverse + cyan   deploy OK</span>
-<span style="color: yellow; font-weight: bold; text-decoration: underline">  bold + underline deploy OK</span>
-<span style="color: white; background-color: blue; font-weight: bold">  bg + bold        deploy OK</span>
+<span style="color: var(--painted-bg, var(--code-bg)); background-color: #008080">  reverse + cyan   deploy OK</span>
+<span style="color: #808000; font-weight: bold; text-decoration: underline">  bold + underline deploy OK</span>
+<span style="color: #c0c0c0; background-color: #000080; font-weight: bold">  bg + bold        deploy OK</span>
                             
 <span style="opacity: 0.6">  merge</span>                     
                             
-<span style="color: blue; font-weight: bold">  base             deploy OK</span>
-<span style="color: red; font-style: italic">  + overlay        deploy OK</span>
-<span style="color: red; font-weight: bold; font-style: italic">  = merged         deploy OK</span>
+<span style="color: #000080; font-weight: bold">  base             deploy OK</span>
+<span style="color: #800000; font-style: italic">  + overlay        deploy OK</span>
+<span style="color: #800000; font-weight: bold; font-style: italic">  = merged         deploy OK</span>
                             
 </pre>
 <!-- outputgen:end -->
