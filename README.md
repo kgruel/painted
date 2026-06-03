@@ -157,7 +157,7 @@ One dependency: [wcwidth](https://pypi.org/project/wcwidth/) (wide character dis
 
 | Export | Purpose |
 |--------|---------|
-| `Palette` | 5 semantic Style roles (success, warning, error, accent, muted) |
+| `Palette` | 5 semantic Style roles (success, warning, error, accent, muted) + a `series` categorical ramp |
 | `IconSet` | Glyph vocabulary with ASCII fallback |
 
 ## License

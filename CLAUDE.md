@@ -80,7 +80,7 @@ Surface + Layer             # alt-screen TUI with keyboard + diff rendering
 | Renderer | `core/compose.py` | join, pad, border, truncate, Align |
 | Renderer | `core/writer.py` | Writer, ColorDepth, print_block |
 | Renderer | `inplace.py` | InPlaceRenderer |
-| Renderer | `palette.py` | Palette (5 semantic Style roles), presets |
+| Renderer | `palette.py` | Palette (5 semantic Style roles + `series` categorical ramp), presets |
 | Renderer | `icon_set.py` | IconSet (glyph vocabulary), ASCII fallback |
 | Renderer | `views/record.py` | record_line, PayloadLens, GutterFn |
 | Renderer | `views/lens/` | shape_lens, tree_lens, chart_lens, flame_lens |

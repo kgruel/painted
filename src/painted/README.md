@@ -159,6 +159,6 @@ with use_palette(NORD_PALETTE):  # or scoped override
     show(data)
 ```
 
-`Palette` — 5 semantic Style roles (success, warning, error, accent, muted).
+`Palette` — 5 semantic Style roles (success, warning, error, accent, muted), plus a `series` categorical ramp for visually separating N peers.
 `IconSet` — named glyph slots (spinner, progress, tree, sparkline).
 Both use ContextVar — scoped overrides via context manager.

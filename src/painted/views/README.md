@@ -49,11 +49,11 @@ never mutated in place. Rendering is a pure function of that state —
 Contextual defaults via ContextVar — set globally or scoped via context manager.
 
 ```python
-from painted.views import Palette, use_palette, current_palette, DEFAULT_PALETTE, NORD_PALETTE, MONO_PALETTE
+from painted.views import Palette, use_palette, current_palette, DEFAULT_PALETTE, NORD_PALETTE, MONO_PALETTE, PAINTED_PALETTE
 from painted.views import IconSet, use_icons, current_icons, ASCII_ICONS
 ```
 
-- **`Palette`** — 5 semantic Style roles: `success`, `warning`, `error`, `accent`, `muted`.
+- **`Palette`** — 5 semantic Style roles (`success`, `warning`, `error`, `accent`, `muted`), plus a `series` categorical ramp (consumed by `flame_lens`).
 - **`IconSet`** — named glyph slots: spinner, progress, tree, sparkline.
 - `use_palette()` / `use_icons()` — setter (no arg = get current) or context manager (scoped override).
 

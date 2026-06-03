@@ -228,9 +228,9 @@ The source is organized into four subsystems. Layer boundaries are enforced by a
 | **tui/** | `mouse.py` | MouseEvent, MouseButton, MouseAction, parse_sgr_mouse |
 | **tui/** | `region.py` | Region |
 | **tui/** | `testing.py` | TestSurface, CapturedFrame |
-| **root** | `palette.py` | Palette, current_palette(), use_palette(), DEFAULT_PALETTE, NORD_PALETTE, MONO_PALETTE |
+| **root** | `palette.py` | Palette, current_palette(), use_palette(), DEFAULT_PALETTE, NORD_PALETTE, MONO_PALETTE, PAINTED_PALETTE |
 | **root** | `icon_set.py` | IconSet, current_icons(), use_icons(), ASCII_ICONS |
-| **root** | `theme.py` | Theme, use_theme(), DEFAULT_THEME, NORD_THEME, MONO_THEME |
+| **root** | `theme.py` | Theme, use_theme(), DEFAULT_THEME, NORD_THEME, MONO_THEME, PAINTED_THEME |
 | **root** | `inplace.py` | InPlaceRenderer |
 | **root** | `viewport.py` | Viewport |
 | **root** | `display.py` | show() |
