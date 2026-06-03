@@ -1,0 +1,252 @@
+---
+// walkthrough.astro — the "no cliffs" continuum, rendered by the REAL library.
+//
+// Every panel below is genuine painted output: tools/outputgen.py captured the
+// demos/patterns/monitor.py render at each point on the continuum and wrote it
+// through render_html (cells → HTML). Only the LAST stage (interactive) is the
+// cosmetic PaintedSurface island — the one legitimately-not-real stop, because
+// a live alt-screen TUI can't be a static fragment.
+//
+// The fragments are committed artifacts under src/generated/panels/, produced
+// on `main` by `outputgen --emit-panels`. The site is a pure consumer.
+import Base from "../layouts/Base.astro";
+import PaintedSurface from "../components/PaintedSurface.jsx";
+
+import monitorQ from "../generated/panels/monitor_q.html?raw";
+import monitorDefault from "../generated/panels/monitor_default.html?raw";
+import monitorHonest from "../generated/panels/monitor_default_honest.html?raw";
+import monitorVv from "../generated/panels/monitor_vv.html?raw";
+import monitorLive from "../generated/panels/monitor_live.html?raw";
+import monitorPlain from "../generated/panels/monitor_plain.html?raw";
+import monitorJson from "../generated/panels/monitor_json.html?raw";
+
+const STOPS = [
+  { id: "show", n: "01", label: "styled print", entry: "show()" },
+  { id: "format", n: "02", label: "format dial", entry: "--json" },
+  { id: "fidelity", n: "03", label: "fidelity dial", entry: "-q / -vv" },
+  { id: "live", n: "04", label: "mode dial", entry: "--live" },
+  { id: "tui", n: "05", label: "interactive", entry: "-i  +  Layer" },
+];
+---
+
+<Base title="painted — no cliffs">
+  <div class="wt-root">
+    <header class="wt-hero">
+      <div class="wt-bigword">no cliffs</div>
+      <p class="wt-intro">
+        One library. Print to TUI. One dataset — a host's vitals — enters as a
+        styled print and never hands over control; it just escalates across
+        surfaces. Here is the whole continuum, <strong>rendered by painted
+        itself</strong> — every panel below is real <code>render_html</code>
+        output, not a mock.
+      </p>
+    </header>
+
+    <div class="wt-page">
+      <nav class="wt-spine" aria-label="continuum">
+        <div class="wt-spine-inner">
+          <div class="wt-spine-eyebrow">ONE DATASET →</div>
+          <ol class="wt-stops">
+            {STOPS.map((s) => (
+              <li><a href={`#${s.id}`} data-stop={s.id}>
+                <span class="wt-dot"></span>
+                <span class="wt-stop-text">
+                  <span class="wt-stop-label">{s.label}</span>
+                  <span class="wt-stop-entry">{s.entry}</span>
+                </span>
+              </a></li>
+            ))}
+          </ol>
+          <div class="wt-spine-foot">
+            <div class="wt-foot-title">no cliffs</div>
+            <div class="wt-foot-sub">same data, same render fn — only the surface escalates.</div>
+          </div>
+        </div>
+      </nav>
+
+      <main class="wt-main">
+        <!-- 01 — styled print -->
+        <section id="show" data-stage="show" class="wt-stage">
+          <div class="wt-stage-head"><span class="wt-n">01</span><span class="wt-label">styled print</span><span class="wt-entry">show(data) → severity bars</span></div>
+          <h2 class="wt-title">Drop it in. It detects the TTY and styles itself.</h2>
+          <div class="shell" data-alt="false">
+            <div class="shell-bar"><span class="shell-title">bash</span><span class="shell-tty">tty · truecolor</span></div>
+            <div class="shell-body">
+              <div class="cmd"><span class="cmd-prompt">~/svc $ </span>python monitor.py</div>
+              <div class="panel panel-primary" set:html={monitorDefault} />
+              <div class="panel panel-alt" set:html={monitorHonest} />
+            </div>
+          </div>
+          <p class="note">
+            Zero config — a numeric dict renders as bars; color is semantic
+            (mem in the red, cpu warned, net cool), vivid truecolor by default.
+            <button class="toggle" data-toggle-alt>see the 16-color downsample ▸</button>
+            <span class="note-dim">the toggle swaps to the named-color palette a basic terminal would show — one <code>use_palette()</code> call away.</span>
+          </p>
+        </section>
+
+        <!-- 02 — format dial -->
+        <section id="format" data-stage="format" class="wt-stage">
+          <div class="wt-stage-head"><span class="wt-n">02</span><span class="wt-label">format dial</span><span class="wt-entry">| cat · --json</span></div>
+          <h2 class="wt-title">Pipe it and the ANSI vanishes. Ask for JSON and it complies.</h2>
+          <div class="shell">
+            <div class="shell-bar"><span class="shell-title">bash</span><span class="shell-tty">pipe · no tty</span></div>
+            <div class="shell-body">
+              <div class="cmd"><span class="cmd-prompt">~/svc $ </span>python monitor.py | cat</div>
+              <div class="panel" set:html={monitorPlain} />
+            </div>
+          </div>
+          <div class="shell">
+            <div class="shell-bar"><span class="shell-title">bash</span><span class="shell-tty">--json</span></div>
+            <div class="shell-body">
+              <div class="cmd"><span class="cmd-prompt">~/svc $ </span>python monitor.py --json</div>
+              <div class="panel" set:html={monitorJson} />
+            </div>
+          </div>
+          <p class="note">No ANSI in a pipe — same structure, color stripped. And <code>--json</code> is orthogonal: structured out for machines, untouched by fidelity or mode.</p>
+        </section>
+
+        <!-- 03 — fidelity dial -->
+        <section id="fidelity" data-stage="fidelity" class="wt-stage">
+          <div class="wt-stage-head"><span class="wt-n">03</span><span class="wt-label">fidelity dial</span><span class="wt-entry">-q · (default) · -vv</span></div>
+          <h2 class="wt-title">Turn the detail up or down. The data is identical.</h2>
+          <div class="shell">
+            <div class="shell-bar"><span class="shell-title">bash</span><span class="shell-tty">-q · quiet</span></div>
+            <div class="shell-body">
+              <div class="cmd"><span class="cmd-prompt">~/svc $ </span>monitor.py -q</div>
+              <div class="panel" set:html={monitorQ} />
+            </div>
+          </div>
+          <div class="shell">
+            <div class="shell-bar"><span class="shell-title">bash</span><span class="shell-tty">-vv · verbose</span></div>
+            <div class="shell-body">
+              <div class="cmd"><span class="cmd-prompt">~/svc $ </span>monitor.py -vv</div>
+              <div class="panel" set:html={monitorVv} />
+            </div>
+          </div>
+          <p class="note">Depth 0 is worst-first, one line — for a status bar or a cron log. Depth 2 is the same numbers plus per-metric status. Escalation is a feature, not a different tool.</p>
+        </section>
+
+        <!-- 04 — mode dial -->
+        <section id="live" data-stage="live" class="wt-stage">
+          <div class="wt-stage-head"><span class="wt-n">04</span><span class="wt-label">mode dial</span><span class="wt-entry">--live → diff-flush</span></div>
+          <h2 class="wt-title">Same output, rewritten in place on a steady tick.</h2>
+          <div class="shell">
+            <div class="shell-bar"><span class="shell-title">bash</span><span class="shell-tty">--live · 60s</span></div>
+            <div class="shell-body">
+              <div class="cmd"><span class="cmd-prompt">~/svc $ </span>python monitor.py --live</div>
+              <div class="panel" set:html={monitorLive} />
+            </div>
+          </div>
+          <p class="note">A later tick — cpu and net drifted, mem eased; only the cells that changed are rewritten. This is the bridge from a one-shot print to a living surface.</p>
+        </section>
+
+        <!-- 05 — interactive -->
+        <section id="tui" data-stage="tui" class="wt-stage">
+          <div class="wt-stage-head"><span class="wt-n">05</span><span class="wt-label">interactive</span><span class="wt-entry">-i  ·  Surface + Layer</span></div>
+          <h2 class="wt-title">Cross into the alt-screen. Still the same data — now you drive it.</h2>
+          <div class="hero-slot"><PaintedSurface client:visible initialView="Status" /></div>
+          <p class="note"><span class="note-dim">cosmetic hero — recreation, not the renderer.</span> The full TUI: keyboard-first, diff-flushed; modal Blocks paint on top while the base dims. (click to focus, then use the keys.)</p>
+        </section>
+
+        <footer class="wt-end">
+          <h2>You never handed over control.</h2>
+          <p>Five surfaces, one dataset, one render function. You enter wherever your problem sits and escalate without rewriting — that's the continuous surface.</p>
+        </footer>
+      </main>
+    </div>
+  </div>
+</Base>
+
+<style>
+  .wt-root { max-width: 1180px; margin: 0 auto; padding: var(--sp-7) var(--sp-5) var(--sp-8); }
+  .wt-hero { max-width: 720px; margin-bottom: var(--sp-7); }
+  .wt-bigword { font-size: var(--t-display); font-weight: var(--w-black); color: var(--cyan); line-height: var(--cell-lh-tight); letter-spacing: -0.02em; }
+  .wt-intro { font-size: var(--t-h3); color: var(--fg-2); line-height: 1.6; margin-top: var(--sp-4); }
+  .wt-intro code { color: var(--cyan); }
+
+  .wt-page { display: grid; grid-template-columns: 200px 1fr; gap: var(--sp-6); align-items: start; }
+  @media (max-width: 760px) { .wt-page { grid-template-columns: 1fr; } .wt-spine { display: none; } }
+
+  /* Spine */
+  .wt-spine-inner { position: sticky; top: var(--sp-5); }
+  .wt-spine-eyebrow { font-size: var(--t-caption); letter-spacing: 0.08em; color: var(--fg-dim); }
+  .wt-stops { list-style: none; margin: var(--sp-4) 0 0; padding: 0; position: relative; }
+  .wt-stops::before { content: ""; position: absolute; left: 6px; top: 6px; bottom: 6px; width: 1px; background: var(--line); }
+  .wt-stops li { margin-bottom: var(--sp-4); }
+  .wt-stops a { display: flex; gap: var(--sp-3); align-items: flex-start; text-decoration: none; }
+  .wt-dot { width: 13px; height: 13px; margin-top: 3px; flex-shrink: 0; background: var(--ink); border: 1px solid var(--line-bold); z-index: 1; }
+  .wt-stops a[aria-current="true"] .wt-dot { background: var(--cyan); border-color: var(--cyan); }
+  .wt-stop-text { display: flex; flex-direction: column; gap: 1px; }
+  .wt-stop-label { font-size: var(--t-small); font-weight: var(--w-bold); color: var(--fg-2); white-space: nowrap; }
+  .wt-stops a[aria-current="true"] .wt-stop-label { color: var(--cyan); }
+  .wt-stop-entry { font-size: var(--t-caption); color: var(--fg-dim); white-space: nowrap; }
+  .wt-spine-foot { margin-top: var(--sp-4); padding-top: var(--sp-3); border-top: 1px solid var(--line); }
+  .wt-foot-title { font-size: var(--t-small); font-weight: var(--w-bold); color: var(--cyan); }
+  .wt-foot-sub { font-size: var(--t-caption); color: var(--fg-dim); margin-top: 2px; line-height: 1.4; }
+
+  /* Stages */
+  .wt-main { min-width: 0; }
+  .wt-stage { margin-bottom: var(--sp-8); scroll-margin-top: var(--sp-5); }
+  .wt-stage-head { display: flex; gap: var(--sp-2); align-items: baseline; margin-bottom: var(--sp-2); flex-wrap: wrap; }
+  .wt-n, .wt-label { font-size: var(--t-caption); letter-spacing: 0.05em; color: var(--cyan); font-weight: var(--w-bold); }
+  .wt-label { text-transform: uppercase; }
+  .wt-entry { font-size: var(--t-caption); color: var(--fg-dim); margin-left: auto; }
+  .wt-title { font-size: var(--t-h2); font-weight: var(--w-bold); color: var(--fg); margin: 0 0 var(--sp-4); letter-spacing: -0.01em; }
+
+  /* Shell window frame */
+  .shell { border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: var(--ink); margin-bottom: var(--sp-3); }
+  .shell-bar { display: flex; justify-content: space-between; align-items: center; padding: var(--sp-1) var(--sp-3); border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--ink) 80%, #fff 4%); }
+  .shell-title { font-size: var(--t-caption); color: var(--fg-dim); }
+  .shell-tty { font-size: var(--t-caption); color: var(--fg-dim); }
+  .shell-body { padding: var(--sp-3) var(--sp-4); }
+  .cmd { white-space: pre-wrap; margin-bottom: var(--sp-2); font-size: var(--t-cell); }
+  .cmd-prompt { color: var(--green); font-weight: var(--w-bold); }
+
+  /* painted-output panels render via the global .painted-output rule (tokens) */
+  .panel :global(.painted-output) { margin: 0; background: transparent; }
+
+  /* vivid default ↔ honest "downsample" toggle */
+  .panel-alt { display: none; }
+  .shell[data-alt="true"] .panel-primary { display: none; }
+  .shell[data-alt="true"] .panel-alt { display: block; }
+  .toggle { font: inherit; font-size: var(--t-caption); color: var(--cyan); background: none; border: 1px solid var(--line-bold); border-radius: 4px; padding: 2px 8px; cursor: pointer; margin: 0 var(--sp-2); }
+  .toggle:hover { border-color: var(--cyan); }
+
+  .note { font-size: var(--t-small); color: var(--fg-2); line-height: 1.6; margin-top: var(--sp-2); }
+  .note code { color: var(--cyan); }
+  .note-dim { color: var(--fg-dim); }
+
+  .hero-slot { height: min(70vh, 600px); display: flex; }
+
+  .wt-end { border-top: 1px solid var(--line); padding-top: var(--sp-4); margin-top: var(--sp-6); }
+  .wt-end h2 { font-size: var(--t-h3); font-weight: var(--w-bold); color: var(--fg); margin: 0 0 var(--sp-2); }
+  .wt-end p { max-width: 640px; font-size: var(--t-small); color: var(--fg-2); line-height: 1.6; }
+</style>
+
+<script is:inline>
+  // Spine active-state on scroll.
+  const stops = Array.from(document.querySelectorAll("[data-stop]"));
+  const stages = Array.from(document.querySelectorAll("[data-stage]"));
+  const byId = (id) => stops.find((a) => a.dataset.stop === id);
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach((e) => {
+      if (e.isIntersecting) {
+        stops.forEach((a) => a.removeAttribute("aria-current"));
+        const a = byId(e.target.id);
+        if (a) a.setAttribute("aria-current", "true");
+      }
+    });
+  }, { rootMargin: "-45% 0px -45% 0px", threshold: 0 });
+  stages.forEach((s) => io.observe(s));
+
+  // Vivid default ↔ honest "downsample" toggle (the use_palette() story, live).
+  document.querySelectorAll("[data-toggle-alt]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const shell = btn.closest(".wt-stage").querySelector(".shell");
+      const on = shell.getAttribute("data-alt") === "true";
+      shell.setAttribute("data-alt", on ? "false" : "true");
+      btn.textContent = on ? "see the 16-color downsample ▸" : "back to truecolor ▸";
+    });
+  });
+</script>
