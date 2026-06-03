@@ -37,6 +37,10 @@ from painted.views import current_palette
 
 SAMPLE: dict[str, int] = {"cpu": 67, "mem": 82, "disk": 45, "net": 23}
 
+# A later tick — a few metrics drifted. Used to show --live as a *different*
+# frame from the one-shot print (only the changed cells repaint).
+SAMPLE_LIVE: dict[str, int] = {"cpu": 73, "mem": 78, "disk": 45, "net": 41}
+
 
 def _severity(value: int) -> str:
     """Map a 0–100 metric to a semantic Palette role name."""

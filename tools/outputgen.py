@@ -28,9 +28,10 @@ class OutputSpec:
     data_attr: str | None = None
     # Ambient palette applied (in-process) during capture. None → DEFAULT.
     palette: Palette | None = None
-    # Light format axis: "block" renders the demo's Block via render_html;
-    # "json" serializes its data_attr — the format-dial stop on the site.
-    render_as: Literal["block", "json"] = "block"
+    # Light format axis: "block" renders the demo's Block via render_html; "json"
+    # serializes its data_attr; "plain" emits the Block's chars with no color (the
+    # piped, no-ANSI stop). All three are format-dial stops on the site.
+    render_as: Literal["block", "json", "plain"] = "block"
 
 
 MANIFEST: dict[str, OutputSpec] = {
@@ -110,6 +111,26 @@ PANELS: dict[str, OutputSpec] = {
         data_attr="SAMPLE",
         palette=PAINTED_PALETTE,
     ),
+    # --live: a later tick (SAMPLE_LIVE) so the frame visibly differs from show().
+    "monitor_live": OutputSpec(
+        name="monitor_live",
+        demo_path="demos/patterns/monitor.py",
+        function_or_zoom=Zoom.SUMMARY,
+        format="html",
+        width=48,
+        data_attr="SAMPLE_LIVE",
+        palette=PAINTED_PALETTE,
+    ),
+    # the format dial's plain stop: piped output, no ANSI/color.
+    "monitor_plain": OutputSpec(
+        name="monitor_plain",
+        demo_path="demos/patterns/monitor.py",
+        function_or_zoom=Zoom.SUMMARY,
+        format="html",
+        width=48,
+        data_attr="SAMPLE",
+        render_as="plain",
+    ),
     "monitor_json": OutputSpec(
         name="monitor_json",
         demo_path="demos/patterns/monitor.py",
@@ -150,6 +171,21 @@ def _generate_output(*, repo_root: Path, spec: OutputSpec) -> str:
         mod = import_module_by_path(repo_root / spec.demo_path)
         data = getattr(mod, spec.data_attr)
         return _render_text_as_html(json.dumps(data, indent=2))
+
+    if spec.render_as == "plain":
+        result = capture_demo(
+            repo_root / spec.demo_path,
+            spec.function_or_zoom,
+            width=spec.width,
+            data_attr=spec.data_attr,
+        )
+        if isinstance(result, Block):
+            text = "\n".join(
+                "".join(c.char for c in result.row(y)) for y in range(result.height)
+            )
+        else:
+            text = result
+        return _render_text_as_html(text)
 
     palette_cm = use_palette(spec.palette) if spec.palette is not None else nullcontext()
     with palette_cm:
