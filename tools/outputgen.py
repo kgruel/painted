@@ -16,6 +16,7 @@ if __package__ is None:  # invoked as a script: python tools/outputgen.py
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from tools.capture import capture_demo, import_module_by_path
+from tools.reference_specimens import CATALOG as _REFERENCE_CATALOG
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,6 +74,24 @@ MANIFEST: dict[str, OutputSpec] = {
 # (legible, on-brand, token-matched); `monitor_default_honest` is the DEFAULT
 # (normal-ANSI) variant the walkthrough offers as a toggle — "what a 16-color
 # terminal downsamples to".
+
+
+def _reference_spec(name: str) -> OutputSpec:
+    """A PANELS spec for one reference-catalog specimen (the /reference page).
+
+    Captures the matching upper-cased constant from tools/reference_specimens.py
+    via the "<module>" shape — the Block carries its own width and baked palette,
+    so `width` here is inert (kept only for the dataclass).
+    """
+    return OutputSpec(
+        name=name,
+        demo_path="tools/reference_specimens.py",
+        function_or_zoom="<module>",
+        format="html",
+        width=64,
+        data_attr=name.upper(),
+    )
+
 
 PANELS: dict[str, OutputSpec] = {
     "monitor_q": OutputSpec(
@@ -140,6 +159,12 @@ PANELS: dict[str, OutputSpec] = {
         data_attr="SAMPLE",
         render_as="json",
     ),
+    # --- Reference catalog ----------------------------------------------------
+    # One real specimen per Design preview card. These are uniform (each captures a
+    # module-level Block from tools/reference_specimens.py via the "<module>" shape),
+    # so they dissolve into the CATALOG registry rather than 21 near-identical
+    # literals — see _reference_spec. Names mirror the Design card ids 1:1.
+    **{name: _reference_spec(name) for name in _REFERENCE_CATALOG},
 }
 
 
