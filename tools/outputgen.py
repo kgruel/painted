@@ -2,18 +2,20 @@ from __future__ import annotations
 
 import argparse
 import html
+import json
 import re
 import sys
+from contextlib import nullcontext
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from painted import Block, Zoom, render_html
+from painted import PAINTED_PALETTE, Block, Palette, Zoom, render_html, use_palette
 
 if __package__ is None:  # invoked as a script: python tools/outputgen.py
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from tools.capture import capture_demo
+from tools.capture import capture_demo, import_module_by_path
 
 
 @dataclass(frozen=True, slots=True)
@@ -24,6 +26,11 @@ class OutputSpec:
     format: Literal["html"]
     width: int
     data_attr: str | None = None
+    # Ambient palette applied (in-process) during capture. None → DEFAULT.
+    palette: Palette | None = None
+    # Light format axis: "block" renders the demo's Block via render_html;
+    # "json" serializes its data_attr — the format-dial stop on the site.
+    render_as: Literal["block", "json"] = "block"
 
 
 MANIFEST: dict[str, OutputSpec] = {
@@ -54,6 +61,61 @@ MANIFEST: dict[str, OutputSpec] = {
 }
 
 
+# --- Site panels --------------------------------------------------------------
+# A SEPARATE set from MANIFEST: these render to committed HTML fragments for the
+# Astro site (via --emit-panels), NOT into doc sentinels. Keeping them outside
+# the gated MANIFEST/docs `--check` lets the site pull real painted output
+# without coupling the site to the docs-injection pipeline.
+#
+# The "no cliffs" walkthrough: ONE monitor dataset walked across the continuum,
+# plus a vivid (PAINTED_PALETTE) variant of the default view for the live toggle.
+
+PANELS: dict[str, OutputSpec] = {
+    "monitor_q": OutputSpec(
+        name="monitor_q",
+        demo_path="demos/patterns/monitor.py",
+        function_or_zoom=Zoom.MINIMAL,
+        format="html",
+        width=64,
+        data_attr="SAMPLE",
+    ),
+    "monitor_default": OutputSpec(
+        name="monitor_default",
+        demo_path="demos/patterns/monitor.py",
+        function_or_zoom=Zoom.SUMMARY,
+        format="html",
+        width=48,
+        data_attr="SAMPLE",
+    ),
+    "monitor_default_vivid": OutputSpec(
+        name="monitor_default_vivid",
+        demo_path="demos/patterns/monitor.py",
+        function_or_zoom=Zoom.SUMMARY,
+        format="html",
+        width=48,
+        data_attr="SAMPLE",
+        palette=PAINTED_PALETTE,
+    ),
+    "monitor_vv": OutputSpec(
+        name="monitor_vv",
+        demo_path="demos/patterns/monitor.py",
+        function_or_zoom=Zoom.DETAILED,
+        format="html",
+        width=56,
+        data_attr="SAMPLE",
+    ),
+    "monitor_json": OutputSpec(
+        name="monitor_json",
+        demo_path="demos/patterns/monitor.py",
+        function_or_zoom="<json>",
+        format="html",
+        width=48,
+        data_attr="SAMPLE",
+        render_as="json",
+    ),
+}
+
+
 _BEGIN_RE = re.compile(r'<!--\s*outputgen:begin\s+name="(?P<name>[^"]+)"\s*-->')
 _END_RE = re.compile(r"<!--\s*outputgen:end\s*-->")
 
@@ -76,12 +138,21 @@ def _render_text_as_html(text: str) -> str:
 
 
 def _generate_output(*, repo_root: Path, spec: OutputSpec) -> str:
-    result = capture_demo(
-        repo_root / spec.demo_path,
-        spec.function_or_zoom,
-        width=spec.width,
-        data_attr=spec.data_attr,
-    )
+    if spec.render_as == "json":
+        if spec.data_attr is None:
+            raise ValueError(f"panel {spec.name!r} render_as='json' requires data_attr")
+        mod = import_module_by_path(repo_root / spec.demo_path)
+        data = getattr(mod, spec.data_attr)
+        return _render_text_as_html(json.dumps(data, indent=2))
+
+    palette_cm = use_palette(spec.palette) if spec.palette is not None else nullcontext()
+    with palette_cm:
+        result = capture_demo(
+            repo_root / spec.demo_path,
+            spec.function_or_zoom,
+            width=spec.width,
+            data_attr=spec.data_attr,
+        )
 
     if isinstance(result, Block):
         return render_html(result)
@@ -146,6 +217,21 @@ def _iter_doc_files(repo_root: Path, roots: list[str]) -> list[Path]:
     return out
 
 
+def emit_panels(*, repo_root: Path, out_dir: Path) -> list[Path]:
+    """Render every PANELS entry to ``out_dir/<name>.html`` as a standalone fragment.
+
+    These are the site's real-output panels — committed artifacts the Astro build
+    imports. Separate from the doc-sentinel injection path (and its `--check`).
+    """
+    out_dir.mkdir(parents=True, exist_ok=True)
+    written: list[Path] = []
+    for name, spec in PANELS.items():
+        path = out_dir / f"{name}.html"
+        _write_text(path, _generate_output(repo_root=repo_root, spec=spec))
+        written.append(path)
+    return written
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(
         prog="outputgen", description="Inject captured demo output into docs."
@@ -155,9 +241,24 @@ def main(argv: list[str] | None = None) -> int:
     mode = ap.add_mutually_exclusive_group(required=True)
     mode.add_argument("--check", action="store_true", help="Verify output blocks are up to date.")
     mode.add_argument("--update", action="store_true", help="Regenerate and inject output blocks.")
+    mode.add_argument(
+        "--emit-panels",
+        type=Path,
+        metavar="DIR",
+        help="Render the PANELS set to standalone HTML fragments in DIR (for the site).",
+    )
     args = ap.parse_args(argv)
 
     repo_root: Path = args.repo_root
+
+    if args.emit_panels is not None:
+        written = emit_panels(repo_root=repo_root, out_dir=args.emit_panels)
+        print("Wrote panels:")
+        for p in written:
+            shown = p.relative_to(repo_root) if p.is_relative_to(repo_root) else p
+            print(f"  - {shown}")
+        return 0
+
     files = _iter_doc_files(repo_root, args.roots)
     if not files:
         print("No doc files found under roots.", file=sys.stderr)
