@@ -213,7 +213,11 @@ def extract_region(
             end_line = i - 1
             break
 
-    if end_line is None or end_line < start_line:
+    # Adjacent markers (end_line == start_line - 1) are a valid *empty* region:
+    # _slice_lines yields "\n", matching extract_fragment's empty-region result.
+    # The end-search loop starts at start_line, so end_line < start_line can only
+    # mean "adjacent" — a truly-absent end marker leaves end_line None.
+    if end_line is None:
         raise ValueError(f"Region {region_id!r} missing end marker in {rel_path}")
 
     source = _slice_lines(lines, start_line, end_line)
