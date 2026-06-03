@@ -67,8 +67,11 @@ MANIFEST: dict[str, OutputSpec] = {
 # the gated MANIFEST/docs `--check` lets the site pull real painted output
 # without coupling the site to the docs-injection pipeline.
 #
-# The "no cliffs" walkthrough: ONE monitor dataset walked across the continuum,
-# plus a vivid (PAINTED_PALETTE) variant of the default view for the live toggle.
+# The "no cliffs" walkthrough: ONE monitor dataset walked across the continuum.
+# The site is always truecolor, so panels render under PAINTED_PALETTE by default
+# (legible, on-brand, token-matched); `monitor_default_honest` is the DEFAULT
+# (normal-ANSI) variant the walkthrough offers as a toggle — "what a 16-color
+# terminal downsamples to".
 
 PANELS: dict[str, OutputSpec] = {
     "monitor_q": OutputSpec(
@@ -78,6 +81,7 @@ PANELS: dict[str, OutputSpec] = {
         format="html",
         width=64,
         data_attr="SAMPLE",
+        palette=PAINTED_PALETTE,
     ),
     "monitor_default": OutputSpec(
         name="monitor_default",
@@ -86,15 +90,16 @@ PANELS: dict[str, OutputSpec] = {
         format="html",
         width=48,
         data_attr="SAMPLE",
+        palette=PAINTED_PALETTE,
     ),
-    "monitor_default_vivid": OutputSpec(
-        name="monitor_default_vivid",
+    "monitor_default_honest": OutputSpec(
+        name="monitor_default_honest",
         demo_path="demos/patterns/monitor.py",
         function_or_zoom=Zoom.SUMMARY,
         format="html",
         width=48,
         data_attr="SAMPLE",
-        palette=PAINTED_PALETTE,
+        # No palette → DEFAULT (normal ANSI): the "downsample preview" toggle.
     ),
     "monitor_vv": OutputSpec(
         name="monitor_vv",
@@ -103,6 +108,7 @@ PANELS: dict[str, OutputSpec] = {
         format="html",
         width=56,
         data_attr="SAMPLE",
+        palette=PAINTED_PALETTE,
     ),
     "monitor_json": OutputSpec(
         name="monitor_json",

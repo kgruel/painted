@@ -15,11 +15,11 @@ def test_render_html_named_color_uses_painted_table_not_css_keyword():
     _BASIC_RGB (keyword "red" is #ff0000, but painted red is #800000), so the
     old keyword passthrough was unfaithful to what painted actually renders.
     """
-    # "green" is NAMED_COLORS index 2 -> _BASIC_RGB (0,128,0) -> #008000
-    assert "color: #008000" in render_html(Block.text("g", Style(fg="green")))
-    # red is index 1 -> #800000, NOT the CSS keyword "red" (#ff0000)
+    # "green" is NAMED_COLORS index 2 -> _BASIC_RGB (0,192,0) -> #00c000
+    assert "color: #00c000" in render_html(Block.text("g", Style(fg="green")))
+    # red is index 1 -> #c00000, NOT the CSS keyword "red" (#ff0000)
     red = render_html(Block.text("r", Style(fg="red")))
-    assert "color: #800000" in red
+    assert "color: #c00000" in red
     assert "color: red" not in red
     # A named color renders identically to its integer index.
     assert render_html(Block.text("c", Style(fg="cyan"))) == render_html(

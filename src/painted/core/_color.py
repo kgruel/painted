@@ -8,14 +8,23 @@ from __future__ import annotations
 _CUBE_START = 16
 _GRAY_START = 232
 
+# RGB for the 16 ANSI colors. DUAL-USE: this table is both the *display* RGB of an
+# ANSI index (via _idx_to_rgb → render_html / int colors) AND the *anchor set* for
+# downsampling truecolor → 16 (_rgb_to_basic); sharing it is what lets the 16
+# colors round-trip to themselves. The normal colors (1–6) sit at 0xC0 (192), not
+# the classic VGA 0x80 (128): 128 reads dim and low-contrast on dark backgrounds,
+# while 192 reads like a modern terminal. We stop at 192 rather than xterm's 205
+# on purpose — pushing the normal *anchors* higher crushes dark midtones toward
+# black in the downsampling path (e.g. rgb(0,100,0) → black instead of green), and
+# the anchor/display duality means both move together.
 _BASIC_RGB: tuple[tuple[int, int, int], ...] = (
     (0, 0, 0),  # 0: black
-    (128, 0, 0),  # 1: red
-    (0, 128, 0),  # 2: green
-    (128, 128, 0),  # 3: yellow
-    (0, 0, 128),  # 4: blue
-    (128, 0, 128),  # 5: magenta
-    (0, 128, 128),  # 6: cyan
+    (192, 0, 0),  # 1: red
+    (0, 192, 0),  # 2: green
+    (192, 192, 0),  # 3: yellow
+    (0, 0, 192),  # 4: blue
+    (192, 0, 192),  # 5: magenta
+    (0, 192, 192),  # 6: cyan
     (192, 192, 192),  # 7: white
     (128, 128, 128),  # 8: bright black (gray)
     (255, 0, 0),  # 9: bright red

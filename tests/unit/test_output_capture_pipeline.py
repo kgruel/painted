@@ -43,10 +43,10 @@ def test_render_html_dim_style_emits_opacity() -> None:
 def test_render_html_reverse_swaps_fg_bg_when_set() -> None:
     block = Block([[Cell("x", Style(fg="red", bg="blue", reverse=True))]], width=1)
     out = render_html(block)
-    # Named colors resolve through painted's ANSI table: blue -> #000080,
-    # red -> #800000 (reverse swaps fg/bg).
-    assert "color: #000080" in out
-    assert "background-color: #800000" in out
+    # Named colors resolve through painted's ANSI table: blue -> #0000c0,
+    # red -> #c00000 (reverse swaps fg/bg).
+    assert "color: #0000c0" in out
+    assert "background-color: #c00000" in out
 
 
 def test_render_html_reverse_with_no_colors_uses_defaults() -> None:

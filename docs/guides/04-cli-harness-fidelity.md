@@ -112,18 +112,18 @@ The harness keeps a strict separation:
 
 <!-- outputgen:begin name="fidelity_detailed" -->
 <pre class="painted-output">╭─ Disk: /home ─────────────────────────────────────────╮
-│<span style="color: #008000"> 67.0% ████████████████████░░░░░░░░░░</span><span style="opacity: 0.6"> 134.0G/200.0G</span>    │
+│<span style="color: #00c000"> 67.0% ████████████████████░░░░░░░░░░</span><span style="opacity: 0.6"> 134.0G/200.0G</span>    │
 ╰───────────────────────────────────────────────────────╯
                                                          
 ╭─ By Directory ────────────────────────────────────────╮
-│<span style="font-weight: bold"> 45.0G</span> <span style="color: #808000">▓▓▓▓▓▓▓▓▓▓░░░░░░░░░░░░░░░░░░░░</span> <span style="opacity: 0.6"> 33.6%</span>  projects │
-│<span style="font-weight: bold"> 28.0G</span> <span style="color: #808000">▓▓▓▓▓▓░░░░░░░░░░░░░░░░░░░░░░░░</span> <span style="opacity: 0.6"> 20.9%</span>  downloads│
-│<span style="font-weight: bold"> 22.0G</span> <span style="color: #008080">▓▓▓▓░░░░░░░░░░░░░░░░░░░░░░░░░░</span> <span style="opacity: 0.6"> 16.4%</span>  .cache   │
-│<span style="font-weight: bold"> 18.0G</span> <span style="color: #008080">▓▓▓▓░░░░░░░░░░░░░░░░░░░░░░░░░░</span> <span style="opacity: 0.6"> 13.4%</span>  documents│
-│<span style="font-weight: bold"> 12.0G</span> <span style="color: #008080">▓▓░░░░░░░░░░░░░░░░░░░░░░░░░░░░</span> <span style="opacity: 0.6">  9.0%</span>  pictures │
-│<span style="font-weight: bold">  9.0G</span> <span style="color: #008080">▓▓░░░░░░░░░░░░░░░░░░░░░░░░░░░░</span> <span style="opacity: 0.6">  6.7%</span>  .local   │
+│<span style="font-weight: bold"> 45.0G</span> <span style="color: #c0c000">▓▓▓▓▓▓▓▓▓▓░░░░░░░░░░░░░░░░░░░░</span> <span style="opacity: 0.6"> 33.6%</span>  projects │
+│<span style="font-weight: bold"> 28.0G</span> <span style="color: #c0c000">▓▓▓▓▓▓░░░░░░░░░░░░░░░░░░░░░░░░</span> <span style="opacity: 0.6"> 20.9%</span>  downloads│
+│<span style="font-weight: bold"> 22.0G</span> <span style="color: #00c0c0">▓▓▓▓░░░░░░░░░░░░░░░░░░░░░░░░░░</span> <span style="opacity: 0.6"> 16.4%</span>  .cache   │
+│<span style="font-weight: bold"> 18.0G</span> <span style="color: #00c0c0">▓▓▓▓░░░░░░░░░░░░░░░░░░░░░░░░░░</span> <span style="opacity: 0.6"> 13.4%</span>  documents│
+│<span style="font-weight: bold"> 12.0G</span> <span style="color: #00c0c0">▓▓░░░░░░░░░░░░░░░░░░░░░░░░░░░░</span> <span style="opacity: 0.6">  9.0%</span>  pictures │
+│<span style="font-weight: bold">  9.0G</span> <span style="color: #00c0c0">▓▓░░░░░░░░░░░░░░░░░░░░░░░░░░░░</span> <span style="opacity: 0.6">  6.7%</span>  .local   │
 ╰───────────────────────────────────────────────────────╯
                                                          
-<span style="color: #008000; font-weight: bold">  Free: 66.0G  </span>                                          
+<span style="color: #00c000; font-weight: bold">  Free: 66.0G  </span>                                          
 </pre>
 <!-- outputgen:end -->

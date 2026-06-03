@@ -16,7 +16,7 @@ from painted.core._color import _idx_to_rgb, _nearest_basic, _rgb_to_256, _rgb_t
 class TestIdxToRgb:
     def test_basic_colors(self):
         assert _idx_to_rgb(0) == (0, 0, 0)  # black
-        assert _idx_to_rgb(1) == (128, 0, 0)  # red
+        assert _idx_to_rgb(1) == (192, 0, 0)  # red — normal at 0xC0 (see _BASIC_RGB)
         assert _idx_to_rgb(15) == (255, 255, 255)  # bright white
 
     def test_cube_colors(self):
