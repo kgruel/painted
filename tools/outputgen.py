@@ -182,6 +182,12 @@ def _repo_root() -> Path:
     return Path(__file__).resolve().parents[1]
 
 
+# The site's committed panel fragments live in-repo (since the docs-site fold).
+# `--emit-panels` writes here by default; `--check` verifies these match a fresh
+# render, so a renderer change that forgets `./dev panels` fails the gate.
+PANELS_DIR = Path("web/src/generated/panels")
+
+
 def _read_text(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
@@ -299,12 +305,13 @@ def _iter_doc_files(repo_root: Path, roots: list[str]) -> list[Path]:
     return out
 
 
-def emit_panels(*, repo_root: Path, out_dir: Path) -> list[Path]:
+def emit_panels(*, repo_root: Path, out_dir: Path | None = None) -> list[Path]:
     """Render every PANELS entry to ``out_dir/<name>.html`` as a standalone fragment.
 
     These are the site's real-output panels — committed artifacts the Astro build
-    imports. Separate from the doc-sentinel injection path (and its `--check`).
+    imports. ``out_dir`` defaults to the in-repo ``web/src/generated/panels``.
     """
+    out_dir = out_dir or (repo_root / PANELS_DIR)
     out_dir.mkdir(parents=True, exist_ok=True)
     written: list[Path] = []
     for name, spec in PANELS.items():
@@ -312,6 +319,23 @@ def emit_panels(*, repo_root: Path, out_dir: Path) -> list[Path]:
         _write_text(path, _generate_output(repo_root=repo_root, spec=spec))
         written.append(path)
     return written
+
+
+def check_panels(*, repo_root: Path) -> list[str]:
+    """PANELS names whose committed fragment is missing or has drifted from a fresh render.
+
+    The external counterpart to the doc-sentinel ``check_doc``: it lets the same
+    ``--check`` gate one renderer change against both the internal docs and the
+    external site, so neither silently lags the library.
+    """
+    out_dir = repo_root / PANELS_DIR
+    stale: list[str] = []
+    for name, spec in PANELS.items():
+        want = _generate_output(repo_root=repo_root, spec=spec)
+        path = out_dir / f"{name}.html"
+        if not path.exists() or _read_text(path) != want:
+            stale.append(name)
+    return stale
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -325,16 +349,19 @@ def main(argv: list[str] | None = None) -> int:
     mode.add_argument("--update", action="store_true", help="Regenerate and inject output blocks.")
     mode.add_argument(
         "--emit-panels",
+        nargs="?",
         type=Path,
+        const=Path(""),
         metavar="DIR",
-        help="Render the PANELS set to standalone HTML fragments in DIR (for the site).",
+        help="Render the PANELS set to HTML fragments (default: web/src/generated/panels).",
     )
     args = ap.parse_args(argv)
 
     repo_root: Path = args.repo_root
 
     if args.emit_panels is not None:
-        written = emit_panels(repo_root=repo_root, out_dir=args.emit_panels)
+        out_dir = args.emit_panels if str(args.emit_panels) else (repo_root / PANELS_DIR)
+        written = emit_panels(repo_root=repo_root, out_dir=out_dir)
         print("Wrote panels:")
         for p in written:
             shown = p.relative_to(repo_root) if p.is_relative_to(repo_root) else p
@@ -376,11 +403,17 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     if args.check:
-        if mismatched:
-            print("outputgen blocks out of date:", file=sys.stderr)
-            for path, names in mismatched:
-                rel = path.relative_to(repo_root)
-                print(f"  - {rel}: {', '.join(names)}", file=sys.stderr)
+        panel_stale = check_panels(repo_root=repo_root)
+        if mismatched or panel_stale:
+            if mismatched:
+                print("outputgen doc blocks out of date:", file=sys.stderr)
+                for path, names in mismatched:
+                    rel = path.relative_to(repo_root)
+                    print(f"  - {rel}: {', '.join(names)}", file=sys.stderr)
+            if panel_stale:
+                print("site panels out of date — run `./dev panels`:", file=sys.stderr)
+                for name in panel_stale:
+                    print(f"  - {name}", file=sys.stderr)
             return 1
         return 0
 

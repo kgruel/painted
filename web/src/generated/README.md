@@ -14,21 +14,19 @@ produces, not a recreation of it. Two sets live here:
 
 ## Regenerate
 
-Run from a **current painted library checkout on `main`** (where the demos,
-`reference_specimens.py`, and outputgen live):
+`web/` lives in the monorepo, so regeneration is one in-repo command from the
+repo root — this directory is the default target:
 
 ```sh
-./dev panels <path-to>/web/src/generated/panels
+./dev panels        # rewrites web/src/generated/panels in place
 ```
 
-> ⚠️ Do **not** run this from this `site` checkout. The site branch is decoupled
-> and carries an older library snapshot **without `tools/reference_specimens.py`
-> or `tools/landing_specimens.py`**, so `./dev panels` there would silently emit
-> only the 7 monitor panels and drop the 25 reference + landing ones. Always
-> regenerate from an up-to-date `main` checkout and point `--emit-panels` here.
+`./dev check` then verifies these fragments match a fresh render — the **same**
+`outputgen --check` that gates the doc sentinels also checks the panels, so a
+renderer change that forgets to regenerate fails the gate. Internal docs and the
+external site regenerate from one library and can't silently drift.
 
-Re-run whenever any of these change, or the panels will drift from what the
-library actually renders:
+Re-run whenever any of these change (or the gate will flag it):
 
 - the demo (`demos/patterns/monitor.py`) or the specimens (`tools/reference_specimens.py`),
 - the panel set (`PANELS` in `tools/outputgen.py`),
