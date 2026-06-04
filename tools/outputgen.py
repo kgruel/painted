@@ -360,7 +360,9 @@ def main(argv: list[str] | None = None) -> int:
     repo_root: Path = args.repo_root
 
     if args.emit_panels is not None:
-        out_dir = args.emit_panels if str(args.emit_panels) else (repo_root / PANELS_DIR)
+        # `--emit-panels` bare → const Path("") (== PosixPath(".")) → in-repo default;
+        # an explicit DIR is used as-is. (str(Path("")) is "." — truthy — so compare paths.)
+        out_dir = (repo_root / PANELS_DIR) if args.emit_panels == Path("") else args.emit_panels
         written = emit_panels(repo_root=repo_root, out_dir=out_dir)
         print("Wrote panels:")
         for p in written:
