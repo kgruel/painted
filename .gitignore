@@ -20,3 +20,7 @@ docs/dev/
 .ruff_cache/
 site/
 tapes/
+# Astro docs site (web/) build artifacts
+web/node_modules/
+web/dist/
+web/.astro/

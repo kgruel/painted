@@ -1,0 +1,208 @@
+/* VENDORED from Claude Design 'painted-design-kit/colors_and_type.css' (painted Design System-6.zip, 2026-06-02).
+   Canonical token source. The Google-Fonts @import was removed — the face loads via a <link> in Base.astro
+   <head> (faster than @import; avoids double-fetch). See fonts/README.md in the kit. */
+/* ============================================================================
+   painted — Design System Foundations
+   Colors, type, spacing, and box-chrome tokens.
+
+   painted is a cell-buffer terminal UI library. Its native medium is the
+   terminal: a monospace grid painted with ANSI colors and box-drawing
+   characters. These tokens translate that medium to the web faithfully.
+
+   Two color layers live here:
+     1. ANSI 16  — the AUTHORITATIVE values painted emits (from core/_color.py).
+                   The terminal owns the final rendering; these are the spec.
+     2. painted theme — a curated, refined-vivid terminal scheme for rendering
+                   painted output on the web. Colorful, fun, legible on ink.
+
+   Font note: the repo ships NO font (the terminal supplies one). We standardise
+   on JetBrains Mono as the reference face — full box-drawing + block coverage.
+   Flagged as a substitution; swap for your preferred mono.
+   ============================================================================ */
+
+
+:root {
+  /* ---------------------------------------------------------------------- */
+  /* ANSI 16 — authoritative (painted core/_color.py _BASIC_RGB)            */
+  /* The exact RGB painted maps named/indexed colors to. Source of truth.   */
+  /* ---------------------------------------------------------------------- */
+  --ansi-black:           #000000;  /* 0  */
+  --ansi-red:             #800000;  /* 1  */
+  --ansi-green:           #008000;  /* 2  */
+  --ansi-yellow:          #808000;  /* 3  */
+  --ansi-blue:            #000080;  /* 4  */
+  --ansi-magenta:         #800080;  /* 5  */
+  --ansi-cyan:            #008080;  /* 6  */
+  --ansi-white:           #c0c0c0;  /* 7  */
+  --ansi-bright-black:    #808080;  /* 8  (gray) */
+  --ansi-bright-red:      #ff0000;  /* 9  */
+  --ansi-bright-green:    #00ff00;  /* 10 */
+  --ansi-bright-yellow:   #ffff00;  /* 11 */
+  --ansi-bright-blue:     #0000ff;  /* 12 */
+  --ansi-bright-magenta:  #ff00ff;  /* 13 */
+  --ansi-bright-cyan:     #00ffff;  /* 14 */
+  --ansi-bright-white:    #ffffff;  /* 15 */
+
+  /* ---------------------------------------------------------------------- */
+  /* painted theme — curated reference rendering (dark, colorful, fun)      */
+  /* Each token notes its ANSI origin. Hues preserved, lifted for legibility */
+  /* on ink. This is the "house terminal" painted is designed to look best in.*/
+  /* ---------------------------------------------------------------------- */
+
+  /* Surfaces — the ink painted paints on. (ANSI black, designed depth.) */
+  --ink:        #0c0e16;  /* canvas / alt-screen background           */
+  --panel:      #151823;  /* a bordered Block / card                  */
+  --overlay:    #1e2230;  /* Layer / modal stack on top of base       */
+  --line:       #2b3142;  /* hairline / inactive box-drawing chrome   */
+  --line-bold:  #3b4258;  /* active / focused box-drawing chrome      */
+
+  /* Foreground — text on ink. (ANSI white / bright-black.) */
+  --fg:         #f4f2ea;  /* primary text (bright white, warmed)      */
+  --fg-2:       #c3c7d1;  /* secondary text                           */
+  --fg-dim:     #79808f;  /* muted / dim (ANSI bright-black) — Palette.muted */
+
+  /* Vivid hues — refined ANSI bright. The fun. */
+  --red:        #ff5b6a;  /* ANSI bright-red    — Palette.error       */
+  --green:      #4fdc82;  /* ANSI bright-green  — Palette.success     */
+  --yellow:     #f5cf52;  /* ANSI bright-yellow — Palette.warning     */
+  --blue:       #5aa7ff;  /* ANSI bright-blue                         */
+  --magenta:    #ff74c8;  /* ANSI bright-magenta                      */
+  --cyan:       #44e0e0;  /* ANSI bright-cyan   — Palette.accent      */
+  --orange:     #ff9d4d;  /* derived warm (256-cube territory)        */
+
+  /* Selection / reverse-video swatch (painted uses reverse for emphasis) */
+  --reverse-fg: var(--ink);
+  --reverse-bg: var(--cyan);
+
+  /* ---------------------------------------------------------------------- */
+  /* Semantic Palette — painted's 5 roles (palette.py DEFAULT_PALETTE)      */
+  /* ---------------------------------------------------------------------- */
+  --role-success: var(--green);
+  --role-warning: var(--yellow);
+  --role-error:   var(--red);
+  --role-accent:  var(--cyan);
+  --role-muted:   var(--fg-dim);
+
+  /* NORD preset (palette.py NORD_PALETTE — 256-index → rgb) */
+  --nord-success: #87af87;  /* 108 */
+  --nord-warning: #d7af5f;  /* 179 */
+  --nord-error:   #d78787;  /* 174 */
+  --nord-accent:  #87afd7;  /* 110 */
+  --nord-muted:   #5f5f5f;  /*  60 */
+
+  /* html.py bridge tokens (core/html.py expects these for <pre> output) */
+  --painted-fg: var(--fg);
+  --painted-bg: var(--ink);
+  --text:       var(--fg);
+  --code-bg:    var(--ink);
+
+  /* ---------------------------------------------------------------------- */
+  /* Type — monospace, always. The grid is the medium.                      */
+  /* ---------------------------------------------------------------------- */
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', 'Cascadia Code',
+               'Fira Code', Menlo, Consolas, monospace;
+
+  /* The terminal cell. Everything is measured in cells.
+     A cell is 1ch wide; row height is the cell line-height. */
+  --cell-w: 1ch;
+  --cell-lh: 1.4;          /* prose / mixed-content containers (.painted-root) only */
+  --cell-lh-tight: 1.0;    /* THE cell grid (.painted-output): box-drawing, bg-fills,
+                              and big-text must tile with NO inter-row gap, exactly
+                              like a real terminal. Any value > 1 breaks vertical
+                              box-drawing continuity (│ ╭ ╰ stop short of the next row). */
+
+  /* Type scale (px). Terminal text wants generous size — 24px+ at display. */
+  --t-display: 64px;       /* big-text block wordmark / hero               */
+  --t-h1:      32px;
+  --t-h2:      24px;
+  --t-h3:      19px;
+  --t-body:    16px;       /* doc prose                                    */
+  --t-cell:    15px;       /* the terminal grid itself                     */
+  --t-small:   13px;
+  --t-caption: 12px;
+
+  /* Weights — mono carries weight well; bold is the workhorse emphasis. */
+  --w-regular: 400;
+  --w-medium:  500;
+  --w-bold:    700;
+  --w-black:   800;
+
+  /* ---------------------------------------------------------------------- */
+  /* Spacing — cell multiples. Layout snaps to the grid.                    */
+  /* ---------------------------------------------------------------------- */
+  --sp-0:  0;
+  --sp-1:  4px;
+  --sp-2:  8px;
+  --sp-3:  12px;
+  --sp-4:  16px;
+  --sp-5:  24px;
+  --sp-6:  32px;
+  --sp-7:  48px;
+  --sp-8:  64px;
+
+  /* ---------------------------------------------------------------------- */
+  /* Chrome — corners are CHARACTERS, not radii. Depth is dim/reverse, not  */
+  /* shadow. The terminal has no blur, no gradient, no drop-shadow.         */
+  /* ---------------------------------------------------------------------- */
+  --radius: 0;                       /* the grid is square                  */
+  --border: 1px solid var(--line);   /* web stand-in for a box-drawing edge */
+  --border-bold: 1px solid var(--line-bold);
+  --dim-opacity: 0.6;                /* Style(dim=True) → opacity 0.6       */
+
+  /* Box-drawing character reference (borders.py charsets) */
+  --box-rounded: '╭ ╮ ╰ ╯ ─ │ ┼';
+  --box-heavy:   '┏ ┓ ┗ ┛ ━ ┃ ╋';
+  --box-double:  '╔ ╗ ╚ ╝ ═ ║ ╬';
+  --box-light:   '┌ ┐ └ ┘ ─ │ ┼';
+  --box-ascii:   '+ + + + - | +';
+}
+
+/* ============================================================================
+   Semantic element styles — the painted "stylesheet" for the web.
+   Apply on a dark (--ink) surface.
+   ============================================================================ */
+
+.painted-root {
+  background: var(--ink);
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: var(--t-body);
+  line-height: var(--cell-lh);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  font-variant-ligatures: none;   /* terminals don't ligate */
+}
+
+h1, .h1 { font-size: var(--t-h1); font-weight: var(--w-bold);  line-height: 1.2; letter-spacing: -0.01em; margin: 0; }
+h2, .h2 { font-size: var(--t-h2); font-weight: var(--w-bold);  line-height: 1.25; margin: 0; }
+h3, .h3 { font-size: var(--t-h3); font-weight: var(--w-medium); line-height: 1.3; margin: 0; }
+p,  .p  { font-size: var(--t-body); line-height: 1.6; margin: 0; color: var(--fg-2); }
+small, .caption { font-size: var(--t-caption); color: var(--fg-dim); }
+
+/* The grid surface — where painted output lives. line-height is the TIGHT (1.0)
+   cell height, NOT the prose --cell-lh: a cell grid has no inter-row gap, so
+   box-drawing verticals and bg-fills tile seamlessly (a real terminal is 1.0). */
+.term, .painted-output {
+  font-family: var(--font-mono);
+  font-size: var(--t-cell);
+  line-height: var(--cell-lh-tight);
+  white-space: pre;
+  tab-size: 4;
+  background: var(--ink);
+  color: var(--fg);
+  margin: 0;
+}
+
+/* ANSI Style() flag → CSS mapping (mirrors core/html.py _style_to_css) */
+.s-bold      { font-weight: var(--w-bold); }
+.s-italic    { font-style: italic; }
+.s-underline { text-decoration: underline; }
+.s-dim       { opacity: var(--dim-opacity); }
+.s-reverse   { color: var(--reverse-fg); background: var(--reverse-bg); }
+
+/* Palette role → fg color */
+.fg-success { color: var(--role-success); }
+.fg-warning { color: var(--role-warning); }
+.fg-error   { color: var(--role-error); }
+.fg-accent  { color: var(--role-accent); }
+.fg-muted   { color: var(--role-muted); }

@@ -1,0 +1,269 @@
+---
+// reference.astro — the component/color/glyph catalog, rendered by the REAL
+// library. The honest counterpoint to the hero: where index.astro's PaintedSurface
+// is a cosmetic recreation, every "real" card below is genuine painted output —
+// tools/reference_specimens.py builds the Block, render_html turns it into the
+// committed fragment under generated/panels/, and this page is a pure ?raw consumer.
+//
+// Laning (load-bearing, web/README.md): a card's label names WHICH feature it
+// shows; it does not claim what the output looks like — the Block is the source of
+// truth. Two Design cards have NO real specimen on purpose: surface colors and the
+// web type scale are CSS design tokens, not renderer output, so they're marked
+// "cosmetic" here rather than faked. Adding a real card = add its specimen + it
+// flows into PANELS automatically, re-run `./dev panels`, then import the fragment
+// and add one CARDS row here.
+import Base from "../layouts/Base.astro";
+
+import compTable from "../generated/panels/comp_table.html?raw";
+import compButtons from "../generated/panels/comp_buttons.html?raw";
+import compCard from "../generated/panels/comp_card.html?raw";
+import compChart from "../generated/panels/comp_chart.html?raw";
+import compListview from "../generated/panels/comp_listview.html?raw";
+import compProgress from "../generated/panels/comp_progress.html?raw";
+import compSparkline from "../generated/panels/comp_sparkline.html?raw";
+import compSpinner from "../generated/panels/comp_spinner.html?raw";
+import compTree from "../generated/panels/comp_tree.html?raw";
+import colorsPalette from "../generated/panels/colors_palette.html?raw";
+import colorsAnsi from "../generated/panels/colors_ansi.html?raw";
+import colorsPresets from "../generated/panels/colors_presets.html?raw";
+import colorsVivid from "../generated/panels/colors_vivid.html?raw";
+import chromeBorders from "../generated/panels/chrome_borders.html?raw";
+import chromeElevation from "../generated/panels/chrome_elevation.html?raw";
+import spacingCells from "../generated/panels/spacing_cells.html?raw";
+import typeBigtext from "../generated/panels/type_bigtext.html?raw";
+import typeModifiers from "../generated/panels/type_modifiers.html?raw";
+import logoWordmark from "../generated/panels/logo_wordmark.html?raw";
+import glyphsIconset from "../generated/panels/glyphs_iconset.html?raw";
+import glyphsBox from "../generated/panels/glyphs_box.html?raw";
+
+const GROUPS = ["Components", "Colors", "Spacing", "Type", "Brand"];
+
+// A card is either { html } — a real painted fragment — or { note } — a
+// genuinely-cosmetic Design card the renderer can't produce (CSS tokens / web font).
+const CARDS = [
+  { group: "Components", label: "table", blurb: "header · separator · reverse-video selection", module: "views/components/_table.py", html: compTable },
+  { group: "Components", label: "buttons + list_view", blurb: "styled-text actions over a ▸-cursor selection list", module: "views/components/_list_view.py", html: compButtons },
+  { group: "Components", label: "the card idiom", blurb: "border(ROUNDED) + reverse title bar + a real progress bar", module: "core/compose.py", html: compCard },
+  { group: "Components", label: "chart_lens", blurb: "a numeric dict as labeled horizontal bars (zoom 3)", module: "views/lens/chart.py", html: compChart },
+  { group: "Components", label: "list_view", blurb: "▸ cursor selection — reverse default, then an accent override", module: "views/components/_list_view.py", html: compListview },
+  { group: "Components", label: "progress_bar", blurb: "█ fill / ░ empty across four palette roles", module: "views/components/progress.py", html: compProgress },
+  { group: "Components", label: "sparkline", blurb: "numeric sequences as relative-magnitude glyphs", module: "views/components/_sparkline.py", html: compSparkline },
+  { group: "Components", label: "spinner", blurb: "the live frame indicator + the three shipped frame sets", module: "views/components/_spinner.py", html: compSpinner },
+  { group: "Components", label: "tree_lens", blurb: "branch chars + styled name/size via a node_renderer", module: "views/lens/tree.py", html: compTree },
+
+  { group: "Colors", label: "Palette", blurb: "the 5 semantic roles of DEFAULT_PALETTE, each in its own Style", module: "palette.py · DEFAULT_PALETTE", html: colorsPalette },
+  { group: "Colors", label: "ANSI 16", blurb: "each index as a real bg chip — painted's brightened anchors, not VGA", module: "core/_color.py", html: colorsAnsi },
+  { group: "Colors", label: "Palette presets", blurb: "NORD's fg roles vs MONO's modifier-only roles", module: "palette.py", html: colorsPresets },
+  { group: "Colors", label: "PAINTED_PALETTE", blurb: "the vivid truecolor series ramp — swatch + name + real hex", module: "palette.py", html: colorsVivid },
+  { group: "Colors", label: "Theme surfaces", blurb: "ink / panel / overlay / line — the dark canvas", module: "colors_and_type.css", note: "Surface colors are CSS design tokens. painted paints fg-styled glyphs on a transparent background — it has no surface, panel, or background color, so there is nothing real to render here." },
+
+  { group: "Spacing", label: "BorderChars", blurb: "corners are characters, not radii — five box vocabularies", module: "core/borders.py", html: chromeBorders },
+  { group: "Spacing", label: "Elevation", blurb: "depth without shadow — reverse / bold / dim Style modifiers", module: "core/cell.py", html: chromeElevation },
+  { group: "Spacing", label: "Cell grid", blurb: "spacing is an exact integer cell count, not px", module: "core/compose.py", html: spacingCells },
+
+  { group: "Type", label: "render_big", blurb: "FILLED solid blocks vs OUTLINE box-drawing strokes", module: "views/big_text.py", html: typeBigtext },
+  { group: "Type", label: "Style flags", blurb: "the bare ANSI modifiers, then roles composed via .merge()", module: "core/cell.py", html: typeModifiers },
+  { group: "Type", label: "wordmark", blurb: "the painted brand as render_big cell-buffer text", module: "views/big_text.py", html: logoWordmark },
+  { group: "Type", label: "Type scale", blurb: "JetBrains Mono reference face, the px ladder", module: "colors_and_type.css", note: "A web font face and px type scale. painted renders fixed-size cells — no px sizing, no variable font weight — so this is the design system's typography, not renderer output." },
+
+  { group: "Brand", label: "IconSet", blurb: "the glyph vocabulary, with its ASCII fallback", module: "icon_set.py", html: glyphsIconset },
+  { group: "Brand", label: "Functional glyphs", blurb: "glyphs inside real output + a live use_icons() swap", module: "icon_set.py", html: glyphsBox },
+];
+
+const byGroup = GROUPS.map((g) => ({
+  group: g,
+  cards: CARDS.filter((c) => c.group === g),
+})).filter((s) => s.cards.length > 0);
+
+const realCount = CARDS.filter((c) => c.html).length;
+const cosmeticCount = CARDS.length - realCount;
+---
+
+<Base title="painted — reference">
+  <main class="ref-root">
+    <header class="ref-hero">
+      <div class="ref-bigword">reference</div>
+      <p class="ref-intro">
+        Every <strong>real</strong> specimen below is genuine painted output — the
+        actual <code>Block</code> the library builds, rendered through <code>render_html</code>.
+        Not a mock: this is the dogfood. The cosmetic recreation lives on the
+        <a href="/">home page</a>; here the renderer speaks for itself.
+      </p>
+      <p class="ref-tally">
+        <span class="ref-tally-real">{realCount} real</span> · <span class="ref-tally-cos"
+          >{cosmeticCount} cosmetic</span
+        > — the two cosmetic cards are CSS design tokens (surfaces, a web font) the
+        renderer can't produce, marked rather than faked.
+      </p>
+    </header>
+
+    {
+      byGroup.map((section) => (
+        <section class="ref-group">
+          <h2 class="ref-group-title">{section.group}</h2>
+          <div class="ref-grid">
+            {section.cards.map((card) => (
+              <article class={card.html ? "ref-card" : "ref-card is-cosmetic"}>
+                <div class="ref-card-head">
+                  <div class="ref-card-id">
+                    <span class="ref-card-label">{card.label}</span>
+                    <span class="ref-card-blurb">{card.blurb}</span>
+                  </div>
+                  {card.html ? (
+                    <span class="ref-badge is-real" title="genuine library output, not a recreation">
+                      real
+                    </span>
+                  ) : (
+                    <span class="ref-badge is-cos" title="CSS design token, not renderer output">
+                      cosmetic
+                    </span>
+                  )}
+                </div>
+                {card.html ? (
+                  <div class="ref-specimen" set:html={card.html} />
+                ) : (
+                  <p class="ref-note">{card.note}</p>
+                )}
+                <div class="ref-card-foot">{card.module}</div>
+              </article>
+            ))}
+          </div>
+        </section>
+      ))
+    }
+  </main>
+</Base>
+
+<style>
+  .ref-root {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: var(--sp-7) var(--sp-5) var(--sp-8);
+  }
+  .ref-hero {
+    max-width: 760px;
+    margin-bottom: var(--sp-7);
+  }
+  .ref-bigword {
+    font-size: var(--t-display);
+    font-weight: var(--w-black);
+    color: var(--cyan);
+    line-height: var(--cell-lh-tight);
+    letter-spacing: -0.02em;
+  }
+  .ref-intro {
+    font-size: var(--t-h3);
+    color: var(--fg-2);
+    line-height: 1.6;
+    margin-top: var(--sp-4);
+  }
+  .ref-intro code {
+    color: var(--cyan);
+  }
+  .ref-tally {
+    font-size: var(--t-small);
+    color: var(--fg-dim);
+    margin-top: var(--sp-3);
+  }
+  .ref-tally-real {
+    color: var(--green);
+  }
+  .ref-tally-cos {
+    color: var(--fg-2);
+  }
+
+  .ref-group {
+    margin-bottom: var(--sp-7);
+  }
+  .ref-group-title {
+    font-size: var(--t-caption);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--fg-dim);
+    font-weight: var(--w-bold);
+    margin: 0 0 var(--sp-3);
+    padding-bottom: var(--sp-2);
+    border-bottom: 1px solid var(--line);
+  }
+  .ref-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+    gap: var(--sp-4);
+  }
+
+  .ref-card {
+    border: 1px solid var(--line);
+    background: var(--panel, var(--ink));
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .ref-card.is-cosmetic {
+    border-style: dashed;
+    border-color: color-mix(in srgb, var(--line) 70%, transparent);
+  }
+  .ref-card-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--sp-3);
+    padding: var(--sp-3) var(--sp-4) var(--sp-2);
+    border-bottom: 1px solid var(--line);
+  }
+  .ref-card-id {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+  .ref-card-label {
+    font-size: var(--t-body);
+    font-weight: var(--w-bold);
+    color: var(--fg);
+  }
+  .ref-card-blurb {
+    font-size: var(--t-small);
+    color: var(--fg-2);
+    line-height: 1.4;
+  }
+  .ref-badge {
+    flex-shrink: 0;
+    font-size: var(--t-caption);
+    letter-spacing: 0.04em;
+    border-radius: 3px;
+    padding: 1px 6px;
+    text-transform: uppercase;
+  }
+  .ref-badge.is-real {
+    color: var(--green);
+    border: 1px solid color-mix(in srgb, var(--green) 50%, transparent);
+  }
+  .ref-badge.is-cos {
+    color: var(--fg-dim);
+    border: 1px solid var(--line);
+  }
+  .ref-specimen {
+    padding: var(--sp-4);
+    overflow-x: auto;
+  }
+  .ref-specimen :global(.painted-output) {
+    margin: 0;
+    background: transparent;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  .ref-note {
+    margin: 0;
+    padding: var(--sp-4);
+    font-size: var(--t-small);
+    color: var(--fg-dim);
+    line-height: 1.6;
+    flex: 1;
+  }
+  .ref-card-foot {
+    font-size: var(--t-caption);
+    color: var(--fg-dim);
+    padding: var(--sp-2) var(--sp-4);
+    border-top: 1px solid var(--line);
+  }
+</style>
