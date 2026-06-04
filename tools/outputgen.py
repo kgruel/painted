@@ -16,6 +16,7 @@ if __package__ is None:  # invoked as a script: python tools/outputgen.py
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from tools.capture import capture_demo, import_module_by_path
+from tools.landing_specimens import LANDING as _LANDING_CATALOG
 from tools.reference_specimens import CATALOG as _REFERENCE_CATALOG
 
 
@@ -76,16 +77,17 @@ MANIFEST: dict[str, OutputSpec] = {
 # terminal downsamples to".
 
 
-def _reference_spec(name: str) -> OutputSpec:
-    """A PANELS spec for one reference-catalog specimen (the /reference page).
+def _module_panel(name: str, demo_path: str) -> OutputSpec:
+    """A PANELS spec capturing one module-level Block constant via the "<module>" shape.
 
-    Captures the matching upper-cased constant from tools/reference_specimens.py
-    via the "<module>" shape — the Block carries its own width and baked palette,
-    so `width` here is inert (kept only for the dataclass).
+    Used for the registry-backed panel sets (the /reference catalog and the
+    landing front door): each captures the matching upper-cased constant from its
+    specimens module — the Block carries its own width and baked palette, so
+    `width` here is inert (kept only for the dataclass).
     """
     return OutputSpec(
         name=name,
-        demo_path="tools/reference_specimens.py",
+        demo_path=demo_path,
         function_or_zoom="<module>",
         format="html",
         width=64,
@@ -163,8 +165,12 @@ PANELS: dict[str, OutputSpec] = {
     # One real specimen per Design preview card. These are uniform (each captures a
     # module-level Block from tools/reference_specimens.py via the "<module>" shape),
     # so they dissolve into the CATALOG registry rather than 21 near-identical
-    # literals — see _reference_spec. Names mirror the Design card ids 1:1.
-    **{name: _reference_spec(name) for name in _REFERENCE_CATALOG},
+    # literals — see _module_panel. Names mirror the Design card ids 1:1.
+    **{name: _module_panel(name, "tools/reference_specimens.py") for name in _REFERENCE_CATALOG},
+    # --- Landing front door ---------------------------------------------------
+    # The hero wordmark + three routing cards for index.astro. Same <module> shape
+    # as the reference catalog, sourced from tools/landing_specimens.py.
+    **{name: _module_panel(name, "tools/landing_specimens.py") for name in _LANDING_CATALOG},
 }
 
 
