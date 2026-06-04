@@ -1,0 +1,49 @@
+/* Self-hosted JetBrains Mono — the FULL font, NOT the Google Fonts CDN subset.
+ *
+ * Why self-host (load-bearing): the Google `css2` endpoint serves JetBrains Mono
+ * in language subsets (latin, latin-ext, cyrillic, greek, vietnamese) that DROP
+ * box-drawing (U+2500–257F) and block-elements (U+2580–259F) entirely. Painted's
+ * panels are built from exactly those glyphs (│ ╭ ╮ ─ for borders, █ ▄ ▀ for the
+ * wordmark), so under the CDN font they fell through to a different-width fallback
+ * font per-glyph — breaking border alignment and jagging the big-text. The full
+ * webfont (official JetBrains/JetBrainsMono distribution) includes them, so every
+ * glyph renders from ONE font at ONE advance width and the cell grid tiles.
+ *
+ * No `unicode-range` on purpose: each face must cover the whole repertoire,
+ * box-drawing included. Files live in public/fonts/ (served at /fonts/...).
+ */
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/JetBrainsMono-Regular.woff2") format("woff2");
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/fonts/JetBrainsMono-Medium.woff2") format("woff2");
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/fonts/JetBrainsMono-Bold.woff2") format("woff2");
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url("/fonts/JetBrainsMono-ExtraBold.woff2") format("woff2");
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/JetBrainsMono-Italic.woff2") format("woff2");
+}
