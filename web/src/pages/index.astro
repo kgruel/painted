@@ -1,33 +1,94 @@
 ---
-// Landing page — static shell + the real Design hero island (the system-monitor
-// Surface). Reference panels (real painted output via outputgen), guides, and
-// search come in later slices.
+// Landing page — the painted front door, rendered by the REAL library.
 //
-// Laning: PaintedSurface is a COSMETIC brand recreation, not painted's renderer.
-// Anywhere the site shows genuine product output, render it via the library.
+// The hero wordmark and the three "door" cards below are genuine painted output:
+// tools/landing_specimens.py builds each Block, render_html turns it into the
+// committed fragment under generated/panels/, and this page is a pure ?raw
+// consumer. Color is the palette's own categorical ramp (PAINTED_PALETTE.series),
+// one hue per letter of the wordmark, one hue per door.
+//
+// Laning (display ↔ interactivity): painted draws the cells; the browser supplies
+// the click. Each door is its own panel, so clickability is a single <a> wrapping
+// the fragment — no per-cell overlay. The PaintedSurface island lower down is the
+// one honestly-cosmetic piece: a recreation of the live TUI, which a static
+// fragment can't be.
 import Base from "../layouts/Base.astro";
 import PaintedSurface from "../components/PaintedSurface.jsx";
+
+import heroHtml from "../generated/panels/hero.html?raw";
+import doorWalkthrough from "../generated/panels/door_walkthrough.html?raw";
+import doorReference from "../generated/panels/door_reference.html?raw";
+import doorGuides from "../generated/panels/door_guides.html?raw";
+
+const REPO = "https://github.com/kgruel/painted";
+
+const DOORS = [
+  {
+    href: "/walkthrough",
+    hue: "var(--cyan)",
+    label: "Walkthrough — one dataset across every surface, print to TUI, no cliffs",
+    html: doorWalkthrough,
+  },
+  {
+    href: "/reference",
+    hue: "var(--green)",
+    label: "Reference — components, colors and glyphs, every panel real output",
+    html: doorReference,
+  },
+  {
+    href: "#",
+    hue: "var(--orange)",
+    label: "Guides — task-shaped, level by level (coming soon)",
+    html: doorGuides,
+    soon: true,
+  },
+];
 ---
 
 <Base title="painted — terminal rendering library">
   <main>
-    <header>
-      <div class="wordmark">painted</div>
-      <p class="tagline">
-        Python data → terminal pixels. The medium is the monospace cell grid:
-        ANSI color, box-drawing characters, composable Blocks.
+    <section class="hero">
+      <h1 class="sr-only">painted</h1>
+      <div class="hero-mark" aria-hidden="true" set:html={heroHtml} />
+      <p class="hero-sub">
+        A terminal rendering library. Compose <strong>Blocks</strong> of styled
+        cells — ANSI color, box-drawing, lenses — from a one-line print to a
+        full-screen TUI, with <em>no cliffs</em> in between.
       </p>
-    </header>
-
-    <section class="hero-slot">
-      <PaintedSurface client:visible initialView="Status" />
+      <div class="hero-cta">
+        <a class="btn" href={REPO}>GitHub&nbsp;↗</a>
+        <span class="cta-hint">or step through the doors&nbsp;↓</span>
+      </div>
     </section>
 
-    <footer>
-      <span class="dim">cosmetic hero — recreation, not the renderer.</span> Real
-      output renders through painted itself: see the <a href="/reference">reference
-      catalog</a> and the <a href="/walkthrough">no-cliffs walkthrough</a> · guides next.
-    </footer>
+    <nav class="doors" aria-label="Explore the site">
+      {
+        DOORS.map((d) => (
+          <a
+            class="door"
+            class:list={[{ soon: d.soon }]}
+            href={d.href}
+            aria-label={d.label}
+            aria-disabled={d.soon ? "true" : undefined}
+            style={`--door:${d.hue}`}
+          >
+            <span class="door-art" aria-hidden="true" set:html={d.html} />
+          </a>
+        ))
+      }
+    </nav>
+
+    <section class="live">
+      <h2>Live, in your browser</h2>
+      <p class="live-note">
+        Everything above is real <code>render_html</code> output. This panel is a
+        <span class="dim">cosmetic recreation</span> of the interactive alt-screen
+        TUI — the one thing a static fragment can't be. Use it to feel the shape.
+      </p>
+      <div class="live-slot">
+        <PaintedSurface client:visible initialView="Status" />
+      </div>
+    </section>
   </main>
 </Base>
 
@@ -35,35 +96,159 @@ import PaintedSurface from "../components/PaintedSurface.jsx";
   main {
     max-width: 1100px;
     margin: 0 auto;
-    padding: var(--sp-8) var(--sp-5);
+    padding: var(--sp-8) var(--sp-5) var(--sp-6);
     display: flex;
     flex-direction: column;
-    gap: var(--sp-6);
+    gap: var(--sp-8);
   }
-  .wordmark {
-    font-size: var(--t-display);
-    font-weight: var(--w-black);
-    color: var(--cyan);
-    line-height: var(--cell-lh-tight);
+
+  /* --- Hero ------------------------------------------------------------- */
+  .hero {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: var(--sp-5);
+    padding-top: var(--sp-6);
   }
-  .tagline {
+  /* Scale the rainbow wordmark up from the base cell size — it's a fixed cell
+     grid, so a uniform font-size keeps every glyph aligned. The wordmark is 62
+     cells wide (8×8 font at FULL density); a <pre> can't reflow, so the size must
+     track the viewport: 2.2vw keeps all 62 columns inside a 320px screen, capped
+     at 1.7rem so it stops growing once the desktop hero is comfortable. No rem
+     floor — a floor is what pushed it off-screen on phones. */
+  .hero-mark :global(.painted-output) {
+    font-size: min(1.7rem, 2.2vw);
+    background: transparent;
+    display: inline-block;
+  }
+  .hero-sub {
+    max-width: 56ch;
     font-size: var(--t-h3);
     color: var(--fg-2);
-    max-width: 60ch;
-    margin: var(--sp-3) 0 0;
+    line-height: 1.5;
   }
-  /* Sized wrapper for the island — it fills its container (minHeight 520). */
-  .hero-slot {
-    height: min(80vh, 720px);
+  .hero-sub strong {
+    color: var(--cyan);
+    font-weight: var(--w-bold);
+  }
+  .hero-sub em {
+    color: var(--green);
+    font-style: normal;
+  }
+  .hero-cta {
     display: flex;
+    align-items: center;
+    gap: var(--sp-4);
+    flex-wrap: wrap;
+    justify-content: center;
   }
-  footer {
+  .btn {
+    font-family: var(--font-mono);
+    font-size: var(--t-small);
+    font-weight: var(--w-bold);
+    color: var(--ink);
+    background: var(--cyan);
+    padding: var(--sp-2) var(--sp-4);
+    border-radius: var(--radius);
+    text-decoration: none;
+    transition: transform 120ms ease, box-shadow 120ms ease;
+  }
+  .btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 22px -8px var(--cyan);
+  }
+  .cta-hint {
     font-size: var(--t-small);
     color: var(--fg-dim);
-    border-top: 1px solid var(--line);
-    padding-top: var(--sp-3);
   }
+
+  /* --- Doors ------------------------------------------------------------ */
+  .doors {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-5);
+    justify-content: center;
+  }
+  .door {
+    display: block;
+    text-decoration: none;
+    border-radius: var(--radius);
+    padding: var(--sp-2);
+    transition: transform 140ms ease, box-shadow 140ms ease;
+  }
+  .door-art :global(.painted-output) {
+    background: transparent;
+    margin: 0;
+  }
+  .door:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 14px 34px -16px var(--door);
+  }
+  .door:focus-visible {
+    outline: 2px solid var(--door);
+    outline-offset: 3px;
+  }
+  /* "soon" door reads as not-yet — desaturated until hovered. */
+  .door.soon {
+    opacity: 0.62;
+    cursor: not-allowed;
+  }
+  .door.soon:hover {
+    opacity: 0.85;
+    transform: translateY(-1px);
+  }
+
+  /* --- Live island ----------------------------------------------------- */
+  .live {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-3);
+    border-top: 1px solid var(--line);
+    padding-top: var(--sp-6);
+  }
+  .live h2 {
+    font-size: var(--t-h2);
+    color: var(--fg);
+    margin: 0;
+  }
+  .live-note {
+    max-width: 64ch;
+    color: var(--fg-2);
+  }
+  .live-note code {
+    color: var(--cyan);
+  }
+  .live-slot {
+    height: min(70vh, 560px);
+    display: flex;
+    margin-top: var(--sp-3);
+  }
+
   .dim {
     color: var(--fg-dim);
+  }
+
+  /* Accessible name carrier for the decorative box-art wordmark. */
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  @media (max-width: 720px) {
+    main {
+      padding: var(--sp-6) var(--sp-4);
+      gap: var(--sp-6);
+    }
+    .doors {
+      gap: var(--sp-4);
+    }
   }
 </style>
