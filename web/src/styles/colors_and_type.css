@@ -105,8 +105,11 @@
   /* The terminal cell. Everything is measured in cells.
      A cell is 1ch wide; row height is the cell line-height. */
   --cell-w: 1ch;
-  --cell-lh: 1.4;          /* row height multiplier for body terminal text */
-  --cell-lh-tight: 1.0;    /* block-glyph / big-text art (no inter-row gap) */
+  --cell-lh: 1.4;          /* prose / mixed-content containers (.painted-root) only */
+  --cell-lh-tight: 1.0;    /* THE cell grid (.painted-output): box-drawing, bg-fills,
+                              and big-text must tile with NO inter-row gap, exactly
+                              like a real terminal. Any value > 1 breaks vertical
+                              box-drawing continuity (│ ╭ ╰ stop short of the next row). */
 
   /* Type scale (px). Terminal text wants generous size — 24px+ at display. */
   --t-display: 64px;       /* big-text block wordmark / hero               */
@@ -176,11 +179,13 @@ h3, .h3 { font-size: var(--t-h3); font-weight: var(--w-medium); line-height: 1.3
 p,  .p  { font-size: var(--t-body); line-height: 1.6; margin: 0; color: var(--fg-2); }
 small, .caption { font-size: var(--t-caption); color: var(--fg-dim); }
 
-/* The grid surface — where painted output lives */
+/* The grid surface — where painted output lives. line-height is the TIGHT (1.0)
+   cell height, NOT the prose --cell-lh: a cell grid has no inter-row gap, so
+   box-drawing verticals and bg-fills tile seamlessly (a real terminal is 1.0). */
 .term, .painted-output {
   font-family: var(--font-mono);
   font-size: var(--t-cell);
-  line-height: var(--cell-lh);
+  line-height: var(--cell-lh-tight);
   white-space: pre;
   tab-size: 4;
   background: var(--ink);
