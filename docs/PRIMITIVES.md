@@ -274,8 +274,8 @@ State is owned by the caller.
 ```python
 from painted.views import render_big, BigTextFormat
 
-block = render_big("OK", style=Style(fg="green"))
-block = render_big("DONE", fmt=BigTextFormat.OUTLINE)
+block = render_big("OK", Style(fg="green"))           # size=1: compact, packed at half density
+block = render_big("DONE", format=BigTextFormat.OUTLINE)
 ```
 
 Source modules: `views/components/`, `views/big_text.py`.

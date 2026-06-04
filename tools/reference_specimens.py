@@ -551,7 +551,7 @@ def _logo_wordmark() -> Block:
     """render_big — the painted brand wordmark as cell-buffer big text (views/big_text.py)."""
     with use_palette(_SITE_PALETTE):
         p = current_palette()
-        wordmark = render_big("painted", p.accent, format=BigTextFormat.FILLED)
+        wordmark = render_big("painted", p.accent, size=2, format=BigTextFormat.FILLED)
         tagline = Block.text("One library. Print to TUI. One dependency.", p.muted)
         return join_vertical(wordmark, Block.empty(1, 1), tagline, gap=0)
 

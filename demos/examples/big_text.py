@@ -2,8 +2,8 @@
 """Big Text — block character rendering with multiple sizes and styles.
 
 Features:
-- Size 1 (3-row) and Size 2 (5-row) fonts
-- Filled and outline formats
+- Size as density: size=1 (half, compact) and size=2 (full, large)
+- Filled (8×8 bitmap font) and outline (box-drawing) formats
 - Rainbow color cycling
 - Multiple demo modes
 
@@ -137,14 +137,14 @@ class BigTextDemo(Surface):
         y += 2
 
         # Size 1
-        self._buf.put_text(2, y, "size=1 (3 rows):", Style(dim=True))
+        self._buf.put_text(2, y, "size=1 (half, compact):", Style(dim=True))
         y += 1
         small = render_big("hello", Style(fg="#64c8ff"), size=1, format=self.format)
         small.paint(self._buf, 2, y)
         y += small.height + 2
 
         # Size 2
-        self._buf.put_text(2, y, "size=2 (5 rows):", Style(dim=True))
+        self._buf.put_text(2, y, "size=2 (full, large):", Style(dim=True))
         y += 1
         big = render_big("hello", Style(fg="#ffc864"), size=2, format=self.format)
         big.paint(self._buf, 2, y)

@@ -1,210 +1,248 @@
-"""Tests for big text rendering."""
+"""Tests for big text rendering.
+
+FILLED is the 8×8 IBM bitmap font packed at a density (size=1 → HALF, 4 cells
+tall; size=2 → FULL, 8 cells tall). OUTLINE is a separate box-drawing model with
+its own 3-row / 5-row sizes. The two formats do NOT share a height.
+"""
 
 from painted import Style
 from painted.views import BIG_GLYPHS, BigTextFormat, render_big
+from painted.views.big_text import (
+    _FULL_CHARS,
+    _HALF_CHARS,
+    _QUAD_CHARS,
+    _Density,
+    _glyph_bits,
+    _pack,
+)
 
 
-class TestRenderBig:
-    """Tests for render_big function."""
+class TestRenderBigFilled:
+    """FILLED: 8×8 font packed at HALF (size=1) — 4 cells tall, glyphs 8 wide."""
 
     def test_single_char(self):
-        """Single character renders as 3x3 block."""
+        """Single char packs to an 8×4 cell block at the default density."""
         block = render_big("a")
-        assert block.height == 3
-        assert block.width == 3
+        assert block.height == 4
+        assert block.width == 8
 
     def test_two_chars_with_gap(self):
-        """Two characters: 3 + 1 (gap) + 3 = 7 width."""
+        """Two glyphs: 8 + 1 (gap) + 8 = 17 wide."""
         block = render_big("ab")
-        assert block.height == 3
-        assert block.width == 7
+        assert block.height == 4
+        assert block.width == 17
 
     def test_word_width(self):
-        """Width formula: n*3 + (n-1)*1 = n*4 - 1."""
+        """Width formula at size=1: n*8 + (n-1)*1 = n*9 - 1."""
         block = render_big("hello")
-        # 5 chars: 5*3 + 4*1 = 19
-        assert block.width == 19
-        assert block.height == 3
+        assert block.width == 5 * 9 - 1  # 44
+        assert block.height == 4
 
     def test_empty_string(self):
-        """Empty string returns 0-width, 3-height block."""
+        """Empty string returns a 0-width, 4-tall block."""
         block = render_big("")
         assert block.width == 0
-        assert block.height == 3
+        assert block.height == 4
 
     def test_empty_string_size_2(self):
-        """Empty string with size 2 returns 0-width, 5-height block."""
+        """Empty string at size 2 returns a 0-width, 8-tall block."""
         block = render_big("", size=2)
         assert block.width == 0
-        assert block.height == 5
+        assert block.height == 8
 
     def test_case_folding(self):
-        """Uppercase folds to lowercase."""
+        """Uppercase folds to lowercase — same glyph, same cells."""
         upper = render_big("ABC")
         lower = render_big("abc")
-        # Same dimensions
         assert upper.width == lower.width
         assert upper.height == lower.height
-        # Same content (compare cell chars)
-        for row in range(3):
-            upper_row = [c.char for c in upper.row(row)]
-            lower_row = [c.char for c in lower.row(row)]
-            assert upper_row == lower_row
+        for row in range(upper.height):
+            assert [c.char for c in upper.row(row)] == [c.char for c in lower.row(row)]
 
     def test_unknown_char_renders_fallback(self):
-        """Unknown characters render as box placeholder."""
-        block = render_big("\u00a7")  # Section sign - not in glyph map
-        assert block.height == 3
-        assert block.width == 3
-        # Should be the fallback box glyph
-        fallback = BIG_GLYPHS["\x00"]
-        for row_idx in range(3):
-            row_chars = "".join(c.char for c in block.row(row_idx))
-            assert row_chars == fallback[row_idx]
+        """Unknown chars pack the box fallback glyph (same as packing '\\x00')."""
+        block = render_big("§")  # section sign — not in the font
+        fallback = _pack(_glyph_bits("\x00"), Style(), _Density.HALF)
+        assert block.height == 4
+        assert block.width == 8
+        for row in range(4):
+            got = [c.char for c in block.row(row)]
+            want = [c.char for c in fallback.row(row)]
+            assert got == want
 
     def test_digits(self):
-        """Digits 0-9 all render."""
+        """Digits 0-9 all render. 10 chars: 10*8 + 9 = 89."""
         block = render_big("0123456789")
-        # 10 chars: 10*3 + 9*1 = 39
-        assert block.width == 39
-        assert block.height == 3
+        assert block.width == 10 * 9 - 1
+        assert block.height == 4
 
     def test_punctuation(self):
-        """Common punctuation renders."""
+        """Common punctuation renders. 6 chars: 6*8 + 5 = 53."""
         block = render_big(".,!?-:")
-        assert block.height == 3
-        # 6 chars: 6*3 + 5*1 = 23
-        assert block.width == 23
+        assert block.height == 4
+        assert block.width == 6 * 9 - 1
 
-    def test_space(self):
-        """Space renders as empty 3-wide glyph."""
+    def test_space_is_blank(self):
+        """Space renders as a blank 8-wide glyph."""
+        # 'a' (0-7), gap (8), space (9-16), gap (17), 'b' (18-25)
         block = render_big("a b")
-        # 3 chars: 3*3 + 2*1 = 11
-        assert block.width == 11
-        # Middle glyph (space) should be all spaces
-        # Columns 4-6 are the space glyph (after 'a' glyph 0-2 and gap at 3)
-        for row in range(3):
-            row_cells = list(block.row(row))
-            # Gap is at index 3, space glyph at 4,5,6
-            assert row_cells[4].char == " "
-            assert row_cells[5].char == " "
-            assert row_cells[6].char == " "
+        for row in range(4):
+            cells = list(block.row(row))
+            for col in (9, 10, 11, 12, 13, 14, 15, 16):
+                assert cells[col].char == " "
 
     def test_whitespace_normalization(self):
-        """Tabs and newlines become spaces."""
-        block_tab = render_big("a\tb")
-        block_space = render_big("a b")
-        assert block_tab.width == block_space.width
+        """Tabs and newlines collapse to spaces."""
+        assert render_big("a\tb").width == render_big("a b").width
 
     def test_style_applied(self):
-        """Style propagates to all cells."""
+        """Style propagates to every cell."""
         style = Style(fg=(255, 0, 0), bold=True)
         block = render_big("x", style)
-        for row in range(3):
+        for row in range(block.height):
             for cell in block.row(row):
                 assert cell.style == style
 
-    def test_all_glyphs_are_3x3(self):
-        """Every glyph is exactly 3 rows of 3 characters."""
-        for char, glyph in BIG_GLYPHS.items():
-            assert len(glyph) == 3, f"Glyph '{char}' has {len(glyph)} rows"
-            for i, row in enumerate(glyph):
-                assert len(row) == 3, f"Glyph '{char}' row {i} has width {len(row)}"
+
+class TestSizeIsDensity:
+    """size selects a packing density over ONE 8×8 font."""
+
+    def test_size_2_is_full_density(self):
+        """size=2 packs at FULL: 8 cells tall, glyphs 8 wide."""
+        block = render_big("a", size=2)
+        assert block.height == 8
+        assert block.width == 8
+
+    def test_size_2_word_width(self):
+        """size=2 width: n*8 + (n-1) = n*9 - 1."""
+        block = render_big("hi", size=2)
+        assert block.width == 2 * 9 - 1
+        assert block.height == 8
+
+    def test_size_2_style_applied(self):
+        style = Style(fg=(0, 255, 0))
+        block = render_big("x", style, size=2)
+        for row in range(block.height):
+            for cell in block.row(row):
+                assert cell.style == style
+
+    def test_denser_is_shorter(self):
+        """HALF packing (size=1) is half the height of FULL (size=2)."""
+        assert render_big("abc", size=1).height * 2 == render_big("abc", size=2).height
+
+
+class TestPacker:
+    """The density packer: a glyph bitmap → cells, one sub-grid per cell."""
+
+    def test_quadrant_combos_round_trip(self):
+        """Every one of the 16 quadrant patterns packs to its block char."""
+        for (tl, tr, bl, br), char in _QUAD_CHARS.items():
+            bits = [[tl, tr], [bl, br]]  # a 2×2 pixel grid
+            block = _pack(bits, Style(), _Density.QUADRANT)
+            assert block.width == 1 and block.height == 1
+            assert block.row(0)[0].char == char
+
+    def test_half_combos_round_trip(self):
+        """Every (top, bottom) pattern packs to its half-block char."""
+        for (top, bottom), char in _HALF_CHARS.items():
+            bits = [[top], [bottom]]  # 1 col, 2 rows
+            block = _pack(bits, Style(), _Density.HALF)
+            assert block.width == 1 and block.height == 1
+            assert block.row(0)[0].char == char
+
+    def test_full_combos_round_trip(self):
+        """FULL maps one pixel to one cell: space / █."""
+        for (px,), char in _FULL_CHARS.items():
+            block = _pack([[px]], Style(), _Density.FULL)
+            assert block.row(0)[0].char == char
+
+    def test_density_governs_dimensions(self):
+        """An 8×8 grid → 8×8 (FULL), 8×4 (HALF), 4×4 (QUADRANT)."""
+        bits = [[1] * 8 for _ in range(8)]
+        assert (
+            _pack(bits, Style(), _Density.FULL).width,
+            _pack(bits, Style(), _Density.FULL).height,
+        ) == (8, 8)
+        assert (
+            _pack(bits, Style(), _Density.HALF).width,
+            _pack(bits, Style(), _Density.HALF).height,
+        ) == (8, 4)
+        assert (
+            _pack(bits, Style(), _Density.QUADRANT).width,
+            _pack(bits, Style(), _Density.QUADRANT).height,
+        ) == (4, 4)
+
+    def test_all_on_is_solid(self):
+        """A fully-lit grid packs to solid █ at every density."""
+        bits = [[1] * 8 for _ in range(8)]
+        for density in (_Density.FULL, _Density.HALF, _Density.QUADRANT):
+            block = _pack(bits, Style(), density)
+            assert all(c.char == "█" for row in range(block.height) for c in block.row(row))
+
+    def test_all_off_is_blank(self):
+        """A fully-unlit grid packs to spaces at every density."""
+        bits = [[0] * 8 for _ in range(8)]
+        for density in (_Density.FULL, _Density.HALF, _Density.QUADRANT):
+            block = _pack(bits, Style(), density)
+            assert all(c.char == " " for row in range(block.height) for c in block.row(row))
 
 
 class TestBigGlyphs:
-    """Tests for the glyph dictionary."""
+    """The master 8×8 font (BIG_GLYPHS): 8 bytes per glyph + a fallback."""
+
+    def test_glyphs_are_8_bytes(self):
+        """Every glyph is exactly 8 bytes (one per pixel row)."""
+        for char, glyph in BIG_GLYPHS.items():
+            assert len(glyph) == 8, f"Glyph '{char}' has {len(glyph)} rows"
+            assert all(0 <= b <= 0xFF for b in glyph), f"Glyph '{char}' has a non-byte row"
 
     def test_fallback_exists(self):
-        """Fallback glyph exists at null character."""
         assert "\x00" in BIG_GLYPHS
 
     def test_alphabet_coverage(self):
-        """All lowercase letters have glyphs."""
         for char in "abcdefghijklmnopqrstuvwxyz":
             assert char in BIG_GLYPHS, f"Missing glyph for '{char}'"
 
     def test_digit_coverage(self):
-        """All digits have glyphs."""
         for char in "0123456789":
             assert char in BIG_GLYPHS, f"Missing glyph for '{char}'"
 
     def test_common_punctuation_coverage(self):
-        """Common punctuation has glyphs."""
         for char in " .,!?-:":
             assert char in BIG_GLYPHS, f"Missing glyph for '{char}'"
 
 
-class TestSize2:
-    """Tests for size 2 (5-row) rendering."""
-
-    def test_size_2_height(self):
-        """Size 2 produces 5-row blocks."""
-        block = render_big("a", size=2)
-        assert block.height == 5
-        assert block.width == 5
-
-    def test_size_2_word_width(self):
-        """Size 2 width: n*5 + (n-1)*1 = n*6 - 1."""
-        block = render_big("hi", size=2)
-        # 2 chars: 2*5 + 1*1 = 11
-        assert block.width == 11
-        assert block.height == 5
-
-    def test_size_2_style_applied(self):
-        """Style propagates in size 2."""
-        style = Style(fg=(0, 255, 0))
-        block = render_big("x", style, size=2)
-        for row in range(5):
-            for cell in block.row(row):
-                assert cell.style == style
-
-
 class TestBigTextFormat:
-    """Tests for format options."""
+    """FILLED vs OUTLINE — different models, different natural heights."""
 
     def test_filled_is_default(self):
-        """Filled format is the default."""
         filled = render_big("a")
         explicit = render_big("a", format=BigTextFormat.FILLED)
-        for row in range(3):
-            filled_row = [c.char for c in filled.row(row)]
-            explicit_row = [c.char for c in explicit.row(row)]
-            assert filled_row == explicit_row
+        for row in range(filled.height):
+            assert [c.char for c in filled.row(row)] == [c.char for c in explicit.row(row)]
 
-    def test_outline_produces_block(self):
-        """Outline format produces valid block."""
+    def test_outline_size_1_is_three_rows(self):
+        """OUTLINE keeps its own 3-row size — it is unchanged by the FILLED work."""
         block = render_big("a", format=BigTextFormat.OUTLINE)
         assert block.height == 3
         assert block.width == 3
 
-    def test_outline_size_2(self):
-        """Outline works with size 2."""
+    def test_outline_size_2_is_five_rows(self):
         block = render_big("ab", size=2, format=BigTextFormat.OUTLINE)
         assert block.height == 5
         assert block.width == 11  # 2*5 + 1
 
+    def test_filled_and_outline_have_different_heights(self):
+        """The two formats are different lenses, not two packings of one grid."""
+        filled = render_big("o")
+        outline = render_big("o", format=BigTextFormat.OUTLINE)
+        assert filled.height != outline.height  # 4 vs 3
+
     def test_format_enum_values(self):
-        """BigTextFormat has expected values."""
         assert BigTextFormat.FILLED.value == "filled"
         assert BigTextFormat.OUTLINE.value == "outline"
 
-    def test_outline_differs_from_filled(self):
-        """Outline format renders differently than filled."""
-        filled = render_big("o")
-        outline = render_big("o", format=BigTextFormat.OUTLINE)
-        # Both have same dimensions
-        assert filled.width == outline.width
-        assert filled.height == outline.height
-        # But different content
-        filled_chars = [c.char for row in range(3) for c in filled.row(row)]
-        outline_chars = [c.char for row in range(3) for c in outline.row(row)]
-        assert filled_chars != outline_chars
-
     def test_outline_uses_box_drawing(self):
-        """Outline format uses box-drawing characters."""
         outline = render_big("o", format=BigTextFormat.OUTLINE)
-        chars = set(c.char for row in range(3) for c in outline.row(row))
-        # Should contain box-drawing characters
-        box_chars = {"┌", "┐", "└", "┘", "│", "─"}
-        assert chars & box_chars, f"Expected box-drawing chars, got {chars}"
+        chars = {c.char for row in range(3) for c in outline.row(row)}
+        assert chars & {"┌", "┐", "└", "┘", "│", "─"}, f"Expected box-drawing, got {chars}"
