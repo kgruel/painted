@@ -6,10 +6,11 @@ They are committed artifacts the Astro build imports via `?raw`, not hand-writte
 markup. This is the load-bearing dogfood: the site shows what painted actually
 produces, not a recreation of it. Two sets live here:
 
-- **28 panels = 7 monitor + 21 reference.** The `monitor_*` panels are the
-  "no cliffs" walkthrough (`/walkthrough`), one dataset across the continuum. The
-  rest are the reference catalog (`/reference`) — one real specimen per Design
-  preview card, from `tools/reference_specimens.py`.
+- **32 panels = 7 monitor + 21 reference + 4 landing.** The `monitor_*` panels are
+  the "no cliffs" walkthrough (`/walkthrough`), one dataset across the continuum.
+  The reference catalog (`/reference`) is one real specimen per Design preview card,
+  from `tools/reference_specimens.py`. The 4 landing panels (`hero`, `door_*`) are
+  the front door (`/`), from `tools/landing_specimens.py`.
 
 ## Regenerate
 
@@ -21,10 +22,10 @@ Run from a **current painted library checkout on `main`** (where the demos,
 ```
 
 > ⚠️ Do **not** run this from this `site` checkout. The site branch is decoupled
-> and carries an older library snapshot **without `tools/reference_specimens.py`**,
-> so `./dev panels` there would silently emit only the 7 monitor panels and drop
-> all 21 reference ones. Always regenerate from an up-to-date `main` checkout and
-> point `--emit-panels` at this directory.
+> and carries an older library snapshot **without `tools/reference_specimens.py`
+> or `tools/landing_specimens.py`**, so `./dev panels` there would silently emit
+> only the 7 monitor panels and drop the 25 reference + landing ones. Always
+> regenerate from an up-to-date `main` checkout and point `--emit-panels` here.
 
 Re-run whenever any of these change, or the panels will drift from what the
 library actually renders:
