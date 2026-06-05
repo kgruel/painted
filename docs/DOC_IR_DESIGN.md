@@ -1,7 +1,9 @@
 # Doc-IR — a document intermediate representation
 
-**Status**: design draft (2026-06-03). Provisional — node types stay out of
-`painted.views.__all__` until validated against *both* help and a real guide.
+**Status**: validated (2026-06-05). The node vocabulary lives in `core/doc.py`
+(a document compositor — see the boundary section) and has been proven against
+*both* help and a real guide. Node types stay out of `painted.core.__all__` until
+the remaining authoring seams (Inline union, `Code(ref)` resolution) settle.
 
 ## Thesis
 
@@ -38,19 +40,33 @@ doc node tree   ×   Fidelity   ×   projector
   (ANSI/PLAIN/JSON) and Mode (static/live/interactive), which compose underneath
   `to_block`.
 
-### Disclosure predicate (shared by every projector)
+### Disclosure tier (shared by every projector)
 
-A node appears iff:
+Disclosure is not binary — it is a **per-node tier** keyed on the *effective depth*:
 
 ```
-fidelity.depth >= node.min_depth
-  AND (node.tag is None or fidelity.shows(node.tag))
+eff = depth - node.min_depth        # hidden when eff < 0, or node.tag is off
+                                     # (tag checked against fidelity.visible)
 ```
 
-`min_depth` = the coarse `-v`/`-vv` ladder (generalizes help's `eff = zoom - min_zoom`).
-`tag` = a cross-cutting semantic layer, opt-in via `--show <name>` — `rationale`,
-`example`, `aside`. Both default to "always show". **Disclosure never rewrites prose;
-it reveals or hides whole nodes.** No paragraph is authored twice.
+`min_depth` is the `-v`/`-vv` ladder; `tag` is a cross-cutting semantic layer,
+opt-in via `--show <name>` (`rationale`, `example`, `aside`). `eff` is **relative**:
+a `Section` consumes its `min_depth` and passes the remaining budget (its own `eff`)
+down to its body as the local depth. So a flag list nested under a group heading is
+one tier compacter than the same list at the top level, *without re-authoring
+`min_depth` on every child* — this cascade is what lets help's framework groups
+collapse to a terse line at the default view while the command's own args stay
+expanded on the same screen. (Help's old `eff = zoom - min_zoom`, computed per flat
+group, was the special case; the cascade generalizes it to a nested tree.)
+
+`eff` drives **density, not re-authoring**: a `Defs` shows terms-only at `eff == 0`,
+term+summary columns at `eff >= 1`, and adds `Def.detail` at `eff >= 2` — the same
+content, never written twice. Prose, items, code, figures, and `Section` headings are
+binary (shown whenever `eff >= 0`); only list density and the `Section.hint` subhead
+are tiered. **The original "reveals or hides whole nodes, never rewrites" axiom was
+too strong** — the help existence-proof showed a group genuinely renders *denser* as
+depth climbs. The invariant that survives: disclosure never re-*authors* content (no
+paragraph written twice); it may reveal, hide, or compress a node.
 
 ## Node vocabulary
 
@@ -135,8 +151,8 @@ Help exercises only the `str` arm. The union lands when guides come into scope.
 ## Projector contracts
 
 ```python
-# views/lens/doc.py — LIBRARY (the terminal lens, peer to shape_lens/tree_lens)
-def to_block(doc: Doc, *, fidelity: Fidelity = Fidelity(), width: int | None = None) -> Block
+# core/doc.py — LIBRARY (the document compositor, peer of compose.py); exported as doc_lens
+def doc_lens(doc: Doc, *, fidelity: Fidelity = Fidelity(), width: int | None = None) -> Block
 
 # tools/ — SITE GENERATION (not in the wheel; consumes the same tree)
 def to_html(doc: Doc, *, fidelity: Fidelity = Fidelity()) -> str        # SEMANTIC html
@@ -163,12 +179,22 @@ is a `Block`*:
 | category | maps | examples | home |
 |---|---|---|---|
 | **Block sink** (Format) | `Block → substrate` | ANSI writer, `core/html.py` | library |
-| **Lens** | `tree → Block` | `shape_lens`, `tree_lens`, `to_block` | library |
+| **Compositor** | `tree → Block` | `compose`, **`doc_lens`** (`core/doc.py`) | library (core) |
+| **Lens** | `data → Block` | `shape_lens`, `tree_lens` | library (views) |
 | **Publisher** | `tree → foreign semantics` | `to_html(doc)`, `to_markdown(doc)` | tools |
 
-`to_block` lands in the renderer's own type (`Block`) → it's a lens → library, with the
-other lenses. `to_html` emits web semantics the renderer has no type for → it leaves the
-renderer's world → publisher → tooling (beside `build_site`/`outputgen`).
+`to_block`/`doc_lens` lands in the renderer's own type (`Block`). **It was first filed
+as a "lens" beside `shape_lens`/`tree_lens` — but those interpret *arbitrary domain
+data* (dicts, lists, unknown trees), while `doc_lens` interprets a *fixed vocabulary
+painted defines* (`Doc`/`Section`/`Def`/…).** That makes it a *document compositor* —
+a peer of `compose.py` (which lays out raw Blocks) — and it lives in `core`, not
+`views`. The forcing function was the dissolution: help (`cli/`) must consume it, and
+the gated `cli ↛ views` peer boundary forbids importing a views lens; `core` is below
+both. `doc.py` imports only `core` and nothing under `views` imported it, so the move
+was edge-free and the "it's a lens" identity was conceptual, not structural.
+
+`to_html` emits web semantics the renderer has no type for → it leaves the renderer's
+world → publisher → tooling (beside `build_site`/`outputgen`).
 
 `core/html.py` is **not** a counterexample to "HTML-gen is tooling": it's a *Block
 sink*, peer to the ANSI writer — `Block → HTML` renders cells faithfully ("the browser
@@ -198,9 +224,13 @@ dissolve into primitives that already ship.
 
 ## Build sequence
 
-1. Node vocabulary + `to_block` + the shared disclosure predicate (`views/lens/doc.py`).
-2. Rewrite `cli/help.py` onto it (breaking; `painted.cli` is the evolving surface).
-   Rewrite its tests to pin the *new* output.
-3. `to_html` in `tools/`; point one `web/` page at it to prove the semantic sink.
-4. *Later/maybe*: Inline union, `Code(ref)` docgen resolution, `to_markdown`,
-   `painted docs` consumer, whether prose guides migrate off hand-markdown at all.
+1. ✅ Node vocabulary + `to_block` + the shared disclosure predicate (`core/doc.py`).
+2. ✅ `painted docs` consumer (terminal front door) — proved `doc == demo` on a real guide.
+3. ✅ Disclosure grows binary → tier (`eff = depth - min_depth`, cascading); absorbs
+   help's compact/expanded/detail keyings into one predicate.
+4. ✅ Rewrite `cli/help.py` (and `app_runner.py`) onto it. `HelpData`/`HelpGroup`/
+   `HelpFlag`/`help_args_to_flags`/`build_help_data`/`render_help` deleted; tests pin
+   the new output. The dissolution forced the `views → core` reclassification above.
+5. `to_html` in `tools/`; point one `web/` page at it to prove the semantic sink.
+6. *Later/maybe*: Inline union, `Code(ref)` docgen resolution, `to_markdown`,
+   whether prose guides migrate off hand-markdown at all.
