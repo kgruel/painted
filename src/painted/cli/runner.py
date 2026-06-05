@@ -29,7 +29,7 @@ from .types import (
     parse_mode,
     parse_zoom,
 )
-from .help import HelpArg, build_help_data, render_help, scan_help_args
+from .help import HelpArg, help_doc, scan_help_args
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -147,21 +147,22 @@ class CliRunner(Generic[T]):
     def _handle_help(self, args: list[str]) -> int:
         """Render zoom-aware help and return 0."""
         zoom, fmt = scan_help_args(args)
-        help_data = build_help_data(self)
+        doc = help_doc(self)
 
         if fmt == Format.JSON:
-            print(json.dumps(asdict(help_data), default=str))
+            print(json.dumps(asdict(doc), default=str))
             return 0
 
         use_ansi = fmt != Format.PLAIN
         if fmt == Format.AUTO:
             use_ansi = hasattr(sys.stdout, "isatty") and sys.stdout.isatty()
 
-        width = shutil.get_terminal_size().columns
-        block = render_help(help_data, zoom, width, use_ansi)
-
+        from ..core.fidelity import Fidelity
         from ..core.writer import print_block
+        from ..core.doc import doc_lens
 
+        width = shutil.get_terminal_size().columns
+        block = doc_lens(doc, fidelity=Fidelity(depth=int(zoom)), width=width)
         print_block(block, use_ansi=use_ansi)
         return 0
 

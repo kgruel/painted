@@ -3,11 +3,14 @@
 # requires-python = ">=3.11"
 # dependencies = ["painted"]
 # ///
-"""Zoom-aware help — help text adapts to the zoom level that requested it.
+"""Help is a document — authored as a doc-IR node tree, projected at each zoom.
 
-The help itself teaches the three-axis model (zoom, mode, format) by
-demonstrating zoom: --help shows grouped flags, --help -v reveals
-interaction rules and flag details.
+There is no bespoke help renderer: a help screen is a ``Doc`` (title, prose,
+definition lists) and the zoom level picks how much of it shows. The same
+``doc_lens`` projector drives ``painted docs`` and painted's own ``--help``.
+Disclosure is a tier — ``eff = depth - min_depth`` — so framework groups gated
+at ``min_depth=SUMMARY`` collapse to a terse names line at the default view and
+expand as you add -v.
 
     uv run demos/patterns/help.py -q           # one-line summary
     uv run demos/patterns/help.py              # sample help at SUMMARY
@@ -20,7 +23,6 @@ interaction rules and flag details.
 from __future__ import annotations
 
 import sys
-from dataclasses import dataclass
 
 from painted import (
     Block,
@@ -29,109 +31,107 @@ from painted import (
     Zoom,
     border,
     join_horizontal,
-    join_responsive,
     join_vertical,
     pad,
     run_cli,
     truncate,
     ROUNDED,
 )
-from painted.cli import (
-    HelpData,
-    HelpFlag,
-    HelpGroup,
-    render_help,
-)
+from painted.core.doc import Def, Defs, Doc, Prose, Section, doc_lens
+from painted.core.fidelity import Fidelity
 
 
-# --- Sample help data (a hypothetical full-featured CLI) ---
+# --- Sample help, authored as a document (a hypothetical full-featured CLI) ---
 
-SAMPLE_HELP = HelpData(
-    prog="deploy",
-    description="Ship services to production.",
-    groups=(
-        HelpGroup(
-            name="Zoom",
-            hint="(what to show)",
-            detail="Controls how much detail is rendered. Stackable: -v for detailed, -vv for full.",
-            flags=(
-                HelpFlag("-q", "--quiet", "Minimal output"),
-                HelpFlag("-v", "--verbose", "Detailed (-v) or full (-vv)"),
+
+def _flag(short: str | None, long: str | None, summary: str, detail: str | None = None) -> Def:
+    term = ", ".join(p for p in (short, long) if p)
+    return Def(term=term, summary=summary, detail=detail)
+
+
+def _group(heading: str, hint: str, detail: str, flags: tuple[Def, ...]) -> Section:
+    # min_depth=SUMMARY: the group is terse at the default view, expands at -v;
+    # its detail prose (min_depth=2, relative) appears only at -vv.
+    return Section(
+        heading,
+        hint=hint,
+        min_depth=Zoom.SUMMARY,
+        body=(Prose(detail, min_depth=2), Defs(flags)),
+    )
+
+
+SAMPLE_HELP = Doc(
+    title="deploy",
+    body=(
+        Prose("Ship services to production."),
+        _group(
+            "Zoom",
+            "(what to show)",
+            "Controls how much detail is rendered. Stackable: -v for detailed, -vv for full.",
+            (
+                _flag("-q", "--quiet", "Minimal output"),
+                _flag("-v", "--verbose", "Detailed (-v) or full (-vv)"),
             ),
         ),
-        HelpGroup(
-            name="Mode",
-            hint="(how to deliver)",
-            detail="Delivery mechanism. AUTO selects LIVE for TTY, STATIC for pipes.",
-            flags=(
-                HelpFlag("-i", "--interactive", "Interactive TUI"),
-                HelpFlag(None, "--static", "Static output, no animation"),
-                HelpFlag(None, "--live", "Live output with in-place updates"),
+        _group(
+            "Mode",
+            "(how to deliver)",
+            "Delivery mechanism. AUTO selects LIVE for TTY, STATIC for pipes.",
+            (
+                _flag("-i", "--interactive", "Interactive TUI"),
+                _flag(None, "--static", "Static output, no animation"),
+                _flag(None, "--live", "Live output with in-place updates"),
             ),
         ),
-        HelpGroup(
-            name="Format",
-            hint="(serialization)",
-            detail="Output serialization. ANSI is default for TTY, PLAIN for pipes.",
-            flags=(
-                HelpFlag(None, "--json", "JSON output", detail="Implies --static."),
-                HelpFlag(
-                    None,
-                    "--plain",
-                    "Plain text, no ANSI codes",
-                    detail="Implies --static when piped.",
-                ),
+        _group(
+            "Format",
+            "(serialization)",
+            "Output serialization. ANSI is default for TTY, PLAIN for pipes.",
+            (
+                _flag(None, "--json", "JSON output", "Implies --static."),
+                _flag(None, "--plain", "Plain text, no ANSI codes", "Implies --static when piped."),
             ),
         ),
-        HelpGroup(
-            name="Help",
-            flags=(HelpFlag("-h", "--help", "Show this help", detail="Add -v for more detail."),),
+        Section(
+            "Help",
+            min_depth=Zoom.SUMMARY,
+            body=(Defs((_flag("-h", "--help", "Show this help", "Add -v for more detail."),)),),
         ),
     ),
 )
 
 
-# --- Render functions ---
+def _render_doc(doc: Doc, depth: Zoom, width: int) -> Block:
+    return doc_lens(doc, fidelity=Fidelity(depth=int(depth)), width=width)
 
 
-def render_minimal(data: HelpData, width: int) -> Block:
+# --- Render functions (the demo renders the sample at several zooms) ---
+
+
+def render_minimal(doc: Doc, width: int) -> Block:
     """One-line: program name + flag count."""
-    flag_count = sum(len(g.flags) for g in data.groups)
-    group_names = ", ".join(g.name.lower() for g in data.groups if g.flags)
-    desc = f" — {data.description}" if data.description else ""
-    return truncate(
-        Block.text(f"{data.prog}{desc} ({flag_count} flags: {group_names})", Style()), width
+    groups = [n for n in doc.body if isinstance(n, Section)]
+    flag_count = sum(len(d.items) for g in groups for d in g.body if isinstance(d, Defs))
+    names = ", ".join(g.heading.lower() for g in groups if g.heading)
+    desc = next((n.content for n in doc.body if isinstance(n, Prose)), "")
+    label = f"{doc.title} — {desc} ({flag_count} flags: {names})"
+    return truncate(Block.text(label, Style()), width)
+
+
+def render_at(doc: Doc, depth: Zoom, width: int, label: str) -> Block:
+    """Show the sample help rendered at one zoom, under a dim caption."""
+    return join_vertical(
+        Block.text(label, Style(dim=True)),
+        Block.text("", Style()),
+        _render_doc(doc, depth, width),
     )
 
 
-def render_summary(data: HelpData, width: int) -> Block:
-    """Show sample help rendered at SUMMARY zoom."""
-    rows: list[Block] = [
-        Block.text("Help at default zoom:", Style(dim=True)),
-        Block.text("", Style()),
-    ]
-    help_block = render_help(data, Zoom.SUMMARY, width, use_ansi=False)
-    rows.append(help_block)
-    return join_vertical(*rows)
-
-
-def render_detailed(data: HelpData, width: int) -> Block:
-    """Show sample help rendered at DETAILED zoom."""
-    rows: list[Block] = [
-        Block.text("Help at --help -v:", Style(dim=True)),
-        Block.text("", Style()),
-    ]
-    help_block = render_help(data, Zoom.DETAILED, width, use_ansi=False)
-    rows.append(help_block)
-    return join_vertical(*rows)
-
-
-def render_full(data: HelpData, width: int) -> Block:
+def render_full(doc: Doc, width: int) -> Block:
     """Side-by-side: SUMMARY vs DETAILED."""
     col_width = max(30, (width - 3) // 2)
-
-    summary_block = render_help(data, Zoom.SUMMARY, col_width, use_ansi=False)
-    detailed_block = render_help(data, Zoom.DETAILED, col_width, use_ansi=False)
+    summary_block = _render_doc(doc, Zoom.SUMMARY, col_width)
+    detailed_block = _render_doc(doc, Zoom.DETAILED, col_width)
 
     summary_box = border(
         pad(summary_block, right=max(0, col_width - 2 - summary_block.width)),
@@ -154,18 +154,18 @@ def render_full(data: HelpData, width: int) -> Block:
 # --- run_cli integration ---
 
 
-def _fetch() -> HelpData:
+def _fetch() -> Doc:
     return SAMPLE_HELP
 
 
-def _render(ctx: CliContext, data: HelpData) -> Block:
+def _render(ctx: CliContext, doc: Doc) -> Block:
     if ctx.zoom == Zoom.MINIMAL:
-        return render_minimal(data, ctx.width)
+        return render_minimal(doc, ctx.width)
     if ctx.zoom == Zoom.SUMMARY:
-        return render_summary(data, ctx.width)
+        return render_at(doc, Zoom.SUMMARY, ctx.width, "Help at default zoom:")
     if ctx.zoom == Zoom.FULL:
-        return render_full(data, ctx.width)
-    return render_detailed(data, ctx.width)
+        return render_full(doc, ctx.width)
+    return render_at(doc, Zoom.DETAILED, ctx.width, "Help at --help -v:")
 
 
 def main() -> int:

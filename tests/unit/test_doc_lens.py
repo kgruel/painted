@@ -8,7 +8,7 @@ from painted.core.block import Block
 from painted.core.cell import Style
 from painted.core.fidelity import Fidelity
 from painted.core.zoom import Zoom
-from painted.views.lens.doc import (
+from painted.core.doc import (
     Code,
     Def,
     Defs,

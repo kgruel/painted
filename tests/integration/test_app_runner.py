@@ -5,7 +5,8 @@ import json
 import pytest
 
 from painted.cli import AppCommand, AppRunner, run_app
-from painted.cli import HelpArg, HelpData, Zoom
+from painted.cli import HelpArg, Zoom
+from painted.core.doc import Defs, Section
 
 
 class TestAppCommand:
@@ -97,7 +98,7 @@ class TestAppRunner:
         assert rc == 0
         captured = capsys.readouterr()
         data = json.loads(captured.out)
-        assert data["prog"] == "test"
+        assert data["title"] == "test"
 
     def test_help_plain(self, capsys):
         runner = self._make_runner()
@@ -141,38 +142,31 @@ class TestAppRunner:
         assert "myapp" in captured.out
 
 
-class TestBuildHelpData:
-    """_build_help_data produces correct HelpData."""
+class TestHelpDoc:
+    """_help_doc produces the help document — the dissolution of HelpData."""
 
-    def test_commands_group_min_zoom(self):
+    def test_commands_lead_as_a_section(self):
         runner = AppRunner(
             commands=(
                 AppCommand("a", "Do A", lambda argv: 0),
                 AppCommand("b", "Do B", lambda argv: 0),
             ),
         )
-        data = runner._build_help_data()
-        assert isinstance(data, HelpData)
-        # Commands (min_zoom=MINIMAL) + Zoom + Format + Help (min_zoom=SUMMARY)
-        assert len(data.groups) == 4
-        commands_group = data.groups[0]
-        assert commands_group.name == "Commands"
-        assert commands_group.min_zoom == Zoom.MINIMAL
-        assert len(commands_group.flags) == 2
-        assert commands_group.flags[0].long == "a"
-        assert commands_group.flags[1].long == "b"
+        doc = runner._help_doc()
+        sections = [n for n in doc.body if isinstance(n, Section)]
+        commands = next(s for s in sections if s.heading == "Commands")
+        assert commands.min_depth == Zoom.MINIMAL  # always expanded
+        defs = next(n for n in commands.body if isinstance(n, Defs))
+        assert [d.term for d in defs.items] == ["a", "b"]
 
-    def test_framework_groups_min_zoom(self):
+    def test_framework_groups_subordinate(self):
         runner = AppRunner(
             commands=(AppCommand("a", "Do A", lambda argv: 0),),
         )
-        data = runner._build_help_data()
-        framework = [g for g in data.groups if g.min_zoom == Zoom.SUMMARY]
-        names = [g.name for g in framework]
-        assert "Zoom" in names
-        assert "Format" in names
-        assert "Help" in names
-        assert all(g.min_zoom == Zoom.SUMMARY for g in framework)
+        doc = runner._help_doc()
+        sections = [n for n in doc.body if isinstance(n, Section)]
+        framework = {s.heading for s in sections if s.min_depth == Zoom.SUMMARY}
+        assert {"Zoom", "Format", "Help"} <= framework
 
     def test_no_interaction_rules(self, capsys):
         """AppRunner help should not show interaction rules even at DETAILED."""
@@ -269,18 +263,17 @@ class TestSubcommandHelp:
         assert "--dry-run" in captured.out
 
     def test_subcommand_help_json(self, capsys):
-        """--json returns HelpData as JSON."""
+        """--json serializes the help Doc node tree."""
         runner, _ = self._make_runner()
         rc = runner.run(["emit", "-h", "--json"])
         assert rc == 0
         captured = capsys.readouterr()
         data = json.loads(captured.out)
-        assert data["prog"] == "loops emit"
-        assert data["description"] == "Inject a fact"
-        # No Zoom/Format groups — only args + Help
-        group_names = [g["name"] for g in data["groups"]]
-        assert "Zoom" not in group_names
-        assert "Format" not in group_names
+        assert data["title"] == "loops emit"
+        # The description is the leading Prose; the only Section is Help.
+        headings = [n.get("heading") for n in data["body"] if "heading" in n]
+        assert headings == ["Help"]
+        assert "Zoom" not in headings and "Format" not in headings
 
     def test_subcommand_help_prog(self, capsys):
         """Prog shows 'loops emit'."""

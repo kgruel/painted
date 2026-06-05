@@ -20,7 +20,7 @@ from dataclasses import dataclass
 from painted import Block, Style, join_vertical, print_block, run_cli
 from painted.cli import OutputMode
 from painted.core.fidelity import Fidelity
-from painted.views.lens.doc import (
+from painted.core.doc import (
     Code,
     Def,
     Defs,

@@ -21,17 +21,26 @@ import shutil
 import sys
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
+from ..core.doc import Def, Defs, Doc, Node, Prose, Section, doc_lens
+
+if TYPE_CHECKING:
+    from ..core.block import Block
 from .help import (
     HelpArg,
-    HelpData,
-    HelpFlag,
-    HelpGroup,
-    help_args_to_flags,
-    render_help,
+    command_defs,
+    framework_sections,
     scan_help_args,
 )
 from .types import Format, Zoom
+
+
+def _render_doc(doc: Doc, zoom: Zoom, width: int) -> "Block":
+    """Project a help Doc to a Block at the given zoom (Format strips styles)."""
+    from ..core.fidelity import Fidelity
+
+    return doc_lens(doc, fidelity=Fidelity(depth=int(zoom)), width=width)
 
 
 @dataclass(frozen=True)
@@ -103,46 +112,30 @@ class AppRunner:
         print_block(error_block, sys.stderr, use_ansi=True)
 
         # Show help to stderr
-        help_data = self._build_help_data()
         width = shutil.get_terminal_size().columns
-        help_block = render_help(help_data, Zoom.SUMMARY, width, use_ansi=True)
+        help_block = _render_doc(self._help_doc(), Zoom.SUMMARY, width)
         print_block(help_block, sys.stderr, use_ansi=True)
 
         return 1
 
     def _handle_help(self, args: list[str]) -> int:
         """Render zoom-aware help and return 0."""
-        from ..core.writer import print_block
-
-        zoom, fmt = scan_help_args(args)
-        help_data = self._build_help_data()
-
-        if fmt == Format.JSON:
-            from dataclasses import asdict
-
-            print(json.dumps(asdict(help_data), default=str))
-            return 0
-
-        use_ansi = fmt != Format.PLAIN
-        if fmt == Format.AUTO:
-            use_ansi = hasattr(sys.stdout, "isatty") and sys.stdout.isatty()
-
-        width = shutil.get_terminal_size().columns
-        block = render_help(help_data, zoom, width, use_ansi)
-        print_block(block, use_ansi=use_ansi)
-        return 0
+        return self._emit_help(self._help_doc(), args)
 
     def _handle_subcommand_help(self, cmd: AppCommand, args: list[str]) -> int:
         """Render zoom-aware help for a subcommand and return 0."""
+        return self._emit_help(self._subcommand_help_doc(cmd), args)
+
+    def _emit_help(self, doc: Doc, args: list[str]) -> int:
+        """Project a help Doc to the active format and print it."""
         from ..core.writer import print_block
 
         zoom, fmt = scan_help_args(args)
-        help_data = self._build_subcommand_help_data(cmd)
 
         if fmt == Format.JSON:
             from dataclasses import asdict
 
-            print(json.dumps(asdict(help_data), default=str))
+            print(json.dumps(asdict(doc), default=str))
             return 0
 
         use_ansi = fmt != Format.PLAIN
@@ -150,80 +143,41 @@ class AppRunner:
             use_ansi = hasattr(sys.stdout, "isatty") and sys.stdout.isatty()
 
         width = shutil.get_terminal_size().columns
-        block = render_help(help_data, zoom, width, use_ansi)
-        print_block(block, use_ansi=use_ansi)
+        print_block(_render_doc(doc, zoom, width), use_ansi=use_ansi)
         return 0
 
-    def _build_subcommand_help_data(self, cmd: AppCommand) -> HelpData:
-        """Build HelpData for a subcommand from its help_args."""
+    def _subcommand_help_doc(self, cmd: AppCommand) -> Doc:
+        """Help Doc for a subcommand — its own args plus the Help group."""
         assert cmd.help_args is not None
 
-        groups: list[HelpGroup] = []
+        cmd_defs = command_defs(cmd.help_args, None)
+        # Help subordinates only when the command has its own args to lead with.
+        framework_depth = Zoom.SUMMARY if cmd_defs else Zoom.MINIMAL
 
-        # Command args as unnamed primary group
-        command_flags = help_args_to_flags(cmd.help_args)
-        if command_flags:
-            groups.append(HelpGroup(name="", flags=command_flags))
-
-        # Help flag — subordinate when command has its own args
-        help_min_zoom = Zoom.SUMMARY if command_flags else Zoom.MINIMAL
-        help_group = HelpGroup(
-            name="Help",
-            flags=(HelpFlag("-h", "--help", "Show this help", detail="Add -v for more detail."),),
-            min_zoom=help_min_zoom,
-        )
-        groups.append(help_group)
+        body: list[Node] = []
+        if cmd.description:
+            body.append(Prose(cmd.description))
+        if cmd_defs:
+            body.append(Defs(cmd_defs))
+        body.extend(framework_sections(framework_depth, include_options=False))
 
         prog = f"{self.prog} {cmd.name}" if self.prog else cmd.name
-        return HelpData(
-            prog=prog,
-            description=cmd.description,
-            groups=tuple(groups),
-        )
+        return Doc(title=prog, body=tuple(body))
 
-    def _build_help_data(self) -> HelpData:
-        """Build HelpData from commands."""
-        # Commands as primary group
-        command_flags = tuple(
-            HelpFlag(short=None, long=cmd.name, description=cmd.description, detail=cmd.detail)
-            for cmd in self.commands
+    def _help_doc(self) -> Doc:
+        """Top-level help Doc — the command list leads, framework groups follow."""
+        body: list[Node] = []
+        if self.description:
+            body.append(Prose(self.description))
+        commands = Defs(
+            tuple(
+                Def(term=cmd.name, summary=cmd.description, detail=cmd.detail)
+                for cmd in self.commands
+            )
         )
-        commands_group = HelpGroup(name="Commands", flags=command_flags)
-
-        # Framework groups — subordinate when commands are the primary content
-        zoom_group = HelpGroup(
-            name="Zoom",
-            hint="(what to show)",
-            detail="Controls how much detail is rendered. Stackable: -v for detailed, -vv for full.",
-            flags=(
-                HelpFlag("-q", "--quiet", "Minimal output"),
-                HelpFlag("-v", "--verbose", "Detailed (-v) or full (-vv)"),
-            ),
-            min_zoom=Zoom.SUMMARY,
-        )
-
-        format_group = HelpGroup(
-            name="Format",
-            hint="(serialization)",
-            detail="Output serialization. ANSI is default for TTY, PLAIN for pipes.",
-            flags=(
-                HelpFlag(None, "--json", "JSON output", detail="Implies --static."),
-                HelpFlag(None, "--plain", "Plain text, no ANSI codes"),
-            ),
-            min_zoom=Zoom.SUMMARY,
-        )
-
-        help_group = HelpGroup(
-            name="Help",
-            flags=(HelpFlag("-h", "--help", "Show this help", detail="Add -v for more detail."),),
-            min_zoom=Zoom.SUMMARY,
-        )
-
-        return HelpData(
-            prog=self.prog,
-            description=self.description,
-            groups=(commands_group, zoom_group, format_group, help_group),
-        )
+        body.append(Section("Commands", body=(commands,)))  # min_depth 0 — always expanded
+        body.extend(framework_sections(Zoom.SUMMARY))
+        return Doc(title=self.prog, body=tuple(body))
 
 
 def run_app(

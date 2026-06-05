@@ -1,10 +1,18 @@
-"""Doc lens: a document node tree projected to a Block.
+"""The doc-IR: a document node tree, and ``doc_lens`` — its projection to a Block.
+
+A **document compositor**, peer of ``compose.py``: where ``compose`` lays out raw
+Blocks (join/pad/border), ``doc_lens`` lays out a *document* — a fixed vocabulary
+painted defines (``Doc``/``Section``/``Defs``/``Def``/``Prose``/…) — into a Block.
+It interprets a known structure, not arbitrary domain data, which is why it lives
+in ``core`` beside the other structural primitives rather than in ``views`` with
+the data lenses (``shape_lens``/``tree_lens``). Core placement is what lets the CLI
+framework (help) and the ``painted docs`` front door both consume it without
+``cli``/``views`` crossing their peer boundary.
 
 This is the *terminal* projector of the doc-IR (`to_block` in the taxonomy of
 ``docs/DOC_IR_DESIGN.md``). The same node tree is also read by the *publishers*
-``to_html`` / ``to_markdown`` that live in ``tools/`` — but those emit foreign
-(web/markdown) semantics, while this one lands in painted's own ``Block`` type,
-which is what makes it a lens and keeps it in the library.
+``to_html`` / ``to_markdown`` that live in ``tools/`` — those emit foreign
+(web/markdown) semantics, while this one lands in painted's own ``Block`` type.
 
 Disclosure is governed entirely by ``Fidelity`` (``core/fidelity.py``): no node
 carries a bespoke zoom primitive. Each node renders at an *effective tier*
@@ -27,18 +35,18 @@ and ``Section`` headings are binary (shown whenever ``eff >= 0``); only the list
 density and the ``Section.hint`` subhead are tiered.
 
 Status: provisional. These names are intentionally NOT exported from
-``painted.views.__all__`` until validated against both help and a real guide.
+``painted.core.__all__`` until validated against both help and a real guide.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ...core._text_width import display_width
-from ...core.block import Block, Wrap
-from ...core.cell import Cell, Style
-from ...core.compose import join_vertical, pad
-from ...core.fidelity import Fidelity
+from ._text_width import display_width
+from .block import Block, Wrap
+from .cell import Cell, Style
+from .compose import join_vertical, pad
+from .fidelity import Fidelity
 
 # Inline content. The first cut accepts only plain ``str``; the rich union
 # (Text / Emphasis / CodeSpan / Link) lands when prose guides come into scope.

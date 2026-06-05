@@ -23,11 +23,7 @@ from .types import (
 )
 from .help import (
     HelpArg,
-    HelpData,
-    HelpFlag,
-    HelpGroup,
-    help_args_to_flags,
-    render_help,
+    help_doc,
     scan_help_args,
 )
 from .runner import CliRunner, run_cli
@@ -52,11 +48,7 @@ __all__ = [
     "parse_fidelity",
     # Help
     "HelpArg",
-    "HelpData",
-    "HelpFlag",
-    "HelpGroup",
-    "help_args_to_flags",
-    "render_help",
+    "help_doc",
     "scan_help_args",
     # Runner
     "CliRunner",

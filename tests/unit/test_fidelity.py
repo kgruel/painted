@@ -12,13 +12,9 @@ from painted.cli import (
     CliRunner,
     Format,
     HelpArg,
-    HelpData,
-    HelpFlag,
-    HelpGroup,
     OutputMode,
     Zoom,
-    help_args_to_flags,
-    render_help,
+    help_doc,
     add_cli_args,
     parse_fidelity,
     parse_format,
@@ -27,7 +23,9 @@ from painted.cli import (
     resolve_mode,
     run_cli,
 )
-from painted.cli.help import build_help_data, _extract_add_args_flags
+from painted.cli.help import _add_args_defs, _arg_def
+from painted.core.doc import Defs, Section, doc_lens
+from tests.helpers import block_to_text
 
 # =============================================================================
 # Zoom Tests
@@ -643,78 +641,89 @@ class TestHelpArg:
         assert arg.positional is False
 
 
-class TestHelpArgsToFlags:
-    """Tests for help_args_to_flags conversion."""
+class TestArgToDef:
+    """HelpArg → Def keeps the term intact (the lossy help_args_to_flags is gone)."""
 
     def test_positional_arg(self):
-        flags = help_args_to_flags([HelpArg("vertex", "Vertex name", positional=True)])
-        assert len(flags) == 1
-        assert flags[0].short is None
-        assert flags[0].long == "vertex"
-        assert flags[0].description == "Vertex name"
+        d = _arg_def(HelpArg("vertex", "Vertex name", positional=True))
+        assert d.term == "vertex"
+        assert d.summary == "Vertex name"
 
     def test_optional_arg(self):
-        flags = help_args_to_flags([HelpArg("--since", "Time range")])
-        assert flags[0].long == "--since"
-        assert flags[0].description == "Time range"
+        d = _arg_def(HelpArg("--since", "Time range"))
+        assert d.term == "--since"
+        assert d.summary == "Time range"
 
     def test_default_appended(self):
-        flags = help_args_to_flags([HelpArg("--since", "Time range", default="7d")])
-        assert "(default: 7d)" in flags[0].description
+        d = _arg_def(HelpArg("--since", "Time range", default="7d"))
+        assert "(default: 7d)" in d.summary
 
     def test_default_only_no_description(self):
-        flags = help_args_to_flags([HelpArg("--since", default="7d")])
-        assert flags[0].description == "(default: 7d)"
+        d = _arg_def(HelpArg("--since", default="7d"))
+        assert d.summary == "(default: 7d)"
 
 
-class TestExtractAddArgsFlags:
-    """Tests for _extract_add_args_flags introspection."""
+class TestAddArgsDefs:
+    """add_args introspection → Defs, keeping the full term (both aliases)."""
 
     def test_extracts_positional(self):
         def add_args(parser):
             parser.add_argument("name", help="The name")
 
-        flags = _extract_add_args_flags(add_args)
-        assert len(flags) == 1
-        assert flags[0].long == "name"
-        assert flags[0].description == "The name"
+        defs = _add_args_defs(add_args)
+        assert len(defs) == 1
+        assert defs[0].term == "name"
+        assert defs[0].summary == "The name"
 
-    def test_extracts_optional(self):
+    def test_keeps_both_aliases(self):
+        """The old bridge dropped one alias; the term now carries -k, --kind."""
+
         def add_args(parser):
             parser.add_argument("-k", "--kind", help="Filter by kind")
 
-        flags = _extract_add_args_flags(add_args)
-        assert len(flags) == 1
-        assert flags[0].short == "-k"
-        assert flags[0].long == "--kind"
-        assert flags[0].description == "Filter by kind"
+        defs = _add_args_defs(add_args)
+        assert len(defs) == 1
+        assert "-k" in defs[0].term
+        assert "--kind" in defs[0].term
+        assert defs[0].summary == "Filter by kind"
 
     def test_skips_suppressed(self):
         def add_args(parser):
             parser.add_argument("--internal", help=argparse.SUPPRESS)
             parser.add_argument("--visible", help="Shown")
 
-        flags = _extract_add_args_flags(add_args)
-        assert len(flags) == 1
-        assert flags[0].long == "--visible"
+        defs = _add_args_defs(add_args)
+        assert len(defs) == 1
+        assert defs[0].term == "--visible"
 
 
-class TestBuildHelpDataAugmentation:
-    """Tests for build_help_data including command args."""
+def _sections(doc):
+    return [n for n in doc.body if isinstance(n, Section)]
 
-    def test_no_command_args_min_zoom_minimal(self):
-        """Without help_args/add_args, all groups have min_zoom=MINIMAL."""
+
+def _first_defs(doc):
+    return next(n for n in doc.body if isinstance(n, Defs))
+
+
+class TestHelpDoc:
+    """help_doc(runner) builds the help document — the dissolution of HelpData."""
+
+    def test_no_command_args_framework_leads(self):
+        """Without command args, the framework groups are the primary content
+        (min_depth 0) so they expand at the default help view."""
         runner = CliRunner(
             render=lambda ctx, data: Block.text("x", Style()),
             fetch=lambda: "ok",
             prog="test",
         )
-        data = build_help_data(runner)
-        for group in data.groups:
-            assert group.min_zoom == Zoom.MINIMAL
+        doc = help_doc(runner)
+        assert doc.title == "test"
+        for section in _sections(doc):
+            assert section.min_depth == Zoom.MINIMAL
 
-    def test_help_args_creates_command_group(self):
-        """help_args appear as min_zoom=MINIMAL group, framework groups get SUMMARY."""
+    def test_command_args_subordinate_framework(self):
+        """With command args, those lead (a top-level Defs) and framework groups
+        step back to min_depth=SUMMARY (the terse default line)."""
         runner = CliRunner(
             render=lambda ctx, data: Block.text("x", Style()),
             fetch=lambda: "ok",
@@ -724,22 +733,16 @@ class TestBuildHelpDataAugmentation:
                 HelpArg("--since", "Time range", default="7d"),
             ],
         )
-        data = build_help_data(runner)
+        doc = help_doc(runner)
 
-        # First group is command args (min_zoom=MINIMAL, no name)
-        assert data.groups[0].min_zoom == Zoom.MINIMAL
-        assert data.groups[0].name == ""
-        assert len(data.groups[0].flags) == 2
-        assert data.groups[0].flags[0].long == "vertex"
-        assert data.groups[0].flags[1].long == "--since"
+        cmd_defs = _first_defs(doc)
+        assert [d.term for d in cmd_defs.items] == ["vertex", "--since"]
+        assert cmd_defs.min_depth == Zoom.MINIMAL  # always expanded
 
-        # Framework groups have min_zoom=SUMMARY
-        for group in data.groups[1:]:
-            assert group.min_zoom == Zoom.SUMMARY
+        for section in _sections(doc):
+            assert section.min_depth == Zoom.SUMMARY
 
-    def test_add_args_creates_command_group(self):
-        """add_args are introspected into a primary command group."""
-
+    def test_add_args_become_command_defs(self):
         def add_args(parser):
             parser.add_argument("file", help="Input file")
             parser.add_argument("--format", help="Output format")
@@ -750,191 +753,50 @@ class TestBuildHelpDataAugmentation:
             prog="test",
             add_args=add_args,
         )
-        data = build_help_data(runner)
-
-        # First group is command args (min_zoom=MINIMAL)
-        assert data.groups[0].min_zoom == Zoom.MINIMAL
-        assert data.groups[0].name == ""
-        assert len(data.groups[0].flags) == 2
-
-        # Framework groups have min_zoom=SUMMARY
-        for group in data.groups[1:]:
-            assert group.min_zoom == Zoom.SUMMARY
+        doc = help_doc(runner)
+        cmd_defs = _first_defs(doc)
+        assert len(cmd_defs.items) == 2
+        for section in _sections(doc):
+            assert section.min_depth == Zoom.SUMMARY
 
 
-class TestRenderHelpAugmentation:
-    """Tests for render_help with effective zoom (min_zoom) rendering."""
+class TestHelpDocRendering:
+    """The four help tiers fall out of the doc-IR disclosure tier, projected
+    through doc_lens — no bespoke help renderer."""
 
-    @staticmethod
-    def _block_text(block: Block) -> str:
-        """Extract all text from a block."""
-        lines = []
-        for y in range(block.height):
-            lines.append("".join(cell.char for cell in block.row(y)).rstrip())
-        return "\n".join(lines)
-
-    def test_compact_at_min_zoom(self):
-        """Groups at eff_zoom=0 render as compact dim line (flag names only)."""
-        data = HelpData(
+    def _runner(self):
+        return CliRunner(
+            render=lambda ctx, data: Block.text("x", Style()),
+            fetch=lambda: "ok",
             prog="myapp",
             description="A test app",
-            groups=(
-                HelpGroup(name="", flags=(HelpFlag(None, "vertex", "Vertex name"),)),
-                HelpGroup(
-                    name="Zoom",
-                    flags=(
-                        HelpFlag("-q", "--quiet", "Minimal"),
-                        HelpFlag("-v", "--verbose", "Verbose"),
-                    ),
-                    min_zoom=Zoom.SUMMARY,
-                ),
-                HelpGroup(
-                    name="Help",
-                    flags=(HelpFlag("-h", "--help", "Show help"),),
-                    min_zoom=Zoom.SUMMARY,
-                ),
-            ),
+            help_args=[HelpArg("vertex", "Vertex name", positional=True)],
         )
-        block = render_help(data, Zoom.SUMMARY, 80, use_ansi=False)
-        text = self._block_text(block)
 
-        # Command arg should be expanded (eff=1)
-        assert "vertex" in text
-        assert "Vertex name" in text
+    def _text(self, depth):
+        block = doc_lens(help_doc(self._runner()), fidelity=Fidelity(depth=depth), width=80)
+        return block_to_text(block)
 
-        # Framework flags in compact line (eff=0, no descriptions)
-        assert "-q" in text
-        assert "-h" in text
-
-        # Group headers should NOT appear at compact
-        lines = text.split("\n")
-        header_lines = [l for l in lines if l.strip().startswith("Zoom")]
-        assert not header_lines
-
-    def test_expanded_above_min_zoom(self):
-        """Groups at eff_zoom=1 render expanded with header and descriptions."""
-        data = HelpData(
-            prog="myapp",
-            description="A test app",
-            groups=(
-                HelpGroup(name="", flags=(HelpFlag(None, "vertex", "Vertex name"),)),
-                HelpGroup(
-                    name="Zoom",
-                    flags=(HelpFlag("-q", "--quiet", "Minimal"),),
-                    min_zoom=Zoom.SUMMARY,
-                ),
-            ),
-        )
-        block = render_help(data, Zoom.DETAILED, 80, use_ansi=False)
-        text = self._block_text(block)
-
-        # Command arg expanded (eff=2)
-        assert "vertex" in text
-        assert "Vertex name" in text
-
-        # Framework group expanded with header (eff=1)
+    def test_default_framework_compact_command_expanded(self):
+        """At the default view: command args expanded, framework groups terse
+        (heading + names line, no per-flag summaries)."""
+        text = self._text(Zoom.SUMMARY)
+        # Command arg expanded.
+        assert "vertex" in text and "Vertex name" in text
+        # Framework group heading present, but its flags are names-only.
         assert "Zoom" in text
-        assert "Minimal" in text
-
-    def test_detail_at_eff_zoom_two(self):
-        """Group and flag detail shown when eff_zoom >= 2."""
-        data = HelpData(
-            prog="myapp",
-            description=None,
-            groups=(
-                HelpGroup(name="", flags=(HelpFlag(None, "vertex", "Vertex name"),)),
-                HelpGroup(
-                    name="Zoom",
-                    hint="(what to show)",
-                    detail="Controls detail level.",
-                    flags=(HelpFlag("-q", "--quiet", "Minimal", detail="Implies --static."),),
-                    min_zoom=Zoom.SUMMARY,
-                ),
-            ),
-        )
-        block = render_help(data, Zoom.FULL, 80, use_ansi=False)
-        text = self._block_text(block)
-
-        # Framework group at eff=2: header + detail + flag detail
-        assert "Zoom (what to show)" in text
-        assert "Controls detail level." in text
-        assert "Implies --static." in text
-
-    def test_all_minimal_renders_uniformly(self):
-        """All groups at min_zoom=MINIMAL render expanded at SUMMARY."""
-        data = HelpData(
-            prog="deploy",
-            description="Ship services",
-            groups=(
-                HelpGroup(
-                    name="Zoom",
-                    hint="(what to show)",
-                    flags=(
-                        HelpFlag("-q", "--quiet", "Minimal output"),
-                        HelpFlag("-v", "--verbose", "Detailed (-v) or full (-vv)"),
-                    ),
-                ),
-                HelpGroup(name="Help", flags=(HelpFlag("-h", "--help", "Show this help"),)),
-            ),
-        )
-        block = render_help(data, Zoom.SUMMARY, 80, use_ansi=False)
-        text = self._block_text(block)
-
-        # All groups rendered expanded (eff=1)
-        assert "Zoom (what to show)" in text
         assert "-q, --quiet" in text
-        assert "Help" in text
-        assert "-h, --help" in text
+        assert "Minimal output" not in text  # summary withheld at the compact tier
 
-    def test_primary_compact_at_minimal(self):
-        """Primary groups (min_zoom=MINIMAL) render compact at MINIMAL."""
-        data = HelpData(
-            prog="myapp",
-            description="A test app",
-            groups=(
-                HelpGroup(
-                    name="Zoom",
-                    flags=(
-                        HelpFlag("-q", "--quiet", "Minimal"),
-                        HelpFlag("-v", "--verbose", "Verbose"),
-                    ),
-                ),
-            ),
-        )
-        block = render_help(data, Zoom.MINIMAL, 80, use_ansi=False)
-        text = self._block_text(block)
+    def test_verbose_expands_framework(self):
+        text = self._text(Zoom.DETAILED)
+        assert "Zoom (what to show)" in text  # hint revealed at tier 1
+        assert "Minimal output" in text  # flag summaries now shown
 
-        # At MINIMAL (eff=0), compact: flag names present, no descriptions
-        assert "-q" in text
-        assert "-v" in text
-        # Group header should NOT appear in compact
-        lines = text.split("\n")
-        header_lines = [l for l in lines if l.strip().startswith("Zoom")]
-        assert not header_lines
-
-    def test_hidden_below_min_zoom(self):
-        """Groups are hidden when zoom < min_zoom."""
-        data = HelpData(
-            prog="myapp",
-            description=None,
-            groups=(
-                HelpGroup(name="", flags=(HelpFlag(None, "vertex", "Vertex name"),)),
-                HelpGroup(
-                    name="Zoom",
-                    flags=(HelpFlag("-q", "--quiet", "Minimal"),),
-                    min_zoom=Zoom.SUMMARY,
-                ),
-            ),
-        )
-        block = render_help(data, Zoom.MINIMAL, 80, use_ansi=False)
-        text = self._block_text(block)
-
-        # Command arg visible (eff=0, compact)
-        assert "vertex" in text
-
-        # Framework group hidden (eff=-1)
-        assert "Zoom" not in text
-        assert "-q" not in text
+    def test_full_reveals_detail(self):
+        text = self._text(Zoom.FULL)
+        assert "Also implies --static" in text  # flag detail at tier 2
+        assert "Controls how much detail" in text  # group detail prose at tier 2
 
 
 class TestRunCliHelp:
