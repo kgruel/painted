@@ -85,6 +85,48 @@ class TestDefs:
         assert "-e" not in text
 
 
+class TestDefsTier:
+    """Defs density is a tier keyed on eff: names @0, columns @1, +detail @2."""
+
+    def test_compact_shows_terms_only(self):
+        """At eff == 0 a Defs collapses to a terse terms-only line (no summaries)."""
+        doc = Doc(None, (Defs((Def("-q, --quiet", "Minimal output"),)),))
+        # Top-level Defs (min_depth 0) is at eff == 0 only at depth MINIMAL.
+        text = _render(doc, depth=Zoom.MINIMAL)
+        assert "-q, --quiet" in text
+        assert "Minimal output" not in text
+
+    def test_expanded_shows_columns(self):
+        doc = Doc(None, (Defs((Def("-q, --quiet", "Minimal output"),)),))
+        text = _render(doc, depth=Zoom.SUMMARY)  # eff == 1
+        assert "-q, --quiet" in text
+        assert "Minimal output" in text
+
+
+class TestCascade:
+    """A Section consumes its min_depth and passes the remaining eff to its body,
+    so a Defs nested under a group heading is one tier compacter than a top-level
+    Defs at the same global depth (the default-help discriminator)."""
+
+    def test_nested_defs_compacter_than_top_level(self):
+        nested = Section("Group", body=(Defs((Def("-q", "Quiet"),)),), min_depth=Zoom.SUMMARY)
+        top = Defs((Def("-v", "Verbose"),))
+        text = _render(Doc(None, (top, nested)), depth=Zoom.SUMMARY)
+        # Top-level Defs (eff 1) shows its summary; the nested Defs (eff 0) does not.
+        assert "Verbose" in text
+        assert "Quiet" not in text
+        assert "-q" in text  # the nested term is still present, just compact
+
+    def test_section_heading_is_binary_at_compact_tier(self):
+        """Headings show whenever the section is visible — even at eff == 0 — so a
+        gated guide section reveals fully, while help groups stay terse via the
+        Defs names-tier, not by hiding headings."""
+        doc = Doc(
+            None, (Section("Why", body=(Defs((Def("-q", "Quiet"),)),), min_depth=Zoom.SUMMARY),)
+        )
+        assert "Why" in _render(doc, depth=Zoom.SUMMARY)  # section eff == 0
+
+
 class TestItems:
     def test_unordered_marker(self):
         doc = Doc(None, (Items(("alpha", "beta")),))

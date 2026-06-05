@@ -7,13 +7,24 @@ This is the *terminal* projector of the doc-IR (`to_block` in the taxonomy of
 which is what makes it a lens and keeps it in the library.
 
 Disclosure is governed entirely by ``Fidelity`` (``core/fidelity.py``): no node
-carries a bespoke zoom primitive. A node appears iff
+carries a bespoke zoom primitive. Each node renders at an *effective tier*
 
-    fidelity.depth >= node.min_depth  AND  (node.tag is None or fidelity.shows(node.tag))
+    eff = depth - node.min_depth          (hidden when eff < 0, or its tag is off)
 
-``min_depth`` is the coarse ``-v``/``-vv`` ladder; ``tag`` is an opt-in semantic
-layer (``--show rationale``). Disclosure reveals or hides whole nodes — it never
-rewrites prose.
+where ``depth`` is the local ``-v``/``-vv`` budget and ``tag`` is an opt-in
+semantic layer (``--show rationale``), checked against ``fidelity.visible``.
+``eff`` is **relative**: a ``Section`` consumes its ``min_depth`` and passes the
+remaining budget (its own ``eff``) down to its body as the local depth — so a
+flag list nested under a group heading is one tier compacter than the same list
+at the top level, without re-authoring ``min_depth`` on every child. This cascade
+is what lets help's framework groups collapse to a terse line at the default view
+while the command's own args stay expanded on the same screen.
+
+``eff`` drives *density*, not re-authoring: a ``Defs`` shows terms-only at
+``eff == 0``, term+summary columns at ``eff >= 1``, and adds ``Def.detail`` at
+``eff >= 2`` — the same content, never written twice. Prose, items, code, figures,
+and ``Section`` headings are binary (shown whenever ``eff >= 0``); only the list
+density and the ``Section.hint`` subhead are tiered.
 
 Status: provisional. These names are intentionally NOT exported from
 ``painted.views.__all__`` until validated against both help and a real guide.
@@ -28,7 +39,6 @@ from ...core.block import Block, Wrap
 from ...core.cell import Cell, Style
 from ...core.compose import join_vertical, pad
 from ...core.fidelity import Fidelity
-from ...core.zoom import Zoom
 
 # Inline content. The first cut accepts only plain ``str``; the rich union
 # (Text / Emphasis / CodeSpan / Link) lands when prose guides come into scope.
@@ -138,13 +148,17 @@ _INDENT = 2  # spaces a Section indents its body
 _BULLET = "- "
 
 
-def _visible(node: Node, fidelity: Fidelity) -> bool:
-    """The shared disclosure predicate (see module docstring)."""
-    if fidelity.depth < node.min_depth:
-        return False
+def _eff(node: Node, depth: int, fidelity: Fidelity) -> int | None:
+    """The node's effective render tier, or ``None`` if it is hidden.
+
+    ``depth`` is the *local* budget (the parent ``Section``'s ``eff``, or
+    ``fidelity.depth`` at the root). ``tag`` is checked against the absolute
+    ``fidelity.visible`` set — semantic layers are not relative.
+    """
     if node.tag is not None and not fidelity.shows(node.tag):
-        return False
-    return True
+        return None
+    eff = depth - node.min_depth
+    return eff if eff >= 0 else None
 
 
 def _cap(n: int, limit: int) -> int:
@@ -175,7 +189,7 @@ def doc_lens(
     blocks: list[Block] = []
     if doc.title:
         blocks.append(_line(doc.title, Style(bold=True), width))
-    body = _render_body(doc.body, fidelity, width)
+    body = _render_body(doc.body, fidelity.depth, fidelity, width)
     if body is not None:
         blocks.append(body)
     if not blocks:
@@ -185,24 +199,40 @@ def doc_lens(
 
 def _render_body(
     nodes: tuple[Node, ...],
+    depth: int,
     fidelity: Fidelity,
     width: int | None,
 ) -> Block | None:
-    """Join the visible body nodes vertically, a blank line between each."""
-    rendered = [_render_node(node, fidelity, width) for node in nodes if _visible(node, fidelity)]
+    """Join the visible body nodes vertically, a blank line between each.
+
+    ``depth`` is the local budget; each node's tier is ``depth - node.min_depth``.
+    """
+    rendered: list[tuple[int, Block]] = []
+    for node in nodes:
+        eff = _eff(node, depth, fidelity)
+        if eff is None:
+            continue
+        rendered.append((eff, _render_node(node, eff, fidelity, width)))
     if not rendered:
         return None
-    return join_vertical(*rendered, gap=1)
+    # A blank line separates nodes, except between two adjacent compact-tier
+    # (eff == 0) siblings — those pack tightly, terse by definition (the default
+    # help screen's framework groups).
+    result = rendered[0][1]
+    for (prev_eff, _), (eff, block) in zip(rendered, rendered[1:]):
+        gap = 0 if prev_eff == 0 and eff == 0 else 1
+        result = join_vertical(result, block, gap=gap)
+    return result
 
 
-def _render_node(node: Node, fidelity: Fidelity, width: int | None) -> Block:
+def _render_node(node: Node, eff: int, fidelity: Fidelity, width: int | None) -> Block:
     match node:
         case Section():
-            return _render_section(node, fidelity, width)
+            return _render_section(node, eff, fidelity, width)
         case Prose():
             return _line(node.content, Style(), width, wrap=Wrap.WORD)
         case Defs():
-            return _render_defs(node, fidelity, width)
+            return _render_defs(node, eff, fidelity, width)
         case Items():
             return _render_items(node, fidelity, width)
         case Code():
@@ -211,16 +241,17 @@ def _render_node(node: Node, fidelity: Fidelity, width: int | None) -> Block:
             return _render_figure(node, width)
 
 
-def _render_section(section: Section, fidelity: Fidelity, width: int | None) -> Block:
+def _render_section(section: Section, eff: int, fidelity: Fidelity, width: int | None) -> Block:
     rows: list[Block] = []
     heading = section.heading or ""
-    if section.hint:
+    if section.hint and eff >= 1:  # the subhead is a tier-1 reveal, like a flag's columns
         heading = f"{heading} {section.hint}" if heading else section.hint
     if heading:
         rows.append(_line(heading, Style(bold=True), width))
 
     body_width = None if width is None else max(0, width - _INDENT)
-    body = _render_body(section.body, fidelity, body_width)
+    # Cascade: the section's own eff becomes the local depth budget for its body.
+    body = _render_body(section.body, eff, fidelity, body_width)
     if body is not None:
         rows.append(pad(body, left=_INDENT))
 
@@ -229,13 +260,18 @@ def _render_section(section: Section, fidelity: Fidelity, width: int | None) -> 
     return join_vertical(*rows, gap=0)
 
 
-def _render_defs(defs: Defs, fidelity: Fidelity, width: int | None) -> Block:
+def _render_defs(defs: Defs, eff: int, fidelity: Fidelity, width: int | None) -> Block:
     items = defs.items[: _cap(len(defs.items), fidelity.lines)] if fidelity.lines else defs.items
     if not items:
         return Block.empty(width or 0, 0)
 
+    if eff == 0:
+        # Compact tier: terms only, flowed to width (the terse default-help line).
+        text = "  ".join(d.term for d in items)
+        return _line(text, Style(dim=True), width, wrap=Wrap.WORD)
+
     col = max(display_width(d.term) for d in items) + 2
-    show_detail = fidelity.depth >= Zoom.DETAILED
+    show_detail = eff >= 2
 
     rows: list[Block] = []
     for d in items:
