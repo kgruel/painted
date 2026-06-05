@@ -4,6 +4,8 @@ Covers the disclosure predicate (the spine), the Def term-fidelity that proves
 the help dissolution, and the width contract.
 """
 
+from painted.core.block import Block
+from painted.core.cell import Style
 from painted.core.fidelity import Fidelity
 from painted.core.zoom import Zoom
 from painted.views.lens.doc import (
@@ -11,6 +13,7 @@ from painted.views.lens.doc import (
     Def,
     Defs,
     Doc,
+    Figure,
     Items,
     Prose,
     Section,
@@ -143,3 +146,20 @@ class TestWidthContract:
     def test_empty_doc_is_empty_block(self):
         block = doc_lens(Doc(None, ()), width=40)
         assert block.height == 0
+
+
+class TestFigure:
+    """Figure embeds a real Block (doc == demo)."""
+
+    def test_block_is_embedded(self):
+        fig = Figure(Block.text("LIVE", Style(bold=True)))
+        text = _render(Doc(None, (fig,)))
+        assert "LIVE" in text
+
+    def test_caption_uses_doc_width_not_block_width(self):
+        """Regression: caption was clipped to the (narrow) block's width."""
+        long_caption = "A caption that is far wider than the tiny embedded block"
+        fig = Figure(Block.text("x", Style()), caption=long_caption)
+        text = _render(Doc(None, (fig,)), width=70)
+        # The whole caption survives (word-wrapped), not truncated to ~1 col.
+        assert "wider than the tiny embedded block" in text

@@ -15,6 +15,9 @@ _USAGE = join_vertical(
     Block.text("  demos [flags]              List available demos", _PLAIN),
     Block.text("  demos <name> [flags]       Run a demo by name", _PLAIN),
     Block.text(" ", _PLAIN),
+    Block.text("  docs [flags]               List available docs", _PLAIN),
+    Block.text("  docs <name> [flags]        Render a doc by name", _PLAIN),
+    Block.text(" ", _PLAIN),
     Block.text("  tour [flags]               Interactive tour", _PLAIN),
     Block.text(" ", _PLAIN),
     Block.text("Use painted <command> --help for details.", Style(dim=True)),
@@ -32,6 +35,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if command in ("demos", "demo"):
         return _demo_dispatch(args[1:])
+
+    if command == "docs":
+        return _docs_dispatch(args[1:])
 
     if command == "tour":
         return _tour_dispatch(args[1:])
@@ -63,6 +69,16 @@ def _demo_dispatch(args: list[str]) -> int:
 
     # Otherwise, first arg is a demo name
     return run_demo(sub, args[1:])
+
+
+def _docs_dispatch(args: list[str]) -> int:
+    from painted._docs_cli import list_docs, run_doc
+
+    # No args or flags only → list docs
+    if not args or args[0].startswith("-"):
+        return list_docs(args)
+
+    return run_doc(args[0], args[1:])
 
 
 def _tour_dispatch(args: list[str]) -> int:

@@ -208,7 +208,7 @@ def _render_node(node: Node, fidelity: Fidelity, width: int | None) -> Block:
         case Code():
             return _render_code(node, width)
         case Figure():
-            return _render_figure(node)
+            return _render_figure(node, width)
 
 
 def _render_section(section: Section, fidelity: Fidelity, width: int | None) -> Block:
@@ -272,9 +272,11 @@ def _render_code(code: Code, width: int | None) -> Block:
     return join_vertical(*(_line(ln, Style(), width) for ln in lines), gap=0)
 
 
-def _render_figure(fig: Figure) -> Block:
+def _render_figure(fig: Figure, width: int | None) -> Block:
     if fig.caption:
-        return join_vertical(fig.block, _line(fig.caption, Style(dim=True), fig.block.width), gap=0)
+        # Caption renders at the available width, not the (often narrower) block's.
+        caption = _line(fig.caption, Style(dim=True), width, wrap=Wrap.WORD)
+        return join_vertical(fig.block, caption, gap=0)
     return fig.block
 
 
