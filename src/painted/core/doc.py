@@ -41,6 +41,7 @@ Status: provisional. These names are intentionally NOT exported from
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TypeVar
 
 from ._text_width import display_width
 from .block import Block, Wrap
@@ -51,6 +52,8 @@ from .fidelity import Fidelity
 # Inline content. The first cut accepts only plain ``str``; the rich union
 # (Text / Emphasis / CodeSpan / Link) lands when prose guides come into scope.
 Inline = str
+
+_T = TypeVar("_T")
 
 
 # =============================================================================
@@ -169,9 +172,28 @@ def _eff(node: Node, depth: int, fidelity: Fidelity) -> int | None:
     return eff if eff >= 0 else None
 
 
-def _cap(n: int, limit: int) -> int:
-    """Apply a Fidelity line/item budget (0 == unlimited)."""
-    return n if limit <= 0 else min(n, limit)
+def visible_body(
+    nodes: tuple[Node, ...], depth: int, fidelity: Fidelity
+) -> tuple[tuple[Node, int], ...]:
+    """The visible nodes of a body, each paired with its effective tier.
+
+    THE shared disclosure walk: every projector — ``doc_lens`` here, the
+    ``to_html`` publisher in ``tools/`` — iterates bodies through this one
+    function, so the cascade is written exactly once and two sinks cannot
+    disclose differently. The cascade rule for callers: when a ``Section``
+    renders its body, pass the Section's own ``eff`` as the body's ``depth``.
+    """
+    return tuple((node, eff) for node in nodes if (eff := _eff(node, depth, fidelity)) is not None)
+
+
+def capped(items: tuple[_T, ...], fidelity: Fidelity) -> tuple[_T, ...]:
+    """Apply the Fidelity ``lines`` budget (0 == unlimited) to a node's items.
+
+    Truncation is deliberately *silent* (no "+N more" row): the budget is the
+    consumer's explicit ask for that much and no more, and both projectors
+    must drop the same tail.
+    """
+    return items if fidelity.lines <= 0 else items[: fidelity.lines]
 
 
 # =============================================================================
@@ -215,12 +237,10 @@ def _render_body(
 
     ``depth`` is the local budget; each node's tier is ``depth - node.min_depth``.
     """
-    rendered: list[tuple[int, Block]] = []
-    for node in nodes:
-        eff = _eff(node, depth, fidelity)
-        if eff is None:
-            continue
-        rendered.append((eff, _render_node(node, eff, fidelity, width)))
+    rendered = [
+        (eff, _render_node(node, eff, fidelity, width))
+        for node, eff in visible_body(nodes, depth, fidelity)
+    ]
     if not rendered:
         return None
     # A blank line separates nodes, except between two adjacent compact-tier
@@ -269,7 +289,7 @@ def _render_section(section: Section, eff: int, fidelity: Fidelity, width: int |
 
 
 def _render_defs(defs: Defs, eff: int, fidelity: Fidelity, width: int | None) -> Block:
-    items = defs.items[: _cap(len(defs.items), fidelity.lines)] if fidelity.lines else defs.items
+    items = capped(defs.items, fidelity)
     if not items:
         return Block.empty(width or 0, 0)
 
@@ -294,7 +314,7 @@ def _render_defs(defs: Defs, eff: int, fidelity: Fidelity, width: int | None) ->
 
 
 def _render_items(items: Items, fidelity: Fidelity, width: int | None) -> Block:
-    entries = items.entries[: _cap(len(items.entries), fidelity.lines)]
+    entries = capped(items.entries, fidelity)
     if not entries:
         return Block.empty(width or 0, 0)
     rows: list[Block] = []
