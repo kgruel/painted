@@ -1,0 +1,104 @@
+---
+// docs/primitives.astro — the doc-IR's SEMANTIC sink, proven on one page.
+//
+// The body below is a committed fragment under src/generated/docs/, produced by
+// tools/doc_publish.to_html from the SAME node tree that `painted docs primitives`
+// renders in the terminal (painted/_doc_pages.py). Chrome arrives as real
+// semantics (<section>/<h2>/<p>/<dl>) read straight off the tree — never
+// flattened through Block → HTML — while each <figure> island IS Block → HTML:
+// live-rendered painted output, terminal-faithful (the doc == demo node).
+// `outputgen --check` gates this fragment against a fresh publish, so this page
+// and the terminal rendering cannot drift apart — they are one tree.
+import Base from "../../layouts/Base.astro";
+
+import primitives from "../../generated/docs/primitives.html?raw";
+---
+
+<Base title="painted — docs / primitives">
+  <main class="doc-root">
+    <p class="doc-provenance">
+      This page is a doc-IR node tree, published as semantic HTML. The same tree
+      renders in your terminal: <code>painted docs primitives -vv --show rationale</code>
+    </p>
+    <Fragment set:html={primitives} />
+  </main>
+</Base>
+
+<style is:global>
+  .doc-root {
+    max-width: 72ch;
+    margin: 0 auto;
+    padding: 2.5rem 1.25rem 5rem;
+  }
+
+  .doc-provenance {
+    font-size: 0.8rem;
+    color: var(--muted, #9a9a9a);
+    border-left: 2px solid var(--line, #333);
+    padding-left: 0.75rem;
+    margin-bottom: 2.5rem;
+  }
+
+  .painted-doc h1 {
+    font-size: 1.6rem;
+    margin: 0 0 1.25rem;
+  }
+
+  .painted-doc section {
+    margin: 2rem 0;
+  }
+
+  .painted-doc h2 {
+    font-size: 1.1rem;
+    margin: 0 0 0.75rem;
+  }
+
+  .painted-doc h2 .hint {
+    font-weight: normal;
+    opacity: 0.6;
+    font-size: 0.85em;
+  }
+
+  .painted-doc p {
+    line-height: 1.6;
+    margin: 0.75rem 0;
+  }
+
+  .painted-doc dl {
+    margin: 1rem 0;
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 0.35rem 1.5rem;
+  }
+
+  .painted-doc dt {
+    font-weight: bold;
+  }
+
+  .painted-doc dd {
+    margin: 0;
+  }
+
+  .painted-doc dd.detail {
+    grid-column: 2;
+    opacity: 0.7;
+    font-size: 0.9em;
+  }
+
+  .painted-doc pre {
+    background: var(--code-bg, #161616);
+    padding: 0.9rem 1rem;
+    overflow-x: auto;
+    border-radius: 4px;
+  }
+
+  .painted-doc figure {
+    margin: 1.25rem 0;
+  }
+
+  .painted-doc figcaption {
+    opacity: 0.6;
+    font-size: 0.85em;
+    margin-top: 0.4rem;
+  }
+</style>

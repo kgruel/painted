@@ -15,7 +15,10 @@ from painted import PAINTED_PALETTE, Block, Palette, Zoom, render_html, use_pale
 if __package__ is None:  # invoked as a script: python tools/outputgen.py
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from painted._doc_pages import DOCS as _DOC_PAGES_CATALOG
+
 from tools.capture import capture_demo, import_module_by_path
+from tools.doc_publish import to_html
 from tools.landing_specimens import LANDING as _LANDING_CATALOG
 from tools.reference_specimens import CATALOG as _REFERENCE_CATALOG
 
@@ -187,6 +190,12 @@ def _repo_root() -> Path:
 # render, so a renderer change that forgets `./dev panels` fails the gate.
 PANELS_DIR = Path("web/src/generated/panels")
 
+# Committed doc-IR pages (tools/doc_publish.to_html over painted._doc_pages.DOCS):
+# the SEMANTIC sink — chrome as <section>/<p>/<dl>, Figure islands via render_html.
+# Same regen/check lifecycle as PANELS; the registry IS the `painted docs` registry,
+# so the site cannot list a page the terminal doesn't have (or vice versa).
+DOC_PAGES_DIR = Path("web/src/generated/docs")
+
 
 def _read_text(path: Path) -> str:
     return path.read_text(encoding="utf-8")
@@ -321,6 +330,34 @@ def emit_panels(*, repo_root: Path, out_dir: Path | None = None) -> list[Path]:
     return written
 
 
+def emit_doc_pages(*, repo_root: Path, out_dir: Path | None = None) -> list[Path]:
+    """Publish every authored doc page to ``out_dir/<name>.html`` via ``to_html``.
+
+    One fragment per ``painted._doc_pages.DOCS`` entry, at published (full)
+    fidelity. ``out_dir`` defaults to the in-repo ``web/src/generated/docs``.
+    """
+    out_dir = out_dir or (repo_root / DOC_PAGES_DIR)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    written: list[Path] = []
+    for name, entry in _DOC_PAGES_CATALOG.items():
+        path = out_dir / f"{name}.html"
+        _write_text(path, to_html(entry.build()))
+        written.append(path)
+    return written
+
+
+def check_doc_pages(*, repo_root: Path) -> list[str]:
+    """Doc-page names whose committed fragment is missing or has drifted."""
+    out_dir = repo_root / DOC_PAGES_DIR
+    stale: list[str] = []
+    for name, entry in _DOC_PAGES_CATALOG.items():
+        want = to_html(entry.build())
+        path = out_dir / f"{name}.html"
+        if not path.exists() or _read_text(path) != want:
+            stale.append(name)
+    return stale
+
+
 def check_panels(*, repo_root: Path) -> list[str]:
     """PANELS names whose committed fragment is missing or has drifted from a fresh render.
 
@@ -364,6 +401,9 @@ def main(argv: list[str] | None = None) -> int:
         # an explicit DIR is used as-is. (str(Path("")) is "." — truthy — so compare paths.)
         out_dir = (repo_root / PANELS_DIR) if args.emit_panels == Path("") else args.emit_panels
         written = emit_panels(repo_root=repo_root, out_dir=out_dir)
+        # Doc pages always land at the in-repo default — they are committed,
+        # gated artifacts; the DIR override only redirects the panel set.
+        written += emit_doc_pages(repo_root=repo_root)
         print("Wrote panels:")
         for p in written:
             shown = p.relative_to(repo_root) if p.is_relative_to(repo_root) else p
@@ -406,7 +446,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.check:
         panel_stale = check_panels(repo_root=repo_root)
-        if mismatched or panel_stale:
+        doc_page_stale = check_doc_pages(repo_root=repo_root)
+        if mismatched or panel_stale or doc_page_stale:
             if mismatched:
                 print("outputgen doc blocks out of date:", file=sys.stderr)
                 for path, names in mismatched:
@@ -415,6 +456,10 @@ def main(argv: list[str] | None = None) -> int:
             if panel_stale:
                 print("site panels out of date — run `./dev panels`:", file=sys.stderr)
                 for name in panel_stale:
+                    print(f"  - {name}", file=sys.stderr)
+            if doc_page_stale:
+                print("site doc pages out of date — run `./dev panels`:", file=sys.stderr)
+                for name in doc_page_stale:
                     print(f"  - {name}", file=sys.stderr)
             return 1
         return 0
