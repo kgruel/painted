@@ -90,7 +90,9 @@ def _hero() -> Block:
 # --- Doors --------------------------------------------------------------------
 
 
-def _door(glyph: str, label: str, blurb: str, hint: str, hue: Style, *, soon: bool = False) -> Block:
+def _door(
+    glyph: str, label: str, blurb: str, hint: str, hue: Style, *, soon: bool = False
+) -> Block:
     """One routing card: a ROUNDED border in the door's ramp hue, a reverse-video
     title bar (glyph + name, with a `→` affordance or a `soon` badge), and two body
     lines. Each door is a standalone panel so the site can wrap it in one anchor."""

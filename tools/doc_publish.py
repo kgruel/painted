@@ -96,7 +96,9 @@ def _emit_node(out: list[str], node: Node, eff: int, fidelity: Fidelity, level: 
             _emit_figure(out, node)
 
 
-def _emit_section(out: list[str], section: Section, eff: int, fidelity: Fidelity, level: int) -> None:
+def _emit_section(
+    out: list[str], section: Section, eff: int, fidelity: Fidelity, level: int
+) -> None:
     out.append("<section>\n")
     heading = _esc(section.heading or "")
     if section.hint and eff >= 1:  # the subhead is a tier-1 reveal, like the lens
@@ -116,9 +118,7 @@ def _emit_defs(out: list[str], defs: Defs, eff: int, fidelity: Fidelity) -> None
         return
     if eff == 0:
         # Compact tier: terms only — same disclosure as the lens's terse line.
-        out.append(
-            '<p class="defs-compact">' + "  ".join(_esc(d.term) for d in items) + "</p>\n"
-        )
+        out.append('<p class="defs-compact">' + "  ".join(_esc(d.term) for d in items) + "</p>\n")
         return
     out.append("<dl>\n")
     for d in items:

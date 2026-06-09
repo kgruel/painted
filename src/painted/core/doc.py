@@ -10,9 +10,11 @@ framework (help) and the ``painted docs`` front door both consume it without
 ``cli``/``views`` crossing their peer boundary.
 
 This is the *terminal* projector of the doc-IR (`to_block` in the taxonomy of
-``docs/DOC_IR_DESIGN.md``). The same node tree is also read by the *publishers*
-``to_html`` / ``to_markdown`` that live in ``tools/`` — those emit foreign
-(web/markdown) semantics, while this one lands in painted's own ``Block`` type.
+``docs/DOC_IR_DESIGN.md``). The same node tree is also read by the *publisher*
+``to_html`` (``tools/doc_publish.py``) — it emits foreign (web) semantics, while
+this one lands in painted's own ``Block`` type. Both projectors iterate bodies
+through the one ``visible_body`` walk below, so they cannot disclose
+differently. (``to_markdown`` is sketched in the design doc, not built.)
 
 Disclosure is governed entirely by ``Fidelity`` (``core/fidelity.py``): no node
 carries a bespoke zoom primitive. Each node renders at an *effective tier*
@@ -34,8 +36,10 @@ while the command's own args stay expanded on the same screen.
 and ``Section`` headings are binary (shown whenever ``eff >= 0``); only the list
 density and the ``Section.hint`` subhead are tiered.
 
-Status: provisional. These names are intentionally NOT exported from
-``painted.core.__all__`` until validated against both help and a real guide.
+Status: validated against both help and a real guide (the primitives page, in
+terminal and site form). The names stay out of ``painted.core.__all__`` until
+the remaining authoring seams settle — the Inline union and ``Code(ref)``
+docgen resolution — since export is a one-way door under the semver guard.
 """
 
 from __future__ import annotations

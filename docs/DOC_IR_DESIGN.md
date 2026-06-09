@@ -154,12 +154,17 @@ Help exercises only the `str` arm. The union lands when guides come into scope.
 # core/doc.py — LIBRARY (the document compositor, peer of compose.py); exported as doc_lens
 def doc_lens(doc: Doc, *, fidelity: Fidelity = Fidelity(), width: int | None = None) -> Block
 
-# tools/ — SITE GENERATION (not in the wheel; consumes the same tree)
-def to_html(doc: Doc, *, fidelity: Fidelity = Fidelity()) -> str        # SEMANTIC html
+# tools/doc_publish.py — SITE GENERATION (not in the wheel; consumes the same tree)
+def to_html(doc: Doc, *, fidelity: Fidelity | None = None) -> str       # SEMANTIC html
 def to_markdown(doc: Doc, *, fidelity: Fidelity = Fidelity()) -> str    # deferred
 ```
 
 All pure functions of `(tree, fidelity)` (render-is-a-pure-function invariant).
+Disclosure is single-sourced: both projectors iterate bodies through
+`visible_body` / `capped` (`core/doc.py`), so two sinks cannot disclose
+differently. `to_html`'s fidelity defaults to `published_fidelity(doc)` — full
+depth plus every tag authored in the tree — because the fidelity dials are a
+terminal affordance; a published page is the full document.
 
 - **`to_block`** — the `doc_lens`. Honors `width` exactly (width contract). Uses
   `fidelity.chars`/`lines` for budgets, `depth` + `visible` for disclosure.
@@ -231,6 +236,13 @@ dissolve into primitives that already ship.
 4. ✅ Rewrite `cli/help.py` (and `app_runner.py`) onto it. `HelpData`/`HelpGroup`/
    `HelpFlag`/`help_args_to_flags`/`build_help_data`/`render_help` deleted; tests pin
    the new output. The dissolution forced the `views → core` reclassification above.
-5. `to_html` in `tools/`; point one `web/` page at it to prove the semantic sink.
+5. ✅ `to_html` in `tools/doc_publish.py`; `web/src/pages/docs/primitives.astro`
+   consumes the committed fragment (emitted by `./dev panels`, drift-gated by
+   `outputgen --check`) — the semantic sink, proven. Authored pages moved to
+   `painted/_doc_pages.py` (neutral module: the CLI front door and the publisher
+   are two consumers of one registry).
 6. *Later/maybe*: Inline union, `Code(ref)` docgen resolution, `to_markdown`,
-   whether prose guides migrate off hand-markdown at all.
+   whether prose guides migrate off hand-markdown at all, graduating the node
+   vocabulary into `core.__all__` (rides whichever branch settles Inline —
+   export is a one-way door), promoting `/docs/primitives` into the site's
+   "guides" lane.

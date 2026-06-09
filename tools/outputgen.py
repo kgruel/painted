@@ -226,9 +226,7 @@ def _generate_output(*, repo_root: Path, spec: OutputSpec) -> str:
             data_attr=spec.data_attr,
         )
         if isinstance(result, Block):
-            text = "\n".join(
-                "".join(c.char for c in result.row(y)) for y in range(result.height)
-            )
+            text = "\n".join("".join(c.char for c in result.row(y)) for y in range(result.height))
         else:
             text = result
         return _render_text_as_html(text)
