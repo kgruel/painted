@@ -66,6 +66,58 @@ class TestInPlaceRenderer:
 
         assert "\x1b[2K" not in stream.getvalue()
 
+    def test_same_height_redraw_diffs_unchanged_rows(self):
+        """The churn law: only changed rows are rewritten; unchanged rows
+        become cursor hops (CSI nB), so the write scales with the churn."""
+        stream = io.StringIO()
+        s = Style()
+        # Letters chosen to never collide with CSI final bytes (A, B, K, ...).
+        block1 = _block([[Cell("q", s)], [Cell("w", s)], [Cell("z", s)]])
+        block2 = _block([[Cell("q", s)], [Cell("x", s)], [Cell("z", s)]])  # only row 1 changed
+
+        with InPlaceRenderer(stream) as renderer:
+            renderer.render(block1)
+            mark = stream.tell()
+            renderer.render(block2)
+            frame2 = stream.getvalue()[mark:]
+            renderer.finalize()
+
+        assert "x" in frame2
+        assert "q" not in frame2 and "z" not in frame2  # unchanged rows untouched
+        assert "\x1b[1B" in frame2  # hop over row 0, hop over row 2
+
+    def test_identical_redraw_writes_no_rows(self):
+        stream = io.StringIO()
+        s = Style()
+        block = _block([[Cell("A", s)], [Cell("B", s)]])
+
+        with InPlaceRenderer(stream) as renderer:
+            renderer.render(block)
+            mark = stream.tell()
+            renderer.render(block)
+            frame2 = stream.getvalue()[mark:]
+            renderer.finalize()
+
+        # Just the sync wrap and cursor motion — up over the frame, hop back down.
+        assert frame2 == "\x1b[?2026h\x1b[2A\x1b[2B\x1b[?2026l"
+
+    def test_clear_forgets_the_previous_frame(self):
+        """After clear() the screen is blank; the next render must not diff
+        against a frame that is no longer on screen."""
+        stream = io.StringIO()
+        s = Style()
+        block = _block([[Cell("A", s)], [Cell("B", s)]])
+
+        with InPlaceRenderer(stream) as renderer:
+            renderer.render(block)
+            renderer.clear()
+            mark = stream.tell()
+            renderer.render(block)  # identical block — but must be fully redrawn
+            renderer.finalize()
+
+        frame2 = stream.getvalue()[mark:]
+        assert "A" in frame2 and "B" in frame2
+
     def test_render_emits_one_synchronized_atomic_write(self):
         """Each frame: exactly one stream.write, wrapped in DEC 2026 markers."""
         writes: list[str] = []

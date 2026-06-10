@@ -322,32 +322,38 @@ def print_block(
     stream.flush()
 
 
-def render_block_ansi(block: Block, writer: Writer, *, clear_eol: bool = False) -> str:
-    """Render a Block to one ANSI string.
+def render_row_ansi(block: Block, row_idx: int, writer: Writer, *, clear_eol: bool = False) -> str:
+    """Render one row of a Block to an ANSI string (no trailing newline).
 
-    With clear_eol, each line ends in erase-to-end-of-line (CSI 0K) so it
+    With clear_eol, the row ends in erase-to-end-of-line (CSI 0K) so it
     cleanly overwrites a longer previous line — the in-place overwrite
     discipline, where a region is never blanked ahead of its redraw.
     """
     out: list[str] = []
-    for row_idx in range(block.height):
-        last_style: Style | None = None
+    last_style: Style | None = None
 
-        for span in iter_trimmed_row_spans(block.row(row_idx)):
-            cell = span.cells[0]
-            if cell.style != last_style:
-                out.append(writer.reset_style())
-                sgr = writer.apply_style(cell.style)
-                if sgr:
-                    out.append(sgr)
-                last_style = cell.style
-            out.append(cell.char)
+    for span in iter_trimmed_row_spans(block.row(row_idx)):
+        cell = span.cells[0]
+        if cell.style != last_style:
+            out.append(writer.reset_style())
+            sgr = writer.apply_style(cell.style)
+            if sgr:
+                out.append(sgr)
+            last_style = cell.style
+        out.append(cell.char)
 
-        out.append(writer.reset_style())
-        if clear_eol:
-            out.append("\x1b[0K")
-        out.append("\n")
+    out.append(writer.reset_style())
+    if clear_eol:
+        out.append("\x1b[0K")
     return "".join(out)
+
+
+def render_block_ansi(block: Block, writer: Writer, *, clear_eol: bool = False) -> str:
+    """Render a Block to one ANSI string."""
+    return "".join(
+        render_row_ansi(block, row_idx, writer, clear_eol=clear_eol) + "\n"
+        for row_idx in range(block.height)
+    )
 
 
 def write_block_ansi(block: Block, writer: Writer, stream: TextIO) -> None:

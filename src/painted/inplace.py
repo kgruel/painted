@@ -29,7 +29,7 @@ from __future__ import annotations
 import sys
 from typing import TYPE_CHECKING, TextIO
 
-from .core.writer import Writer, render_block_ansi
+from .core.writer import Writer, render_block_ansi, render_row_ansi
 
 if TYPE_CHECKING:
     from .core.block import Block
@@ -51,6 +51,7 @@ class InPlaceRenderer:
         self._stream = stream
         self._writer = Writer(stream)
         self._height = 0  # lines written by last frame
+        self._prev: Block | None = None  # last rendered frame, for row diffing
         self._active = False
 
     def __enter__(self) -> InPlaceRenderer:
@@ -68,26 +69,44 @@ class InPlaceRenderer:
     def render(self, block: Block) -> None:
         """Render block, replacing previous output.
 
-        First call: just write lines.
-        Subsequent calls: move up and overwrite in place — no blank phase.
-        The whole frame goes out as a single write so a line-buffered TTY
-        can't expose a partially drawn state between flushes.
+        First call (or height change): full write, overwriting in place.
+        Same-height redraws DIFF against the previous frame: unchanged rows
+        are hopped over with cursor-down, only changed rows are rewritten —
+        the write shrinks to the churn, not the frame. Either way the frame
+        goes out as one write wrapped in synchronized-update markers, so a
+        line-buffered TTY can't expose a partially drawn state.
         """
         if not self._active:
             raise RuntimeError("InPlaceRenderer.render() called outside of a context manager")
         parts: list[str] = [_SYNC_BEGIN]
-        if self._height > 0:
+        if self._prev is not None and self._prev.height == block.height:
             parts.append(f"\x1b[{self._height}A")
-        parts.append(render_block_ansi(block, self._writer, clear_eol=True))
-        leftover = self._height - block.height
-        if leftover > 0:
-            # The new frame is shorter: blank the rows it no longer covers,
-            # then park the cursor back at the end of the new content.
-            parts.append("\x1b[2K\n" * leftover + f"\x1b[{leftover}A")
+            skip = 0  # unchanged rows pending a cursor hop
+            for row_idx in range(block.height):
+                if block.row(row_idx) == self._prev.row(row_idx):
+                    skip += 1
+                    continue
+                if skip:
+                    parts.append(f"\x1b[{skip}B")
+                    skip = 0
+                parts.append(render_row_ansi(block, row_idx, self._writer, clear_eol=True))
+                parts.append("\n")
+            if skip:
+                parts.append(f"\x1b[{skip}B")
+        else:
+            if self._height > 0:
+                parts.append(f"\x1b[{self._height}A")
+            parts.append(render_block_ansi(block, self._writer, clear_eol=True))
+            leftover = self._height - block.height
+            if leftover > 0:
+                # The new frame is shorter: blank the rows it no longer
+                # covers, then park the cursor at the end of the new content.
+                parts.append("\x1b[2K\n" * leftover + f"\x1b[{leftover}A")
         parts.append(_SYNC_END)
         self._stream.write("".join(parts))
         self._stream.flush()
         self._height = block.height
+        self._prev = block
 
     def clear(self) -> None:
         """Clear the last rendered content."""
@@ -98,6 +117,7 @@ class InPlaceRenderer:
             self._stream.write(f"\x1b[{h}A" + ("\x1b[2K\n" * h) + f"\x1b[{h}A")
             self._stream.flush()
             self._height = 0
+            self._prev = None  # the screen is blank — nothing to diff against
 
     def finalize(self, block: Block | None = None) -> None:
         """Finalize output: clear, optionally print final block, show cursor.
