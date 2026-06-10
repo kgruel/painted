@@ -186,19 +186,22 @@ def _grid(world: LifeWorld, width: int) -> Block:
 
 
 def _census(world: LifeWorld) -> Block:
+    # Counters are width-padded so changing digit counts never shift the row.
     p = current_palette()
     return join_horizontal(
         Block.text(world.seed, p.accent.merge(Style(bold=True))),
-        Block.text(f"  gen {world.generation}  pop {len(world.cells)}", Style(dim=True)),
+        Block.text(f"  gen {world.generation:>3}  pop {len(world.cells):>3}", Style(dim=True)),
     )
 
 
 def _pop_sparkline(world: LifeWorld, width: int) -> Block:
-    spark_w = max(8, min(len(world.history), width - 12))
+    # Fixed width from frame 0 — sparkline pads until history fills it, so
+    # the window never widens as samples accumulate.
+    spark_w = max(8, width - 12)
     return join_horizontal(
         Block.text("pop ", Style(dim=True)),
         sparkline(list(world.history), spark_w, style=current_palette().success),
-        Block.text(f" {len(world.cells)}", Style(dim=True)),
+        Block.text(f" {len(world.cells):>3}", Style(dim=True)),
     )
 
 
@@ -213,7 +216,7 @@ def _meter(frame_ms: tuple[float, ...], fps: int, width: int) -> Block | None:
     p = current_palette()
     cost, budget = frame_ms[-1], 1000.0 / fps
     role = p.success if cost < budget * 0.5 else p.warning if cost < budget * 0.9 else p.error
-    spark_w = max(8, min(len(frame_ms), width - 22))
+    spark_w = max(8, width - 27)  # 27 = the row's fixed label chars; spark + labels == width
     return join_horizontal(
         Block.text("cost ", Style(dim=True)),
         sparkline(list(frame_ms), spark_w, style=role),
@@ -223,8 +226,12 @@ def _meter(frame_ms: tuple[float, ...], fps: int, width: int) -> Block | None:
 
 
 def _window(world: LifeWorld, width: int, *extra: Block) -> Block:
-    """The dressed viewing frame: grid, census, live meter, and any extras."""
-    w = width - 4
+    """The dressed viewing frame: grid, census, live meter, and any extras.
+
+    Inner width pins to the grid — every row is sized against it, so the
+    border never moves no matter what the data rows do.
+    """
+    w = min(width - 4, world.cols)
     rows = [_grid(world, w), truncate(_census(world), w)]
     meter = _meter(world.frame_ms, _FPS, w)
     if meter is not None:
@@ -245,18 +252,20 @@ def _render_summary(world: LifeWorld, width: int) -> Block:
 
 
 def _render_detailed(world: LifeWorld, width: int) -> Block:
-    return _window(world, width, _pop_sparkline(world, width - 4))
+    w = min(width - 4, world.cols)
+    return _window(world, width, _pop_sparkline(world, w))
 
 
 def _render_full(world: LifeWorld, width: int) -> Block:
+    w = min(width - 4, world.cols)
     peak = max(world.history)
     density = len(world.cells) / (world.cols * world.rows)
     stats = Block.text(
-        f"seed {world.seed}  ·  gen {world.generation}  ·  "
-        f"pop {len(world.cells)}  ·  peak {peak}  ·  density {density:.1%}",
+        f"seed {world.seed}  ·  gen {world.generation:>3}  ·  "
+        f"pop {len(world.cells):>3}  ·  peak {peak:>3}  ·  density {density:.1%}",
         Style(dim=True),
     )
-    return _window(world, width, _pop_sparkline(world, width - 4), stats)
+    return _window(world, width, _pop_sparkline(world, w), stats)
 
 
 def _render(ctx: CliContext, world: LifeWorld) -> Block:

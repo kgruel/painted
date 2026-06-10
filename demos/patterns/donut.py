@@ -174,7 +174,7 @@ def _census(spin: Spin) -> Block:
     p = current_palette()
     return join_horizontal(
         Block.text("donut", p.accent.merge(Style(bold=True))),
-        Block.text(f"  frame {spin.frame}  A {a:.2f}  B {b:.2f}", Style(dim=True)),
+        Block.text(f"  frame {spin.frame:>3}  A {a:5.2f}  B {b:5.2f}", Style(dim=True)),
     )
 
 
@@ -199,7 +199,7 @@ def _meter(frame_ms: tuple[float, ...], fps: int, width: int) -> Block | None:
     p = current_palette()
     cost, budget = frame_ms[-1], 1000.0 / fps
     role = p.success if cost < budget * 0.5 else p.warning if cost < budget * 0.9 else p.error
-    spark_w = max(8, min(len(frame_ms), width - 22))
+    spark_w = max(8, width - 27)  # 27 = the row's fixed label chars; spark + labels == width
     return join_horizontal(
         Block.text("cost ", Style(dim=True)),
         sparkline(list(frame_ms), spark_w, style=role),
@@ -209,8 +209,12 @@ def _meter(frame_ms: tuple[float, ...], fps: int, width: int) -> Block | None:
 
 
 def _window(spin: Spin, width: int, *extra: Block) -> Block:
-    """The dressed viewing frame: torus, census, live meter, and any extras."""
-    w = width - 4
+    """The dressed viewing frame: torus, census, live meter, and any extras.
+
+    Inner width pins to the torus grid — every row is sized against it, so
+    the border never moves no matter what the data rows do.
+    """
+    w = min(width - 4, _W)
     rows = [_torus(spin, w), truncate(_census(spin), w)]
     meter = _meter(spin.frame_ms, _FPS, w)
     if meter is not None:
