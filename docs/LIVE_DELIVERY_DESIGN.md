@@ -154,9 +154,13 @@ repaints), so the gap honestly reads ~0 — the structural win of the tier,
 and the death of that vantage point.
 
 Resolution: **the framework owns the measurement** (`cli/live_meter.py`,
-`LiveMeter`). Both tiers dress every outgoing live frame with a `cost_meter`
-row — the in-place loop times render+write around each frame; `StreamSurface`
-times `render()`→`_flush()`. Consequences of the dissolution:
+`LiveMeter`), behind an author knob: `run_cli(live_meter=True)`, default
+off. Like `live_delivery`, instrumentation is the app author's choice — it
+changes the output, so it is never implied, and downstream apps' live
+output is byte-stable across the upgrade. When opted in, both tiers dress
+every outgoing live frame with a `cost_meter` row — the in-place loop
+times render+write around each frame; `StreamSurface` times
+`render()`→`_flush()`. Consequences of the dissolution:
 
 - **The budget is measured, not declared**: the median inter-frame period.
   "Did delivery fit inside the frame it was delivering?" self-calibrates to
@@ -164,8 +168,8 @@ times `render()`→`_flush()`. Consequences of the dissolution:
 - **The gauge row is reserved (blank) from frame one**, so the dressed
   height never shifts when samples arrive (the pinned-window lesson).
 - **Demos/apps carry no measurement code** — no `frame_ms` state, no
-  `perf_counter` choreography. Any `fetch_stream` app gets the gauge free;
-  the final deposit carries the run's last reading.
+  `perf_counter` choreography. Any `fetch_stream` app gets the gauge for
+  one keyword; the final deposit carries the run's last reading.
 - **Second architecture seam**: `live_meter.py → painted.views` (the gauge
   renderer is views' public `cost_meter`; re-implementing it in cli would
   undo the component graduation). File-scoped in `_CLI_TUI_SEAMS`, lazy

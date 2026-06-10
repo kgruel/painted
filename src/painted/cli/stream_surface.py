@@ -54,6 +54,7 @@ class StreamSurface(Surface, Generic[T]):
         render: Callable[[CliContext, T], Block],
         fetch_stream: Callable[[], AsyncIterator[T]],
         fps_cap: int = 60,
+        live_meter: bool = False,
     ) -> None:
         super().__init__(fps_cap=fps_cap, on_start=self._spawn, on_stop=self._stop)
         self._ctx = ctx
@@ -69,9 +70,12 @@ class StreamSurface(Surface, Generic[T]):
         self.error: Exception | None = None
         self.error_kind: str | None = None  # "fetch" | "render"
 
-        # Delivery gauge: only this side of the decoupling can measure
-        # render+write cost — the stream's yield boundary reads ~0 here.
+        # Delivery gauge (opt-in): only this side of the decoupling can
+        # measure render+write cost — the stream's yield boundary reads ~0
+        # here. The attribute always exists; the flag gates measurement and
+        # dressing, so an opted-out run pays nothing.
         self.meter = LiveMeter()
+        self._live_meter = live_meter
 
     # --- Stream hosting (lifecycle hooks fire inside Surface.run) ---
 
@@ -126,7 +130,8 @@ class StreamSurface(Surface, Generic[T]):
         self._buf.fill(0, 0, self._buf.width, self._buf.height, " ", Style())
         if self._state is None:
             return
-        self.meter.start()
+        if self._live_meter:
+            self.meter.start()
         try:
             block = self._render(self._ctx, self._state)
         except Exception as exc:
@@ -134,7 +139,9 @@ class StreamSurface(Surface, Generic[T]):
             self.error_kind = "render"
             self.quit()
             return
-        self.meter.dress(block).paint(self._buf, 0, 0)
+        if self._live_meter:
+            block = self.meter.dress(block)
+        block.paint(self._buf, 0, 0)
 
     def _flush(self) -> None:
         # The loop runs render() then _flush(); stopping here closes the

@@ -54,11 +54,14 @@ def _stream_of(states, *, fail_after=None):
     return gen
 
 
-def _make_surface(states, *, fail_after=None, render=_render_text) -> StreamSurface:
+def _make_surface(
+    states, *, fail_after=None, render=_render_text, live_meter=False
+) -> StreamSurface:
     return StreamSurface(
         ctx=static_ctx(Zoom.SUMMARY),
         render=render,
         fetch_stream=_stream_of(states, fail_after=fail_after),
+        live_meter=live_meter,
     )
 
 
@@ -153,7 +156,7 @@ def test_frames_feed_the_gauge(monkeypatch):
     from painted.tui import Surface
 
     monkeypatch.setattr(Surface, "_flush", lambda self: None)  # silence the terminal
-    surf = _make_surface(["hello"])
+    surf = _make_surface(["hello"], live_meter=True)
     surf._buf = Buffer(40, 2)
     surf._state = "hello"
     surf.render()
@@ -166,9 +169,22 @@ def test_stateless_frames_are_not_measured(monkeypatch):
     from painted.tui import Surface
 
     monkeypatch.setattr(Surface, "_flush", lambda self: None)
-    surf = _make_surface([])
+    surf = _make_surface([], live_meter=True)
     surf._buf = Buffer(40, 2)
     surf.render()  # _state is still None
+    surf._flush()
+    assert surf.meter._costs == []
+
+
+def test_gauge_is_opt_in(monkeypatch):
+    """Without live_meter, frames are neither measured nor dressed."""
+    from painted.tui import Surface
+
+    monkeypatch.setattr(Surface, "_flush", lambda self: None)
+    surf = _make_surface(["hello"])
+    surf._buf = Buffer(40, 2)
+    surf._state = "hello"
+    surf.render()
     surf._flush()
     assert surf.meter._costs == []
 
@@ -196,8 +212,8 @@ def test_space_toggles_pause():
 # --- _run_live_surface: deposit + exit codes ---
 
 
-def _runner(render=_render_text) -> CliRunner:
-    return CliRunner(render=render, fetch=lambda: None, fetch_stream=_stream_of([]))
+def _runner(render=_render_text, **kwargs) -> CliRunner:
+    return CliRunner(render=render, fetch=lambda: None, fetch_stream=_stream_of([]), **kwargs)
 
 
 def test_deposits_last_frame_on_success(monkeypatch, capsys):
@@ -221,7 +237,7 @@ def test_deposit_carries_the_final_gauge(monkeypatch, capsys):
         self.meter._periods.append(33.0)
 
     monkeypatch.setattr(StreamSurface, "run", fake_run)
-    code = _runner()._run_live_surface(static_ctx(Zoom.SUMMARY))
+    code = _runner(live_meter=True)._run_live_surface(static_ctx(Zoom.SUMMARY))
     assert code == 0
     out = capsys.readouterr().out
     assert "final" in out and "budget" in out

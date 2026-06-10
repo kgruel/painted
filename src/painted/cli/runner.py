@@ -64,6 +64,11 @@ class CliRunner(Generic[T]):
     # (alt-screen sustained animation). See docs/LIVE_DELIVERY_DESIGN.md.
     live_delivery: str = "inplace"
 
+    # Opt-in delivery gauge: dress live frames with a cost_meter row
+    # (render+write vs the measured frame period). An author choice, like
+    # live_delivery — it changes the output, so it is never implied.
+    live_meter: bool = False
+
     # Optional: description for help
     description: str | None = None
 
@@ -277,21 +282,27 @@ class CliRunner(Generic[T]):
                         print_block(last_block, use_ansi=False)
                     return 0
 
-                from .live_meter import LiveMeter
+                meter = None
+                if self.live_meter:
+                    from .live_meter import LiveMeter
 
-                meter = LiveMeter()
+                    meter = LiveMeter()
                 with InPlaceRenderer() as renderer:
                     try:
                         async for state in self.fetch_stream():  # type: ignore[misc]
-                            meter.start()
+                            if meter is not None:
+                                meter.start()
                             try:
                                 block = self.render(ctx, state)
                             except Exception as exc:
                                 renderer.render(self._render_error_block(ctx, exc))
                                 renderer.finalize()
                                 return 2
-                            renderer.render(meter.dress(block))
-                            meter.stop()
+                            if meter is not None:
+                                block = meter.dress(block)
+                            renderer.render(block)
+                            if meter is not None:
+                                meter.stop()
                     except (KeyboardInterrupt, asyncio.CancelledError):
                         renderer.finalize()
                         return 0
@@ -340,7 +351,12 @@ class CliRunner(Generic[T]):
         from .stream_surface import StreamSurface
 
         assert self.fetch_stream is not None  # guarded by the caller
-        surface = StreamSurface(ctx=ctx, render=self.render, fetch_stream=self.fetch_stream)
+        surface = StreamSurface(
+            ctx=ctx,
+            render=self.render,
+            fetch_stream=self.fetch_stream,
+            live_meter=self.live_meter,
+        )
         try:
             asyncio.run(surface.run())
         except KeyboardInterrupt:
@@ -359,8 +375,10 @@ class CliRunner(Generic[T]):
             except Exception as exc:
                 print_block(self._render_error_block(ctx, exc), use_ansi=ctx.use_ansi)
                 return 2
-            # The deposit carries the run's final gauge — what this show cost.
-            print_block(surface.meter.dress(block), use_ansi=ctx.use_ansi)
+            if self.live_meter:
+                # The deposit carries the run's final gauge — what this show cost.
+                block = surface.meter.dress(block)
+            print_block(block, use_ansi=ctx.use_ansi)
         return 0
 
     @staticmethod
@@ -409,6 +427,7 @@ def run_cli(
     default_zoom: Zoom = Zoom.SUMMARY,
     default_mode: OutputMode = OutputMode.LIVE,
     live_delivery: str = "inplace",
+    live_meter: bool = False,
     description: str | None = None,
     prog: str | None = None,
     add_args: Callable[[argparse.ArgumentParser], None] | None = None,
@@ -426,6 +445,7 @@ def run_cli(
         default_zoom: Default zoom level (SUMMARY)
         default_mode: Default mode for TTY when AUTO (LIVE)
         live_delivery: Live tier — "inplace" (scrollback) or "surface" (alt screen)
+        live_meter: Dress live frames with a delivery-cost gauge (opt-in)
         description: Help text description
         prog: Program name
         add_args: Callback to add custom arguments
@@ -443,6 +463,7 @@ def run_cli(
         default_zoom=default_zoom,
         default_mode=default_mode,
         live_delivery=live_delivery,
+        live_meter=live_meter,
         description=description,
         prog=prog,
         add_args=add_args,

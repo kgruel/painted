@@ -259,6 +259,7 @@ def main() -> int:
         fetch=lambda: _fetch(ns.seed, ns.gen),
         fetch_stream=lambda: _fetch_stream(ns.seed),
         live_delivery="surface",
+        live_meter=True,
         description=__doc__,
         prog="life.py",
         help_args=[

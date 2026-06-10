@@ -336,6 +336,7 @@ def main() -> int:
         fetch=lambda: _fetch(ns.circuit, ns.gen),
         fetch_stream=lambda: _fetch_stream(ns.circuit),
         live_delivery="surface",
+        live_meter=True,
         description=__doc__,
         prog="wireworld.py",
         help_args=[

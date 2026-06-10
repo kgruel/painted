@@ -1,7 +1,8 @@
 """Laws for LiveMeter — the framework's delivery-cost gauge.
 
-The live tiers measure their own render+write cost and dress each frame
-with a cost_meter row. The laws pin the gauge's contract:
+When an app opts in (run_cli(live_meter=True)), the live tiers measure
+their own render+write cost and dress each frame with a cost_meter row.
+The laws pin the gauge's contract:
 
   - the row is reserved (blank) from the first frame, so dressed height
     never shifts when samples arrive (pinned-window contract);
@@ -142,6 +143,40 @@ def test_inplace_live_frames_carry_the_gauge(monkeypatch) -> None:
         render=lambda ctx, s: Block.text(str(s), Style()),
         fetch=lambda: None,
         fetch_stream=stream,
+        live_meter=True,
     )
     assert runner._run_live(ctx) == 0
     assert "budget" in out.getvalue()
+
+
+def test_inplace_live_is_undressed_by_default(monkeypatch) -> None:
+    """No opt-in, no gauge — the knob is the author's, never implied."""
+    import io
+
+    import painted.inplace as inplace_mod
+    from painted.cli.runner import CliRunner
+    from painted.cli.types import CliContext, Fidelity, OutputMode, Zoom
+
+    out = io.StringIO()
+    real = inplace_mod.InPlaceRenderer
+    monkeypatch.setattr(inplace_mod, "InPlaceRenderer", lambda: real(stream=out))
+
+    async def stream():
+        for s in ("a", "b", "c"):
+            yield s.ljust(64, ".")
+
+    ctx = CliContext(
+        fidelity=Fidelity(depth=int(Zoom.SUMMARY)),
+        mode=OutputMode.LIVE,
+        use_ansi=True,
+        is_tty=True,
+        width=80,
+        height=24,
+    )
+    runner = CliRunner(
+        render=lambda ctx, s: Block.text(str(s), Style()),
+        fetch=lambda: None,
+        fetch_stream=stream,
+    )
+    assert runner._run_live(ctx) == 0
+    assert "budget" not in out.getvalue() and "cost" not in out.getvalue()

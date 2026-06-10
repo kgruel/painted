@@ -313,6 +313,7 @@ def main() -> int:
         fetch=lambda: _fetch(ns.seed, ns.frame),
         fetch_stream=lambda: _fetch_stream(ns.seed),
         live_delivery="surface",
+        live_meter=True,
         description=__doc__,
         prog="boids.py",
         help_args=[

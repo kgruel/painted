@@ -236,6 +236,7 @@ def main() -> int:
         fetch=lambda: _fetch(ns.frame),
         fetch_stream=lambda: _fetch_stream(),
         live_delivery="surface",
+        live_meter=True,
         description=__doc__,
         prog="donut.py",
         help_args=[
