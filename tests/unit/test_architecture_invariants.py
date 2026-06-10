@@ -343,7 +343,14 @@ def test_views_do_not_import_cli_or_tui() -> None:
 # component graduation. These are the ONLY sanctioned crossings; every other
 # cli file stays tui- and views-free (both imports are lazy where it matters,
 # so `import painted` never pays for either).
-_CLI_TUI_SEAMS = frozenset(
+#
+# Seams are framework→library only — cli reaching down into views/tui. The
+# reverse direction is never a seam: a library module needing the framework
+# means the code is in the wrong layer, not that the boundary needs a hole.
+# Each seam is file-scoped to one (file, target) pair, serves a ratified
+# contract, and exists only because dissolving it (duplicating the code in
+# cli, or demoting it below the boundary) was honestly worse.
+_CLI_SEAMS = frozenset(
     {
         ("painted/cli/stream_surface.py", "painted.tui.surface"),
         ("painted/cli/live_meter.py", "painted.views"),
@@ -354,12 +361,12 @@ _CLI_TUI_SEAMS = frozenset(
 def test_cli_does_not_import_tui() -> None:
     """cli/ may import core/ and root, but not tui/ or views/.
 
-    Exception: the documented live-delivery seams (see _CLI_TUI_SEAMS).
+    Exception: the documented live-delivery seams (see _CLI_SEAMS).
     """
     painted_root = Path(__file__).resolve().parents[2] / "src" / "painted"
     src_root = painted_root.parent
     violations = _check_layer_boundary(
-        painted_root, src_root, "cli", {"tui", "views"}, allowed_seams=_CLI_TUI_SEAMS
+        painted_root, src_root, "cli", {"tui", "views"}, allowed_seams=_CLI_SEAMS
     )
     assert not violations, "cli/ imports higher layers:\n" + "\n".join(violations)
 

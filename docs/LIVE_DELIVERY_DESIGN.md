@@ -134,7 +134,7 @@ NOT required for this change and should not ride along.
   crosses the `cli ↛ tui` invariant. This is the ONE sanctioned crossing: the
   two-tier contract makes the CLI framework the orchestrator of *both* live
   tiers, so it must reach the alt-screen delivery. Carved as a file-scoped
-  exception in `test_cli_does_not_import_tui` (`_CLI_TUI_SEAMS`); every other
+  exception in `test_cli_does_not_import_tui` (`_CLI_SEAMS`); every other
   `cli → tui` import still fails the guard. The import is lazy (inside
   `_run_live_surface`), so `import painted` never pays for tui.
 - **`-i` / `--live` convergence (§6)** → realized. With `live_delivery=
@@ -172,6 +172,6 @@ times render+write around each frame; `StreamSurface` times
   one keyword; the final deposit carries the run's last reading.
 - **Second architecture seam**: `live_meter.py → painted.views` (the gauge
   renderer is views' public `cost_meter`; re-implementing it in cli would
-  undo the component graduation). File-scoped in `_CLI_TUI_SEAMS`, lazy
+  undo the component graduation). File-scoped in `_CLI_SEAMS`, lazy
   import. Pipes and static output are never dressed — there is no delivery
   being measured.
