@@ -85,7 +85,8 @@ the cli package:
 buffer diff and InPlace's row diff are two implementations of one damage
 engine. Unifying them (damage computation in core; deliveries translate
 damage to absolute-alt-screen vs relative-scrollback writes) is real but is
-NOT required for this change and should not ride along.
+NOT required for this change and should not ride along. *(Buried 2026-06-10
+— see §9; the dissolution test failed on inspection.)*
 
 ## 5. Open questions for the implementer
 
@@ -129,7 +130,14 @@ NOT required for this change and should not ride along.
   (zoom + width) on the normal screen after the alt screen is torn down.
 - **(c) `live.py` (health checks)** → left on inplace; the canonical ephemeral
   citizen. `life.py` / `donut.py` opt into `"surface"`.
-- **(d) DEC 2026 wrap on Surface** → not added; orthogonal, deferred.
+- **(d) DEC 2026 wrap on Surface** → already present, and always was: the
+  writer's `write_ops` has wrapped every op batch in `?2026h`/`?2026l` since
+  the initial commit, and both of Surface's flush paths (cell diff via
+  `write_frame`, scroll-optimized via `write_ops` directly) go through it.
+  The round-1 fix (§2) only caught InPlace up to what Surface's writer
+  already did. Nothing to add; the open question was answered before it was
+  asked. (Corrected 2026-06-10 — the original resolution said "deferred"
+  without checking.)
 - **Architecture seam** → `StreamSurface` subclasses `tui.Surface`, so it
   crosses the `cli ↛ tui` invariant. This is the ONE sanctioned crossing: the
   two-tier contract makes the CLI framework the orchestrator of *both* live
@@ -182,3 +190,41 @@ terminal — so a third legitimate seam is evidence that a delivery layer
 exists and wants a name. The response is extraction (the seam files move
 below the `cli ↛ views/tui` boundary, shrinking the allowlist back toward
 zero), never a third entry. Re-layer, never relax.
+
+## 9. Deferred items closed (2026-06-10)
+
+Both §4/§7 deferrals are resolved without code; recorded here so the debt
+doesn't outlive its premise.
+
+**DEC 2026 on Surface** — never deferred work, just an unverified fact. See
+the corrected §7(d): the wrap has lived in `write_ops` since the initial
+commit, so Surface frames were always synchronized.
+
+**Single-renderer unification — BURIED (dissolution test failed).** The
+"one damage engine, two deliveries" framing assumed the *diff* was the
+shared substance. It isn't:
+
+- The diff is already shared where it matters: `Buffer`, `CellWrite`,
+  `Buffer.diff`, and the op→ANSI translation all live in *core*. InPlace's
+  row-diff is ~25 law-pinned lines; that's all unification would delete.
+- The translation discipline is the real substance, and it does not unify.
+  `write_ops` positions absolutely (legal on the alt screen); the normal
+  screen has only a relative anchor, so a unified InPlace would need a
+  second translator (relative CUU/CUD motion, its own cursor tracking,
+  wide-char and style-run edge cases, its own laws). Accretion wearing a
+  dissolution costume.
+- It fixes nothing: round 4 (§2) proved granularity was never the lever —
+  the normal screen's coordinate system is the defect, and no damage engine
+  repairs relative addressing under scroll. The two-tier contract already
+  routes every high-churn stream to Surface; InPlace's remaining domain is
+  spinners and short status, where row grain is the right grain (a cursor
+  hop *is* a row operation).
+
+What survives of the idea: if consistency between deliveries ever feels at
+risk, the cheap unification is a shared *delivery-equivalence law* — same
+frame sequence, same final screen content on both paths. Unify the spec,
+not the implementation. Revisit triggers: the seam tripwire firing (a
+delivery layer extraction puts both translators in one package with a
+forcing function), or InPlace growing sustained-composition ambitions
+(multi-region dashboards on the normal screen), where per-cell damage
+starts paying. Neither is on the roadmap.
