@@ -39,7 +39,6 @@ from painted import (
     Block,
     CliContext,
     Line,
-    OutputMode,
     Span,
     Style,
     Zoom,
@@ -306,42 +305,6 @@ def _render(ctx: CliContext, orbit: Orbit) -> Block:
     return _render_summary(orbit, ctx.width)
 
 
-# --- Interactive: the same _render, delivered by Surface ---
-
-
-def _run_interactive(ctx: CliContext) -> int:
-    """-i: a live frame around the same _render, on the alt screen.
-
-    Keys: space pauses, q quits.
-    """
-    from painted.tui import Surface
-
-    class LorenzSurface(Surface):
-        def __init__(self) -> None:
-            super().__init__(fps_cap=_FPS)
-            self.orbit = seed_orbit()
-            self.paused = False
-
-        def update(self) -> None:
-            if self.paused:
-                return
-            self.orbit = step(self.orbit)
-            self.mark_dirty()
-
-        def render(self) -> None:
-            self._buf.fill(0, 0, self._buf.width, self._buf.height, " ", Style())
-            _render(ctx, self.orbit).paint(self._buf, 0, 0)
-
-        def on_key(self, key: str) -> None:
-            if key == "q":
-                self.quit()
-            elif key == "space":
-                self.paused = not self.paused
-
-    asyncio.run(LorenzSurface().run())
-    return 0
-
-
 # --- Entry point ---
 
 
@@ -355,7 +318,7 @@ def main() -> int:
         render=_render,
         fetch=lambda: _fetch(ns.frame),
         fetch_stream=lambda: _fetch_stream(),
-        handlers={OutputMode.INTERACTIVE: _run_interactive},
+        live_delivery="surface",
         description=__doc__,
         prog="lorenz.py",
         help_args=[
