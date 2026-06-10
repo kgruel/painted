@@ -33,6 +33,7 @@ from time import perf_counter
 from painted import (
     Block,
     CliContext,
+    OutputMode,
     Style,
     Zoom,
     border,
@@ -268,6 +269,49 @@ def _render(ctx: CliContext, world: LifeWorld) -> Block:
     return _render_summary(world, ctx.width)
 
 
+# --- Interactive: the same _render, delivered by Surface ---
+
+
+def _run_interactive(ctx: CliContext, seed: str) -> int:
+    """-i: a live frame around the same _render, on the alt screen.
+
+    The renderer differential: --live delivers frames through
+    InPlaceRenderer (relative cursor walk, normal screen buffer); -i
+    delivers the same frames through Surface (per-cell diff, absolute
+    positioning, alt screen). Comparing the two under identical content
+    isolates the delivery mechanism. No meter row here — frame_ms is a
+    stream affordance; Surface owns its own loop.
+
+    Keys: space pauses, q quits.
+    """
+    from painted.tui import Surface
+
+    class LifeSurface(Surface):
+        def __init__(self) -> None:
+            super().__init__(fps_cap=_FPS)
+            self.world = seed_world(seed)
+            self.paused = False
+
+        def update(self) -> None:
+            if self.paused:
+                return
+            self.world = step(self.world)
+            self.mark_dirty()
+
+        def render(self) -> None:
+            self._buf.fill(0, 0, self._buf.width, self._buf.height, " ", Style())
+            _render(ctx, self.world).paint(self._buf, 0, 0)
+
+        def on_key(self, key: str) -> None:
+            if key == "q":
+                self.quit()
+            elif key == "space":
+                self.paused = not self.paused
+
+    asyncio.run(LifeSurface().run())
+    return 0
+
+
 # --- Entry point ---
 
 
@@ -284,6 +328,7 @@ def main() -> int:
         render=_render,
         fetch=lambda: _fetch(ns.seed, ns.gen),
         fetch_stream=lambda: _fetch_stream(ns.seed),
+        handlers={OutputMode.INTERACTIVE: lambda ctx: _run_interactive(ctx, ns.seed)},
         description=__doc__,
         prog="life.py",
         help_args=[

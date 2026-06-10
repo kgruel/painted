@@ -38,6 +38,7 @@ from painted import (
     Block,
     CliContext,
     Line,
+    OutputMode,
     Span,
     Style,
     Zoom,
@@ -255,6 +256,44 @@ def _render(ctx: CliContext, spin: Spin) -> Block:
     return _render_summary(spin, ctx.width)
 
 
+# --- Interactive: the same _render, delivered by Surface ---
+
+
+def _run_interactive(ctx: CliContext) -> int:
+    """-i: a live frame around the same _render, on the alt screen.
+
+    The renderer differential twin of life.py's -i: same content as
+    --live, delivered by Surface instead of InPlaceRenderer.
+    Keys: space pauses, q quits.
+    """
+    from painted.tui import Surface
+
+    class DonutSurface(Surface):
+        def __init__(self) -> None:
+            super().__init__(fps_cap=_FPS)
+            self.spin = Spin(frame=0)
+            self.paused = False
+
+        def update(self) -> None:
+            if self.paused:
+                return
+            self.spin = Spin(frame=self.spin.frame + 1)
+            self.mark_dirty()
+
+        def render(self) -> None:
+            self._buf.fill(0, 0, self._buf.width, self._buf.height, " ", Style())
+            _render(ctx, self.spin).paint(self._buf, 0, 0)
+
+        def on_key(self, key: str) -> None:
+            if key == "q":
+                self.quit()
+            elif key == "space":
+                self.paused = not self.paused
+
+    asyncio.run(DonutSurface().run())
+    return 0
+
+
 # --- Entry point ---
 
 
@@ -268,6 +307,7 @@ def main() -> int:
         render=_render,
         fetch=lambda: _fetch(ns.frame),
         fetch_stream=lambda: _fetch_stream(),
+        handlers={OutputMode.INTERACTIVE: _run_interactive},
         description=__doc__,
         prog="donut.py",
         help_args=[
