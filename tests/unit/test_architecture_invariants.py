@@ -290,16 +290,26 @@ def _check_layer_boundary(
     src_root: Path,
     layer: str,
     forbidden_layers: set[str],
+    allowed_seams: frozenset[tuple[str, str]] = frozenset(),
 ) -> list[str]:
-    """Check that a layer doesn't import from forbidden layers."""
+    """Check that a layer doesn't import from forbidden layers.
+
+    ``allowed_seams`` carves narrow, file-scoped exceptions: each ``(relative
+    file path, imported module)`` pair is a documented crossing that the guard
+    permits. Anything else crossing the boundary still fails — the exception is
+    a seam, not a blanket relaxation.
+    """
     violations = []
     for py_file in _layer_files(painted_root, layer):
+        rel = str(py_file.relative_to(src_root))
         imported = _iter_imported_modules(src_root, py_file)
         for mod in sorted(imported):
             target_layer = _layer_of(mod)
             if target_layer in forbidden_layers:
                 key = (layer, target_layer)
                 if key in _KNOWN_VIOLATIONS:
+                    continue
+                if (rel, mod) in allowed_seams:
                     continue
                 violations.append(
                     f"{py_file.relative_to(src_root)} imports {mod} ({layer} → {target_layer})"
@@ -323,11 +333,26 @@ def test_views_do_not_import_cli_or_tui() -> None:
     assert not violations, "views/ imports framework layers:\n" + "\n".join(violations)
 
 
+# The live-surface seam: the two-tier live-delivery contract
+# (docs/LIVE_DELIVERY_DESIGN.md) makes the CLI framework the orchestrator of
+# BOTH live tiers — ephemeral (InPlaceRenderer, in root) and sustained
+# (Surface, in tui). StreamSurface is the cli-private adapter that hosts a
+# fetch_stream on an alt screen, so it must subclass tui's Surface. This is
+# the ONE sanctioned cli → tui crossing; every other cli file stays tui-free
+# (the import is lazy, so `import painted` never pays for tui).
+_CLI_TUI_SEAMS = frozenset({("painted/cli/stream_surface.py", "painted.tui.surface")})
+
+
 def test_cli_does_not_import_tui() -> None:
-    """cli/ may import core/ and root, but not tui/ or views/."""
+    """cli/ may import core/ and root, but not tui/ or views/.
+
+    Exception: the documented live-surface seam (see _CLI_TUI_SEAMS).
+    """
     painted_root = Path(__file__).resolve().parents[2] / "src" / "painted"
     src_root = painted_root.parent
-    violations = _check_layer_boundary(painted_root, src_root, "cli", {"tui", "views"})
+    violations = _check_layer_boundary(
+        painted_root, src_root, "cli", {"tui", "views"}, allowed_seams=_CLI_TUI_SEAMS
+    )
     assert not violations, "cli/ imports higher layers:\n" + "\n".join(violations)
 
 

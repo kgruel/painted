@@ -60,6 +60,10 @@ class CliRunner(Generic[T]):
     default_zoom: Zoom = Zoom.SUMMARY
     default_mode: OutputMode = OutputMode.LIVE
 
+    # Live delivery tier: "inplace" (scrollback liveness) or "surface"
+    # (alt-screen sustained animation). See docs/LIVE_DELIVERY_DESIGN.md.
+    live_delivery: str = "inplace"
+
     # Optional: description for help
     description: str | None = None
 
@@ -133,7 +137,12 @@ class CliRunner(Generic[T]):
         modes: set[OutputMode] = {OutputMode.STATIC}
         if self.fetch_stream is not None:
             modes.add(OutputMode.LIVE)
-        if self.handlers and OutputMode.INTERACTIVE in self.handlers:
+        # -i is available with a custom handler, or when surface delivery is
+        # opted in — then INTERACTIVE falls through to the alt-screen live path,
+        # converging -i and --live onto the same StreamSurface.
+        if (self.handlers and OutputMode.INTERACTIVE in self.handlers) or (
+            self.live_delivery == "surface" and self.fetch_stream is not None
+        ):
             modes.add(OutputMode.INTERACTIVE)
 
         add_cli_args(parser, modes=modes)
@@ -240,6 +249,12 @@ class CliRunner(Generic[T]):
         from ..core.writer import print_block
 
         if self.fetch_stream is not None:
+            # Alt-screen delivery for sustained streams — only on a real TTY
+            # (it takes the terminal over). Pipes / forced-plain fall through
+            # to the in-place path's non-TTY branch below.
+            if self.live_delivery == "surface" and ctx.is_tty and ctx.use_ansi:
+                return self._run_live_surface(ctx)
+
             # Streaming mode: update as data arrives
             async def stream() -> int:
                 if not ctx.use_ansi:
@@ -306,6 +321,42 @@ class CliRunner(Generic[T]):
         print_block(block, use_ansi=ctx.use_ansi)
         return 0
 
+    def _run_live_surface(self, ctx: CliContext) -> int:
+        """Stream onto an alt screen, then deposit the final frame.
+
+        The StreamSurface owns the alt-screen render loop; once it tears the
+        alt screen down, we deposit the last frame (or the failure) to the
+        normal screen at the current zoom and width — the scrollback half of
+        the two-tier contract.
+        """
+        import asyncio
+
+        from ..core.writer import print_block
+        from .stream_surface import StreamSurface
+
+        assert self.fetch_stream is not None  # guarded by the caller
+        surface = StreamSurface(ctx=ctx, render=self.render, fetch_stream=self.fetch_stream)
+        try:
+            asyncio.run(surface.run())
+        except KeyboardInterrupt:
+            pass  # final frame still deposited below
+
+        if surface.error is not None:
+            if surface.error_kind == "render":
+                print_block(self._render_error_block(ctx, surface.error), use_ansi=ctx.use_ansi)
+                return 2
+            print_block(self._fetch_error_block(ctx, surface.error), use_ansi=ctx.use_ansi)
+            return 1
+
+        if surface.last_state is not None:
+            try:
+                block = self.render(ctx, surface.last_state)
+            except Exception as exc:
+                print_block(self._render_error_block(ctx, exc), use_ansi=ctx.use_ansi)
+                return 2
+            print_block(block, use_ansi=ctx.use_ansi)
+        return 0
+
     @staticmethod
     def _exception_message(exc: Exception) -> str:
         message = str(exc).strip()
@@ -351,6 +402,7 @@ def run_cli(
     handlers: dict[OutputMode, Callable[[CliContext], R]] | None = None,
     default_zoom: Zoom = Zoom.SUMMARY,
     default_mode: OutputMode = OutputMode.LIVE,
+    live_delivery: str = "inplace",
     description: str | None = None,
     prog: str | None = None,
     add_args: Callable[[argparse.ArgumentParser], None] | None = None,
@@ -367,6 +419,7 @@ def run_cli(
         handlers: Custom handlers for specific output modes
         default_zoom: Default zoom level (SUMMARY)
         default_mode: Default mode for TTY when AUTO (LIVE)
+        live_delivery: Live tier — "inplace" (scrollback) or "surface" (alt screen)
         description: Help text description
         prog: Program name
         add_args: Callback to add custom arguments
@@ -383,6 +436,7 @@ def run_cli(
         handlers=handlers,  # type: ignore[arg-type]
         default_zoom=default_zoom,
         default_mode=default_mode,
+        live_delivery=live_delivery,
         description=description,
         prog=prog,
         add_args=add_args,

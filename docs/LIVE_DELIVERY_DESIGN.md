@@ -1,8 +1,9 @@
 # Live Delivery — the two-tier contract and the alt-screen LIVE path
 
-**Status: RATIFIED 2026-06-09, not yet implemented.** This document is the
-handoff brief for the implementation session. The contract below is decided;
-the open questions in §5 are the implementer's to settle (with the user).
+**Status: IMPLEMENTED 2026-06-10** (branch `stream-surface`). The contract
+below is realized by `cli/stream_surface.py` (the `StreamSurface` adapter) and
+the `live_delivery` knob on `run_cli`/`CliRunner`. The §5 open questions are
+settled in §7. This document remains the rationale of record.
 
 ## 1. The contract
 
@@ -116,3 +117,29 @@ NOT required for this change and should not ride along.
 - Existing InPlaceRenderer laws (`tests/unit/test_inplace_renderer.py`)
   untouched and green — InPlace itself does not change.
 - Full `./dev check` green.
+
+## 7. Resolutions (implementation)
+
+- **(a) Delivery selector** → an API knob, `run_cli(live_delivery="inplace" |
+  "surface")`, default `"inplace"`. No end-user CLI spelling — the app author
+  knows whether a stream is ephemeral or sustained; the user shouldn't have to.
+  `_run_live` takes the surface path only on a real TTY (`is_tty and use_ansi`);
+  pipes / forced-plain fall through to the in-place non-TTY branch unchanged.
+- **(b) Deposit fidelity** → the last frame is rendered at the current ctx
+  (zoom + width) on the normal screen after the alt screen is torn down.
+- **(c) `live.py` (health checks)** → left on inplace; the canonical ephemeral
+  citizen. `life.py` / `donut.py` opt into `"surface"`.
+- **(d) DEC 2026 wrap on Surface** → not added; orthogonal, deferred.
+- **Architecture seam** → `StreamSurface` subclasses `tui.Surface`, so it
+  crosses the `cli ↛ tui` invariant. This is the ONE sanctioned crossing: the
+  two-tier contract makes the CLI framework the orchestrator of *both* live
+  tiers, so it must reach the alt-screen delivery. Carved as a file-scoped
+  exception in `test_cli_does_not_import_tui` (`_CLI_TUI_SEAMS`); every other
+  `cli → tui` import still fails the guard. The import is lazy (inside
+  `_run_live_surface`), so `import painted` never pays for tui.
+- **`-i` / `--live` convergence (§6)** → realized. With `live_delivery=
+  "surface"`, INTERACTIVE falls through to the alt-screen live path, so `-i`
+  and `--live` deliver identically. The demos' hand-rolled `LifeSurface` /
+  `DonutSurface` handlers are deleted. (This also fixed a latent bug: those
+  handlers bound pause to `"space"`, but the keyboard reports the spacebar as
+  `" "`, so pause never worked; `StreamSurface` binds `" "`.)
