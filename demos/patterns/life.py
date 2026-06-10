@@ -28,6 +28,7 @@ import asyncio
 import sys
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, replace
+from time import perf_counter
 
 from painted import (
     Block,
@@ -62,6 +63,10 @@ class LifeWorld:
     generation: int
     seed: str
     history: tuple[int, ...]  # population per generation, capped
+    # Observed render+write cost per frame, ms — measured by the stream at its
+    # yield boundary, empty for static snapshots. Timings are *inputs* to the
+    # render, so render stays a pure function and static output stays undressed.
+    frame_ms: tuple[float, ...] = ()
 
 
 # Classic seeds, in their conventional coordinates (centered at world-build).
@@ -130,19 +135,32 @@ def _fetch(seed: str = DEFAULT_SEED, generation: int = DEFAULT_GEN) -> LifeWorld
 
 _FPS = 15
 _MAX_GENS = 450  # ~30s of animation before the demo bows out on its own
+_METER_CAP = 60  # frame-cost samples kept for the meter
 
 
 async def _fetch_stream(seed: str = DEFAULT_SEED) -> AsyncIterator[LifeWorld]:
-    """Animate from the seed; stop on death, stasis, or short oscillation."""
+    """Animate from the seed; stop on death, stasis, or short oscillation.
+
+    The time from each `yield` to its resume is the harness consuming the
+    frame — render plus write — so the stream is the one place frame cost
+    can be observed without touching the runner. Each measurement rides
+    into the *next* world's frame_ms: a trailing gauge.
+    """
+    budget = 1.0 / _FPS
     world = seed_world(seed)
+    t0 = perf_counter()
     yield world
+    cost = perf_counter() - t0
     prev: Cells = ()
     prev2: Cells = ()
     while world.generation < _MAX_GENS:
-        await asyncio.sleep(1 / _FPS)
+        await asyncio.sleep(max(0.0, budget - cost))
         prev, prev2 = world.cells, prev
         world = step(world)
+        world = replace(world, frame_ms=(*world.frame_ms, cost * 1000)[-_METER_CAP:])
+        t0 = perf_counter()
         yield world
+        cost = perf_counter() - t0
         if not world.cells or world.cells == prev or world.cells == prev2:
             break  # extinct, still life, or period-2 — the show is over
 
@@ -183,6 +201,37 @@ def _pop_sparkline(world: LifeWorld, width: int) -> Block:
     )
 
 
+def _meter(frame_ms: tuple[float, ...], fps: int, width: int) -> Block | None:
+    """The in-frame gauge: observed frame cost against the fps budget.
+
+    Returns None when there are no observations (static output) — the live
+    dress follows the data, not a flag.
+    """
+    if not frame_ms:
+        return None
+    p = current_palette()
+    cost, budget = frame_ms[-1], 1000.0 / fps
+    role = p.success if cost < budget * 0.5 else p.warning if cost < budget * 0.9 else p.error
+    spark_w = max(8, min(len(frame_ms), width - 22))
+    return join_horizontal(
+        Block.text("cost ", Style(dim=True)),
+        sparkline(list(frame_ms), spark_w, style=role),
+        Block.text(f" {cost:5.1f}ms ", role),
+        Block.text(f"/ {budget:.0f}ms budget", Style(dim=True)),
+    )
+
+
+def _window(world: LifeWorld, width: int, *extra: Block) -> Block:
+    """The dressed viewing frame: grid, census, live meter, and any extras."""
+    w = width - 4
+    rows = [_grid(world, w), truncate(_census(world), w)]
+    meter = _meter(world.frame_ms, _FPS, w)
+    if meter is not None:
+        rows.append(truncate(meter, w))
+    rows += [truncate(b, w) for b in extra]
+    return border(join_vertical(*rows), title="Conway's Life", chars=ROUNDED)
+
+
 # --- Zoom renderers ---
 
 
@@ -191,15 +240,11 @@ def _render_minimal(world: LifeWorld, width: int) -> Block:
 
 
 def _render_summary(world: LifeWorld, width: int) -> Block:
-    return join_vertical(_grid(world, width), truncate(_census(world), width))
+    return _window(world, width)
 
 
 def _render_detailed(world: LifeWorld, width: int) -> Block:
-    return join_vertical(
-        _grid(world, width),
-        truncate(_census(world), width),
-        truncate(_pop_sparkline(world, width), width),
-    )
+    return _window(world, width, _pop_sparkline(world, width - 4))
 
 
 def _render_full(world: LifeWorld, width: int) -> Block:
@@ -210,13 +255,7 @@ def _render_full(world: LifeWorld, width: int) -> Block:
         f"pop {len(world.cells)}  ·  peak {peak}  ·  density {density:.1%}",
         Style(dim=True),
     )
-    inner = join_vertical(
-        _grid(world, width - 4),
-        Block.text("", Style()),
-        truncate(_pop_sparkline(world, width - 4), width - 4),
-        truncate(stats, width - 4),
-    )
-    return border(inner, title="Conway's Life", chars=ROUNDED)
+    return _window(world, width, _pop_sparkline(world, width - 4), stats)
 
 
 def _render(ctx: CliContext, world: LifeWorld) -> Block:

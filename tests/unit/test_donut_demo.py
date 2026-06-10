@@ -68,6 +68,16 @@ def test_rotation_actually_rotates() -> None:
     assert a != b
 
 
+def test_meter_dresses_only_observed_frames() -> None:
+    # Static poses carry no timings -> no cost row; live timings -> gauge.
+    # Timings are inputs to the render, so this is deterministic.
+    ctx = static_ctx(Zoom.SUMMARY)
+    assert "cost" not in block_to_text(donut._render(ctx, donut.Spin(frame=60)))
+    timed = donut.Spin(frame=60, frame_ms=(5.0, 6.0, 7.5))
+    text = block_to_text(donut._render(ctx, timed))
+    assert "cost" in text and "7.5ms" in text and "33ms budget" in text
+
+
 def test_grid_glyphs_come_only_from_the_ramp() -> None:
     text = block_to_text(donut._torus(donut.Spin(frame=60), 80))
     assert set(text) <= set(donut._RAMP) | {" ", "\n"}
