@@ -322,28 +322,40 @@ def print_block(
     stream.flush()
 
 
-def write_block_ansi(block: Block, writer: Writer, stream: TextIO) -> None:
-    """Write a Block to a stream with ANSI styling, line-by-line.
+def render_block_ansi(block: Block, writer: Writer, *, clear_eol: bool = False) -> str:
+    """Render a Block to one ANSI string.
 
-    Shared by `print_block` and `InPlaceRenderer`.
+    With clear_eol, each line ends in erase-to-end-of-line (CSI 0K) so it
+    cleanly overwrites a longer previous line — the in-place overwrite
+    discipline, where a region is never blanked ahead of its redraw.
     """
+    out: list[str] = []
     for row_idx in range(block.height):
-        parts: list[str] = []
         last_style: Style | None = None
 
         for span in iter_trimmed_row_spans(block.row(row_idx)):
             cell = span.cells[0]
             if cell.style != last_style:
-                parts.append(writer.reset_style())
+                out.append(writer.reset_style())
                 sgr = writer.apply_style(cell.style)
                 if sgr:
-                    parts.append(sgr)
+                    out.append(sgr)
                 last_style = cell.style
-            parts.append(cell.char)
+            out.append(cell.char)
 
-        parts.append(writer.reset_style())
-        parts.append("\n")
-        stream.write("".join(parts))
+        out.append(writer.reset_style())
+        if clear_eol:
+            out.append("\x1b[0K")
+        out.append("\n")
+    return "".join(out)
+
+
+def write_block_ansi(block: Block, writer: Writer, stream: TextIO) -> None:
+    """Write a Block to a stream with ANSI styling.
+
+    Shared by `print_block` and `InPlaceRenderer`.
+    """
+    stream.write(render_block_ansi(block, writer))
 
 
 @dataclass(frozen=True)

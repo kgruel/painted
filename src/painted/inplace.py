@@ -1,7 +1,14 @@
 """InPlaceRenderer: non-Surface terminal animation.
 
 Animate Block output in-place without entering alt screen.
-Uses cursor control to hide, move up, clear, and redraw.
+
+Each frame is emitted as ONE atomic write: cursor up, every line
+overwritten in place (erase-to-EOL trims old residue), leftover lines
+blanked only if the frame shrank — the screen always holds the old frame
+or the new one, never a cleared region waiting for its redraw. The write
+is wrapped in DEC 2026 synchronized-update markers so terminals that
+support them (ghostty, kitty, iTerm2, WezTerm, ...) composite the frame
+atomically; terminals that don't simply ignore the markers.
 
 For CLI spinners, progress bars, and live-updating status.
 
@@ -22,16 +29,22 @@ from __future__ import annotations
 import sys
 from typing import TYPE_CHECKING, TextIO
 
-from .core.writer import Writer, write_block_ansi
+from .core.writer import Writer, render_block_ansi
 
 if TYPE_CHECKING:
     from .core.block import Block
+
+# DEC private mode 2026: synchronized output. The terminal buffers
+# everything between begin/end and composites it as one update.
+_SYNC_BEGIN = "\x1b[?2026h"
+_SYNC_END = "\x1b[?2026l"
 
 
 class InPlaceRenderer:
     """Animate Block output in-place without alt screen.
 
-    Pattern: hide cursor, move up N lines, clear, redraw, show cursor.
+    Pattern: hide cursor; per frame, one synchronized atomic write that
+    moves up and overwrites; show cursor.
     """
 
     def __init__(self, stream: TextIO = sys.stdout):
@@ -56,23 +69,25 @@ class InPlaceRenderer:
         """Render block, replacing previous output.
 
         First call: just write lines.
-        Subsequent calls: move up, clear, rewrite.
+        Subsequent calls: move up and overwrite in place — no blank phase.
+        The whole frame goes out as a single write so a line-buffered TTY
+        can't expose a partially drawn state between flushes.
         """
         if not self._active:
             raise RuntimeError("InPlaceRenderer.render() called outside of a context manager")
-        # Move up and clear previous content
+        parts: list[str] = [_SYNC_BEGIN]
         if self._height > 0:
-            h = self._height
-            self._stream.write(f"\x1b[{h}A" + ("\x1b[2K\n" * h) + f"\x1b[{h}A")
-
-        # Write new content
-        self._write_block(block)
-        self._height = block.height
-
-    def _write_block(self, block: Block) -> None:
-        """Write block content line by line with ANSI styling."""
-        write_block_ansi(block, self._writer, self._stream)
+            parts.append(f"\x1b[{self._height}A")
+        parts.append(render_block_ansi(block, self._writer, clear_eol=True))
+        leftover = self._height - block.height
+        if leftover > 0:
+            # The new frame is shorter: blank the rows it no longer covers,
+            # then park the cursor back at the end of the new content.
+            parts.append("\x1b[2K\n" * leftover + f"\x1b[{leftover}A")
+        parts.append(_SYNC_END)
+        self._stream.write("".join(parts))
         self._stream.flush()
+        self._height = block.height
 
     def clear(self) -> None:
         """Clear the last rendered content."""

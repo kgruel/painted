@@ -25,9 +25,9 @@ class TestInPlaceRenderer:
         out = stream.getvalue()
         assert "\x1b[?25l" in out  # hide cursor on enter
         assert "\x1b[?25h" in out  # show cursor on finalize
-        assert "\x1b[0m\x1b[31mAB\x1b[0mC\x1b[0m\n" in out
+        assert "\x1b[0m\x1b[31mAB\x1b[0mC\x1b[0m\x1b[0K\n" in out
 
-    def test_render_second_call_moves_up_and_clears(self):
+    def test_render_second_call_moves_up_and_overwrites(self):
         stream = io.StringIO()
         s = Style()
         block1 = _block([[Cell("A", s)], [Cell("B", s)]])  # height 2
@@ -39,14 +39,51 @@ class TestInPlaceRenderer:
             renderer.finalize()
 
         out = stream.getvalue()
-        first_frame = "\x1b[0mA\x1b[0m\n\x1b[0mB\x1b[0m\n"
-        second_frame = "\x1b[0mC\x1b[0m\n\x1b[0mD\x1b[0m\n"
-        clear_seq = "\x1b[2A\x1b[2K\n\x1b[2K\n\x1b[2A"
+        first_frame = "\x1b[0mA\x1b[0m\x1b[0K\n\x1b[0mB\x1b[0m\x1b[0K\n"
+        second_frame = "\x1b[0mC\x1b[0m\x1b[0K\n\x1b[0mD\x1b[0m\x1b[0K\n"
 
         assert first_frame in out
         assert second_frame in out
-        assert clear_seq in out
-        assert out.index(first_frame) < out.index(clear_seq) < out.index(second_frame)
+        assert "\x1b[2A" in out  # move up over the old frame
+        assert out.index(first_frame) < out.index(second_frame)
+
+    def test_render_has_no_blank_phase(self):
+        """The anti-flicker law: a same-height redraw never blanks a line.
+
+        Erase-line (CSI 2K) blanks content ahead of its redraw — the torn
+        empty region a compositor can catch. Overwrite-in-place means it
+        must not appear unless the frame shrank.
+        """
+        stream = io.StringIO()
+        s = Style()
+        block1 = _block([[Cell("A", s)], [Cell("B", s)]])
+        block2 = _block([[Cell("C", s)], [Cell("D", s)]])
+
+        with InPlaceRenderer(stream) as renderer:
+            renderer.render(block1)
+            renderer.render(block2)
+            renderer.finalize()
+
+        assert "\x1b[2K" not in stream.getvalue()
+
+    def test_render_emits_one_synchronized_atomic_write(self):
+        """Each frame: exactly one stream.write, wrapped in DEC 2026 markers."""
+        writes: list[str] = []
+
+        class Spy(io.StringIO):
+            def write(self, text: str) -> int:
+                writes.append(text)
+                return super().write(text)
+
+        stream = Spy()
+        s = Style()
+        with InPlaceRenderer(stream) as renderer:
+            writes.clear()
+            renderer.render(_block([[Cell("A", s)]]))
+            (frame,) = writes
+            assert frame.startswith("\x1b[?2026h")
+            assert frame.endswith("\x1b[?2026l")
+            renderer.finalize()
 
     def test_render_outside_context_raises(self):
         stream = io.StringIO()
@@ -94,12 +131,11 @@ class TestInPlaceRenderer:
         out = stream.getvalue()
         assert out.count(clear_seq) == 1
 
-    def test_height_tracking_across_different_sized_blocks(self):
+    def test_shrinking_frame_blanks_only_leftover_rows(self):
         stream = io.StringIO()
         s = Style()
         block3 = _block([[Cell("A", s)], [Cell("B", s)], [Cell("C", s)]])  # height 3
         block1 = _block([[Cell("D", s)]])  # height 1
-        clear_seq = "\x1b[3A\x1b[2K\n\x1b[2K\n\x1b[2K\n\x1b[3A"
 
         with InPlaceRenderer(stream) as renderer:
             renderer.render(block3)
@@ -108,7 +144,10 @@ class TestInPlaceRenderer:
             assert renderer._height == 1
             renderer.finalize()
 
-        assert clear_seq in stream.getvalue()
+        out = stream.getvalue()
+        # After overwriting line 1, the two rows the frame no longer covers
+        # are blanked and the cursor parks at the end of the new content.
+        assert "\x1b[0K\n\x1b[2K\n\x1b[2K\n\x1b[2A" in out
 
     def test_clear_outside_context_raises(self):
         stream = io.StringIO()
