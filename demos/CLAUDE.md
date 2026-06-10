@@ -84,6 +84,7 @@ patterns/
   boids.py          Boids: continuous agents projected onto cells         ✓
   lorenz.py         Lorenz: trails as frozen data, chaos law-tested       ✓
   wireworld.py      Wireworld: ASCII-art circuits, laws verify computing  ✓
+  raymarch.py       SDF raymarcher: scene as expression tree, donut re-derived ✓
 
 apps/
   (behavior graduated to tests/unit/test_*_app.py — TestSurface drives keys,

@@ -77,6 +77,7 @@ PATTERNS = [
     "palette_icons",
     "plasma",
     "profiler",
+    "raymarch",
     "responsive",
     "testing",
     "timing",
