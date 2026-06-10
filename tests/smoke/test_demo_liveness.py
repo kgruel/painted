@@ -72,6 +72,7 @@ PATTERNS = [
     "layers",
     "life",
     "live",
+    "lorenz",
     "monitor",
     "palette_icons",
     "plasma",
