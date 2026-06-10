@@ -169,4 +169,5 @@ docs/
   ZOOM_PATTERNS.md    # Lens zoom propagation patterns
   MODE_RESOLUTION.md  # AUTO mode collapse rules, capability filtering
   DEMO_PATTERNS.md    # TUI app pattern, demo organization
+  LIVE_DELIVERY_DESIGN.md  # Two-tier live contract; alt-screen LIVE path (ratified, unbuilt)
 ```

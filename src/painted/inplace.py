@@ -1,6 +1,13 @@
-"""InPlaceRenderer: non-Surface terminal animation.
+"""InPlaceRenderer: ephemeral liveness in the scrollback.
 
 Animate Block output in-place without entering alt screen.
+
+CONTRACT (see docs/LIVE_DELIVERY_DESIGN.md): this renderer is for
+short-lived liveness — spinners, progress, status — where the final state
+belonging to terminal history is the point. Its relative cursor addressing
+is structurally fragile under viewport disturbance: scrolling during a
+render lands writes on the wrong visual rows (tearing, reprinted frames).
+Sustained animation belongs on the alt screen (Surface), which is immune.
 
 Each frame is emitted as ONE atomic write: cursor up, every line
 overwritten in place (erase-to-EOL trims old residue), leftover lines
