@@ -175,3 +175,10 @@ times render+write around each frame; `StreamSurface` times
   undo the component graduation). File-scoped in `_CLI_SEAMS`, lazy
   import. Pipes and static output are never dressed — there is no delivery
   being measured.
+
+**Seam tripwire (ratified 2026-06-10)**: `_CLI_SEAMS` never grows past two.
+Both seams are delivery concerns — cli orchestrating how frames reach the
+terminal — so a third legitimate seam is evidence that a delivery layer
+exists and wants a name. The response is extraction (the seam files move
+below the `cli ↛ views/tui` boundary, shrinking the allowlist back toward
+zero), never a third entry. Re-layer, never relax.

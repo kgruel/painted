@@ -350,6 +350,13 @@ def test_views_do_not_import_cli_or_tui() -> None:
 # Each seam is file-scoped to one (file, target) pair, serves a ratified
 # contract, and exists only because dissolving it (duplicating the code in
 # cli, or demoting it below the boundary) was honestly worse.
+#
+# TRIPWIRE (ratified 2026-06-10): this set never grows past two. Both
+# entries are delivery concerns — cli orchestrating how frames reach the
+# terminal — so a third legitimate seam is evidence that a delivery layer
+# exists and wants a name. The response is to extract it (move the seam
+# files below the boundary, shrinking this set back toward zero), never to
+# add a third entry. The allowlist is a pressure gauge, not a budget.
 _CLI_SEAMS = frozenset(
     {
         ("painted/cli/stream_surface.py", "painted.tui.surface"),
