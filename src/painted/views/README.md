@@ -15,6 +15,7 @@ from painted.views import shape_lens, tree_lens, chart_lens, flame_lens, sparkli
 - **`chart_lens`** — numeric data as horizontal bar charts.
 - **`flame_lens`** — proportional visualization (flame graph style).
 - **`sparkline`** / **`sparkline_with_range`** — inline mini-charts from numeric sequences.
+- **`cost_meter`** — one-row gauge of observed per-frame costs against a time budget; returns `None` when there are no observations, so static output stays undressed.
 - **`NodeRenderer`** — callback protocol for custom tree node rendering.
 
 ## Components

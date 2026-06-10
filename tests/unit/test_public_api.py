@@ -125,6 +125,7 @@ STABLE_VIEWS_SURFACE = frozenset(
         "flame_lens",
         "sparkline",
         "sparkline_with_range",
+        "cost_meter",
         "SpinnerState",
         "SpinnerFrames",
         "spinner",

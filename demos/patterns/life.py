@@ -44,7 +44,7 @@ from painted import (
 )
 from painted.cli import HelpArg
 from painted.palette import current_palette
-from painted.views import sparkline
+from painted.views import cost_meter, sparkline
 
 
 # --- Data: a frozen world ---
@@ -204,26 +204,6 @@ def _pop_sparkline(world: LifeWorld, width: int) -> Block:
     )
 
 
-def _meter(frame_ms: tuple[float, ...], fps: int, width: int) -> Block | None:
-    """The in-frame gauge: observed frame cost against the fps budget.
-
-    Returns None when there are no observations (static output) — the live
-    dress follows the data, not a flag.
-    """
-    if not frame_ms:
-        return None
-    p = current_palette()
-    cost, budget = frame_ms[-1], 1000.0 / fps
-    role = p.success if cost < budget * 0.5 else p.warning if cost < budget * 0.9 else p.error
-    spark_w = max(8, width - 27)  # 27 = the row's fixed label chars; spark + labels == width
-    return join_horizontal(
-        Block.text("cost ", Style(dim=True)),
-        sparkline(list(frame_ms), spark_w, style=role),
-        Block.text(f" {cost:5.1f}ms ", role),
-        Block.text(f"/ {budget:.0f}ms budget", Style(dim=True)),
-    )
-
-
 def _window(world: LifeWorld, width: int, *extra: Block) -> Block:
     """The dressed viewing frame: grid, census, live meter, and any extras.
 
@@ -232,7 +212,7 @@ def _window(world: LifeWorld, width: int, *extra: Block) -> Block:
     """
     w = min(width - 4, world.cols)
     rows = [_grid(world, w), truncate(_census(world), w)]
-    meter = _meter(world.frame_ms, _FPS, w)
+    meter = cost_meter(world.frame_ms, w, budget_ms=1000 / _FPS)
     if meter is not None:
         rows.append(truncate(meter, w))
     rows += [truncate(b, w) for b in extra]

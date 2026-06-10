@@ -21,6 +21,7 @@ never mutated in place. Rendering is a pure function of that state —
 | `_text_input.py` | `TextInputState` | `text_input()` | Single-line input with cursor |
 | `_table.py` | `TableState` | `table()` | Scrollable table with Column headers |
 | `_sparkline.py` | — | `sparkline()` | Inline mini-chart (stateless) |
+| `_meter.py` | — | `cost_meter()` | Frame-cost gauge vs a budget (stateless) |
 | `_data_explorer.py` | `DataExplorerState` | `data_explorer()` | Interactive data browser |
 
 Backing files are underscore-private (`_name.py`) wherever the public name would

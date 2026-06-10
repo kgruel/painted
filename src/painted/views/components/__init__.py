@@ -2,6 +2,7 @@
 
 from ._data_explorer import DataExplorerState, DataNode, data_explorer, flatten
 from ._list_view import ListState, list_view
+from ._meter import cost_meter
 from .progress import ProgressState, progress_bar
 from ._sparkline import sparkline, sparkline_with_range
 from ._spinner import BRAILLE, DOTS, LINE, SpinnerFrames, SpinnerState, spinner
@@ -25,6 +26,7 @@ __all__ = [
     "TableState",
     "table",
     "sparkline",
+    "cost_meter",
     "sparkline_with_range",
     "DataExplorerState",
     "DataNode",

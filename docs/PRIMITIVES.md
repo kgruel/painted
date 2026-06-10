@@ -231,7 +231,17 @@ block = sparkline([12, 15, 23, 45, 67], width=20)
 block = sparkline_with_range([12, 15, 23, 45, 67], width=20, min_val=0, max_val=100)
 ```
 
-**Connects to:** Produces Blocks. Nested structures reduce zoom at each level. Source modules: `views/lens/chart.py`, `views/lens/flame.py`, `views/lens/shape.py`, `views/lens/tree.py`, `views/components/_sparkline.py`.
+**Cost meter** — a one-row gauge of observed per-frame costs against a time budget
+(sparkline + latest cost, role-colored by headroom). Returns `None` when there are
+no observations: the live dress follows the data, so static output stays undressed.
+
+```python
+from painted.views import cost_meter
+
+block = cost_meter(frame_ms, width=60, budget_ms=1000 / 30)
+```
+
+**Connects to:** Produces Blocks. Nested structures reduce zoom at each level. Source modules: `views/lens/chart.py`, `views/lens/flame.py`, `views/lens/shape.py`, `views/lens/tree.py`, `views/components/_sparkline.py`, `views/components/_meter.py`.
 
 ---
 
