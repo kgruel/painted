@@ -83,6 +83,7 @@ patterns/
   fire.py           Doom fire: seeded LCG — randomness as frozen data     ✓
   boids.py          Boids: continuous agents projected onto cells         ✓
   lorenz.py         Lorenz: trails as frozen data, chaos law-tested       ✓
+  wireworld.py      Wireworld: ASCII-art circuits, laws verify computing  ✓
 
 apps/
   (behavior graduated to tests/unit/test_*_app.py — TestSurface drives keys,

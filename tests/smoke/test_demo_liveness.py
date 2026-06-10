@@ -80,6 +80,7 @@ PATTERNS = [
     "responsive",
     "testing",
     "timing",
+    "wireworld",
 ]
 
 
