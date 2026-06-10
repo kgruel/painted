@@ -78,6 +78,7 @@ patterns/
   profiler.py       Self-profiling: frame cost, emission timeline, flame  ✓
   help.py           Zoom-aware help: HelpData rendered at each zoom level ✓
   life.py           Conway's Life: pure step + fetch_stream animation     ✓
+  donut.py          donut.c: scene as pure function of a frame counter    ✓
 
 apps/
   (behavior graduated to tests/unit/test_*_app.py — TestSurface drives keys,
