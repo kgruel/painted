@@ -77,6 +77,7 @@ patterns/
   testing.py        Replay testing: emit capture, observation traces      ✓
   profiler.py       Self-profiling: frame cost, emission timeline, flame  ✓
   help.py           Zoom-aware help: HelpData rendered at each zoom level ✓
+  life.py           Conway's Life: pure step + fetch_stream animation     ✓
 
 apps/
   (behavior graduated to tests/unit/test_*_app.py — TestSurface drives keys,
