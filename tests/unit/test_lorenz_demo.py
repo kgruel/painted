@@ -97,12 +97,3 @@ def test_young_points_outrank_old_in_a_shared_cell() -> None:
     orbit = lorenz._fetch(lorenz._TRAIL_CAP + 100)  # trail full, crossings certain
     text = block_to_text(lorenz._grid(orbit, 80))
     assert "@" in text  # the head's age class survives every collision
-
-
-def test_meter_dresses_only_observed_frames() -> None:
-    ctx = static_ctx(Zoom.SUMMARY)
-    bare = lorenz._fetch(200)
-    assert "cost" not in block_to_text(lorenz._render(ctx, bare))
-    timed = replace(bare, frame_ms=(5.0, 6.0, 7.5))
-    text = block_to_text(lorenz._render(ctx, timed))
-    assert "cost" in text and "7.5ms" in text and "33ms budget" in text

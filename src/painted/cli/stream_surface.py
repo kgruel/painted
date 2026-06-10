@@ -24,6 +24,7 @@ from typing import TYPE_CHECKING, Generic, TypeVar
 
 from ..core.cell import Style
 from ..tui.surface import Surface
+from .live_meter import LiveMeter
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Callable
@@ -67,6 +68,10 @@ class StreamSurface(Surface, Generic[T]):
         self.last_state: T | None = None
         self.error: Exception | None = None
         self.error_kind: str | None = None  # "fetch" | "render"
+
+        # Delivery gauge: only this side of the decoupling can measure
+        # render+write cost — the stream's yield boundary reads ~0 here.
+        self.meter = LiveMeter()
 
     # --- Stream hosting (lifecycle hooks fire inside Surface.run) ---
 
@@ -121,12 +126,21 @@ class StreamSurface(Surface, Generic[T]):
         self._buf.fill(0, 0, self._buf.width, self._buf.height, " ", Style())
         if self._state is None:
             return
+        self.meter.start()
         try:
-            self._render(self._ctx, self._state).paint(self._buf, 0, 0)
+            block = self._render(self._ctx, self._state)
         except Exception as exc:
             self.error = exc
             self.error_kind = "render"
             self.quit()
+            return
+        self.meter.dress(block).paint(self._buf, 0, 0)
+
+    def _flush(self) -> None:
+        # The loop runs render() then _flush(); stopping here closes the
+        # start() opened in render(), so the sample spans paint+diff+write.
+        super()._flush()
+        self.meter.stop()
 
     def on_key(self, key: str) -> None:
         if key in ("q", "\x03"):

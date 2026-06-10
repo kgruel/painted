@@ -101,12 +101,3 @@ def test_render_is_pure_at_every_zoom() -> None:
 def test_grid_glyphs_are_the_three_states() -> None:
     text = block_to_text(ww._grid(ww._fetch("diode", ww.DEFAULT_GEN), 80))
     assert set(text) <= {"·", "@", "~", " ", "\n"}
-
-
-def test_meter_dresses_only_observed_frames() -> None:
-    ctx = static_ctx(Zoom.SUMMARY)
-    bare = ww._fetch("diode", 30)
-    assert "cost" not in block_to_text(ww._render(ctx, bare))
-    timed = replace(bare, frame_ms=(5.0, 6.0, 7.5))
-    text = block_to_text(ww._render(ctx, timed))
-    assert "cost" in text and "7.5ms" in text and "67ms budget" in text

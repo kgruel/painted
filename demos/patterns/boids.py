@@ -37,7 +37,6 @@ import math
 import sys
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, replace
-from time import perf_counter
 
 from painted import (
     Block,
@@ -53,7 +52,7 @@ from painted import (
 )
 from painted.cli import HelpArg
 from painted.palette import current_palette
-from painted.views import cost_meter, sparkline
+from painted.views import sparkline
 
 
 # --- Randomness as data (the pattern fire.py settled) ---
@@ -86,9 +85,6 @@ class Flock:
     frame: int
     seed: int
     history: tuple[float, ...]  # spread per frame, capped
-    # Observed render+write cost per frame, ms — measured by the stream at its
-    # yield boundary, empty for static poses.
-    frame_ms: tuple[float, ...] = ()
 
 
 DEFAULT_SEED = 7
@@ -198,23 +194,17 @@ def _fetch(seed: int = DEFAULT_SEED, frame: int = DEFAULT_FRAME) -> Flock:
 
 _FPS = 30
 _MAX_FRAMES = 900  # ~30s; the flock never lands, so the bound is the curtain
-_METER_CAP = 60  # frame-cost samples kept for the meter
 
 
 async def _fetch_stream(seed: int = DEFAULT_SEED) -> AsyncIterator[Flock]:
-    """Fly at the budget; the yield-to-resume gap is the harness's frame cost."""
+    """Fly at the budget; the live harness gauges its own delivery cost."""
     budget = 1.0 / _FPS
     flock = seed_flock(seed)
-    t0 = perf_counter()
     yield flock
-    cost = perf_counter() - t0
     while flock.frame < _MAX_FRAMES:
-        await asyncio.sleep(max(0.0, budget - cost))
+        await asyncio.sleep(budget)
         flock = step(flock)
-        flock = replace(flock, frame_ms=(*flock.frame_ms, cost * 1000)[-_METER_CAP:])
-        t0 = perf_counter()
         yield flock
-        cost = perf_counter() - t0
 
 
 # --- Render helpers ---
@@ -260,16 +250,13 @@ def _spread_sparkline(flock: Flock, width: int) -> Block:
 
 
 def _window(flock: Flock, width: int, *extra: Block) -> Block:
-    """The dressed viewing frame: flock, census, live meter, and any extras.
+    """The dressed viewing frame: flock, census, and any extras.
 
     Inner width pins to the grid — every row is sized against it, so the
     border never moves no matter what the data rows do.
     """
     w = min(width - 4, _COLS)
     rows = [_grid(flock, w), truncate(_census(flock), w)]
-    meter = cost_meter(flock.frame_ms, w, budget_ms=1000 / _FPS)
-    if meter is not None:
-        rows.append(truncate(meter, w))
     rows += [truncate(b, w) for b in extra]
     return border(join_vertical(*rows), title="boids", chars=ROUNDED)
 

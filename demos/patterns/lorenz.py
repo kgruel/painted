@@ -33,7 +33,6 @@ import math
 import sys
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, replace
-from time import perf_counter
 
 from painted import (
     Block,
@@ -51,7 +50,7 @@ from painted import (
 )
 from painted.cli import HelpArg
 from painted.palette import current_palette
-from painted.views import cost_meter, sparkline
+from painted.views import sparkline
 
 
 # --- Data: position plus accumulated time ---
@@ -73,9 +72,6 @@ class Orbit:
     tracers: tuple[Tracer, ...]
     frame: int
     history: tuple[float, ...]  # tracer separation per frame, capped
-    # Observed render+write cost per frame, ms — measured by the stream at its
-    # yield boundary, empty for static poses.
-    frame_ms: tuple[float, ...] = ()
 
 
 # Classic chaotic parameters; the twin starts differ by 0.01 in x —
@@ -154,23 +150,17 @@ def _fetch(frame: int = DEFAULT_FRAME) -> Orbit:
 
 _FPS = 30
 _MAX_FRAMES = 900  # ~30s; the attractor never settles, so the bound is the curtain
-_METER_CAP = 60  # frame-cost samples kept for the meter
 
 
 async def _fetch_stream(start: int = 0) -> AsyncIterator[Orbit]:
-    """Trace at the budget; the yield-to-resume gap is the harness's frame cost."""
+    """Trace at the budget; the live harness gauges its own delivery cost."""
     budget = 1.0 / _FPS
     orbit = _advance(seed_orbit(), start)
-    t0 = perf_counter()
     yield orbit
-    cost = perf_counter() - t0
     while orbit.frame < start + _MAX_FRAMES:
-        await asyncio.sleep(max(0.0, budget - cost))
+        await asyncio.sleep(budget)
         orbit = step(orbit)
-        orbit = replace(orbit, frame_ms=(*orbit.frame_ms, cost * 1000)[-_METER_CAP:])
-        t0 = perf_counter()
         yield orbit
-        cost = perf_counter() - t0
 
 
 # --- Render helpers ---
@@ -254,16 +244,13 @@ def _separation_sparkline(orbit: Orbit, width: int) -> Block:
 
 
 def _window(orbit: Orbit, width: int, *extra: Block) -> Block:
-    """The dressed viewing frame: butterfly, census, live meter, extras.
+    """The dressed viewing frame: butterfly, census, and any extras.
 
     Inner width pins to the grid — every row is sized against it, so the
     border never moves no matter what the data rows do.
     """
     w = min(width - 4, _W)
     rows = [_grid(orbit, w), truncate(_census(orbit), w)]
-    meter = cost_meter(orbit.frame_ms, w, budget_ms=1000 / _FPS)
-    if meter is not None:
-        rows.append(truncate(meter, w))
     rows += [truncate(b, w) for b in extra]
     return border(join_vertical(*rows), title="lorenz", chars=ROUNDED)
 

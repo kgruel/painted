@@ -70,15 +70,6 @@ def test_gradient_endpoints_hit_the_anchors() -> None:
     assert plasma._STYLES[-1].fg == plasma._ANCHORS[-1]
 
 
-def test_meter_dresses_only_observed_frames() -> None:
-    # Static poses carry no timings -> no cost row; live timings -> gauge.
-    ctx = static_ctx(Zoom.SUMMARY)
-    assert "cost" not in block_to_text(plasma._render(ctx, plasma.Plasma(frame=80)))
-    timed = plasma.Plasma(frame=80, frame_ms=(5.0, 6.0, 7.5))
-    text = block_to_text(plasma._render(ctx, timed))
-    assert "cost" in text and "7.5ms" in text and "33ms budget" in text
-
-
 def test_runs_per_row_is_a_real_compression_measure() -> None:
     # More than one run per row (the field varies) but far fewer than one
     # per cell (smoothness compresses into spans) — the SGR-load story.

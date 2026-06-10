@@ -99,14 +99,3 @@ def test_grid_colors_come_only_from_the_gradient() -> None:
     gradient_fgs = {s.fg for s in fire._STYLES}
     seen = {block.row(y)[x].style.fg for y in range(block.height) for x in range(block.width)}
     assert seen <= gradient_fgs
-
-
-def test_meter_dresses_only_observed_frames() -> None:
-    from dataclasses import replace
-
-    ctx = static_ctx(Zoom.SUMMARY)
-    bare = fire._fetch(7, 50)
-    assert "cost" not in block_to_text(fire._render(ctx, bare))
-    timed = replace(bare, frame_ms=(5.0, 6.0, 7.5))
-    text = block_to_text(fire._render(ctx, timed))
-    assert "cost" in text and "7.5ms" in text and "33ms budget" in text

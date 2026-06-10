@@ -144,6 +144,35 @@ def test_render_without_state_is_blank():
     assert buffer_to_lines(surf._buf) == ["     "]
 
 
+# --- The delivery gauge ---
+
+
+def test_frames_feed_the_gauge(monkeypatch):
+    """One render+flush cycle records one cost sample — the meter lives on
+    the delivery side of the decoupling, where the cost actually is."""
+    from painted.tui import Surface
+
+    monkeypatch.setattr(Surface, "_flush", lambda self: None)  # silence the terminal
+    surf = _make_surface(["hello"])
+    surf._buf = Buffer(40, 2)
+    surf._state = "hello"
+    surf.render()
+    surf._flush()
+    assert len(surf.meter._costs) == 1
+
+
+def test_stateless_frames_are_not_measured(monkeypatch):
+    """A flush whose render carried no state contributes no sample."""
+    from painted.tui import Surface
+
+    monkeypatch.setattr(Surface, "_flush", lambda self: None)
+    surf = _make_surface([])
+    surf._buf = Buffer(40, 2)
+    surf.render()  # _state is still None
+    surf._flush()
+    assert surf.meter._costs == []
+
+
 # --- keys ---
 
 
@@ -179,6 +208,23 @@ def test_deposits_last_frame_on_success(monkeypatch, capsys):
     code = _runner()._run_live_surface(static_ctx(Zoom.SUMMARY))
     assert code == 0
     assert "final" in capsys.readouterr().out  # last frame left in scrollback
+
+
+def test_deposit_carries_the_final_gauge(monkeypatch, capsys):
+    """The scrollback artifact shows what the run cost."""
+
+    async def fake_run(self):
+        # Wide enough that the gauge row (truncated to the frame's width)
+        # still shows its budget suffix.
+        self.last_state = "final".ljust(64, ".")
+        self.meter._costs.append(7.5)
+        self.meter._periods.append(33.0)
+
+    monkeypatch.setattr(StreamSurface, "run", fake_run)
+    code = _runner()._run_live_surface(static_ctx(Zoom.SUMMARY))
+    assert code == 0
+    out = capsys.readouterr().out
+    assert "final" in out and "budget" in out
 
 
 def test_deposits_fetch_error(monkeypatch, capsys):

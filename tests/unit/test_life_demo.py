@@ -100,17 +100,6 @@ def test_render_is_pure_at_every_zoom() -> None:
         assert block_to_text(life._render(ctx, world)) == block_to_text(life._render(ctx, world))
 
 
-def test_meter_dresses_only_observed_frames() -> None:
-    # Static state carries no timings -> no cost row; live timings -> gauge.
-    # Timings are inputs to the render, so this is deterministic.
-    ctx = static_ctx(Zoom.SUMMARY)
-    bare = life._fetch("glider", 8)
-    assert "cost" not in block_to_text(life._render(ctx, bare))
-    timed = replace(bare, frame_ms=(5.0, 6.0, 7.5))
-    text = block_to_text(life._render(ctx, timed))
-    assert "cost" in text and "7.5ms" in text and "67ms budget" in text
-
-
 def test_grid_pairs_rows_into_half_blocks() -> None:
     # One cell in an even row and one directly below it merge into one █.
     world = _world(((10, 10), (10, 11)))

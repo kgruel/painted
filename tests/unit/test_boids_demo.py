@@ -131,12 +131,3 @@ def test_grid_pairs_rows_into_half_blocks() -> None:
     pair = _flock(((10.2, 10.4, 0.5, 0.0), (10.7, 11.6, 0.5, 0.0)))
     text = block_to_text(boids._grid(pair, 80))
     assert text.splitlines()[5][10] == "█"
-
-
-def test_meter_dresses_only_observed_frames() -> None:
-    ctx = static_ctx(Zoom.SUMMARY)
-    bare = boids._fetch(7, 50)
-    assert "cost" not in block_to_text(boids._render(ctx, bare))
-    timed = replace(bare, frame_ms=(5.0, 6.0, 7.5))
-    text = block_to_text(boids._render(ctx, timed))
-    assert "cost" in text and "7.5ms" in text and "33ms budget" in text

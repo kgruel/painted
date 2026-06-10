@@ -34,7 +34,6 @@ import asyncio
 import sys
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, replace
-from time import perf_counter
 
 from painted import (
     Block,
@@ -52,7 +51,6 @@ from painted import (
 )
 from painted.cli import HelpArg
 from painted.palette import current_palette
-from painted.views import cost_meter
 
 
 # --- Randomness as data: a seeded LCG threaded through the state ---
@@ -79,9 +77,6 @@ class Fire:
     rng: int  # LCG state — randomness carried as data
     frame: int
     seed: int
-    # Observed render+write cost per frame, ms — measured by the stream at its
-    # yield boundary, empty for static poses.
-    frame_ms: tuple[float, ...] = ()
 
 
 DEFAULT_SEED = 7
@@ -137,23 +132,17 @@ def _fetch(seed: int = DEFAULT_SEED, frame: int = DEFAULT_FRAME) -> Fire:
 
 _FPS = 30
 _MAX_FRAMES = 900  # ~30s; constant fuel never settles, so the bound is the curtain
-_METER_CAP = 60  # frame-cost samples kept for the meter
 
 
 async def _fetch_stream(seed: int = DEFAULT_SEED) -> AsyncIterator[Fire]:
-    """Burn at the budget; the yield-to-resume gap is the harness's frame cost."""
+    """Burn at the budget; the live harness gauges its own delivery cost."""
     budget = 1.0 / _FPS
     fire = ignite(seed)
-    t0 = perf_counter()
     yield fire
-    cost = perf_counter() - t0
     while fire.frame < _MAX_FRAMES:
-        await asyncio.sleep(max(0.0, budget - cost))
+        await asyncio.sleep(budget)
         fire = step(fire)
-        fire = replace(fire, frame_ms=(*fire.frame_ms, cost * 1000)[-_METER_CAP:])
-        t0 = perf_counter()
         yield fire
-        cost = perf_counter() - t0
 
 
 # --- Two carriers: a glyph ramp (pipes) and a fire gradient (TTYs) ---
@@ -230,16 +219,13 @@ def _flame_height(fire: Fire) -> int:
 
 
 def _window(fire: Fire, width: int, *extra: Block) -> Block:
-    """The dressed viewing frame: field, census, live meter, and any extras.
+    """The dressed viewing frame: field, census, and any extras.
 
     Inner width pins to the grid — every row is sized against it, so the
     border never moves no matter what the data rows do.
     """
     w = min(width - 4, _W)
     rows = [_grid(fire, w), truncate(_census(fire), w)]
-    meter = cost_meter(fire.frame_ms, w, budget_ms=1000 / _FPS)
-    if meter is not None:
-        rows.append(truncate(meter, w))
     rows += [truncate(b, w) for b in extra]
     return border(join_vertical(*rows), title="fire", chars=ROUNDED)
 

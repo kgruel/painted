@@ -277,16 +277,21 @@ class CliRunner(Generic[T]):
                         print_block(last_block, use_ansi=False)
                     return 0
 
+                from .live_meter import LiveMeter
+
+                meter = LiveMeter()
                 with InPlaceRenderer() as renderer:
                     try:
                         async for state in self.fetch_stream():  # type: ignore[misc]
+                            meter.start()
                             try:
                                 block = self.render(ctx, state)
                             except Exception as exc:
                                 renderer.render(self._render_error_block(ctx, exc))
                                 renderer.finalize()
                                 return 2
-                            renderer.render(block)
+                            renderer.render(meter.dress(block))
+                            meter.stop()
                     except (KeyboardInterrupt, asyncio.CancelledError):
                         renderer.finalize()
                         return 0
@@ -354,7 +359,8 @@ class CliRunner(Generic[T]):
             except Exception as exc:
                 print_block(self._render_error_block(ctx, exc), use_ansi=ctx.use_ansi)
                 return 2
-            print_block(block, use_ansi=ctx.use_ansi)
+            # The deposit carries the run's final gauge — what this show cost.
+            print_block(surface.meter.dress(block), use_ansi=ctx.use_ansi)
         return 0
 
     @staticmethod

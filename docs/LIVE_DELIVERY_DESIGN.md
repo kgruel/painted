@@ -143,3 +143,31 @@ NOT required for this change and should not ride along.
   `DonutSurface` handlers are deleted. (This also fixed a latent bug: those
   handlers bound pause to `"space"`, but the keyboard reports the spacebar as
   `" "`, so pause never worked; `StreamSurface` binds `" "`.)
+
+## 8. The delivery gauge (follow-up, ratified)
+
+Moving sustained streams onto `StreamSurface` broke the demos' frame-cost
+meter: it measured the stream's yield→resume gap, which equals render+write
+only while delivery is *synchronous* with consumption. The surface tier
+decouples them (the consumer stores state and marks dirty; the render loop
+repaints), so the gap honestly reads ~0 — the structural win of the tier,
+and the death of that vantage point.
+
+Resolution: **the framework owns the measurement** (`cli/live_meter.py`,
+`LiveMeter`). Both tiers dress every outgoing live frame with a `cost_meter`
+row — the in-place loop times render+write around each frame; `StreamSurface`
+times `render()`→`_flush()`. Consequences of the dissolution:
+
+- **The budget is measured, not declared**: the median inter-frame period.
+  "Did delivery fit inside the frame it was delivering?" self-calibrates to
+  any cadence — 30fps animation (~33ms) or a 2s-cadence status script.
+- **The gauge row is reserved (blank) from frame one**, so the dressed
+  height never shifts when samples arrive (the pinned-window lesson).
+- **Demos/apps carry no measurement code** — no `frame_ms` state, no
+  `perf_counter` choreography. Any `fetch_stream` app gets the gauge free;
+  the final deposit carries the run's last reading.
+- **Second architecture seam**: `live_meter.py → painted.views` (the gauge
+  renderer is views' public `cost_meter`; re-implementing it in cli would
+  undo the component graduation). File-scoped in `_CLI_TUI_SEAMS`, lazy
+  import. Pipes and static output are never dressed — there is no delivery
+  being measured.

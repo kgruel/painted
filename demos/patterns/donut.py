@@ -31,8 +31,7 @@ import asyncio
 import math
 import sys
 from collections.abc import AsyncIterator
-from dataclasses import dataclass, replace
-from time import perf_counter
+from dataclasses import dataclass
 
 from painted import (
     Block,
@@ -50,7 +49,6 @@ from painted import (
 )
 from painted.cli import HelpArg
 from painted.palette import current_palette
-from painted.views import cost_meter
 
 
 # --- Data: the pose is just time ---
@@ -59,10 +57,6 @@ from painted.views import cost_meter
 @dataclass(frozen=True)
 class Spin:
     frame: int
-    # Observed render+write cost per frame, ms — measured by the stream at its
-    # yield boundary, empty for static poses. The scene is still a pure
-    # function of the frame; the gauge is data riding alongside.
-    frame_ms: tuple[float, ...] = ()
 
 
 _A_STEP, _B_STEP = 0.07, 0.03  # radians of rotation per frame, per axis
@@ -81,22 +75,14 @@ def _fetch(frame: int = DEFAULT_FRAME) -> Spin:
 
 _FPS = 30
 _MAX_FRAMES = 900  # ~30s; the torus never settles, so the bound is the curtain
-_METER_CAP = 60  # frame-cost samples kept for the meter
 
 
 async def _fetch_stream(start: int = 0) -> AsyncIterator[Spin]:
-    """Spin at the budget; the yield-to-resume gap is the harness's frame cost."""
+    """Spin at the budget; the live harness gauges its own delivery cost."""
     budget = 1.0 / _FPS
-    spin = Spin(frame=start)
-    cost = 0.0
     for frame in range(start, start + _MAX_FRAMES):
-        spin = replace(
-            spin, frame=frame, frame_ms=(*spin.frame_ms, cost * 1000)[-_METER_CAP:] if frame > start else ()
-        )
-        t0 = perf_counter()
-        yield spin
-        cost = perf_counter() - t0
-        await asyncio.sleep(max(0.0, budget - cost))
+        yield Spin(frame=frame)
+        await asyncio.sleep(budget)
 
 
 # --- The projection: donut.c, faithfully ---
@@ -188,16 +174,13 @@ def _lit(shade: list[list[int]]) -> int:
 
 
 def _window(spin: Spin, width: int, *extra: Block) -> Block:
-    """The dressed viewing frame: torus, census, live meter, and any extras.
+    """The dressed viewing frame: torus, census, and any extras.
 
     Inner width pins to the torus grid — every row is sized against it, so
     the border never moves no matter what the data rows do.
     """
     w = min(width - 4, _W)
     rows = [_torus(spin, w), truncate(_census(spin), w)]
-    meter = cost_meter(spin.frame_ms, w, budget_ms=1000 / _FPS)
-    if meter is not None:
-        rows.append(truncate(meter, w))
     rows += [truncate(b, w) for b in extra]
     return border(join_vertical(*rows), title="donut.c", chars=ROUNDED)
 

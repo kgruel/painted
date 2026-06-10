@@ -28,7 +28,6 @@ import asyncio
 import sys
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, replace
-from time import perf_counter
 
 from painted import (
     Block,
@@ -44,7 +43,7 @@ from painted import (
 )
 from painted.cli import HelpArg
 from painted.palette import current_palette
-from painted.views import cost_meter, sparkline
+from painted.views import sparkline
 
 
 # --- Data: a frozen world ---
@@ -63,10 +62,6 @@ class LifeWorld:
     generation: int
     seed: str
     history: tuple[int, ...]  # population per generation, capped
-    # Observed render+write cost per frame, ms — measured by the stream at its
-    # yield boundary, empty for static snapshots. Timings are *inputs* to the
-    # render, so render stays a pure function and static output stays undressed.
-    frame_ms: tuple[float, ...] = ()
 
 
 # Classic seeds, in their conventional coordinates (centered at world-build).
@@ -135,32 +130,25 @@ def _fetch(seed: str = DEFAULT_SEED, generation: int = DEFAULT_GEN) -> LifeWorld
 
 _FPS = 15
 _MAX_GENS = 450  # ~30s of animation before the demo bows out on its own
-_METER_CAP = 60  # frame-cost samples kept for the meter
 
 
 async def _fetch_stream(seed: str = DEFAULT_SEED) -> AsyncIterator[LifeWorld]:
     """Animate from the seed; stop on death, stasis, or short oscillation.
 
-    The time from each `yield` to its resume is the harness consuming the
-    frame — render plus write — so the stream is the one place frame cost
-    can be observed without touching the runner. Each measurement rides
-    into the *next* world's frame_ms: a trailing gauge.
+    The stream only paces the show — delivery cost is measured and shown
+    by the live harness itself (its LiveMeter row under the frame), since
+    only the delivery mechanism can observe what delivery costs.
     """
     budget = 1.0 / _FPS
     world = seed_world(seed)
-    t0 = perf_counter()
     yield world
-    cost = perf_counter() - t0
     prev: Cells = ()
     prev2: Cells = ()
     while world.generation < _MAX_GENS:
-        await asyncio.sleep(max(0.0, budget - cost))
+        await asyncio.sleep(budget)
         prev, prev2 = world.cells, prev
         world = step(world)
-        world = replace(world, frame_ms=(*world.frame_ms, cost * 1000)[-_METER_CAP:])
-        t0 = perf_counter()
         yield world
-        cost = perf_counter() - t0
         if not world.cells or world.cells == prev or world.cells == prev2:
             break  # extinct, still life, or period-2 — the show is over
 
@@ -205,16 +193,13 @@ def _pop_sparkline(world: LifeWorld, width: int) -> Block:
 
 
 def _window(world: LifeWorld, width: int, *extra: Block) -> Block:
-    """The dressed viewing frame: grid, census, live meter, and any extras.
+    """The dressed viewing frame: grid, census, and any extras.
 
     Inner width pins to the grid — every row is sized against it, so the
     border never moves no matter what the data rows do.
     """
     w = min(width - 4, world.cols)
     rows = [_grid(world, w), truncate(_census(world), w)]
-    meter = cost_meter(world.frame_ms, w, budget_ms=1000 / _FPS)
-    if meter is not None:
-        rows.append(truncate(meter, w))
     rows += [truncate(b, w) for b in extra]
     return border(join_vertical(*rows), title="Conway's Life", chars=ROUNDED)
 

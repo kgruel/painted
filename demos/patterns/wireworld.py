@@ -35,7 +35,6 @@ import asyncio
 import sys
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, replace
-from time import perf_counter
 
 from painted import (
     Block,
@@ -53,7 +52,7 @@ from painted import (
 )
 from painted.cli import HelpArg
 from painted.palette import current_palette
-from painted.views import cost_meter, sparkline
+from painted.views import sparkline
 
 
 # --- Data: copper and charge, frozen ---
@@ -71,9 +70,6 @@ class Circuit:
     generation: int
     name: str
     history: tuple[int, ...]  # electron heads per generation, capped
-    # Observed render+write cost per frame, ms — measured by the stream at its
-    # yield boundary, empty for static snapshots.
-    frame_ms: tuple[float, ...] = ()
 
 
 # --- The circuit library: ASCII art is the machine's source code ---
@@ -191,23 +187,17 @@ def _fetch(circuit: str = DEFAULT_CIRCUIT, generation: int = DEFAULT_GEN) -> Cir
 
 _FPS = 15
 _MAX_GENS = 450  # ~30s of computation before the demo bows out
-_METER_CAP = 60  # frame-cost samples kept for the meter
 
 
 async def _fetch_stream(circuit: str = DEFAULT_CIRCUIT) -> AsyncIterator[Circuit]:
-    """Tick at the budget; the yield-to-resume gap is the harness's frame cost."""
+    """Tick at the budget; the live harness gauges its own delivery cost."""
     budget = 1.0 / _FPS
     state = parse(CIRCUITS[circuit], circuit)
-    t0 = perf_counter()
     yield state
-    cost = perf_counter() - t0
     while state.generation < _MAX_GENS:
-        await asyncio.sleep(max(0.0, budget - cost))
+        await asyncio.sleep(budget)
         state = step(state)
-        state = replace(state, frame_ms=(*state.frame_ms, cost * 1000)[-_METER_CAP:])
-        t0 = perf_counter()
         yield state
-        cost = perf_counter() - t0
 
 
 # --- Render helpers ---
@@ -280,16 +270,13 @@ def _electron_sparkline(circuit: Circuit, width: int) -> Block:
 
 
 def _window(circuit: Circuit, width: int, *extra: Block) -> Block:
-    """The dressed viewing frame: copper, census, live meter, and any extras.
+    """The dressed viewing frame: copper, census, and any extras.
 
     Inner width pins to the circuit's own bounds — every row is sized
     against it, so the border never moves no matter what the data rows do.
     """
     w = min(width - 4, _bounds(circuit)[0])
     rows = [_grid(circuit, w), truncate(_census(circuit), w)]
-    meter = cost_meter(circuit.frame_ms, w, budget_ms=1000 / _FPS)
-    if meter is not None:
-        rows.append(truncate(meter, w))
     rows += [truncate(b, w) for b in extra]
     return border(join_vertical(*rows), title="wireworld", chars=ROUNDED)
 

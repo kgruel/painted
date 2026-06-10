@@ -333,20 +333,28 @@ def test_views_do_not_import_cli_or_tui() -> None:
     assert not violations, "views/ imports framework layers:\n" + "\n".join(violations)
 
 
-# The live-surface seam: the two-tier live-delivery contract
+# The live-delivery seams: the two-tier live-delivery contract
 # (docs/LIVE_DELIVERY_DESIGN.md) makes the CLI framework the orchestrator of
 # BOTH live tiers — ephemeral (InPlaceRenderer, in root) and sustained
 # (Surface, in tui). StreamSurface is the cli-private adapter that hosts a
-# fetch_stream on an alt screen, so it must subclass tui's Surface. This is
-# the ONE sanctioned cli → tui crossing; every other cli file stays tui-free
-# (the import is lazy, so `import painted` never pays for tui).
-_CLI_TUI_SEAMS = frozenset({("painted/cli/stream_surface.py", "painted.tui.surface")})
+# fetch_stream on an alt screen, so it must subclass tui's Surface; and both
+# tiers dress their frames with the delivery-cost gauge, whose renderer is
+# views' public cost_meter — re-implementing it in cli would undo the
+# component graduation. These are the ONLY sanctioned crossings; every other
+# cli file stays tui- and views-free (both imports are lazy where it matters,
+# so `import painted` never pays for either).
+_CLI_TUI_SEAMS = frozenset(
+    {
+        ("painted/cli/stream_surface.py", "painted.tui.surface"),
+        ("painted/cli/live_meter.py", "painted.views"),
+    }
+)
 
 
 def test_cli_does_not_import_tui() -> None:
     """cli/ may import core/ and root, but not tui/ or views/.
 
-    Exception: the documented live-surface seam (see _CLI_TUI_SEAMS).
+    Exception: the documented live-delivery seams (see _CLI_TUI_SEAMS).
     """
     painted_root = Path(__file__).resolve().parents[2] / "src" / "painted"
     src_root = painted_root.parent
