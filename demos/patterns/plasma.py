@@ -1,0 +1,318 @@
+#!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.11"
+# dependencies = ["painted"]
+# ///
+"""Plasma — a colored field, where every cell's color is data.
+
+Life animated glyphs and donut tiered an ASCII ramp through font weight;
+plasma's new concept is *per-cell color*: the scene is a smooth scalar
+field f(x, y, t) — four interfering sine waves — and each cell's value
+picks both a glyph from an intensity ramp and a `Style(fg="#rrggbb")`
+from a precomputed gradient. The demo speaks raw truecolor hex; the
+*writer* owns fidelity, downsampling per terminal to 256 colors, to 16,
+or stripping color entirely — so a pipe still receives the field carried
+honestly by the glyph ramp alone.
+
+Color this dense has a cost: consecutive same-colored cells share one
+styled span (one SGR sequence on a TTY), so the field's smoothness sets
+the style-run load. `-vv` surfaces runs/row — the SGR economics of a
+frame, measured in the frame.
+
+    uv run demos/patterns/plasma.py                  # one pose of the field
+    uv run demos/patterns/plasma.py --live           # let it swirl
+    uv run demos/patterns/plasma.py --frame 200 -v   # later pose + shade legend
+    uv run demos/patterns/plasma.py -vv              # bordered, runs/row stats
+    uv run demos/patterns/plasma.py -q               # one-line census
+    uv run demos/patterns/plasma.py --json           # the pose as data
+"""
+
+from __future__ import annotations
+
+import argparse
+import asyncio
+import math
+import sys
+from collections.abc import AsyncIterator
+from dataclasses import dataclass, replace
+from time import perf_counter
+
+from painted import (
+    Block,
+    CliContext,
+    Line,
+    OutputMode,
+    Span,
+    Style,
+    Zoom,
+    border,
+    join_horizontal,
+    run_cli,
+    truncate,
+    join_vertical,
+    ROUNDED,
+)
+from painted.cli import HelpArg
+from painted.palette import current_palette
+from painted.views import cost_meter
+
+
+# --- Data: the pose is just time ---
+
+
+@dataclass(frozen=True)
+class Plasma:
+    frame: int
+    # Observed render+write cost per frame, ms — measured by the stream at its
+    # yield boundary, empty for static poses. The field is still a pure
+    # function of the frame; the gauge is data riding alongside.
+    frame_ms: tuple[float, ...] = ()
+
+
+_T_STEP = 0.06  # field time advanced per frame, radians-ish
+
+DEFAULT_FRAME = 80
+
+
+def _fetch(frame: int = DEFAULT_FRAME) -> Plasma:
+    return Plasma(frame=frame)
+
+
+_FPS = 30
+_MAX_FRAMES = 900  # ~30s; the field never settles, so the bound is the curtain
+_METER_CAP = 60  # frame-cost samples kept for the meter
+
+
+async def _fetch_stream(start: int = 0) -> AsyncIterator[Plasma]:
+    """Swirl at the budget; the yield-to-resume gap is the harness's frame cost."""
+    budget = 1.0 / _FPS
+    pose = Plasma(frame=start)
+    cost = 0.0
+    for frame in range(start, start + _MAX_FRAMES):
+        pose = replace(
+            pose, frame=frame, frame_ms=(*pose.frame_ms, cost * 1000)[-_METER_CAP:] if frame > start else ()
+        )
+        t0 = perf_counter()
+        yield pose
+        cost = perf_counter() - t0
+        await asyncio.sleep(max(0.0, budget - cost))
+
+
+# --- The field: four interfering waves, pure f(x, y, t) ---
+
+_W, _H = 64, 22
+
+
+def _field(x: float, y: float, t: float) -> float:
+    """The plasma value at one cell, normalized to [0, 1]."""
+    yy = y * 2.0  # character cells are ~2:1 — un-squash before measuring distance
+    v = math.sin(x / 9.0 + t)
+    v += math.sin((yy + t) / 5.0)
+    v += math.sin((x + yy + t) / 11.0)
+    # A radial wave from a center that itself orbits — this is what swirls.
+    cx = _W / 2 + (_W / 3) * math.sin(t / 3.0)
+    cy = _H + _H * math.cos(t / 2.0)  # yy-domain is 0..2*_H
+    v += math.sin(math.hypot(x - cx, yy - cy) / 7.0 + t)
+    return (v + 4.0) / 8.0
+
+
+def _sample(pose: Plasma) -> list[list[float]]:
+    """The whole field for one pose: _H rows of _W values in [0, 1]."""
+    t = pose.frame * _T_STEP
+    return [[_field(x, y, t) for x in range(_W)] for y in range(_H)]
+
+
+# --- Two carriers: a glyph ramp (pipes) and a color ramp (TTYs) ---
+
+_RAMP = " .:-=+*#%@"
+
+# Gradient anchors, low to high intensity. The values are tunable; lerping
+# them into _SHADES discrete styles is the point — color computed as data.
+_ANCHORS = ("#1c2f9e", "#7a2fbe", "#e84a8a", "#ff8c42", "#ffe66e")
+_SHADES = 24
+
+
+def _lerp_styles(anchors: tuple[str, ...], n: int) -> tuple[Style, ...]:
+    rgbs = [tuple(int(a[i : i + 2], 16) for i in (1, 3, 5)) for a in anchors]
+    styles = []
+    for i in range(n):
+        pos = i / (n - 1) * (len(rgbs) - 1)
+        j = min(int(pos), len(rgbs) - 2)
+        t = pos - j
+        r, g, b = (round(rgbs[j][k] + (rgbs[j + 1][k] - rgbs[j][k]) * t) for k in range(3))
+        styles.append(Style(fg=f"#{r:02x}{g:02x}{b:02x}"))
+    return tuple(styles)
+
+
+_STYLES = _lerp_styles(_ANCHORS, _SHADES)
+
+
+def _glyph_idx(v: float) -> int:
+    return min(len(_RAMP) - 1, int(v * len(_RAMP)))
+
+
+def _shade_idx(v: float) -> int:
+    return min(_SHADES - 1, int(v * _SHADES))
+
+
+# --- Render helpers ---
+
+
+def _grid(pose: Plasma, width: int) -> Block:
+    """The field as styled rows: cells sharing a shade share one span."""
+    rows: list[Block] = []
+    for value_row in _sample(pose):
+        spans: list[Span] = []
+        run: list[str] = []
+        run_shade = _shade_idx(value_row[0])
+        for v in (*value_row, None):  # sentinel flushes the last run
+            shade = run_shade if v is None else _shade_idx(v)
+            if v is not None and shade == run_shade:
+                run.append(_RAMP[_glyph_idx(v)])
+                continue
+            spans.append(Span("".join(run), _STYLES[run_shade]))
+            if v is not None:
+                run, run_shade = [_RAMP[_glyph_idx(v)]], shade
+        rows.append(Line(spans=tuple(spans)).to_block(min(_W, width)))
+    return join_vertical(*rows)
+
+
+def _census(pose: Plasma) -> Block:
+    p = current_palette()
+    return join_horizontal(
+        Block.text("plasma", p.accent.merge(Style(bold=True))),
+        Block.text(f"  frame {pose.frame:>3}  t {pose.frame * _T_STEP:6.2f}", Style(dim=True)),
+    )
+
+
+def _legend() -> Block:
+    # Both carriers, side by side: the gradient the TTY sees, the ramp a pipe gets.
+    spans = [Span("shade ", Style(dim=True))]
+    spans += [Span("█", s) for s in _STYLES]
+    spans += [Span("  " + _RAMP.strip(), Style(dim=True))]
+    return Line(spans=tuple(spans)).to_block(6 + _SHADES + 2 + len(_RAMP.strip()))
+
+
+def _runs_per_row(pose: Plasma) -> float:
+    """Average styled spans per row — the SGR load a TTY pays for this pose."""
+    shade_rows = [[_shade_idx(v) for v in row] for row in _sample(pose)]
+    runs = sum(1 + sum(1 for a, b in zip(row, row[1:]) if a != b) for row in shade_rows)
+    return runs / _H
+
+
+def _window(pose: Plasma, width: int, *extra: Block) -> Block:
+    """The dressed viewing frame: field, census, live meter, and any extras.
+
+    Inner width pins to the field grid — every row is sized against it, so
+    the border never moves no matter what the data rows do.
+    """
+    w = min(width - 4, _W)
+    rows = [_grid(pose, w), truncate(_census(pose), w)]
+    meter = cost_meter(pose.frame_ms, w, budget_ms=1000 / _FPS)
+    if meter is not None:
+        rows.append(truncate(meter, w))
+    rows += [truncate(b, w) for b in extra]
+    return border(join_vertical(*rows), title="plasma", chars=ROUNDED)
+
+
+# --- Zoom renderers ---
+
+
+def _render_minimal(pose: Plasma, width: int) -> Block:
+    return truncate(_census(pose), width)
+
+
+def _render_summary(pose: Plasma, width: int) -> Block:
+    return _window(pose, width)
+
+
+def _render_detailed(pose: Plasma, width: int) -> Block:
+    return _window(pose, width, _legend())
+
+
+def _render_full(pose: Plasma, width: int) -> Block:
+    field = _sample(pose)
+    mean = sum(sum(row) for row in field) / (_W * _H)
+    shades = len({_shade_idx(v) for row in field for v in row})
+    stats = Block.text(
+        f"frame {pose.frame}  ·  mean {mean:.2f}  ·  shades {shades}/{_SHADES}  ·  "
+        f"runs/row {_runs_per_row(pose):.1f}",
+        Style(dim=True),
+    )
+    return _window(pose, width, _legend(), stats)
+
+
+def _render(ctx: CliContext, pose: Plasma) -> Block:
+    if ctx.zoom == Zoom.MINIMAL:
+        return _render_minimal(pose, ctx.width)
+    if ctx.zoom == Zoom.DETAILED:
+        return _render_detailed(pose, ctx.width)
+    if ctx.zoom == Zoom.FULL:
+        return _render_full(pose, ctx.width)
+    return _render_summary(pose, ctx.width)
+
+
+# --- Interactive: the same _render, delivered by Surface ---
+
+
+def _run_interactive(ctx: CliContext) -> int:
+    """-i: a live frame around the same _render, on the alt screen.
+
+    Keys: space pauses, q quits.
+    """
+    from painted.tui import Surface
+
+    class PlasmaSurface(Surface):
+        def __init__(self) -> None:
+            super().__init__(fps_cap=_FPS)
+            self.pose = Plasma(frame=0)
+            self.paused = False
+
+        def update(self) -> None:
+            if self.paused:
+                return
+            self.pose = Plasma(frame=self.pose.frame + 1)
+            self.mark_dirty()
+
+        def render(self) -> None:
+            self._buf.fill(0, 0, self._buf.width, self._buf.height, " ", Style())
+            _render(ctx, self.pose).paint(self._buf, 0, 0)
+
+        def on_key(self, key: str) -> None:
+            if key == "q":
+                self.quit()
+            elif key == "space":
+                self.paused = not self.paused
+
+    asyncio.run(PlasmaSurface().run())
+    return 0
+
+
+# --- Entry point ---
+
+
+def main() -> int:
+    pre = argparse.ArgumentParser(add_help=False)
+    pre.add_argument("--frame", type=int, default=DEFAULT_FRAME)
+    ns, rest = pre.parse_known_args(sys.argv[1:])
+
+    return run_cli(
+        rest,
+        render=_render,
+        fetch=lambda: _fetch(ns.frame),
+        fetch_stream=lambda: _fetch_stream(),
+        handlers={OutputMode.INTERACTIVE: _run_interactive},
+        description=__doc__,
+        prog="plasma.py",
+        help_args=[
+            HelpArg(
+                "--frame",
+                "pose shown by static output (live swirls from 0)",
+                default=str(DEFAULT_FRAME),
+            ),
+        ],
+    )
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -79,6 +79,7 @@ patterns/
   help.py           Zoom-aware help: HelpData rendered at each zoom level ✓
   life.py           Conway's Life: pure step + fetch_stream animation     ✓
   donut.py          donut.c: scene as pure function of a frame counter    ✓
+  plasma.py         Plasma field: per-cell color as data, truecolor ramp  ✓
 
 apps/
   (behavior graduated to tests/unit/test_*_app.py — TestSurface drives keys,

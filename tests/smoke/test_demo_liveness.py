@@ -72,6 +72,7 @@ PATTERNS = [
     "live",
     "monitor",
     "palette_icons",
+    "plasma",
     "profiler",
     "responsive",
     "testing",
