@@ -62,6 +62,7 @@ def test_primitive_demo_renders(name: str) -> None:
 # --- Patterns: _fetch() then _render(ctx, data) at every zoom ---
 
 PATTERNS = [
+    "boids",
     "donut",
     "fidelity",
     "fire",

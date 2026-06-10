@@ -81,6 +81,7 @@ patterns/
   donut.py          donut.c: scene as pure function of a frame counter    ✓
   plasma.py         Plasma field: per-cell color as data, truecolor ramp  ✓
   fire.py           Doom fire: seeded LCG — randomness as frozen data     ✓
+  boids.py          Boids: continuous agents projected onto cells         ✓
 
 apps/
   (behavior graduated to tests/unit/test_*_app.py — TestSurface drives keys,
