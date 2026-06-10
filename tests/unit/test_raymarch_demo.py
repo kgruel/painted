@@ -117,24 +117,39 @@ def test_trace_shades_within_the_ramp() -> None:
     assert max(indices) >= 0, "no lit cells at all"
 
 
-# --- Quality contract: live ramp, half-block portrait, pipe honesty ---
+# --- Quality contract: lit color on terminals, ramp on pipes, AA settle ---
 
 
-def test_live_grid_glyphs_come_only_from_the_ramp() -> None:
+def test_ramp_grid_glyphs_come_only_from_the_ramp() -> None:
     text = block_to_text(rm._grid_live(rm.Shot(frame=110), 80))
     assert set(text) <= set(rm._RAMP) | {" ", "\n"}
 
 
-def test_portrait_is_half_blocks_on_a_capable_terminal() -> None:
+def test_color_terminals_get_half_blocks_at_both_qualities() -> None:
     ctx = dataclasses.replace(static_ctx(Zoom.SUMMARY), use_ansi=True)
-    text = block_to_text(rm._grid(ctx, rm.Shot(frame=110, quality=1), 80))
-    assert set(text) <= {"▀", " ", "\n"}
+    for quality in (0, 1):
+        text = block_to_text(rm._grid(ctx, rm.Shot(frame=110, quality=quality), 80))
+        assert set(text) <= {"▀", " ", "\n"}, f"quality {quality}"
 
 
-def test_portrait_falls_back_to_the_ramp_for_pipes() -> None:
+def test_pipes_get_the_ramp_at_both_qualities() -> None:
     ctx = static_ctx(Zoom.SUMMARY)  # use_ansi=False
-    text = block_to_text(rm._grid(ctx, rm.Shot(frame=110, quality=1), 80))
-    assert set(text) <= set(rm._RAMP) | {" ", "\n"}
+    for quality in (0, 1):
+        text = block_to_text(rm._grid(ctx, rm.Shot(frame=110, quality=quality), 80))
+        assert set(text) <= set(rm._RAMP) | {" ", "\n"}, f"quality {quality}"
+
+
+def test_the_settle_buys_a_4x_supersample() -> None:
+    _rows0, _h0, _s0, rays0 = rm._trace_portrait(rm.Shot(frame=110, quality=0))
+    rows1, _h1, _s1, rays1 = rm._trace_portrait(rm.Shot(frame=110, quality=1))
+    assert rays1 == 4 * rays0
+    assert len(rows1) == 2 * rm._H and len(rows1[0]) == rm._W  # same output grid
+
+
+def test_anti_aliasing_actually_changes_the_pixels() -> None:
+    rows0, *_rest0 = rm._trace_portrait(rm.Shot(frame=110, quality=0))
+    rows1, *_rest1 = rm._trace_portrait(rm.Shot(frame=110, quality=1))
+    assert rows0 != rows1
 
 
 def test_static_pose_is_always_the_portrait() -> None:

@@ -14,13 +14,15 @@ own ethos mirrored in the content. A sphere threads the torus like a chain
 link, smooth-blending where they pass; an orbiting camera changes every ray
 every frame, so this is also the lane's true whole-frame-churn pole.
 
-Fidelity is a budget decision, demonstrated: live frames render at cell
-resolution through the classic luminance ramp (motion is the point); the
-stream's final yield bumps `quality`, and the settled frame — and any
-static pose — is the portrait: half-block cells, two lit samples per cell,
-soft shadows, truecolor materials. Same scene, same pure render; only the
-state asked for more. A pipe receives the portrait carried honestly by the
-glyph ramp alone.
+Fidelity is a budget decision, demonstrated: live frames render the full
+lit scene — half-block cells, two color samples each, soft shadows — at
+30fps, every frame near the writer's style-run worst case (hundreds of
+distinct truecolor pairs, measured by the delivery gauge). The stream's
+final yield bumps `quality`, and the settled frame — like any static pose
+— buys the one thing a live budget can't: a 2x2 supersampled, anti-aliased
+portrait. Same scene, same pure render; only the state asked for more. A
+pipe receives the pose carried honestly by the classic luminance ramp
+(.,-~:;=!*#$@) alone.
 
     uv run demos/patterns/raymarch.py                # one portrait pose
     uv run demos/patterns/raymarch.py --live         # orbit, then settle
@@ -64,7 +66,7 @@ from painted.palette import current_palette
 @dataclass(frozen=True)
 class Shot:
     frame: int
-    quality: int = 0  # 0 = cell-res luminance (motion), 1 = the portrait
+    quality: int = 0  # 0 = live (one ray per half-pixel), 1 = settled anti-aliased portrait
 
 
 DEFAULT_FRAME = 110
@@ -359,33 +361,61 @@ def _sky(v: float) -> tuple[int, int, int]:
     )  # type: ignore[return-value]
 
 
+def _ss(shot: Shot) -> int:
+    """Samples per axis per half-pixel: the settle buys anti-aliasing."""
+    return 2 if shot.quality >= 1 else 1
+
+
 @lru_cache(maxsize=2)
-def _trace_portrait(shot: Shot) -> list[list[tuple[int, int, int]]]:
-    """Two lit samples per cell: 2*_H rows of rgb, soft-shadowed and skied."""
+def _trace_portrait(shot: Shot) -> tuple[list[list[tuple[int, int, int]]], int, int, int]:
+    """Lit color, two half-pixels per cell: (2*_H rgb rows, hits, steps, rays).
+
+    Soft-shadowed and skied; at quality 1 each half-pixel is a box-averaged
+    2x2 supersample — the anti-aliased portrait a live budget can't afford
+    but a single settled frame can.
+    """
     sdf = _compile(_scene(shot.frame))
     (ex, ey, ez), right, up, fwd = _camera(shot.frame)
-    rows: list[list[tuple[int, int, int]]] = []
-    for py in range(2 * _H):
-        v = (1.0 - 2.0 * (py + 0.5) / (2 * _H)) * _FOV_Y
+    ss = _ss(shot)
+    hi_w, hi_h = _W * ss, 2 * _H * ss
+    hits = steps_spent = 0
+    hi: list[list[tuple[int, int, int]]] = []
+    for py in range(hi_h):
+        v = (1.0 - 2.0 * (py + 0.5) / hi_h) * _FOV_Y
         row: list[tuple[int, int, int]] = []
-        for px in range(_W):
-            u = 2.0 * (px + 0.5) / _W - 1.0
+        for px in range(hi_w):
+            u = 2.0 * (px + 0.5) / hi_w - 1.0
             dx = fwd[0] * _FOCAL + u * right[0] + v * up[0]
             dy = fwd[1] * _FOCAL + u * right[1] + v * up[1]
             dz = fwd[2] * _FOCAL + u * right[2] + v * up[2]
             dl = math.sqrt(dx * dx + dy * dy + dz * dz)
-            t, _steps = _march(sdf, ex, ey, ez, dx / dl, dy / dl, dz / dl)
+            t, steps = _march(sdf, ex, ey, ez, dx / dl, dy / dl, dz / dl)
+            steps_spent += steps
             if t < 0:
                 row.append(_sky(v))
                 continue
+            hits += 1
             hx, hy, hz = ex + t * dx / dl, ey + t * dy / dl, ez + t * dz / dl
             nx, ny, nz = _normal(sdf, hx, hy, hz)
             diff = max(0.0, nx * _LIGHT[0] + ny * _LIGHT[1] + nz * _LIGHT[2])
             shadow = _soft_shadow(sdf, hx + nx * _EPS * 4, hy + ny * _EPS * 4, hz + nz * _EPS * 4)
             lum = 0.14 + 0.86 * diff * shadow
             row.append(_shade_rgb(lum, _material(shot.frame, hx, hy, hz)))
-        rows.append(row)
-    return rows
+        hi.append(row)
+    if ss == 1:
+        return hi, hits, steps_spent, hi_w * hi_h
+    rows = [
+        [
+            tuple(
+                sum(hi[py * ss + j][px * ss + i][c] for j in range(ss) for i in range(ss))
+                // (ss * ss)
+                for c in range(3)
+            )
+            for px in range(_W)
+        ]
+        for py in range(2 * _H)
+    ]
+    return rows, hits, steps_spent, hi_w * hi_h  # type: ignore[return-value]
 
 
 # --- Render helpers ---
@@ -424,7 +454,7 @@ def _grid_live(shot: Shot, width: int) -> Block:
 
 def _grid_portrait(shot: Shot, width: int) -> Block:
     """Half-block truecolor: every cell two lit pixels, fg over bg."""
-    rgb = _trace_portrait(shot)
+    rgb, _hits, _steps, _rays = _trace_portrait(shot)
     rows: list[Block] = []
     for py in range(_H):
         top, bot = rgb[2 * py], rgb[2 * py + 1]
@@ -437,8 +467,9 @@ def _grid_portrait(shot: Shot, width: int) -> Block:
 
 
 def _grid(ctx: CliContext, shot: Shot, width: int) -> Block:
-    """Quality asks, capability answers: a pipe gets the ramp either way."""
-    if shot.quality >= 1 and ctx.use_ansi:
+    """Capability picks the carrier: color terminals get the lit portrait
+    (anti-aliased when the shot settles), pipes get the luminance ramp."""
+    if ctx.use_ansi:
         return _grid_portrait(shot, width)
     return _grid_live(shot, width)
 
@@ -486,8 +517,13 @@ def _render_minimal(shot: Shot, width: int) -> Block:
 
 
 def _render_full(ctx: CliContext, shot: Shot, width: int) -> Block:
-    _grid_vals, hits, steps = _trace(shot)
-    rays = _W * _H
+    # Stats describe the grid actually displayed: portrait rays on a color
+    # terminal (4x when the settle supersamples), ramp rays on a pipe.
+    if ctx.use_ansi:
+        _rows, hits, steps, rays = _trace_portrait(shot)
+    else:
+        _grid_vals, hits, steps = _trace(shot)
+        rays = _W * _H
     stats = Block.text(
         f"frame {shot.frame}  ·  rays {rays}  ·  hit {hits / rays:.0%}  ·  "
         f"steps/ray {steps / rays:.1f}  ·  scene {_count_nodes(_scene(shot.frame))} nodes",
