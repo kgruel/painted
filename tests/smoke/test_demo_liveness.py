@@ -64,6 +64,7 @@ def test_primitive_demo_renders(name: str) -> None:
 PATTERNS = [
     "donut",
     "fidelity",
+    "fire",
     "focus",
     "help",
     "hit_testing",

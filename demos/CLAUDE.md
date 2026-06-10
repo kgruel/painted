@@ -80,6 +80,7 @@ patterns/
   life.py           Conway's Life: pure step + fetch_stream animation     ✓
   donut.py          donut.c: scene as pure function of a frame counter    ✓
   plasma.py         Plasma field: per-cell color as data, truecolor ramp  ✓
+  fire.py           Doom fire: seeded LCG — randomness as frozen data     ✓
 
 apps/
   (behavior graduated to tests/unit/test_*_app.py — TestSurface drives keys,
