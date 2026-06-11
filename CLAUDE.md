@@ -49,7 +49,7 @@ Below painted in the monorepo: `libs/atoms/` defines Facts and Specs; `libs/engi
 
 2. **The CLI Framework** — argument parsing, context detection, mode dispatch, lifecycle management. Sits on top of the renderer. Connects user intent (`-v`, `--json`, pipe detection) to rendering.
 
-They live in one package because CLI and TUI are fidelity levels of the same lens — not different apps. But the boundary is real: `core/fidelity.py` has zero module-level imports from painted's rendering modules. All imports are lazy, inside functions.
+They live in one package because CLI and TUI are fidelity levels of the same lens — not different apps. But the boundary is real: the framework reaches the renderer only through lazy imports inside functions; `core/fidelity.py` holds just the `Fidelity` spec (shared rendering vocabulary), while the grammar that compiles into it lives in `cli/`.
 
 **The Renderer** (bottom to top):
 
@@ -63,7 +63,10 @@ writer / InPlaceRenderer    # delivery: dump to stdout or cursor-controlled rewr
 **The CLI Framework** (on top of the renderer):
 
 ```
-core/fidelity.py            # run_cli — zoom/mode/format parsing, context detection, dispatch
+core/fidelity.py            # Fidelity — the compiled disclosure spec
+cli/types.py                # Tag, depth aliases, CliContext — the grammar + context detection
+cli/runner.py               # CliRunner / run_cli — compile flags, dispatch by mode
+cli/help.py                 # help as a doc-IR document
 cli/app_runner.py           # run_app — multi-command routing through run_cli
 ```
 
@@ -89,7 +92,10 @@ Surface + Layer             # alt-screen TUI with keyboard + diff rendering
 | Renderer | `views/lens/` | shape_lens, tree_lens, chart_lens, flame_lens |
 | Renderer | `views/components/` | Stateful view components (spinner, progress, list, table, etc.) |
 | Renderer | `views/` | Public view-layer namespace (re-exports lenses + components) |
-| Framework | `core/fidelity.py` | Zoom, OutputMode, Format, CliContext, run_cli |
+| Framework | `core/fidelity.py` | Fidelity (the compiled disclosure spec) |
+| Framework | `cli/types.py` | Tag, depth_aliases, OutputMode, Format, CliContext, add_cli_args, parse_fidelity |
+| Framework | `cli/runner.py` | CliRunner, run_cli |
+| Framework | `cli/help.py` | HelpArg, help_doc (help as a doc-IR Doc) |
 | Framework | `cli/app_runner.py` | AppCommand, run_app (multi-command dispatch) |
 | TUI | `tui/` | Surface, Layer, Focus, Search, Buffer, KeyboardInput |
 
@@ -101,12 +107,13 @@ Surface + Layer             # alt-screen TUI with keyboard + diff rendering
 
 **Trigger**: I need to modify rendering behavior, the CLI harness, or a component.
 
-**`run_cli` flow** (`core/fidelity.py`):
+**`run_cli` flow** (`cli/runner.py`):
 1. Create `CliRunner(render, fetch, ...)` internally
 2. Intercept `-h`/`--help` → painted help with zoom awareness
-3. Parse framework args (`-q`, `-v`, `-vv`, `--json`, `--plain`, `--static`, `--live`, `-i`)
-4. `detect_context()` resolves Zoom/Mode/Format from args and TTY state
-5. Dispatch by mode: STATIC (`print_block`) → LIVE (`InPlaceRenderer`) → INTERACTIVE (custom handler)
+3. Parse framework args (`-q`, `-v`, `-vv`, `--json`, `--plain`, `--static`, `--live`, `-i`) plus declared flags (each `Tag` → `--{name}`, each depth alias, `budgets=True` → `--max-chars`/`--max-lines`); declaration collisions raise at parser construction
+4. Compile flags into `Fidelity` (`parse_fidelity` resolves tag implications at compile time); `build_fidelity` runs last as the residue escape hatch
+5. `detect_context()` resolves Mode/Format from args and TTY state
+6. Dispatch by mode: STATIC (`print_block`) → LIVE (`InPlaceRenderer` or `StreamSurface`) → INTERACTIVE (custom handler)
 
 **`record_line` pattern** (`views/record.py`):
 - `record_line()` owns structure, `PayloadLens` interprets domain content

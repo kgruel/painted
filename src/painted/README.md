@@ -79,8 +79,19 @@ run_cli(sys.argv[1:], render=render, fetch=fetch)
 
 You provide `render(ctx, data) → Block` and `fetch() → data`. The framework handles zoom/format/mode automatically.
 
-Three orthogonal dimensions:
-- **Fidelity** (`-q`/`-v`/`-vv`): `ctx.fidelity` is the canonical field — `depth` (0–3), plus optional `visible` tag set and `chars`/`lines` density budgets. `ctx.zoom` returns `Zoom(fidelity.depth)` for backward compat.
+**The disclosure ladder** (`docs/FIDELITY_DESIGN.md`) — each rung additive; climbing never rewrites the rung below:
+
+| Rung | You need | You write |
+|------|----------|-----------|
+| 0 | decent defaults | `show(data)` — no ctx at all |
+| 1 | detail levels | `if ctx.zoom >= Zoom.DETAILED:` — `-q`/`-v`/`-vv` come free |
+| 2 | a named facet | declare `tags=[Tag("thinking", "Show reasoning", implied_at=3)]`; gate with `ctx.fidelity.shows("thinking")` — the `--thinking` flag, its help entry, and the depth implication are generated |
+| 3 | density control | pass `budgets=True`; read `fidelity.chars`/`fidelity.lines` — only now do `--max-chars`/`--max-lines` exist |
+| 4 | structural disclosure | build a `Doc`; `doc_lens` applies the whole spec |
+
+Depth is anonymous detail (the user's word is "verbose"); a tag is a named facet a user would ask for at low depth (`--thinking` at `-q`). `ctx.zoom` is the rung-1 view of `ctx.fidelity` — not a compat shim, blessed permanently. `depth_aliases={"brief": 0, "full": 3}` adds app-local depth spellings. The honesty rule: a flag exists only because a capability was declared, and a declared capability must change output.
+
+The other two axes:
 - **Format** (`--json`/`--plain`): ANSI (TTY default), PLAIN (pipe default), JSON
 - **Mode** (`-i`/`--static`/`--live`): AUTO detects from TTY
 

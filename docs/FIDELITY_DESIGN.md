@@ -1,8 +1,13 @@
 # Fidelity — the disclosure grammar and the consumption ladder
 
-**Status: RATIFIED 2026-06-10, unbuilt** (branch `fidelity-grammar`). The §7
-questions are settled — (a) accepted into §4, the rest deferred or declined
-as recommended. This document is the design of record. Companion to
+**Status: RATIFIED + IMPLEMENTED 2026-06-10** (branch `fidelity-grammar`).
+The §7 questions are settled — (a) accepted into §4, the rest deferred or
+declined as recommended. The grammar, both behavior breaks (budgets opt-in,
+`Depth` removal), the docs-CLI migration, and the teaching reform are built;
+`tests/unit/test_tag_grammar.py` pins the compilation laws and the §6
+acceptance tables. Known residue beyond §6's list: siftd's `-b`/`-F` *short*
+spellings — `depth_aliases` generates long flags only (open call). This
+document is the design of record. Companion to
 `docs/LIVE_DELIVERY_DESIGN.md` — that document gave the *delivery* axis its
 contract; this one does the same for *disclosure*.
 
