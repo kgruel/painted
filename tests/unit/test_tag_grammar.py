@@ -361,7 +361,9 @@ def _siftd_residue(parsed, fid):
 # (argv) → (depth, visible, chars). Long-form flags only: siftd's -b/-F short
 # spellings are not expressible by depth_aliases (residue, noted in §6 review);
 # --full --brief together is stricter here (argparse exclusive group) where
-# siftd silently let --full win.
+# siftd silently let --full win. siftd's --tools takes an optional FILTER
+# value (nargs="?") — the boolean presence is the tag; the filter string is
+# per-facet residue that stays on their namespace (§6, valued tags §7e).
 SIFTD_TRUTH_TABLE = [
     ([], 1, {"text"}, 0),
     (["--brief"], 0, {"text"}, 80),
@@ -447,3 +449,282 @@ class TestLoopsAcceptance:
         assert fid.visible == frozenset(visible)
         assert fid.chars == chars
         assert fid.lines == lines
+
+
+# =============================================================================
+# Depth alias values — declarations are promises, including the depth
+# =============================================================================
+
+
+class TestDepthAliasValues:
+    def test_negative_alias_rejected_at_construction(self):
+        with pytest.raises(ValueError, match="non-negative"):
+            _parse([], depth_aliases={"silent": -1})
+
+    def test_alias_above_enum_compiles_open_and_clamps_at_porthole(self):
+        """depth is an open int in the spec; the rung-1 porthole clamps."""
+        from painted.cli import CliContext
+
+        _, fid = _parse(["--forensic"], depth_aliases={"forensic": 5})
+        assert fid.depth == 5
+        ctx = CliContext(
+            fidelity=fid, mode=OutputMode.STATIC, use_ansi=False, is_tty=False, width=80, height=24
+        )
+        assert ctx.zoom == Zoom.FULL
+
+    def test_porthole_clamps_below_too(self):
+        """A build_fidelity hook can hand back any int — the porthole never
+        raises on it."""
+        from painted.cli import CliContext
+        from painted.core.fidelity import Fidelity
+
+        ctx = CliContext(
+            fidelity=Fidelity(depth=-2),
+            mode=OutputMode.STATIC,
+            use_ansi=False,
+            is_tty=False,
+            width=80,
+            height=24,
+        )
+        assert ctx.zoom == Zoom.MINIMAL
+
+
+# =============================================================================
+# add_args dest collisions — the escape hatch can't shadow a declaration
+# =============================================================================
+
+
+class TestAddArgsDestCollision:
+    def _run(self, argv, **kwargs):
+        return run_cli(
+            argv, render=lambda ctx, data: Block.text("x", Style()), fetch=lambda: "x", **kwargs
+        )
+
+    def test_positional_on_tag_dest_raises(self, monkeypatch):
+        monkeypatch.setattr("sys.stdout.isatty", lambda: False)
+        with pytest.raises(ValueError, match="collides with a declared tag"):
+            self._run(
+                ["data.csv"],
+                tags=[Tag("stats", "x")],
+                add_args=lambda p: p.add_argument("stats"),
+            )
+
+    def test_custom_dest_on_alias_raises(self, monkeypatch):
+        monkeypatch.setattr("sys.stdout.isatty", lambda: False)
+        with pytest.raises(ValueError, match="collides with a declared tag"):
+            self._run(
+                [],
+                depth_aliases={"brief": 0},
+                add_args=lambda p: p.add_argument("--terse", dest="brief"),
+            )
+
+
+# =============================================================================
+# The help path obeys the same laws as the parse path
+# =============================================================================
+
+
+class TestHelpPathLaws:
+    def test_collision_raises_on_help_path(self, monkeypatch):
+        """A broken declaration must raise on -h too, not render the
+        contradiction it would refuse to parse."""
+        monkeypatch.setattr("sys.stdout.isatty", lambda: False)
+        with pytest.raises(ValueError, match="framework flag"):
+            run_cli(
+                ["-h"],
+                render=lambda ctx, data: Block.text("x", Style()),
+                fetch=lambda: "x",
+                tags=[Tag("json", "x")],
+            )
+
+    def test_help_zoom_honors_depth_alias(self):
+        """An alias is pure spelling on the help path too: -h --full ≡ -h -vv."""
+        from painted.cli.help import scan_help_args
+
+        aliases = {"brief": 0, "full": 3}
+        assert scan_help_args(["-h", "--full"], depth_aliases=aliases)[0] == Zoom.FULL
+        assert scan_help_args(["-h", "-vv"], depth_aliases=aliases)[0] == Zoom.FULL
+        assert scan_help_args(["-h", "--brief"], depth_aliases=aliases)[0] == Zoom.MINIMAL
+        assert scan_help_args(["-h"], depth_aliases=aliases)[0] == Zoom.SUMMARY
+
+    def test_help_zoom_alias_end_to_end(self, capsys, monkeypatch):
+        monkeypatch.setattr("sys.stdout.isatty", lambda: False)
+
+        def _help(argv):
+            run_cli(
+                argv,
+                render=lambda ctx, data: Block.text("x", Style()),
+                fetch=lambda: "x",
+                depth_aliases={"full": 3},
+            )
+            return capsys.readouterr().out
+
+        assert _help(["-h", "--full", "--plain"]) == _help(["-h", "-vv", "--plain"])
+
+    def test_interactive_flag_in_help_for_surface_delivery(self, capsys, monkeypatch):
+        """help_doc mirrors _get_parser: surface delivery makes -i exist, so
+        it must appear in help (the help surface matches the flag surface)."""
+        monkeypatch.setattr("sys.stdout.isatty", lambda: False)
+
+        async def stream():
+            yield "x"
+
+        run_cli(
+            ["-h", "-v", "--plain"],
+            render=lambda ctx, data: Block.text("x", Style()),
+            fetch=lambda: "x",
+            fetch_stream=stream,
+            live_delivery="surface",
+        )
+        assert "--interactive" in capsys.readouterr().out
+
+
+# =============================================================================
+# Runner edge paths
+# =============================================================================
+
+
+class TestRunnerEdgePaths:
+    def test_json_short_circuit_accepts_tag_flag(self, capsys, monkeypatch):
+        """--json with a declared flag parses cleanly and exports data."""
+        monkeypatch.setattr("sys.stdout.isatty", lambda: False)
+        result = run_cli(
+            ["--json", "--stats"],
+            render=lambda ctx, data: Block.text("x", Style()),
+            fetch=lambda: {"ok": True},
+            tags=[Tag("stats", "x")],
+        )
+        assert result == 0
+        assert '"ok": true' in capsys.readouterr().out
+
+    def test_parser_cache_reuse_across_runs(self, monkeypatch):
+        """A cached parser still compiles declarations correctly on rerun."""
+        monkeypatch.setattr("sys.stdout.isatty", lambda: False)
+        seen = []
+
+        runner = CliRunner(
+            render=lambda ctx, data: seen.append(ctx.fidelity) or Block.text("x", Style()),
+            fetch=lambda: "x",
+            tags=[Tag("stats", "x")],
+        )
+        assert runner.run(["--stats"]) == 0
+        assert runner.run([]) == 0
+        assert seen[0].shows("stats")
+        assert not seen[1].shows("stats")
+
+
+# =============================================================================
+# Demo facet honesty — the declared capability changes output
+# =============================================================================
+
+
+def _load_demo(name):
+    import importlib.util
+    import sys
+    from pathlib import Path
+
+    path = Path(__file__).resolve().parent.parent.parent / "demos" / "patterns" / name
+    spec = importlib.util.spec_from_file_location(f"_facet_{name[:-3]}", path)
+    assert spec and spec.loader
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = mod
+    spec.loader.exec_module(mod)
+    return mod
+
+
+class TestFidelityDemoFacet:
+    def test_timestamp_facet_changes_output(self):
+        """The honesty rule for the harness teaching demo: --timestamp adds
+        the stamp at any depth; without the facet no renderer emits it."""
+        from tests.helpers import block_to_text, static_ctx
+
+        fid_demo = _load_demo("fidelity.py")
+        data = replace(fid_demo.SAMPLE_DISK, timestamp="2026-06-10T12:00:00")
+
+        for zoom in Zoom:
+            base = block_to_text(fid_demo._render(static_ctx(zoom), data))
+            faceted = block_to_text(
+                fid_demo._render(static_ctx(zoom, visible=("timestamp",)), data)
+            )
+            assert "2026-06-10T12:00:00" not in base, zoom
+            assert "2026-06-10T12:00:00" in faceted, zoom
+
+    def test_timestamp_implied_at_detailed(self):
+        from painted.cli import implied_visible
+
+        fid_demo = _load_demo("fidelity.py")
+        assert implied_visible(fid_demo._TAGS, int(Zoom.DETAILED)) == frozenset({"timestamp"})
+        assert implied_visible(fid_demo._TAGS, int(Zoom.SUMMARY)) == frozenset()
+
+
+# =============================================================================
+# Docs CLI migration — page tags become declarations, --show is gone (§7d)
+# =============================================================================
+
+
+class TestDocsCliMigration:
+    def test_pages_with_tagged_nodes_get_flags(self):
+        """--rationale exists exactly on pages that have rationale nodes."""
+        from painted._doc_pages import DOCS
+        from painted._docs_cli import _collect_tags
+
+        tag_names = {
+            name: {t.name for t in _collect_tags(entry.build())} for name, entry in DOCS.items()
+        }
+        assert any("rationale" in names for names in tag_names.values())
+
+    def test_tag_flag_changes_output(self, capsys, monkeypatch):
+        monkeypatch.setattr("sys.stdout.isatty", lambda: False)
+        from painted._doc_pages import DOCS
+        from painted._docs_cli import _collect_tags, run_doc
+
+        name = next(
+            n
+            for n, e in DOCS.items()
+            if any(t.name == "rationale" for t in _collect_tags(e.build()))
+        )
+        assert run_doc(name, ["--plain"]) == 0
+        base = capsys.readouterr().out
+        assert run_doc(name, ["--rationale", "--plain"]) == 0
+        faceted = capsys.readouterr().out
+        assert base != faceted
+
+    def test_show_flag_is_retired(self, monkeypatch):
+        monkeypatch.setattr("sys.stdout.isatty", lambda: False)
+        from painted._doc_pages import DOCS
+        from painted._docs_cli import run_doc
+
+        name = next(iter(DOCS))
+        with pytest.raises(SystemExit):
+            run_doc(name, ["--show", "rationale"])
+
+
+# =============================================================================
+# AppCommand — declarations surface in intercepted subcommand help
+# =============================================================================
+
+
+class TestAppCommandTags:
+    def test_declared_tags_render_in_intercepted_help(self, capsys, monkeypatch):
+        """A command with help_args + tags shows its Layers group on the
+        intercepted -h path — the same group the handler's run_cli renders."""
+        monkeypatch.setattr("sys.stdout.isatty", lambda: False)
+        from painted.cli import AppCommand, HelpArg, run_app
+
+        cmd = AppCommand(
+            "march",
+            "Render the march",
+            handler=lambda argv: 0,
+            help_args=[HelpArg("--frame", "pose to render")],
+            tags=[Tag("stats", "Show march internals", implied_at=3)],
+        )
+        assert run_app(["march", "-h", "-v"], [cmd], prog="myapp") == 0
+        out = capsys.readouterr().out
+        assert "Layers" in out
+        assert "--stats" in out
+
+    def test_declarations_validated_at_construction(self):
+        from painted.cli import AppCommand
+
+        with pytest.raises(ValueError, match="framework flag"):
+            AppCommand("x", "y", handler=lambda argv: 0, tags=[Tag("json", "z")])

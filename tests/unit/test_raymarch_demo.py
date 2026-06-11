@@ -180,3 +180,38 @@ def test_stream_settles_into_the_portrait() -> None:
     shots = asyncio.run(collect())
     assert [s.frame for s in shots] == [5, 6, 7, 7]
     assert [s.quality for s in shots] == [0, 0, 0, 1]
+
+
+# --- The stats facet: honesty rule + implication law ---
+
+
+def test_stats_facet_changes_output() -> None:
+    """The honesty rule's second half: the declared capability changes output.
+    --stats at SUMMARY appends march internals the plain window lacks."""
+    shot = rm.Shot(frame=110)
+    base = block_to_text(rm._render(static_ctx(Zoom.SUMMARY), shot))
+    faceted = block_to_text(rm._render(static_ctx(Zoom.SUMMARY, visible=("stats",)), shot))
+    assert "steps/ray" not in base
+    assert "steps/ray" in faceted
+
+
+def test_stats_facet_reaches_minimal() -> None:
+    """The noun test in action: the facet is nameable at the floor depth."""
+    shot = rm.Shot(frame=110)
+    faceted = block_to_text(rm._render(static_ctx(Zoom.MINIMAL, visible=("stats",)), shot))
+    assert "steps/ray" in faceted
+
+
+def test_stats_implied_at_full_restores_the_old_bundle() -> None:
+    """implied_at=3 keeps -vv ⇒ stats — FULL with the compiled implication
+    shows the same march internals _render_full used to hard-wire."""
+    from painted.cli import implied_visible
+
+    assert implied_visible(rm._TAGS, int(Zoom.FULL)) == frozenset({"stats"})
+    assert implied_visible(rm._TAGS, int(Zoom.DETAILED)) == frozenset()
+
+    shot = rm.Shot(frame=110)
+    full = block_to_text(
+        rm._render(static_ctx(Zoom.FULL, visible=tuple(implied_visible(rm._TAGS, 3))), shot)
+    )
+    assert "steps/ray" in full

@@ -20,6 +20,7 @@ from .types import (
     parse_mode,
     parse_format,
     parse_fidelity,
+    implied_visible,
 )
 from .help import (
     HelpArg,
@@ -46,6 +47,7 @@ __all__ = [
     "parse_mode",
     "parse_format",
     "parse_fidelity",
+    "implied_visible",
     # Help
     "HelpArg",
     "help_doc",

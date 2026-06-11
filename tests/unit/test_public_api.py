@@ -230,3 +230,19 @@ class TestStableViewsSurface:
         assert not unresolved, "painted.views stable names that do not resolve:\n" + "\n".join(
             unresolved
         )
+
+
+class TestRetiredNames:
+    """Names deliberately removed pre-0.2.0 — pinned so they cannot quietly
+    return (one spelling per concept; see docs/FIDELITY_DESIGN.md §4)."""
+
+    def test_depth_alias_is_gone(self) -> None:
+        """``Depth = Zoom`` died with the disclosure grammar: the ladder is
+        the decision, ``Zoom`` is the one name for the rung-1 axis."""
+        import painted.cli
+        import painted.core.fidelity
+
+        assert "Depth" not in painted.__all__
+        assert "Depth" not in painted.cli.__all__
+        assert not hasattr(painted.core.fidelity, "Depth")
+        assert not hasattr(painted, "Depth")  # lazy facade must not resolve it

@@ -541,6 +541,11 @@ def _count_nodes(node: Node) -> int:
     return 1
 
 
+# Module-level so harnesses that build Fidelity directly (tools/capture.py)
+# can resolve the same implications the CLI compiles.
+_TAGS = [Tag("stats", "Show march internals (rays, hit rate, steps)", implied_at=3)]
+
+
 def _render(ctx: CliContext, shot: Shot) -> Block:
     # Depth gates anonymous detail; the stats facet rides fidelity.visible —
     # named by --stats at any depth, implied at -vv.
@@ -574,7 +579,7 @@ def main() -> int:
         live_meter=True,
         description=__doc__,
         prog="raymarch.py",
-        tags=[Tag("stats", "Show march internals (rays, hit rate, steps)", implied_at=3)],
+        tags=_TAGS,
         help_args=[
             HelpArg(
                 "--frame",

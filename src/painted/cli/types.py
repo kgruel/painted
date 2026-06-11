@@ -41,6 +41,7 @@ __all__ = [
     "parse_mode",
     "parse_format",
     "parse_fidelity",
+    "implied_visible",
 ]
 
 
@@ -93,9 +94,10 @@ class CliContext:
 
         Not a compat shim — the honest name for the first axis; day-one code
         that reads it stays load-bearing forever. depth is an open int in the
-        spec; the porthole is bounded by the enum, hence the clamp.
+        spec; the porthole is bounded by the enum, hence the two-sided clamp
+        (a build_fidelity hook can hand back any int).
         """
-        return Zoom(min(self.fidelity.depth, 3))
+        return Zoom(min(max(self.fidelity.depth, 0), 3))
 
 
 # =============================================================================
@@ -241,15 +243,15 @@ def _dest(name: str) -> str:
     return name.replace("-", "_")
 
 
-def _check_declarations(
+def check_declarations(
     tags: Sequence[Tag] | None,
     depth_aliases: Mapping[str, int] | None,
 ) -> None:
-    """Validate declared names at parser construction.
+    """Validate declarations at parser construction.
 
-    Declarations are promises: a malformed or colliding name raises here,
-    not at runtime. Collisions are checked tag↔framework, alias↔framework,
-    tag↔tag, and tag↔alias.
+    Declarations are promises: a malformed name, a colliding name, or an
+    out-of-domain alias depth raises here, not at runtime. Collisions are
+    checked tag↔framework, alias↔framework, tag↔tag, and tag↔alias.
     """
     seen: set[str] = set()
     declared = [t.name for t in tags or ()] + list(depth_aliases or ())
@@ -264,6 +266,33 @@ def _check_declarations(
         if name in seen:
             raise ValueError(f"Declared flag name {name!r} collides with another declaration")
         seen.add(name)
+    for alias_name, alias_depth in (depth_aliases or {}).items():
+        if alias_depth < 0:
+            raise ValueError(
+                f"Depth alias {alias_name!r} maps to {alias_depth}: depth is a "
+                "non-negative int (0=minimal; open above 3)"
+            )
+
+
+def implied_visible(tags: Sequence[Tag] | None, depth: int) -> frozenset[str]:
+    """The tags a depth turns on implicitly — the implication half of
+    compilation, shared so non-CLI harnesses (capture, tests) can resolve a
+    depth into the same visible set the compiler would."""
+    return frozenset(
+        t.name for t in tags or () if t.implied_at is not None and depth >= t.implied_at
+    )
+
+
+def declared_dests(
+    tags: Sequence[Tag] | None,
+    depth_aliases: Mapping[str, int] | None,
+) -> frozenset[str]:
+    """The argparse dests the declarations own — what compilation reads back
+    off the namespace. Exposed so the runner can keep add_args from landing
+    a custom arg on a declared dest."""
+    return frozenset(_dest(t.name) for t in tags or ()) | frozenset(
+        _dest(a) for a in depth_aliases or ()
+    )
 
 
 def depth_alias_help(depth: int) -> str:
@@ -305,7 +334,7 @@ def add_cli_args(
             a capability was declared, and a declared capability must change
             output (the honesty rule).
     """
-    _check_declarations(tags, depth_aliases)
+    check_declarations(tags, depth_aliases)
 
     # Zoom group — depth aliases join -q/-v, mutually exclusive spellings of
     # the same axis
@@ -330,7 +359,10 @@ def add_cli_args(
             help=depth_alias_help(alias_depth),
         )
 
-    # Layers — declared tags
+    # Layers — declared tags. (argparse's own --help lists this group after
+    # the default options group; painted's rendered help places Layers right
+    # after Zoom. run_cli intercepts -h, so the rendered doc is the surface
+    # users see — the argparse ordering matters only to bare-argparse hosts.)
     if tags:
         layers = parser.add_argument_group("Layers")
         for tag in tags:
@@ -452,11 +484,9 @@ def parse_fidelity(
         if getattr(args, _dest(alias_name), False):
             depth = alias_depth
 
-    visible: set[str] = set()
+    visible: set[str] = set(implied_visible(tags, depth))
     for tag in tags or ():
         if getattr(args, _dest(tag.name), False):
-            visible.add(tag.name)
-        elif tag.implied_at is not None and depth >= tag.implied_at:
             visible.add(tag.name)
 
     max_chars = getattr(args, "max_chars", None)

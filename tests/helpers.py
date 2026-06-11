@@ -13,10 +13,15 @@ from painted.cli import OutputMode
 from painted.core.writer import print_block
 
 
-def static_ctx(zoom: Zoom) -> CliContext:
-    """Build a deterministic CliContext for golden/snapshot testing."""
+def static_ctx(zoom: Zoom, *, visible: tuple[str, ...] = ()) -> CliContext:
+    """Build a deterministic CliContext for golden/snapshot testing.
+
+    ``visible`` sets fidelity facets explicitly — this harness builds the
+    spec directly, so tag implications are the caller's to state (use
+    ``painted.cli.implied_visible`` to mirror what the CLI would compile).
+    """
     return CliContext(
-        fidelity=Fidelity(depth=int(zoom)),
+        fidelity=Fidelity(depth=int(zoom), visible=frozenset(visible)),
         mode=OutputMode.STATIC,
         use_ansi=False,
         is_tty=False,

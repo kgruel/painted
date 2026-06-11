@@ -284,9 +284,11 @@ Acknowledged residue, by design:
 - siftd's depth-derived density defaults (`--brief` ⇒ chars=80, `--full` ⇒
   chars=0) stay consumption-side (their `_tool_density` pattern) — the
   grammar carries explicit budgets only.
-- siftd's `--tool-chars` (a per-facet budget) and loops' int-valued
-  `--refs N`: app-specific, stay on the `add_args`/`build_fidelity` hooks.
-  Tags are boolean layers in this design; valued tags are deferred (§7e).
+- siftd's `--tool-chars` (a per-facet budget), siftd's `--tools FILTER`
+  optional value (a per-facet filter — the boolean presence is the tag; the
+  filter string stays on their namespace), and loops' int-valued `--refs N`:
+  app-specific, stay on the `add_args`/`build_fidelity` hooks. Tags are
+  boolean layers in this design; valued tags are deferred (§7e).
 - siftd's `--brief`/`--full` *spellings* — expressible via `depth_aliases`
   (§4), so they are not residue.
 

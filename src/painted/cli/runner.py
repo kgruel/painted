@@ -139,8 +139,8 @@ class CliRunner(Generic[T]):
 
         # Plain text and minimal depth imply static mode. Checked on the
         # compiled fidelity, not the -q flag, so a depth alias to 0 behaves
-        # like -q.
-        if mode == OutputMode.AUTO and (force_plain or fidelity.depth == int(Zoom.MINIMAL)):
+        # like -q (<= because a build_fidelity hook can hand back any int).
+        if mode == OutputMode.AUTO and (force_plain or fidelity.depth <= int(Zoom.MINIMAL)):
             mode = OutputMode.STATIC
 
         ctx = detect_context(
@@ -182,14 +182,41 @@ class CliRunner(Generic[T]):
         )
 
         if self.add_args is not None:
+            framework_actions = len(parser._actions)
             self.add_args(parser)
+            self._check_add_args_dests(parser._actions[framework_actions:])
 
         self._parser_cache = parser
         return parser
 
+    def _check_add_args_dests(self, added: list[argparse.Action]) -> None:
+        """Custom args must not land on a declared tag/alias dest.
+
+        argparse raises only on duplicate option strings, not duplicate
+        dests — a custom arg (or positional) whose dest matches a declared
+        name would silently turn the tag on or override depth at compile
+        time. Same promise as the name collision check, extended to the
+        escape hatch.
+        """
+        from .types import declared_dests
+
+        declared = declared_dests(self.tags, self.depth_aliases)
+        if not declared:
+            return
+        for action in added:
+            if action.dest in declared:
+                raise ValueError(
+                    f"add_args registers dest {action.dest!r}, which collides "
+                    "with a declared tag or depth alias"
+                )
+
     def _handle_help(self, args: list[str]) -> int:
         """Render zoom-aware help and return 0."""
-        zoom, fmt = scan_help_args(args)
+        # Build the parser for its validation side effects — a broken
+        # declaration must raise on the help path too, not render the
+        # contradiction it would refuse to parse.
+        self._get_parser()
+        zoom, fmt = scan_help_args(args, depth_aliases=self.depth_aliases)
         doc = help_doc(self)
 
         if fmt == Format.JSON:

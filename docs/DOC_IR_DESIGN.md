@@ -50,7 +50,10 @@ eff = depth - node.min_depth        # hidden when eff < 0, or node.tag is off
 ```
 
 `min_depth` is the `-v`/`-vv` ladder; `tag` is a cross-cutting semantic layer,
-opt-in via `--show <name>` (`rationale`, `example`, `aside`). `eff` is **relative**:
+opt-in via the page's declared flag (`--rationale`, `--example`, `--aside` —
+the docs CLI enumerates each page's node tags into `Tag` declarations; the
+generic `--show <name>` spelling retired with FIDELITY_DESIGN.md §7d). `eff`
+is **relative**:
 a `Section` consumes its `min_depth` and passes the remaining budget (its own `eff`)
 down to its body as the local depth. So a flag list nested under a group heading is
 one tier compacter than the same list at the top level, *without re-authoring

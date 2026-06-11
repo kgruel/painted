@@ -315,6 +315,11 @@ def _fetch() -> DiskData:
     )
 
 
+# Module-level so harnesses that build Fidelity directly (tools/capture.py)
+# can resolve the same implications the CLI compiles.
+_TAGS = [Tag("timestamp", "Show the measurement timestamp", implied_at=2)]
+
+
 def _render(ctx: CliContext, data: DiskData) -> Block:
     # Depth picks the renderer (anonymous detail); the timestamp is a named
     # facet riding fidelity.visible — --timestamp at any depth, implied at -v.
@@ -327,7 +332,8 @@ def _render(ctx: CliContext, data: DiskData) -> Block:
     else:
         block = render_minimal(data, ctx.width)
     if ctx.fidelity.shows("timestamp") and data.timestamp:
-        block = join_vertical(block, Block.text(f"  {data.timestamp}", Style(dim=True)))
+        stamp = truncate(Block.text(f"  {data.timestamp}", Style(dim=True)), ctx.width)
+        block = join_vertical(block, stamp)
     return block
 
 
@@ -338,7 +344,7 @@ def main() -> int:
         fetch=_fetch,
         description=__doc__,
         prog="fidelity.py",
-        tags=[Tag("timestamp", "Show the measurement timestamp", implied_at=2)],
+        tags=_TAGS,
     )
 
 

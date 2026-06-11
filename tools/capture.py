@@ -98,8 +98,17 @@ def capture_demo(
                 raise AttributeError(f"{demo_path} is missing callable _fetch()")
             data = fetch()
 
+        # Resolve tag implications exactly as the CLI compiler would — a demo
+        # declaring _TAGS gets the same visible set here as via run_cli, so
+        # capture output can't diverge from what the flags produce.
+        from painted.cli import implied_visible
+
+        fidelity = Fidelity(
+            depth=int(zoom),
+            visible=implied_visible(getattr(mod, "_TAGS", None), int(zoom)),
+        )
         ctx = CliContext(
-            fidelity=Fidelity(depth=int(zoom)),
+            fidelity=fidelity,
             mode=OutputMode.STATIC,
             use_ansi=False,
             is_tty=False,

@@ -33,7 +33,7 @@ from .help import (
     framework_sections,
     scan_help_args,
 )
-from .types import Format, Zoom
+from .types import Format, Tag, Zoom, check_declarations
 
 
 def _render_doc(doc: Doc, zoom: Zoom, width: int) -> "Block":
@@ -48,7 +48,9 @@ class AppCommand:
     """A routable command with name, description, and handler.
 
     The handler receives argv (remaining args after command name) and
-    returns an exit code.
+    returns an exit code. ``tags`` mirrors the handler's own declarations so
+    the intercepted ``-h`` path renders the same Layers group the handler's
+    run_cli would — declare in one place and pass the same list to both.
     """
 
     name: str  # "status"
@@ -56,12 +58,17 @@ class AppCommand:
     handler: Callable[[list[str]], int]  # receives argv[1:], returns exit code
     detail: str | None = None  # shown at DETAILED+ zoom, e.g. usage hint
     help_args: Sequence[HelpArg] | None = None  # when set, AppRunner intercepts -h
+    tags: Sequence[Tag] | None = None  # declared layers, shown in intercepted help
 
     def __post_init__(self) -> None:
         # Defensively coerce a caller-owned sequence to a tuple so this frozen
         # value cannot be mutated through a retained reference (cf. Block).
         if self.help_args is not None and not isinstance(self.help_args, tuple):
             object.__setattr__(self, "help_args", tuple(self.help_args))
+        if self.tags is not None and not isinstance(self.tags, tuple):
+            object.__setattr__(self, "tags", tuple(self.tags))
+        # Declarations are promises — validate here, same as parser construction.
+        check_declarations(self.tags, None)
 
 
 @dataclass(frozen=True)
@@ -159,7 +166,7 @@ class AppRunner:
             body.append(Prose(cmd.description))
         if cmd_defs:
             body.append(Defs(cmd_defs))
-        body.extend(framework_sections(framework_depth, include_options=False))
+        body.extend(framework_sections(framework_depth, include_options=False, tags=cmd.tags))
 
         prog = f"{self.prog} {cmd.name}" if self.prog else cmd.name
         return Doc(title=prog, body=tuple(body))

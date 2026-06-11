@@ -138,8 +138,9 @@ def framework_sections(
     at ``depth``. Layers and Density appear only when declared — the help
     surface mirrors the flag surface.
 
-    ``include_options=False`` keeps only Help (subcommand help, which carries no
-    framework options of its own).
+    ``include_options=False`` keeps only Layers (when tags are declared) and
+    Help — subcommand help, where zoom/mode/format belong to the handler but
+    declared facets are the command's own.
     """
     sections: list[Node] = []
     if include_options:
@@ -158,16 +159,20 @@ def framework_sections(
                 depth,
             )
         )
-        if tags:
-            sections.append(
-                _group(
-                    "Layers",
-                    "(named facets)",
-                    "Toggleable layers of this view, independent of depth.",
-                    tuple(_tag_def(t) for t in tags),
-                    depth,
-                )
+    # Layers renders whenever tags are declared — including subcommand help
+    # (include_options=False), where the declared flags ARE the command's
+    # framework surface even though zoom/mode/format belong to its handler.
+    if tags:
+        sections.append(
+            _group(
+                "Layers",
+                "(named facets)",
+                "Toggleable layers of this view, independent of depth.",
+                tuple(_tag_def(t) for t in tags),
+                depth,
             )
+        )
+    if include_options:
         if has_live or has_interactive:
             mode_flags: list[Def] = []
             if has_interactive:
@@ -256,7 +261,11 @@ def help_doc(runner) -> Doc:  # runner: CliRunner (avoid import cycle)
         body.append(Defs(cmd_defs))
 
     has_live = runner.fetch_stream is not None
-    has_interactive = runner.handlers is not None and OutputMode.INTERACTIVE in runner.handlers
+    # Mirrors _get_parser: -i also exists when surface delivery converges it
+    # onto the live path — the help surface must match the flag surface.
+    has_interactive = (
+        runner.handlers is not None and OutputMode.INTERACTIVE in runner.handlers
+    ) or (runner.live_delivery == "surface" and runner.fetch_stream is not None)
     body.extend(
         framework_sections(
             framework_depth,
@@ -275,10 +284,18 @@ def help_doc(runner) -> Doc:  # runner: CliRunner (avoid import cycle)
 # =============================================================================
 
 
-def scan_help_args(args: list[str]) -> tuple[Zoom, Format]:
-    """Quick-scan args for zoom and format when --help is present."""
+def scan_help_args(
+    args: list[str],
+    depth_aliases: Mapping[str, int] | None = None,
+) -> tuple[Zoom, Format]:
+    """Quick-scan args for zoom and format when --help is present.
+
+    ``depth_aliases`` keeps the help path honest to "an alias is pure
+    spelling": ``-h --full`` renders help at the same tier ``-h -vv`` would.
+    """
     zoom = Zoom.SUMMARY
     fmt = Format.AUTO
+    alias_flags = {f"--{name}": depth for name, depth in (depth_aliases or {}).items()}
 
     v_count = 0
     for arg in args:
@@ -286,6 +303,8 @@ def scan_help_args(args: list[str]) -> tuple[Zoom, Format]:
             continue
         if arg == "-q" or arg == "--quiet":
             zoom = Zoom.MINIMAL
+        elif arg in alias_flags:
+            zoom = Zoom(min(max(alias_flags[arg], 0), 3))
         elif arg.startswith("-v"):
             # Count v's: -v, -vv, -vvv
             if arg.startswith("--verbose"):
@@ -297,7 +316,7 @@ def scan_help_args(args: list[str]) -> tuple[Zoom, Format]:
         elif arg == "--plain":
             fmt = Format.PLAIN
 
-    if zoom != Zoom.MINIMAL and v_count > 0:
+    if zoom == Zoom.SUMMARY and v_count > 0:
         zoom = Zoom.FULL if v_count >= 2 else Zoom.DETAILED
 
     return zoom, fmt
