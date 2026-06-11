@@ -40,7 +40,7 @@ _MAX_HEADING = 6
 def published_fidelity(doc: Doc) -> Fidelity:
     """The fidelity a *published* page renders at: full depth, every tag on.
 
-    The fidelity dials are a terminal affordance (``-v``, ``--show``); a
+    The fidelity dials are a terminal affordance (``-v``, a declared tag flag); a
     published page IS the full document. Deriving the tag set from the tree
     (rather than configuring it per page) keeps the site registry equal to the
     ``painted docs`` registry with nothing to drift.

@@ -22,7 +22,7 @@ carries a bespoke zoom primitive. Each node renders at an *effective tier*
     eff = depth - node.min_depth          (hidden when eff < 0, or its tag is off)
 
 where ``depth`` is the local ``-v``/``-vv`` budget and ``tag`` is an opt-in
-semantic layer (``--show rationale``), checked against ``fidelity.visible``.
+semantic layer (a declared ``--rationale`` flag), checked against ``fidelity.visible``.
 ``eff`` is **relative**: a ``Section`` consumes its ``min_depth`` and passes the
 remaining budget (its own ``eff``) down to its body as the local depth — so a
 flag list nested under a group heading is one tier compacter than the same list
