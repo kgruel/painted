@@ -286,6 +286,18 @@ class TestHelpIntegration:
         sections = framework_sections(0)
         assert "Layers" not in _section_headings(sections)
 
+    def test_layers_leads_and_never_steps_back(self):
+        # Layers is app-declared vocabulary, not universal grammar: it renders
+        # first among the groups and stays at MINIMAL even when the grammar
+        # steps back behind command args (depth=1).
+        sections = framework_sections(1, tags=[Tag("thinking", "Show reasoning")])
+        headings = _section_headings(sections)
+        assert headings[0] == "Layers"
+        layers = next(n for n in sections if isinstance(n, Section) and n.heading == "Layers")
+        zoom = next(n for n in sections if isinstance(n, Section) and n.heading == "Zoom")
+        assert layers.min_depth == 0
+        assert zoom.min_depth == 1
+
     def test_density_section_gated_on_budgets(self):
         assert "Density" in _section_headings(framework_sections(0, budgets=True))
         assert "Density" not in _section_headings(framework_sections(0, budgets=False))
