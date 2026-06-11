@@ -24,12 +24,12 @@ What this dissolves, relative to the old hand-rolled renderer:
 from __future__ import annotations
 
 import argparse
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 
 from ..core.zoom import Zoom
 from ..core.doc import Def, Defs, Doc, Node, Prose, Section
-from .types import Format
+from .types import Format, Tag, depth_alias_help
 
 
 @dataclass(frozen=True)
@@ -117,34 +117,57 @@ def _group(
     return Section(heading, body=tuple(body), hint=hint, min_depth=depth)
 
 
+def _tag_def(tag: Tag) -> Def:
+    detail = None
+    if tag.implied_at is not None:
+        detail = f"Implied at depth {tag.implied_at}+."
+    return Def(term=f"--{tag.name}", summary=tag.help, detail=detail)
+
+
 def framework_sections(
     depth: int,
     *,
     has_live: bool = False,
     has_interactive: bool = False,
     include_options: bool = True,
+    tags: Sequence[Tag] | None = None,
+    depth_aliases: Mapping[str, int] | None = None,
+    budgets: bool = False,
 ) -> list[Node]:
-    """The Zoom / Mode / Format / Help groups, each gated at ``depth``.
+    """The Zoom / Layers / Mode / Format / Density / Help groups, each gated
+    at ``depth``. Layers and Density appear only when declared — the help
+    surface mirrors the flag surface.
 
     ``include_options=False`` keeps only Help (subcommand help, which carries no
     framework options of its own).
     """
     sections: list[Node] = []
     if include_options:
+        zoom_flags: list[Def] = [
+            _flag("-q", "--quiet", "Minimal output", "Also implies --static (no animation)."),
+            _flag("-v", "--verbose", "Detailed (-v) or full (-vv)"),
+        ]
+        for alias_name, alias_depth in (depth_aliases or {}).items():
+            zoom_flags.append(_flag(None, f"--{alias_name}", depth_alias_help(alias_depth)))
         sections.append(
             _group(
                 "Zoom",
                 "(what to show)",
                 "Controls how much detail is rendered. Stackable: -v for detailed, -vv for full.",
-                (
-                    _flag(
-                        "-q", "--quiet", "Minimal output", "Also implies --static (no animation)."
-                    ),
-                    _flag("-v", "--verbose", "Detailed (-v) or full (-vv)"),
-                ),
+                tuple(zoom_flags),
                 depth,
             )
         )
+        if tags:
+            sections.append(
+                _group(
+                    "Layers",
+                    "(named facets)",
+                    "Toggleable layers of this view, independent of depth.",
+                    tuple(_tag_def(t) for t in tags),
+                    depth,
+                )
+            )
         if has_live or has_interactive:
             mode_flags: list[Def] = []
             if has_interactive:
@@ -175,6 +198,19 @@ def framework_sections(
                 depth,
             )
         )
+        if budgets:
+            sections.append(
+                _group(
+                    "Density",
+                    "(how much per item)",
+                    "Budgets applied per value or collection. 0 means unlimited.",
+                    (
+                        _flag(None, "--max-chars", "Max display width for string values"),
+                        _flag(None, "--max-lines", "Max items to show for collections"),
+                    ),
+                    depth,
+                )
+            )
     sections.append(
         _group(
             "Help",
@@ -222,7 +258,14 @@ def help_doc(runner) -> Doc:  # runner: CliRunner (avoid import cycle)
     has_live = runner.fetch_stream is not None
     has_interactive = runner.handlers is not None and OutputMode.INTERACTIVE in runner.handlers
     body.extend(
-        framework_sections(framework_depth, has_live=has_live, has_interactive=has_interactive)
+        framework_sections(
+            framework_depth,
+            has_live=has_live,
+            has_interactive=has_interactive,
+            tags=runner.tags,
+            depth_aliases=runner.depth_aliases,
+            budgets=runner.budgets,
+        )
     )
     return Doc(title=title, body=tuple(body))
 

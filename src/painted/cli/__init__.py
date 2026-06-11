@@ -10,6 +10,7 @@ from .types import (
     Depth,
     Fidelity,
     Zoom,
+    Tag,
     OutputMode,
     Format,
     CliContext,
@@ -33,6 +34,7 @@ __all__ = [
     # Types
     "Depth",
     "Zoom",
+    "Tag",
     "OutputMode",
     "Format",
     "Fidelity",

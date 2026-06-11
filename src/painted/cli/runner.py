@@ -21,6 +21,7 @@ from .types import (
     Fidelity,
     Format,
     OutputMode,
+    Tag,
     Zoom,
     add_cli_args,
     detect_context,
@@ -81,7 +82,19 @@ class CliRunner(Generic[T]):
     # Optional: describe pre-parsed args for help rendering
     help_args: list[HelpArg] | None = None
 
-    # Optional: transform Fidelity after parsing (e.g. to inject visible tags)
+    # Disclosure declarations — each Tag generates a --{name} flag compiled
+    # into fidelity.visible; depth_aliases are app-local depth spellings
+    # ({"brief": 0} generates --brief). See docs/FIDELITY_DESIGN.md.
+    tags: list[Tag] | None = None
+    depth_aliases: dict[str, int] | None = None
+
+    # Whether this app honors --max-chars/--max-lines. A flag exists only
+    # because a capability was declared.
+    budgets: bool = True
+
+    # Optional: transform Fidelity after parsing — the escape hatch for
+    # app-specific residue the grammar doesn't express. Runs last, after tag
+    # compilation.
     build_fidelity: Callable[[argparse.Namespace, Fidelity], Fidelity] | None = None
 
     # Internal parser cache for repeated invocations
@@ -93,7 +106,13 @@ class CliRunner(Generic[T]):
         if "-h" in args or "--help" in args:
             return self._handle_help(args)
 
-        if not args and self.add_args is None and self.build_fidelity is None:
+        has_declarations = bool(self.tags) or bool(self.depth_aliases)
+        if (
+            not args
+            and self.add_args is None
+            and self.build_fidelity is None
+            and not has_declarations
+        ):
             zoom = self.default_zoom
             mode = OutputMode.AUTO
             fmt = Format.AUTO
@@ -105,7 +124,9 @@ class CliRunner(Generic[T]):
             zoom = parse_zoom(parsed, self.default_zoom)
             mode = parse_mode(parsed)
             fmt = parse_format(parsed)
-            fidelity = parse_fidelity(parsed, zoom)
+            fidelity = parse_fidelity(
+                parsed, zoom, tags=self.tags, depth_aliases=self.depth_aliases
+            )
             if self.build_fidelity is not None:
                 fidelity = self.build_fidelity(parsed, fidelity)
 
@@ -116,8 +137,10 @@ class CliRunner(Generic[T]):
 
         force_plain = fmt == Format.PLAIN
 
-        # Plain text and minimal zoom imply static mode
-        if mode == OutputMode.AUTO and (force_plain or zoom == Zoom.MINIMAL):
+        # Plain text and minimal depth imply static mode. Checked on the
+        # compiled fidelity, not the -q flag, so a depth alias to 0 behaves
+        # like -q.
+        if mode == OutputMode.AUTO and (force_plain or fidelity.depth == int(Zoom.MINIMAL)):
             mode = OutputMode.STATIC
 
         ctx = detect_context(
@@ -150,7 +173,13 @@ class CliRunner(Generic[T]):
         ):
             modes.add(OutputMode.INTERACTIVE)
 
-        add_cli_args(parser, modes=modes)
+        add_cli_args(
+            parser,
+            modes=modes,
+            tags=self.tags,
+            depth_aliases=self.depth_aliases,
+            budgets=self.budgets,
+        )
 
         if self.add_args is not None:
             self.add_args(parser)
@@ -432,6 +461,9 @@ def run_cli(
     prog: str | None = None,
     add_args: Callable[[argparse.ArgumentParser], None] | None = None,
     help_args: list[HelpArg] | None = None,
+    tags: list[Tag] | None = None,
+    depth_aliases: dict[str, int] | None = None,
+    budgets: bool = True,
     build_fidelity: Callable[[argparse.Namespace, Fidelity], Fidelity] | None = None,
 ) -> int:
     """Run a CLI tool with zoom/mode/format handling.
@@ -450,7 +482,12 @@ def run_cli(
         prog: Program name
         add_args: Callback to add custom arguments
         help_args: Describe pre-parsed args for help rendering
-        build_fidelity: Transform Fidelity after parsing (e.g. inject visible tags)
+        tags: Declared disclosure layers — each generates a --{name} flag
+            compiled into fidelity.visible
+        depth_aliases: App-local depth spellings ({"brief": 0} → --brief)
+        budgets: Whether the app honors --max-chars/--max-lines
+        build_fidelity: Transform Fidelity after tag compilation — the escape
+            hatch for app-specific residue
 
     Returns:
         Exit code (0 for success)
@@ -468,5 +505,8 @@ def run_cli(
         prog=prog,
         add_args=add_args,
         help_args=help_args,
+        tags=tags,
+        depth_aliases=depth_aliases,
+        budgets=budgets,
         build_fidelity=build_fidelity,
     ).run(args)

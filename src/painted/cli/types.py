@@ -3,19 +3,24 @@
 This module consolidates the small vocabulary for CLI tools built on painted:
 
   - Enums: OutputMode, Format
-  - Types: CliContext (with backward-compat ctx.zoom property)
+  - Types: CliContext (with the rung-1 ctx.zoom porthole), Tag
   - Context: detect_context(), resolve_mode()
   - Args: add_cli_args(), parse_zoom(), parse_mode(), parse_format(), parse_fidelity()
 
-Zoom and Fidelity live in core/ as shared rendering vocabulary.
+Zoom and Fidelity live in core/ as shared rendering vocabulary. The disclosure
+grammar (Tag declarations, depth aliases, budget gating) lives here beside the
+parsing it configures — spec in core, grammar in cli. See
+docs/FIDELITY_DESIGN.md.
 """
 
 from __future__ import annotations
 
 import argparse
 import os
+import re
 import shutil
 import sys
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
 
@@ -26,6 +31,7 @@ __all__ = [
     "Depth",
     "Fidelity",
     "Zoom",
+    "Tag",
     "OutputMode",
     "Format",
     "CliContext",
@@ -182,6 +188,92 @@ def detect_context(
 
 
 # =============================================================================
+# Disclosure grammar: Tag declarations and depth aliases
+# =============================================================================
+
+
+@dataclass(frozen=True)
+class Tag:
+    """A named, toggleable layer of a view — the rung-2 disclosure declaration.
+
+    Declaring a tag buys the ``--{name}`` flag, its help entry, and its
+    compilation into ``Fidelity.visible`` in one move. ``implied_at`` turns
+    the tag on implicitly at that depth and above (``-vv`` ⇒ depth 3), so the
+    bundle convenience survives without smuggling the facet into depth.
+
+    Depth is anonymous detail; tags are named facets. Declare a tag when a
+    user would want the layer by name at low depth (``--thinking`` at brief);
+    keep "only ever more of the same" on the depth axis.
+    """
+
+    name: str  # the noun; generates --{name}
+    help: str  # one-line help text
+    implied_at: int | None = None  # depth at which the tag turns on implicitly
+
+
+# Long-form names of every flag the framework itself may register. Declared
+# names are checked against the full set regardless of modes=/budgets=
+# filtering, so a declaration that works in one configuration cannot break in
+# another.
+_FRAMEWORK_FLAG_NAMES = frozenset(
+    {
+        "help",
+        "quiet",
+        "verbose",
+        "interactive",
+        "static",
+        "live",
+        "json",
+        "plain",
+        "max-chars",
+        "max-lines",
+    }
+)
+
+_DECLARED_NAME_RE = re.compile(r"^[a-z][a-z0-9]*(-[a-z0-9]+)*$")
+
+
+def _dest(name: str) -> str:
+    """argparse dest for a declared flag name (kebab → snake)."""
+    return name.replace("-", "_")
+
+
+def _check_declarations(
+    tags: Sequence[Tag] | None,
+    depth_aliases: Mapping[str, int] | None,
+) -> None:
+    """Validate declared names at parser construction.
+
+    Declarations are promises: a malformed or colliding name raises here,
+    not at runtime. Collisions are checked tag↔framework, alias↔framework,
+    tag↔tag, and tag↔alias.
+    """
+    seen: set[str] = set()
+    declared = [t.name for t in tags or ()] + list(depth_aliases or ())
+    for name in declared:
+        if not _DECLARED_NAME_RE.match(name):
+            raise ValueError(
+                f"Declared flag name {name!r} must be lowercase kebab-case "
+                "(it becomes both the --flag and the visible-set key)"
+            )
+        if name in _FRAMEWORK_FLAG_NAMES:
+            raise ValueError(f"Declared flag name {name!r} collides with a framework flag")
+        if name in seen:
+            raise ValueError(f"Declared flag name {name!r} collides with another declaration")
+        seen.add(name)
+
+
+def depth_alias_help(depth: int) -> str:
+    """Generated help text for a depth alias flag — pure spelling, so the
+    help says only what depth it sets."""
+    try:
+        label = f"{depth} ({Zoom(depth).name.lower()})"
+    except ValueError:
+        label = str(depth)
+    return f"Set detail depth to {label}"
+
+
+# =============================================================================
 # Argument parsing
 # =============================================================================
 
@@ -190,6 +282,9 @@ def add_cli_args(
     parser: argparse.ArgumentParser,
     *,
     modes: set[OutputMode] | None = None,
+    tags: Sequence[Tag] | None = None,
+    depth_aliases: Mapping[str, int] | None = None,
+    budgets: bool = True,
 ) -> None:
     """Add standard zoom/mode/format arguments.
 
@@ -197,8 +292,19 @@ def add_cli_args(
         parser: ArgumentParser to add arguments to.
         modes: Supported output modes. When provided, only adds flags for
             modes in the set. When None, adds all flags (backward-compatible).
+        tags: Declared disclosure layers. Each generates a ``--{name}`` flag
+            grouped under "Layers".
+        depth_aliases: App-local depth spellings (``{"brief": 0, "full": 3}``
+            generates ``--brief``/``--full``). Pure spelling: an alias sets
+            depth, mutually exclusive with ``-q``/``-v``.
+        budgets: Whether the app honors density budgets. Only when True do
+            ``--max-chars``/``--max-lines`` exist — a flag exists only because
+            a capability was declared.
     """
-    # Zoom group
+    _check_declarations(tags, depth_aliases)
+
+    # Zoom group — depth aliases join -q/-v, mutually exclusive spellings of
+    # the same axis
     zoom_group = parser.add_mutually_exclusive_group()
     zoom_group.add_argument(
         "-q",
@@ -213,6 +319,22 @@ def add_cli_args(
         default=0,
         help="Increase detail level (-v=detailed, -vv=full)",
     )
+    for alias_name, alias_depth in (depth_aliases or {}).items():
+        zoom_group.add_argument(
+            f"--{alias_name}",
+            action="store_true",
+            help=depth_alias_help(alias_depth),
+        )
+
+    # Layers — declared tags
+    if tags:
+        layers = parser.add_argument_group("Layers")
+        for tag in tags:
+            layers.add_argument(
+                f"--{tag.name}",
+                action="store_true",
+                help=tag.help,
+            )
 
     # Mode group — only add flags for supported modes
     has_live = modes is None or OutputMode.LIVE in modes
@@ -251,21 +373,22 @@ def add_cli_args(
         help="Plain text, no ANSI codes",
     )
 
-    # Density
-    parser.add_argument(
-        "--max-chars",
-        type=int,
-        default=None,
-        metavar="N",
-        help="Max display width for string values. Truncates mid-content — prefer --max-lines for surfaced contexts (e.g. SessionStart hooks) where truncation reads as completeness.",
-    )
-    parser.add_argument(
-        "--max-lines",
-        type=int,
-        default=None,
-        metavar="N",
-        help="Max items to show for collections",
-    )
+    # Density — only when the app declared it honors budgets
+    if budgets:
+        parser.add_argument(
+            "--max-chars",
+            type=int,
+            default=None,
+            metavar="N",
+            help="Max display width for string values. Truncates mid-content — prefer --max-lines for surfaced contexts (e.g. SessionStart hooks) where truncation reads as completeness.",
+        )
+        parser.add_argument(
+            "--max-lines",
+            type=int,
+            default=None,
+            metavar="N",
+            help="Max items to show for collections",
+        )
 
 
 def parse_zoom(args: argparse.Namespace, default: Zoom = Zoom.SUMMARY) -> Zoom:
@@ -300,16 +423,43 @@ def parse_format(args: argparse.Namespace) -> Format:
     return Format.AUTO
 
 
-def parse_fidelity(args: argparse.Namespace, zoom: Zoom = Zoom.SUMMARY) -> Fidelity:
-    """Build a Fidelity from parsed args.
+def parse_fidelity(
+    args: argparse.Namespace,
+    zoom: Zoom = Zoom.SUMMARY,
+    *,
+    tags: Sequence[Tag] | None = None,
+    depth_aliases: Mapping[str, int] | None = None,
+) -> Fidelity:
+    """Compile parsed args into a Fidelity.
 
-    depth comes from the zoom level (parsed separately).
+    depth comes from the zoom level (parsed separately), overridden by a
+    passed depth alias — the alias is just another spelling of the same axis,
+    so argparse's exclusive group guarantees at most one source.
+
+    visible = tags whose flag was passed ∪ tags implied by the resolved depth
+    (``implied_at is not None and depth >= implied_at``). Implications resolve
+    here, at compile time — the spec stays dumb, consumers just call
+    ``shows()``.
+
     chars/lines come from --max-chars/--max-lines (0 means unlimited).
     """
+    depth = int(zoom)
+    for alias_name, alias_depth in (depth_aliases or {}).items():
+        if getattr(args, _dest(alias_name), False):
+            depth = alias_depth
+
+    visible: set[str] = set()
+    for tag in tags or ():
+        if getattr(args, _dest(tag.name), False):
+            visible.add(tag.name)
+        elif tag.implied_at is not None and depth >= tag.implied_at:
+            visible.add(tag.name)
+
     max_chars = getattr(args, "max_chars", None)
     max_lines = getattr(args, "max_lines", None)
     return Fidelity(
-        depth=int(zoom),
+        depth=depth,
+        visible=frozenset(visible),
         chars=max_chars if max_chars is not None else 0,
         lines=max_lines if max_lines is not None else 0,
     )
