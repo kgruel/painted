@@ -134,15 +134,33 @@ def framework_sections(
     depth_aliases: Mapping[str, int] | None = None,
     budgets: bool = False,
 ) -> list[Node]:
-    """The Zoom / Layers / Mode / Format / Density / Help groups, each gated
-    at ``depth``. Layers and Density appear only when declared — the help
-    surface mirrors the flag surface.
+    """The Layers / Zoom / Mode / Format / Density / Help groups. Layers and
+    Density appear only when declared — the help surface mirrors the flag
+    surface.
+
+    ``depth`` gates the universal grammar (Zoom/Mode/Format/Density/Help) —
+    flags with the same meaning on every tool, safe to render terse when
+    command args lead. Layers is app-declared *vocabulary*: ``--stats`` exists
+    only where a Tag declared it, so it leads the groups and stays at MINIMAL,
+    fully rendered at default ``--help`` regardless of ``depth``.
 
     ``include_options=False`` keeps only Layers (when tags are declared) and
     Help — subcommand help, where zoom/mode/format belong to the handler but
     declared facets are the command's own.
     """
     sections: list[Node] = []
+    # Layers leads: app-declared vocabulary is command content, not grammar —
+    # it never steps back with the universal groups.
+    if tags:
+        sections.append(
+            _group(
+                "Layers",
+                "(named facets)",
+                "Toggleable layers of this view, independent of depth.",
+                tuple(_tag_def(t) for t in tags),
+                Zoom.MINIMAL,
+            )
+        )
     if include_options:
         zoom_flags: list[Def] = [
             _flag("-q", "--quiet", "Minimal output", "Also implies --static (no animation)."),
@@ -156,19 +174,6 @@ def framework_sections(
                 "(what to show)",
                 "Controls how much detail is rendered. Stackable: -v for detailed, -vv for full.",
                 tuple(zoom_flags),
-                depth,
-            )
-        )
-    # Layers renders whenever tags are declared — including subcommand help
-    # (include_options=False), where the declared flags ARE the command's
-    # framework surface even though zoom/mode/format belong to its handler.
-    if tags:
-        sections.append(
-            _group(
-                "Layers",
-                "(named facets)",
-                "Toggleable layers of this view, independent of depth.",
-                tuple(_tag_def(t) for t in tags),
                 depth,
             )
         )
