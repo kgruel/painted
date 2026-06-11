@@ -184,10 +184,10 @@ graduate to the knob if/when the harness dissolves.
 - `fidelity.visible` = tags whose flag was passed ∪ tags whose
   `implied_at is not None and depth >= implied_at`. Implications resolve at
   compile time — the spec stays dumb, consumers just call `shows()`.
-- **Collision check**: a tag name that collides with a framework flag
-  (`live`, `static`, `json`, `plain`, `max-chars`, …) or another declaration
-  raises at parser construction, not at runtime. Declarations are checked
-  because they are promises.
+- **Collision check**: a declared name — tag or depth alias — that collides
+  with a framework flag (`live`, `static`, `json`, `plain`, `max-chars`, …)
+  or another declaration (tag↔tag, tag↔alias) raises at parser construction,
+  not at runtime. Declarations are checked because they are promises.
 - `budgets=False` (default): `--max-chars`/`--max-lines` are **not** added.
   This changes today's behavior — the flags are currently unconditional —
   which is the honesty rule applied retroactively: no current `run_cli` app
