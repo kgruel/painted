@@ -7,7 +7,6 @@ and lifecycle management for CLI tools built on painted's renderer.
 """
 
 from .types import (
-    Depth,
     Fidelity,
     Zoom,
     Tag,
@@ -32,7 +31,6 @@ from .app_runner import AppCommand, AppRunner, run_app
 
 __all__ = [
     # Types
-    "Depth",
     "Zoom",
     "Tag",
     "OutputMode",

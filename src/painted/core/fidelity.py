@@ -1,40 +1,39 @@
-"""Fidelity: three-axis rendering specification.
+"""Fidelity: the compiled disclosure spec.
 
-Fidelity encodes *how much* to show across three independent dimensions:
+Fidelity is what the flag grammar (``-v``, ``--thinking``, ``--max-lines``)
+compiles into — the disclosure half of the CLI contract
+(docs/FIDELITY_DESIGN.md). Its fields:
 
-  depth   — structural disclosure level (0=minimal, 1=summary, 2=detailed, 3=full).
-             Maps 1:1 to the old Zoom values. Lens functions receive fidelity.depth
-             where they previously received zoom.
+  depth   — anonymous detail: how closely am I looking (0=minimal, 1=summary,
+             2=detailed, 3=full; open int above that). The rung-1 axis.
 
-  visible — which semantic layers are present (consumer-defined tags).
-             Empty frozenset means "nothing extra". Use fidelity.shows(tag) to test.
+  visible — named facets: which toggleable layers are present. Tags whose
+             flag was passed or whose ``implied_at`` the depth reached,
+             fully resolved at compile time. Use fidelity.shows(tag); empty
+             frozenset means "nothing extra".
 
   chars   — max display width for string values (0 = unlimited).
   lines   — max items to show per collection (0 = unlimited).
 
-CliContext carries a Fidelity. The backward-compat ctx.zoom property
-returns Zoom(fidelity.depth) so callers that use ctx.zoom continue to work.
-
-``Depth`` is an alias for ``Zoom`` — either name is fine.
+CliContext carries a Fidelity whole — renderers consuming beyond rung 1
+receive the spec intact, never exploded into kwargs. ``ctx.zoom`` is the
+rung-1 porthole onto it: ``Zoom(min(depth, 3))``, blessed permanently.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
 
-from .zoom import Zoom
-
-# Alias: depth is an int 0-3 mapping to Zoom values.
-Depth = Zoom
+__all__ = ["Fidelity"]
 
 
 @dataclass(frozen=True)
 class Fidelity:
-    """Three-axis rendering specification.
+    """The compiled disclosure spec.
 
-    Axes:
-      depth   — structural disclosure (0=minimal, 1=summary, 2=detailed, 3=full)
-      visible — which semantic layers are present (consumer-defined tags)
+    Fields:
+      depth   — anonymous detail (0=minimal, 1=summary, 2=detailed, 3=full)
+      visible — named facets present, resolved at compile time
       chars   — character budget per text block (0=unlimited)
       lines   — line budget per section (0=unlimited)
     """

@@ -24,11 +24,10 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
 
-from ..core.fidelity import Depth, Fidelity
+from ..core.fidelity import Fidelity
 from ..core.zoom import Zoom
 
 __all__ = [
-    "Depth",
     "Fidelity",
     "Zoom",
     "Tag",
@@ -77,9 +76,8 @@ class Format(Enum):
 class CliContext:
     """Resolved runtime context.
 
-    ``fidelity`` is the canonical field. ``ctx.zoom`` is a backward-compat
-    property returning ``Zoom(fidelity.depth)`` so existing callers continue
-    to work unchanged.
+    ``fidelity`` is the compiled disclosure spec — the canonical field.
+    ``ctx.zoom`` is the rung-1 view of it, blessed permanently.
     """
 
     fidelity: Fidelity
@@ -91,7 +89,12 @@ class CliContext:
 
     @property
     def zoom(self) -> Zoom:
-        """Backward-compat: fidelity.depth as Zoom."""
+        """The rung-1 view of the spec: fidelity.depth as Zoom.
+
+        Not a compat shim — the honest name for the first axis; day-one code
+        that reads it stays load-bearing forever. depth is an open int in the
+        spec; the porthole is bounded by the enum, hence the clamp.
+        """
         return Zoom(min(self.fidelity.depth, 3))
 
 
