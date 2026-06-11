@@ -25,7 +25,7 @@ from painted.cli import (
     run_cli,
 )
 from painted.cli.help import framework_sections
-from painted.core.doc import Section
+from painted.core.doc import Defs, Section
 
 
 def _parse(argv, *, tags=None, depth_aliases=None, budgets=True, add_args=None):
@@ -232,7 +232,7 @@ class TestRunnerIntegration:
         monkeypatch.setattr("sys.stdout.isatty", lambda: False)
         seen = {}
 
-        def hook(parsed, fid):
+        def hook(_parsed, fid):
             seen["visible"] = fid.visible
             return replace(fid, visible=fid.visible | {"extra"})
 
@@ -262,7 +262,7 @@ class TestRunnerIntegration:
         with pytest.raises(ValueError, match="framework flag"):
             run_cli(
                 [],
-                render=lambda ctx, data: Block.text("x", Style()),
+                render=lambda _ctx, _data: Block.text("x", Style()),
                 fetch=lambda: "x",
                 tags=[Tag("plain", "x")],
             )
@@ -305,12 +305,12 @@ class TestHelpIntegration:
     def test_alias_appears_in_zoom_group(self):
         sections = framework_sections(0, depth_aliases={"brief": 0})
         zoom = next(n for n in sections if isinstance(n, Section) and n.heading == "Zoom")
-        terms = [d.term for defs in zoom.body if hasattr(defs, "items") for d in defs.items]
+        terms = [d.term for defs in zoom.body if isinstance(defs, Defs) for d in defs.items]
         assert "--brief" in terms
 
     def test_help_doc_carries_declarations(self):
         runner = CliRunner(
-            render=lambda ctx, data: Block.text("x", Style()),
+            render=lambda _ctx, _data: Block.text("x", Style()),
             fetch=lambda: "ok",
             prog="test",
             tags=[Tag("thinking", "Show reasoning", implied_at=3)],
@@ -324,7 +324,7 @@ class TestHelpIntegration:
         monkeypatch.setattr("sys.stdout.isatty", lambda: False)
         result = run_cli(
             ["--help", "-v"],
-            render=lambda ctx, data: Block.text("x", Style()),
+            render=lambda _ctx, _data: Block.text("x", Style()),
             fetch=lambda: "ok",
             prog="myapp",
             tags=[Tag("thinking", "Show model reasoning")],
@@ -509,7 +509,7 @@ class TestDepthAliasValues:
 class TestAddArgsDestCollision:
     def _run(self, argv, **kwargs):
         return run_cli(
-            argv, render=lambda ctx, data: Block.text("x", Style()), fetch=lambda: "x", **kwargs
+            argv, render=lambda _ctx, _data: Block.text("x", Style()), fetch=lambda: "x", **kwargs
         )
 
     def test_positional_on_tag_dest_raises(self, monkeypatch):
@@ -544,7 +544,7 @@ class TestHelpPathLaws:
         with pytest.raises(ValueError, match="framework flag"):
             run_cli(
                 ["-h"],
-                render=lambda ctx, data: Block.text("x", Style()),
+                render=lambda _ctx, _data: Block.text("x", Style()),
                 fetch=lambda: "x",
                 tags=[Tag("json", "x")],
             )
@@ -565,7 +565,7 @@ class TestHelpPathLaws:
         def _help(argv):
             run_cli(
                 argv,
-                render=lambda ctx, data: Block.text("x", Style()),
+                render=lambda _ctx, _data: Block.text("x", Style()),
                 fetch=lambda: "x",
                 depth_aliases={"full": 3},
             )
@@ -583,7 +583,7 @@ class TestHelpPathLaws:
 
         run_cli(
             ["-h", "-v", "--plain"],
-            render=lambda ctx, data: Block.text("x", Style()),
+            render=lambda _ctx, _data: Block.text("x", Style()),
             fetch=lambda: "x",
             fetch_stream=stream,
             live_delivery="surface",
@@ -602,7 +602,7 @@ class TestRunnerEdgePaths:
         monkeypatch.setattr("sys.stdout.isatty", lambda: False)
         result = run_cli(
             ["--json", "--stats"],
-            render=lambda ctx, data: Block.text("x", Style()),
+            render=lambda _ctx, _data: Block.text("x", Style()),
             fetch=lambda: {"ok": True},
             tags=[Tag("stats", "x")],
         )
