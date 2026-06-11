@@ -28,6 +28,7 @@ pipe receives the pose carried honestly by the classic luminance ramp
     uv run demos/patterns/raymarch.py --live         # orbit, then settle
     uv run demos/patterns/raymarch.py --frame 200 -v # later pose + legend
     uv run demos/patterns/raymarch.py -vv            # bordered, march stats
+    uv run demos/patterns/raymarch.py --stats        # the stats facet by name
     uv run demos/patterns/raymarch.py -q             # one-line pose census
     uv run demos/patterns/raymarch.py --json         # the pose as data
 """
@@ -56,7 +57,7 @@ from painted import (
     truncate,
     ROUNDED,
 )
-from painted.cli import HelpArg
+from painted.cli import HelpArg, Tag
 from painted.palette import current_palette
 
 
@@ -516,20 +517,22 @@ def _render_minimal(shot: Shot, width: int) -> Block:
     return truncate(_census(shot), width)
 
 
-def _render_full(ctx: CliContext, shot: Shot, width: int) -> Block:
-    # Stats describe the grid actually displayed: portrait rays on a color
-    # terminal (4x when the settle supersamples), ramp rays on a pipe.
+def _stats(ctx: CliContext, shot: Shot) -> Block:
+    """March internals — the --stats facet, implied at -vv.
+
+    Stats describe the grid actually displayed: portrait rays on a color
+    terminal (4x when the settle supersamples), ramp rays on a pipe.
+    """
     if ctx.use_ansi:
         _rows, hits, steps, rays = _trace_portrait(shot)
     else:
         _grid_vals, hits, steps = _trace(shot)
         rays = _W * _H
-    stats = Block.text(
+    return Block.text(
         f"frame {shot.frame}  ·  rays {rays}  ·  hit {hits / rays:.0%}  ·  "
         f"steps/ray {steps / rays:.1f}  ·  scene {_count_nodes(_scene(shot.frame))} nodes",
         Style(dim=True),
     )
-    return _window(ctx, shot, width, _legend(ctx), stats)
 
 
 def _count_nodes(node: Node) -> int:
@@ -539,13 +542,19 @@ def _count_nodes(node: Node) -> int:
 
 
 def _render(ctx: CliContext, shot: Shot) -> Block:
-    if ctx.zoom >= Zoom.FULL:
-        return _render_full(ctx, shot, ctx.width)
+    # Depth gates anonymous detail; the stats facet rides fidelity.visible —
+    # named by --stats at any depth, implied at -vv.
+    extra: list[Block] = []
     if ctx.zoom >= Zoom.DETAILED:
-        return _window(ctx, shot, ctx.width, _legend(ctx))
+        extra.append(_legend(ctx))
+    if ctx.fidelity.shows("stats"):
+        extra.append(_stats(ctx, shot))
     if ctx.zoom >= Zoom.SUMMARY:
-        return _window(ctx, shot, ctx.width)
-    return _render_minimal(shot, ctx.width)
+        return _window(ctx, shot, ctx.width, *extra)
+    census = _render_minimal(shot, ctx.width)
+    if extra:  # at minimal only stats can be on; the legend is depth-gated
+        return join_vertical(census, *(truncate(b, ctx.width) for b in extra))
+    return census
 
 
 # --- Entry point ---
@@ -565,6 +574,7 @@ def main() -> int:
         live_meter=True,
         description=__doc__,
         prog="raymarch.py",
+        tags=[Tag("stats", "Show march internals (rays, hit rate, steps)", implied_at=3)],
         help_args=[
             HelpArg(
                 "--frame",

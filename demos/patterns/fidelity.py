@@ -12,6 +12,7 @@ The flags drive the output — the code doesn't switch on modes.
     uv run demos/patterns/fidelity.py           # directory list
     uv run demos/patterns/fidelity.py -v        # styled bars
     uv run demos/patterns/fidelity.py -vv       # full detail
+    uv run demos/patterns/fidelity.py --timestamp   # a named facet, any depth
 """
 
 from __future__ import annotations
@@ -26,6 +27,7 @@ from painted import (
     Block,
     Style,
     CliContext,
+    Tag,
     Zoom,
     border,
     join_vertical,
@@ -152,9 +154,8 @@ SAMPLE_DISK = DiskData(
 
 
 def render_minimal(data: DiskData, width: int) -> Block:
-    ts = f"  [{data.timestamp}]" if data.timestamp else ""
     result = Block.text(
-        f"{data.used_percent:.0f}% used ({data.used_human}/{data.total_human}){ts}",
+        f"{data.used_percent:.0f}% used ({data.used_human}/{data.total_human})",
         Style(),
     )
     return truncate(result, width)
@@ -186,8 +187,6 @@ def render_standard(data: DiskData, width: int) -> Block:
 
     rows.append(Block.text("", Style()))
     rows.append(Block.text(f"Free: {data.free_human}", Style()))
-    if data.timestamp:
-        rows.append(Block.text(f"  {data.timestamp}", Style(dim=True)))
     return truncate(join_vertical(*rows), width)
 
 
@@ -259,8 +258,6 @@ def render_styled(data: DiskData, width: int) -> Block:
         Block.text("", Style()),
         Block.text(f"  Free: {data.free_human}  ", free_style),
     ]
-    if data.timestamp:
-        blocks.append(Block.text(f"  {data.timestamp}", Style(dim=True)))
     return join_vertical(*blocks)
 
 
@@ -296,8 +293,6 @@ def render_full(data: DiskData, width: int) -> Block:
         Block.text("", Style()),
         Block.text(f"  Free: {data.free_human}  ", free_style),
     ]
-    if data.timestamp:
-        blocks.append(Block.text(f"  {data.timestamp}", Style(dim=True)))
     return join_vertical(*blocks)
 
 
@@ -321,13 +316,19 @@ def _fetch() -> DiskData:
 
 
 def _render(ctx: CliContext, data: DiskData) -> Block:
+    # Depth picks the renderer (anonymous detail); the timestamp is a named
+    # facet riding fidelity.visible — --timestamp at any depth, implied at -v.
     if ctx.zoom >= Zoom.FULL:
-        return render_full(data, ctx.width)
-    if ctx.zoom >= Zoom.DETAILED:
-        return render_styled(data, ctx.width)
-    if ctx.zoom >= Zoom.SUMMARY:
-        return render_standard(data, ctx.width)
-    return render_minimal(data, ctx.width)
+        block = render_full(data, ctx.width)
+    elif ctx.zoom >= Zoom.DETAILED:
+        block = render_styled(data, ctx.width)
+    elif ctx.zoom >= Zoom.SUMMARY:
+        block = render_standard(data, ctx.width)
+    else:
+        block = render_minimal(data, ctx.width)
+    if ctx.fidelity.shows("timestamp") and data.timestamp:
+        block = join_vertical(block, Block.text(f"  {data.timestamp}", Style(dim=True)))
+    return block
 
 
 def main() -> int:
@@ -337,6 +338,7 @@ def main() -> int:
         fetch=_fetch,
         description=__doc__,
         prog="fidelity.py",
+        tags=[Tag("timestamp", "Show the measurement timestamp", implied_at=2)],
     )
 
 
