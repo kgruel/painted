@@ -401,13 +401,13 @@ def _render_full(data: HitTestData, width: int) -> Block:
 
 
 def _render(ctx: CliContext, data: HitTestData) -> Block:
-    if ctx.zoom == Zoom.MINIMAL:
-        return _render_minimal(data, ctx.width)
-    if ctx.zoom == Zoom.SUMMARY:
-        return _render_summary(data, ctx.width)
-    if ctx.zoom == Zoom.FULL:
+    if ctx.zoom >= Zoom.FULL:
         return _render_full(data, ctx.width)
-    return _render_detailed(data, ctx.width)
+    if ctx.zoom >= Zoom.DETAILED:
+        return _render_detailed(data, ctx.width)
+    if ctx.zoom >= Zoom.SUMMARY:
+        return _render_summary(data, ctx.width)
+    return _render_minimal(data, ctx.width)
 
 
 def _fetch() -> HitTestData:

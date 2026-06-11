@@ -213,13 +213,13 @@ def _render_full(spin: Spin, width: int) -> Block:
 
 
 def _render(ctx: CliContext, spin: Spin) -> Block:
-    if ctx.zoom == Zoom.MINIMAL:
-        return _render_minimal(spin, ctx.width)
-    if ctx.zoom == Zoom.DETAILED:
-        return _render_detailed(spin, ctx.width)
-    if ctx.zoom == Zoom.FULL:
+    if ctx.zoom >= Zoom.FULL:
         return _render_full(spin, ctx.width)
-    return _render_summary(spin, ctx.width)
+    if ctx.zoom >= Zoom.DETAILED:
+        return _render_detailed(spin, ctx.width)
+    if ctx.zoom >= Zoom.SUMMARY:
+        return _render_summary(spin, ctx.width)
+    return _render_minimal(spin, ctx.width)
 
 
 # --- Entry point ---

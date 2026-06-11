@@ -312,13 +312,13 @@ def _render_full(circuit: Circuit, width: int) -> Block:
 
 
 def _render(ctx: CliContext, circuit: Circuit) -> Block:
-    if ctx.zoom == Zoom.MINIMAL:
-        return _render_minimal(circuit, ctx.width)
-    if ctx.zoom == Zoom.DETAILED:
-        return _render_detailed(circuit, ctx.width)
-    if ctx.zoom == Zoom.FULL:
+    if ctx.zoom >= Zoom.FULL:
         return _render_full(circuit, ctx.width)
-    return _render_summary(circuit, ctx.width)
+    if ctx.zoom >= Zoom.DETAILED:
+        return _render_detailed(circuit, ctx.width)
+    if ctx.zoom >= Zoom.SUMMARY:
+        return _render_summary(circuit, ctx.width)
+    return _render_minimal(circuit, ctx.width)
 
 
 # --- Entry point ---

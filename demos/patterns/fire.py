@@ -257,13 +257,13 @@ def _render_full(fire: Fire, width: int) -> Block:
 
 
 def _render(ctx: CliContext, fire: Fire) -> Block:
-    if ctx.zoom == Zoom.MINIMAL:
-        return _render_minimal(fire, ctx.width)
-    if ctx.zoom == Zoom.DETAILED:
-        return _render_detailed(fire, ctx.width)
-    if ctx.zoom == Zoom.FULL:
+    if ctx.zoom >= Zoom.FULL:
         return _render_full(fire, ctx.width)
-    return _render_summary(fire, ctx.width)
+    if ctx.zoom >= Zoom.DETAILED:
+        return _render_detailed(fire, ctx.width)
+    if ctx.zoom >= Zoom.SUMMARY:
+        return _render_summary(fire, ctx.width)
+    return _render_minimal(fire, ctx.width)
 
 
 # --- Entry point ---

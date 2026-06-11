@@ -372,13 +372,13 @@ def _render_full(results: list[ScenarioResult], width: int) -> Block:
 
 
 def _render(ctx: CliContext, results: list[ScenarioResult]) -> Block:
-    if ctx.zoom == Zoom.MINIMAL:
-        return _render_minimal(results, ctx.width)
-    if ctx.zoom == Zoom.SUMMARY:
-        return _render_summary(results, ctx.width)
-    if ctx.zoom == Zoom.FULL:
+    if ctx.zoom >= Zoom.FULL:
         return _render_full(results, ctx.width)
-    return _render_detailed(results, ctx.width)
+    if ctx.zoom >= Zoom.DETAILED:
+        return _render_detailed(results, ctx.width)
+    if ctx.zoom >= Zoom.SUMMARY:
+        return _render_summary(results, ctx.width)
+    return _render_minimal(results, ctx.width)
 
 
 def _fetch() -> list[ScenarioResult]:

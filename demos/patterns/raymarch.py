@@ -539,13 +539,13 @@ def _count_nodes(node: Node) -> int:
 
 
 def _render(ctx: CliContext, shot: Shot) -> Block:
-    if ctx.zoom == Zoom.MINIMAL:
-        return _render_minimal(shot, ctx.width)
-    if ctx.zoom == Zoom.DETAILED:
-        return _window(ctx, shot, ctx.width, _legend(ctx))
-    if ctx.zoom == Zoom.FULL:
+    if ctx.zoom >= Zoom.FULL:
         return _render_full(ctx, shot, ctx.width)
-    return _window(ctx, shot, ctx.width)
+    if ctx.zoom >= Zoom.DETAILED:
+        return _window(ctx, shot, ctx.width, _legend(ctx))
+    if ctx.zoom >= Zoom.SUMMARY:
+        return _window(ctx, shot, ctx.width)
+    return _render_minimal(shot, ctx.width)
 
 
 # --- Entry point ---

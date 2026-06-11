@@ -225,13 +225,13 @@ def _render_full(pose: Plasma, width: int) -> Block:
 
 
 def _render(ctx: CliContext, pose: Plasma) -> Block:
-    if ctx.zoom == Zoom.MINIMAL:
-        return _render_minimal(pose, ctx.width)
-    if ctx.zoom == Zoom.DETAILED:
-        return _render_detailed(pose, ctx.width)
-    if ctx.zoom == Zoom.FULL:
+    if ctx.zoom >= Zoom.FULL:
         return _render_full(pose, ctx.width)
-    return _render_summary(pose, ctx.width)
+    if ctx.zoom >= Zoom.DETAILED:
+        return _render_detailed(pose, ctx.width)
+    if ctx.zoom >= Zoom.SUMMARY:
+        return _render_summary(pose, ctx.width)
+    return _render_minimal(pose, ctx.width)
 
 
 # --- Entry point ---

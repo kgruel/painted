@@ -559,13 +559,13 @@ def _render_full(ctx: CliContext, traces: list[ScenarioTrace]) -> Block:
 
 
 def _render(ctx: CliContext, traces: list[ScenarioTrace]) -> Block:
-    if ctx.zoom == Zoom.MINIMAL:
-        return _render_minimal(traces)
-    if ctx.zoom == Zoom.SUMMARY:
-        return _render_summary(traces)
-    if ctx.zoom == Zoom.FULL:
+    if ctx.zoom >= Zoom.FULL:
         return _render_full(ctx, traces)
-    return _render_detailed(ctx, traces)
+    if ctx.zoom >= Zoom.DETAILED:
+        return _render_detailed(ctx, traces)
+    if ctx.zoom >= Zoom.SUMMARY:
+        return _render_summary(traces)
+    return _render_minimal(traces)
 
 
 def _fetch() -> list[ScenarioTrace]:

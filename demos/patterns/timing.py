@@ -382,13 +382,13 @@ def render_full(data: TimingData, width: int) -> Block:
 
 
 def _render(ctx: CliContext, data: TimingData) -> Block:
-    if ctx.zoom == Zoom.MINIMAL:
-        return render_minimal(data, ctx.width)
-    if ctx.zoom == Zoom.SUMMARY:
-        return render_summary(data, ctx.width)
-    if ctx.zoom == Zoom.FULL:
+    if ctx.zoom >= Zoom.FULL:
         return render_full(data, ctx.width)
-    return render_detailed(data, ctx.width)
+    if ctx.zoom >= Zoom.DETAILED:
+        return render_detailed(data, ctx.width)
+    if ctx.zoom >= Zoom.SUMMARY:
+        return render_summary(data, ctx.width)
+    return render_minimal(data, ctx.width)
 
 
 def main() -> int:

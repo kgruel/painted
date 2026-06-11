@@ -314,13 +314,13 @@ def _render_full(report: HealthReport, width: int) -> Block:
 
 
 def _render(ctx: CliContext, report: HealthReport) -> Block:
-    if ctx.zoom == Zoom.MINIMAL:
-        return _render_minimal(report, ctx.width)
-    if ctx.zoom == Zoom.SUMMARY:
-        return _render_summary(report, ctx.width)
-    if ctx.zoom == Zoom.FULL:
+    if ctx.zoom >= Zoom.FULL:
         return _render_full(report, ctx.width)
-    return _render_detailed(report, ctx.width)
+    if ctx.zoom >= Zoom.DETAILED:
+        return _render_detailed(report, ctx.width)
+    if ctx.zoom >= Zoom.SUMMARY:
+        return _render_summary(report, ctx.width)
+    return _render_minimal(report, ctx.width)
 
 
 # --- Entry point ---

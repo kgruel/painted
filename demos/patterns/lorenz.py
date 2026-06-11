@@ -283,13 +283,13 @@ def _render_full(orbit: Orbit, width: int) -> Block:
 
 
 def _render(ctx: CliContext, orbit: Orbit) -> Block:
-    if ctx.zoom == Zoom.MINIMAL:
-        return _render_minimal(orbit, ctx.width)
-    if ctx.zoom == Zoom.DETAILED:
-        return _render_detailed(orbit, ctx.width)
-    if ctx.zoom == Zoom.FULL:
+    if ctx.zoom >= Zoom.FULL:
         return _render_full(orbit, ctx.width)
-    return _render_summary(orbit, ctx.width)
+    if ctx.zoom >= Zoom.DETAILED:
+        return _render_detailed(orbit, ctx.width)
+    if ctx.zoom >= Zoom.SUMMARY:
+        return _render_summary(orbit, ctx.width)
+    return _render_minimal(orbit, ctx.width)
 
 
 # --- Entry point ---

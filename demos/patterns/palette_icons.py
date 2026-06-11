@@ -293,13 +293,13 @@ def _render_full(ctx: CliContext, data: Dashboard) -> Block:
 
 def _render(ctx: CliContext, data: Dashboard) -> Block:
     with use_palette(DEFAULT_PALETTE):
-        if ctx.zoom == Zoom.MINIMAL:
-            return _render_minimal(ctx)
-        if ctx.zoom == Zoom.SUMMARY:
-            return _render_summary(ctx, data)
-        if ctx.zoom == Zoom.DETAILED:
+        if ctx.zoom >= Zoom.FULL:
+            return _render_full(ctx, data)
+        if ctx.zoom >= Zoom.DETAILED:
             return _render_detailed(ctx, data)
-        return _render_full(ctx, data)
+        if ctx.zoom >= Zoom.SUMMARY:
+            return _render_summary(ctx, data)
+        return _render_minimal(ctx)
 
 
 def main() -> int:

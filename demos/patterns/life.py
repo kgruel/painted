@@ -233,13 +233,13 @@ def _render_full(world: LifeWorld, width: int) -> Block:
 
 
 def _render(ctx: CliContext, world: LifeWorld) -> Block:
-    if ctx.zoom == Zoom.MINIMAL:
-        return _render_minimal(world, ctx.width)
-    if ctx.zoom == Zoom.DETAILED:
-        return _render_detailed(world, ctx.width)
-    if ctx.zoom == Zoom.FULL:
+    if ctx.zoom >= Zoom.FULL:
         return _render_full(world, ctx.width)
-    return _render_summary(world, ctx.width)
+    if ctx.zoom >= Zoom.DETAILED:
+        return _render_detailed(world, ctx.width)
+    if ctx.zoom >= Zoom.SUMMARY:
+        return _render_summary(world, ctx.width)
+    return _render_minimal(world, ctx.width)
 
 
 # --- Entry point ---

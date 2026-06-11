@@ -159,13 +159,13 @@ def _fetch() -> Doc:
 
 
 def _render(ctx: CliContext, doc: Doc) -> Block:
-    if ctx.zoom == Zoom.MINIMAL:
-        return render_minimal(doc, ctx.width)
-    if ctx.zoom == Zoom.SUMMARY:
-        return render_at(doc, Zoom.SUMMARY, ctx.width, "Help at default zoom:")
-    if ctx.zoom == Zoom.FULL:
+    if ctx.zoom >= Zoom.FULL:
         return render_full(doc, ctx.width)
-    return render_at(doc, Zoom.DETAILED, ctx.width, "Help at --help -v:")
+    if ctx.zoom >= Zoom.DETAILED:
+        return render_at(doc, Zoom.DETAILED, ctx.width, "Help at --help -v:")
+    if ctx.zoom >= Zoom.SUMMARY:
+        return render_at(doc, Zoom.SUMMARY, ctx.width, "Help at default zoom:")
+    return render_minimal(doc, ctx.width)
 
 
 def main() -> int:

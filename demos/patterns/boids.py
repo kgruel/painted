@@ -289,13 +289,13 @@ def _render_full(flock: Flock, width: int) -> Block:
 
 
 def _render(ctx: CliContext, flock: Flock) -> Block:
-    if ctx.zoom == Zoom.MINIMAL:
-        return _render_minimal(flock, ctx.width)
-    if ctx.zoom == Zoom.DETAILED:
-        return _render_detailed(flock, ctx.width)
-    if ctx.zoom == Zoom.FULL:
+    if ctx.zoom >= Zoom.FULL:
         return _render_full(flock, ctx.width)
-    return _render_summary(flock, ctx.width)
+    if ctx.zoom >= Zoom.DETAILED:
+        return _render_detailed(flock, ctx.width)
+    if ctx.zoom >= Zoom.SUMMARY:
+        return _render_summary(flock, ctx.width)
+    return _render_minimal(flock, ctx.width)
 
 
 # --- Entry point ---
