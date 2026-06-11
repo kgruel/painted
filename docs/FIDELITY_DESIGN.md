@@ -1,9 +1,10 @@
 # Fidelity — the disclosure grammar and the consumption ladder
 
-**Status: PROPOSED 2026-06-10** (branch `fidelity-grammar`). Direction ratified
-in conversation; this document is the design of record for ratification before
-any code. Companion to `docs/LIVE_DELIVERY_DESIGN.md` — that document gave the
-*delivery* axis its contract; this one does the same for *disclosure*.
+**Status: RATIFIED 2026-06-10, unbuilt** (branch `fidelity-grammar`). The §7
+questions are settled — (a) accepted into §4, the rest deferred or declined
+as recommended. This document is the design of record. Companion to
+`docs/LIVE_DELIVERY_DESIGN.md` — that document gave the *delivery* axis its
+contract; this one does the same for *disclosure*.
 
 ## 1. The contract
 
@@ -159,6 +160,18 @@ add_cli_args(parser, modes=..., tags=SIFTD_TAGS, budgets=False)
 fidelity = parse_fidelity(parsed, zoom, tags=SIFTD_TAGS)
 ```
 
+**Depth aliases** — app-local spellings for depth levels, at both altitudes:
+
+```python
+depth_aliases={"brief": 0, "full": 3}   # generates --brief / --full
+```
+
+Pure spelling: an alias flag sets depth (mutually exclusive with `-q`/`-v`,
+same argparse group), then compilation proceeds identically — so siftd's
+`--full` is `depth=3`, which trips the `implied_at=3` tags. One dict, no new
+concepts; exists because without it siftd keeps a parser and §6's
+deletability test fails.
+
 The functions are the rung below the knob — the knob is implemented *as*
 them. This is what makes downstream parsers deletable (§6) without forcing a
 harness migration, and it is itself monotonic: adopt the functions today,
@@ -268,8 +281,9 @@ Acknowledged residue, by design:
   grammar carries explicit budgets only.
 - siftd's `--tool-chars` (a per-facet budget) and loops' int-valued
   `--refs N`: app-specific, stay on the `add_args`/`build_fidelity` hooks.
-  Tags are boolean layers in this design; valued tags are deferred (§7).
-- siftd's `--brief`/`--full` *spellings* — see §7(a).
+  Tags are boolean layers in this design; valued tags are deferred (§7e).
+- siftd's `--brief`/`--full` *spellings* — expressible via `depth_aliases`
+  (§4), so they are not residue.
 
 loops: `cli/fidelity.py` deletes in favor of `parse_fidelity(tags=...)`;
 the per-view `visible={"facts": "facts"}` mappings become per-lens `Tag`
@@ -293,28 +307,26 @@ painted's own migration, same commit series as the grammar:
   and `Tag` addition; a new unit file pins the compilation laws (implication
   resolution, collision errors, budgets gating, help integration).
 
-## 7. Open questions for ratification
+## 7. Open questions — RESOLVED 2026-06-10
 
-(a) **Depth-flag aliases** (`--brief` ⇒ 0, `--full` ⇒ 3). Only siftd needs
+(a) **Depth-flag aliases** (`--brief` ⇒ 0, `--full` ⇒ 3) — **ACCEPTED**,
+    folded into §4 as `depth_aliases: dict[str, int]`. Only siftd needs
     them, but without them siftd keeps a parser and the acceptance test
-    fails. Recommendation: support as `depth_aliases: dict[str, int]` on the
-    grammar — one dict, pure spelling, no new concepts. The alternative
-    (siftd adopts `-q`/`-vv`) is siftd's UX to break, not ours to assume.
+    fails. One dict, pure spelling, no new concepts.
 (b) **Tag negation** (`--no-thinking` to subtract an implied tag from
-    `--full`). No field evidence of demand. Recommendation: defer;
+    `--full`) — **DEFERRED**. No field evidence of demand;
     `argparse.BooleanOptionalAction` is the obvious future path and nothing
     in the compilation rules precludes it.
-(c) **`ctx.shows(tag)` sugar.** Pure delegation to `ctx.fidelity.shows` —
-    fails the dissolution test (adds a name, adds nothing else).
-    Recommendation: no; `ctx.zoom` stays the only porthole.
-(d) **`--show TAG` generic spelling.** Keep alongside generated `--{name}`
-    flags, or retire? Recommendation: retire after the docs CLI enumerates —
-    one spelling per facet, and `--show` only existed because declarations
-    didn't.
-(e) **Valued tags** (loops' `--refs N`). Deferred — `Fidelity.visible` is
-    `frozenset[str]` and stays so; revisit only if a second consumer needs a
-    per-tag parameter (the seam tripwire discipline: re-design on the second
-    instance, not the first).
+(c) **`ctx.shows(tag)` sugar** — **DECLINED**. Pure delegation to
+    `ctx.fidelity.shows` fails the dissolution test (adds a name, adds
+    nothing else). `ctx.zoom` stays the only porthole.
+(d) **`--show TAG` generic spelling** — **RETIRED** once the docs CLI
+    enumerates its tags into declarations. One spelling per facet; `--show`
+    only existed because declarations didn't.
+(e) **Valued tags** (loops' `--refs N`) — **DEFERRED, revisit as its own
+    design discussion**. `Fidelity.visible` is `frozenset[str]` and stays
+    so; re-open on a second consumer needing a per-tag parameter (the seam
+    tripwire discipline: re-design on the second instance, not the first).
 
 ## 8. Non-goals
 
