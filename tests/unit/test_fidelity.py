@@ -338,9 +338,9 @@ class TestAddCliArgs:
         assert args.plain is True
 
     def test_density_args(self):
-        """Density arguments are added correctly."""
+        """Density arguments are added when budgets are declared."""
         parser = argparse.ArgumentParser()
-        add_cli_args(parser)
+        add_cli_args(parser, budgets=True)
 
         args = parser.parse_args(["--max-chars", "50"])
         assert args.max_chars == 50
@@ -357,11 +357,19 @@ class TestAddCliArgs:
     def test_density_args_defaults(self):
         """Density arguments default to None."""
         parser = argparse.ArgumentParser()
-        add_cli_args(parser)
+        add_cli_args(parser, budgets=True)
 
         args = parser.parse_args([])
         assert args.max_chars is None
         assert args.max_lines is None
+
+    def test_density_args_absent_by_default(self):
+        """The honesty rule: undeclared budgets means no --max-chars/--max-lines."""
+        parser = argparse.ArgumentParser()
+        add_cli_args(parser)
+
+        with pytest.raises(SystemExit):
+            parser.parse_args(["--max-chars", "50"])
 
     def test_zoom_mutual_exclusion(self):
         """Cannot combine -q and -v."""
@@ -520,6 +528,7 @@ class TestCliRunner:
             ["--max-chars", "50", "--max-lines", "10"],
             render=render,
             fetch=lambda: "data",
+            budgets=True,
         )
 
         assert received_fidelity is not None

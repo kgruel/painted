@@ -284,14 +284,14 @@ def add_cli_args(
     modes: set[OutputMode] | None = None,
     tags: Sequence[Tag] | None = None,
     depth_aliases: Mapping[str, int] | None = None,
-    budgets: bool = True,
+    budgets: bool = False,
 ) -> None:
     """Add standard zoom/mode/format arguments.
 
     Args:
         parser: ArgumentParser to add arguments to.
         modes: Supported output modes. When provided, only adds flags for
-            modes in the set. When None, adds all flags (backward-compatible).
+            modes in the set. When None, adds all mode flags.
         tags: Declared disclosure layers. Each generates a ``--{name}`` flag
             grouped under "Layers".
         depth_aliases: App-local depth spellings (``{"brief": 0, "full": 3}``
@@ -299,7 +299,8 @@ def add_cli_args(
             depth, mutually exclusive with ``-q``/``-v``.
         budgets: Whether the app honors density budgets. Only when True do
             ``--max-chars``/``--max-lines`` exist — a flag exists only because
-            a capability was declared.
+            a capability was declared, and a declared capability must change
+            output (the honesty rule).
     """
     _check_declarations(tags, depth_aliases)
 

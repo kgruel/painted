@@ -88,9 +88,9 @@ class CliRunner(Generic[T]):
     tags: list[Tag] | None = None
     depth_aliases: dict[str, int] | None = None
 
-    # Whether this app honors --max-chars/--max-lines. A flag exists only
-    # because a capability was declared.
-    budgets: bool = True
+    # Whether this app honors --max-chars/--max-lines. Opt-in: a flag exists
+    # only because a capability was declared.
+    budgets: bool = False
 
     # Optional: transform Fidelity after parsing — the escape hatch for
     # app-specific residue the grammar doesn't express. Runs last, after tag
@@ -463,7 +463,7 @@ def run_cli(
     help_args: list[HelpArg] | None = None,
     tags: list[Tag] | None = None,
     depth_aliases: dict[str, int] | None = None,
-    budgets: bool = True,
+    budgets: bool = False,
     build_fidelity: Callable[[argparse.Namespace, Fidelity], Fidelity] | None = None,
 ) -> int:
     """Run a CLI tool with zoom/mode/format handling.
