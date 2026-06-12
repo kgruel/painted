@@ -3,7 +3,7 @@
 Reference for how primitives compose.
 
 ```
-                           FIDELIS HIERARCHY
+                           PAINTED HIERARCHY
 ═══════════════════════════════════════════════════════════════════
 
 ATOMIC LAYER

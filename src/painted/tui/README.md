@@ -7,14 +7,16 @@ Full-screen terminal applications with keyboard input, modal dialogs, and diff r
 The app base class. Manages alt screen, keyboard loop, and diff-based rendering.
 
 ```python
-from painted.tui import Surface, BufferView
+import asyncio
+from painted.tui import Surface
 
 class MyApp(Surface):
     def __init__(self):
         super().__init__()
         self.count = 0
 
-    def render(self, buf: BufferView) -> None:
+    def render(self) -> None:
+        buf = self._buf
         block = Block.text(f"Count: {self.count}", Style())
         block.paint(buf, 0, 0)
 
@@ -24,10 +26,10 @@ class MyApp(Surface):
         elif key == " ":
             self.count += 1
 
-MyApp().run()
+asyncio.run(MyApp().run())
 ```
 
-`run()` enters alt screen, starts keyboard + render loop, diff-flushes only changed cells.
+`run()` is async: it enters alt screen, starts the keyboard + render loop, and diff-flushes only changed cells. `render()` takes no arguments — paint into `self._buf`.
 
 ## Layer Pattern
 
@@ -110,5 +112,6 @@ from painted.tui import (
     Search, filter_fuzzy, filter_prefix, filter_contains,
     TestSurface, CapturedFrame,
     Region, Cursor, CursorMode,
+    MouseEvent, MouseButton, MouseAction,
 )
 ```

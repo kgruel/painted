@@ -64,7 +64,7 @@ class Surface:
         self._enable_mouse = enable_mouse
         self._mouse_all_motion = mouse_all_motion
         if scroll_optimization is None:
-            env = os.environ.get("FIDELIS_SCROLL_OPTIM", "").strip().lower()
+            env = os.environ.get("PAINTED_SCROLL_OPTIM", "").strip().lower()
             scroll_optimization = env in {"1", "true", "yes", "on"}
         self._scroll_optimization = bool(scroll_optimization)
         self._scroll_optimization_emit = scroll_optimization_emit
@@ -80,22 +80,28 @@ class Surface:
         import asyncio
 
         self._running = True
-        self._writer.enter_alt_screen()
-        self._writer.hide_cursor()
-        if self._enable_mouse:
-            self._writer.enable_mouse(all_motion=self._mouse_all_motion)
-
-        # Initial sizing
-        width, height = self._writer.size()
-        self._buf = Buffer(width, height)
-        self._prev = Buffer(width, height)
-        self.layout(width, height)
-
-        # Handle terminal resize
-        loop = asyncio.get_running_loop()
-        loop.add_signal_handler(signal.SIGWINCH, self._on_resize)
-
+        # Everything from enter_alt_screen on is inside the try: sizing, user
+        # layout(), and signal-handler setup can all raise, and the terminal
+        # must be restored even when setup fails.
+        sigwinch_installed = False
+        loop = None
         try:
+            self._writer.enter_alt_screen()
+            self._writer.hide_cursor()
+            if self._enable_mouse:
+                self._writer.enable_mouse(all_motion=self._mouse_all_motion)
+
+            # Initial sizing
+            width, height = self._writer.size()
+            self._buf = Buffer(width, height)
+            self._prev = Buffer(width, height)
+            self.layout(width, height)
+
+            # Handle terminal resize
+            loop = asyncio.get_running_loop()
+            loop.add_signal_handler(signal.SIGWINCH, self._on_resize)
+            sigwinch_installed = True
+
             with self._keyboard:
                 if self._on_start is not None:
                     await self._on_start()
@@ -146,7 +152,8 @@ class Surface:
         finally:
             if self._on_stop is not None:
                 await self._on_stop()
-            loop.remove_signal_handler(signal.SIGWINCH)
+            if sigwinch_installed and loop is not None:
+                loop.remove_signal_handler(signal.SIGWINCH)
             if self._enable_mouse:
                 self._writer.disable_mouse()
             self._writer.show_cursor()
