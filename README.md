@@ -71,12 +71,31 @@ run_cli(sys.argv[1:], render=render, fetch=fetch)
 myapp              # auto-detect
 myapp -q           # quiet (zoom 0)
 myapp -v           # verbose (zoom 2)
-myapp -i           # interactive TUI
 myapp --json       # JSON output
 myapp | grep ok    # plain text, no ANSI
 ```
 
 <!-- TODO: tapes/zoom.gif — quiet/default/verbose spectrum -->
+
+The flag surface grows only as you declare capabilities — a flag exists only
+because the app declared it, and a declared capability must change output:
+
+```python
+run_cli(
+    sys.argv[1:], render=render, fetch=fetch,
+    tags=[Tag("thinking", "Show reasoning", implied_at=3)],  # generates --thinking
+    depth_aliases={"brief": 0, "full": 3},                   # --brief / --full
+    budgets=True,                                            # --max-chars / --max-lines
+)
+```
+
+Gate content with `ctx.fidelity.shows("thinking")`; read `ctx.fidelity.chars`
+for budgets. Add `fetch_stream=` for live updates (`--live` appears), and
+`live_delivery="surface"` to upgrade sustained streams to an alt-screen
+render loop (`-i` appears, converging with `--live`). Each rung is additive —
+climbing never rewrites the rung below. For multi-command apps, `run_app`
+routes subcommands through the same harness. The full consumer guide lives in
+[`src/painted/README.md`](src/painted/README.md).
 
 ### Full TUI
 
@@ -112,6 +131,11 @@ One dependency: [wcwidth](https://pypi.org/project/wcwidth/) (wide character dis
 
 ## API
 
+Two stability tiers: `painted.core` + `painted.views` are semver-stable
+(removing or renaming a public name is a major version); `painted.cli` +
+`painted.tui` are the evolving framework surface and may change across minor
+versions — pre-1.0, pin accordingly.
+
 ### Primitives
 
 | Export | Purpose |
@@ -134,7 +158,8 @@ One dependency: [wcwidth](https://pypi.org/project/wcwidth/) (wide character dis
 |--------|---------|
 | `show(data)` | Zero-config display with auto-detection |
 | `print_block(block)` | Print a Block to stdout (TTY-aware) |
-| `run_cli(args, render=, fetch=)` | CLI harness with zoom/mode/format |
+| `run_cli(args, render=, fetch=, ...)` | CLI harness: zoom/mode/format, plus declared `tags=`, `depth_aliases=`, `budgets=`, `fetch_stream=`, `live_delivery=` |
+| `run_app(argv, commands)` | Multi-command routing; each `AppCommand` handler calls `run_cli` |
 
 ### Views (`painted.views`)
 
