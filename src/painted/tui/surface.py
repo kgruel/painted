@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import os
 import signal
 from collections.abc import Awaitable, Callable
@@ -75,6 +74,11 @@ class Surface:
 
     async def run(self) -> None:
         """Enter alt screen, run main loop, restore terminal on exit."""
+        # Deferred: asyncio is ~55% of this module's import cost, and only the
+        # running loop needs it — importing Surface (e.g. via painted.tui or
+        # TestSurface) shouldn't pay for it.
+        import asyncio
+
         self._running = True
         self._writer.enter_alt_screen()
         self._writer.hide_cursor()
