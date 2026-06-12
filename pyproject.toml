@@ -69,3 +69,10 @@ unresolved-attribute = "ignore"  # Block uses object.__setattr__ + __slots__ for
 
 [tool.ty.environment]
 python-version = "3.11"
+
+[tool.pyright]
+# Editor-only checker (the gate runs ty); point it at the project venv so
+# dev-only imports (hypothesis, pytest) resolve.
+venvPath = "."
+venv = ".venv"
+pythonVersion = "3.11"
