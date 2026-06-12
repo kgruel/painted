@@ -18,6 +18,22 @@ from ..core.writer import ScrollOp, Writer
 Emit = Callable[[str, dict[str, Any]], None]
 LifecycleHook = Callable[[], Awaitable[None]]
 
+# Minimum sleep: yields the event loop without measurably delaying the frame.
+MIN_YIELD = 0.001
+
+
+def frame_sleep(elapsed: float, fps_cap: int, *, active: bool) -> float:
+    """Seconds to sleep after a frame, compensating for frame work already done.
+
+    ``active`` (input flowing or a re-render already queued) yields minimally so
+    the loop drains input at full speed. Otherwise sleep only the remainder of
+    the frame period — the frame's own render time counts toward its period, so
+    a slow render shortens the sleep instead of stretching the frame.
+    """
+    if active:
+        return MIN_YIELD
+    return max(MIN_YIELD, 1.0 / fps_cap - elapsed)
+
 
 class Surface:
     """Base class for buffer-rendered applications.
@@ -81,6 +97,7 @@ class Surface:
                     await self._on_start()
 
                 while self._running:
+                    frame_start = loop.time()
                     # Drain all available input before rendering
                     had_input = False
                     while True:
@@ -114,11 +131,14 @@ class Surface:
                         self.render()
                         self._flush()
 
-                    # Adaptive sleep: short yield when active, full frame sleep when idle
-                    if had_input or self._dirty:
-                        await asyncio.sleep(0.001)
-                    else:
-                        await asyncio.sleep(1.0 / self._fps_cap)
+                    # Adaptive sleep: short yield when input is flowing, else the
+                    # REMAINDER of the frame period — sleeping the full period after
+                    # a blocking render compounds to render_time + period per frame
+                    # (a 30fps cap delivered ~23fps before compensation).
+                    elapsed = loop.time() - frame_start
+                    await asyncio.sleep(
+                        frame_sleep(elapsed, self._fps_cap, active=had_input or self._dirty)
+                    )
         finally:
             if self._on_stop is not None:
                 await self._on_stop()
