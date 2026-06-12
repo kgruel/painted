@@ -1,26 +1,39 @@
 ---
-// docs/primitives.astro — the doc-IR's SEMANTIC sink, proven on one page.
+// docs/[slug].astro — the doc-IR's SEMANTIC sink, one route for every page.
 //
-// The body below is a committed fragment under src/generated/docs/, produced by
-// tools/doc_publish.to_html from the SAME node tree that `painted docs primitives`
+// Each body is a committed fragment under src/generated/docs/, produced by
+// tools/doc_publish.to_html from the SAME node tree that `painted docs <name>`
 // renders in the terminal (painted/_doc_pages.py). Chrome arrives as real
 // semantics (<section>/<h2>/<p>/<dl>) read straight off the tree — never
 // flattened through Block → HTML — while each <figure> island IS Block → HTML:
 // live-rendered painted output, terminal-faithful (the doc == demo node).
-// `outputgen --check` gates this fragment against a fresh publish, so this page
-// and the terminal rendering cannot drift apart — they are one tree.
+// `outputgen --check` gates every fragment (and index.json) against a fresh
+// publish, so these pages and the terminal rendering cannot drift apart.
 import Base from "../../layouts/Base.astro";
 
-import primitives from "../../generated/docs/primitives.html?raw";
+export async function getStaticPaths() {
+  const fragments = import.meta.glob("../../generated/docs/*.html", {
+    query: "?raw",
+    import: "default",
+    eager: true,
+  });
+  return Object.entries(fragments).map(([path, html]) => ({
+    params: { slug: path.split("/").pop().replace(".html", "") },
+    props: { html },
+  }));
+}
+
+const { slug } = Astro.params;
+const { html } = Astro.props;
 ---
 
-<Base title="painted — docs / primitives">
+<Base title={`painted — docs / ${slug}`}>
   <main class="doc-root">
     <p class="doc-provenance">
       This page is a doc-IR node tree, published as semantic HTML. The same tree
-      renders in your terminal: <code>painted docs primitives -vv --show rationale</code>
+      renders in your terminal: <code>painted docs {slug} -vv</code>
     </p>
-    <Fragment set:html={primitives} />
+    <Fragment set:html={html} />
   </main>
 </Base>
 

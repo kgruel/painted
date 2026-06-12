@@ -1,0 +1,38 @@
+<article class="painted-doc">
+<h1>Guide 4 — Interactive TUI</h1>
+<p>You need keyboard input, full-screen, modal dialogs. Most tools don&#x27;t — exhaust the earlier rungs first. When you do: subclass Surface, override render() and on_key(), call run().</p>
+<pre><code class="language-python">from painted.tui import Surface
+
+class MyApp(Surface):
+    def render(self, buf):
+        Block.text(f&quot;Count: {self.count}&quot;, Style()).paint(buf, 0, 0)
+
+    def on_key(self, key):
+        if key == &quot;q&quot;:
+            self.quit()</code></pre>
+<figure>
+<pre class="painted-output"><span style="opacity: 0.6">item 1   ready</span>                
+<span style="opacity: 0.6">item 2   ready</span>                
+<span style="opacity: 0.6">item 3   running</span>              
+╭────────────────────────────╮
+│ <span style="font-weight: bold">Quit without saving? [y/n]</span> │
+╰────────────────────────────╯
+</pre>
+<figcaption>A modal layer over a base view</figcaption>
+</figure>
+<dl>
+<dt>Surface</dt>
+<dd>alt-screen loop: keyboard in, diff-rendered frames out</dd>
+<dt>Layer</dt>
+<dd>modal stack — top layer handles keys, all render</dd>
+<dt>Focus / Search</dt>
+<dd>navigation ring and query filtering</dd>
+<dt>TestSurface</dt>
+<dd>replay keys, capture frames — no terminal needed</dd>
+</dl>
+<p>State stays yours: Surface subclasses hold mutable app state, but rendering is still Blocks painted into a buffer — the same compose vocabulary from Guide 1. Emit is the feedback boundary: the Surface reports observations upstream instead of mutating the world.</p>
+<section>
+<h2>Testing is the design</h2>
+<p>TestSurface(app, input_queue) replays keys against a fixed-size buffer and captures every frame. If your app is hard to drive that way, its state is hiding somewhere rendering can&#x27;t see — fix the app, not the test.</p>
+</section>
+</article>

@@ -1,0 +1,26 @@
+[
+  {
+    "name": "primitives",
+    "description": "The render-layer value types: Style, Cell, Span, Line, Block"
+  },
+  {
+    "name": "show",
+    "description": "Guide 0 \u2014 display data with show(), zero ceremony"
+  },
+  {
+    "name": "compose",
+    "description": "Guide 1 \u2014 custom layout with Blocks: join, border, pad"
+  },
+  {
+    "name": "cli",
+    "description": "Guide 2 \u2014 a CLI tool: run_cli and the disclosure ladder"
+  },
+  {
+    "name": "live",
+    "description": "Guide 3 \u2014 live updates: fetch_stream and the two delivery tiers"
+  },
+  {
+    "name": "tui",
+    "description": "Guide 4 \u2014 interactive TUI: Surface, Layer, TestSurface"
+  }
+]

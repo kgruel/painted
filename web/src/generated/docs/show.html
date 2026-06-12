@@ -1,0 +1,20 @@
+<article class="painted-doc">
+<h1>Guide 0 — Display data</h1>
+<p>You have data and want it to look decent in a terminal. show() is the whole API at this rung: it auto-dispatches by data shape — dict to key-value, list to items, numeric to chart, nested to tree.</p>
+<pre><code class="language-python">from painted import show
+
+show({&quot;status&quot;: &quot;ok&quot;, &quot;items&quot;: 42})</code></pre>
+<figure>
+<pre class="painted-output">root                                        
+├─ status: ok                               
+├─ items: 42                                
+└─ regions                                  
+</pre>
+<figcaption>shape_lens output — what show() prints</figcaption>
+</figure>
+<p>show(data, zoom=Zoom.DETAILED) asks for more, show(data, zoom=Zoom.MINIMAL) for a one-liner. That zoom argument is the first rung of the disclosure ladder — the same axis -q/-v will control once you have a CLI.</p>
+<section>
+<h2>Why start here</h2>
+<p>Every later rung is additive. A show() call you outgrow becomes a render function without rewriting what it displays — the no-framework-switch invariant.</p>
+</section>
+</article>

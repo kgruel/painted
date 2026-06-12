@@ -45,7 +45,7 @@ from painted import Block, Style, join_horizontal, border, pad, print_block
 left = Block.text("Name: Alice", Style(bold=True))
 right = Block.text("Score: 98", Style(fg="green"))
 row = join_horizontal(left, Block.text("  "), right)
-print_block(border(pad(row, 1)))
+print_block(border(pad(row, left=1, right=1)))
 ```
 
 Key types:

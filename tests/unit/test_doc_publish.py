@@ -153,6 +153,17 @@ class TestPublishedFidelity:
 class TestEmit:
     def test_one_fragment_per_registry_entry(self, tmp_path):
         written = emit_doc_pages(repo_root=tmp_path, out_dir=tmp_path)
-        assert {p.name for p in written} == {f"{name}.html" for name in DOCS}
+        # one HTML fragment per page, plus the registry index the site lists from
+        assert {p.name for p in written} == {f"{name}.html" for name in DOCS} | {"index.json"}
         for p in written:
+            if p.name == "index.json":
+                continue
             assert p.read_text(encoding="utf-8").startswith('<article class="painted-doc">')
+
+    def test_index_lists_the_registry(self, tmp_path):
+        import json
+
+        emit_doc_pages(repo_root=tmp_path, out_dir=tmp_path)
+        entries = json.loads((tmp_path / "index.json").read_text(encoding="utf-8"))
+        assert [e["name"] for e in entries] == list(DOCS)
+        assert all(e["description"] == DOCS[e["name"]].description for e in entries)

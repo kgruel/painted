@@ -341,7 +341,21 @@ def emit_doc_pages(*, repo_root: Path, out_dir: Path | None = None) -> list[Path
         path = out_dir / f"{name}.html"
         _write_text(path, to_html(entry.build()))
         written.append(path)
+    index = out_dir / "index.json"
+    _write_text(index, _doc_pages_index())
+    written.append(index)
     return written
+
+
+def _doc_pages_index() -> str:
+    """The page registry as JSON — the site lists pages from the same DOCS
+    dict the terminal dispatches on, so neither side can list a page the
+    other doesn't have."""
+    entries = [
+        {"name": name, "description": entry.description}
+        for name, entry in _DOC_PAGES_CATALOG.items()
+    ]
+    return json.dumps(entries, indent=2) + "\n"
 
 
 def check_doc_pages(*, repo_root: Path) -> list[str]:
@@ -353,6 +367,9 @@ def check_doc_pages(*, repo_root: Path) -> list[str]:
         path = out_dir / f"{name}.html"
         if not path.exists() or _read_text(path) != want:
             stale.append(name)
+    index = out_dir / "index.json"
+    if not index.exists() or _read_text(index) != _doc_pages_index():
+        stale.append("index.json")
     return stale
 
 
