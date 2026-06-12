@@ -95,7 +95,7 @@ The other two axes:
 - **Format** (`--json`/`--plain`): ANSI (TTY default), PLAIN (pipe default), JSON
 - **Mode** (`-i`/`--static`/`--live`): AUTO detects from TTY
 
-Streaming: add `fetch_stream` for live updates.
+Streaming: add `fetch_stream` for live updates. Mode flags follow the honesty rule too: `--live` exists only when `fetch_stream` is declared, and `-i` only with an INTERACTIVE handler or `live_delivery="surface"` *plus* `fetch_stream` (where it converges with `--live` onto the same alt-screen surface).
 
 **Don't reach for yet**: Surface, Layer, InPlaceRenderer (unless you need custom animation outside the CLI harness).
 

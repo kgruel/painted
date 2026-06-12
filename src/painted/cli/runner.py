@@ -68,6 +68,8 @@ class CliRunner(Generic[T]):
     # Opt-in delivery gauge: dress live frames with a cost_meter row
     # (render+write vs the measured frame period). An author choice, like
     # live_delivery — it changes the output, so it is never implied.
+    # Meters streaming frames only: without fetch_stream there is no frame
+    # period to measure, so the flag has no effect.
     live_meter: bool = False
 
     # Optional: description for help
@@ -99,6 +101,14 @@ class CliRunner(Generic[T]):
 
     # Internal parser cache for repeated invocations
     _parser_cache: argparse.ArgumentParser | None = field(default=None, init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        # Same promise as the declaration collision checks: misconfiguration
+        # raises at construction, never degrades silently at dispatch.
+        if self.live_delivery not in ("inplace", "surface"):
+            raise ValueError(
+                f"live_delivery must be 'inplace' or 'surface', got {self.live_delivery!r}"
+            )
 
     def run(self, args: list[str]) -> int:
         """Parse args, resolve context, dispatch."""
@@ -237,7 +247,14 @@ class CliRunner(Generic[T]):
         return 0
 
     def _export_json(self) -> int:
-        """Export data as JSON — bypasses render pipeline entirely."""
+        """Export data as JSON — bypasses render pipeline entirely.
+
+        Dataclass state is exported via ``asdict``; anything else is handed
+        to ``json.dumps`` directly. Values JSON can't encode are coerced with
+        ``str()`` (``default=str``) rather than erroring — export is
+        best-effort by contract, so a non-JSON-clean field yields its repr,
+        not a failure.
+        """
         try:
             state = self.fetch()
         except Exception as exc:
@@ -417,6 +434,13 @@ class CliRunner(Generic[T]):
             asyncio.run(surface.run())
         except KeyboardInterrupt:
             pass  # final frame still deposited below
+        except Exception as exc:
+            # User fetch/render failures are captured in surface.error; what
+            # reaches here is a delivery failure (terminal setup, sizing).
+            # Surface.run has already restored the terminal — translate to the
+            # documented exit-code contract instead of leaking a traceback.
+            print(self._exception_message(exc), file=sys.stderr)
+            return 1
 
         if surface.error is not None:
             if surface.error_kind == "render":

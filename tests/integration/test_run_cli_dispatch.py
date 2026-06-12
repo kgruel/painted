@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from painted import Block, Style
 from painted.cli import (
     CliContext,
@@ -32,6 +34,15 @@ from painted.cli import (
 
 class TestCliRunner:
     """Tests for CliRunner class."""
+
+    def test_invalid_live_delivery_raises_at_construction(self):
+        """Misconfiguration raises immediately, never degrades at dispatch."""
+        with pytest.raises(ValueError, match="live_delivery"):
+            CliRunner(
+                render=lambda ctx, data: Block.text("x", Style()),
+                fetch=lambda: "x",
+                live_delivery="surfce",
+            )
 
     def test_static_output(self, monkeypatch):
         """Static mode uses print_block and returns 0."""

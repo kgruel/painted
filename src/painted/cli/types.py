@@ -243,6 +243,12 @@ def _dest(name: str) -> str:
     return name.replace("-", "_")
 
 
+# check_declarations / declared_dests / depth_alias_help below are package
+# internals shared with the sibling runner/help/app_runner modules. They are
+# public-named (the arch gate forbids cross-module private imports) but
+# deliberately not in __all__ — not part of the consumer surface.
+
+
 def check_declarations(
     tags: Sequence[Tag] | None,
     depth_aliases: Mapping[str, int] | None,

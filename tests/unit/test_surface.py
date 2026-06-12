@@ -188,3 +188,53 @@ class TestActionAutoEmission:
         )
 
         assert should_quit
+
+
+class TestRunSetupFailureRestoresTerminal:
+    """Surface.run must restore the terminal even when setup fails.
+
+    Regression: enter_alt_screen/hide_cursor ran before the try/finally,
+    so a failure in sizing or user layout() wedged the terminal.
+    """
+
+    class _FailingSizeWriter:
+        def __init__(self):
+            self.calls = []
+
+        def enter_alt_screen(self):
+            self.calls.append("enter_alt_screen")
+
+        def exit_alt_screen(self):
+            self.calls.append("exit_alt_screen")
+
+        def hide_cursor(self):
+            self.calls.append("hide_cursor")
+
+        def show_cursor(self):
+            self.calls.append("show_cursor")
+
+        def enable_mouse(self, *, all_motion=False):
+            self.calls.append("enable_mouse")
+
+        def disable_mouse(self):
+            self.calls.append("disable_mouse")
+
+        def size(self):
+            raise OSError("not a tty")
+
+    def test_setup_failure_exits_alt_screen(self):
+        import asyncio
+
+        import pytest
+
+        surface = Surface()
+        writer = self._FailingSizeWriter()
+        surface._writer = writer
+
+        with pytest.raises(OSError):
+            asyncio.run(surface.run())
+
+        assert "exit_alt_screen" in writer.calls
+        assert "show_cursor" in writer.calls
+        # Restore runs after the failed setup, not before
+        assert writer.calls.index("exit_alt_screen") > writer.calls.index("enter_alt_screen")

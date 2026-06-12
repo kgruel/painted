@@ -177,5 +177,5 @@ docs/
   MODE_RESOLUTION.md  # AUTO mode collapse rules, capability filtering
   DEMO_PATTERNS.md    # TUI app pattern, demo organization
   LIVE_DELIVERY_DESIGN.md  # Two-tier live contract; alt-screen LIVE path (implemented)
-  FIDELITY_DESIGN.md  # Disclosure grammar: Tag declarations, consumption ladder (ratified, unbuilt)
+  FIDELITY_DESIGN.md  # Disclosure grammar: Tag declarations, consumption ladder (ratified, implemented)
 ```

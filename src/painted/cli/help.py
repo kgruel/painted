@@ -309,6 +309,8 @@ def scan_help_args(
         if arg == "-q" or arg == "--quiet":
             zoom = Zoom.MINIMAL
         elif arg in alias_flags:
+            # Intentional lossy clamp: alias depths are open ints in the spec,
+            # but the help path renders at a Zoom rung, so >3 reads as FULL.
             zoom = Zoom(min(max(alias_flags[arg], 0), 3))
         elif arg.startswith("-v"):
             # Count v's: -v, -vv, -vvv

@@ -198,6 +198,13 @@ def run_app(
 
     Convenience function that creates an AppRunner and runs it.
 
+    Each command's handler receives the remaining argv and returns an exit
+    code; the expected shape is a function that calls ``run_cli`` with that
+    argv, so every subcommand gets the framework flags (zoom, format, mode,
+    declared tags). Per-subcommand ``-h`` is intercepted only when the
+    AppCommand sets ``help_args`` (and ``tags``, mirroring the handler's own
+    declarations) — without them, ``-h`` falls through to the handler.
+
     Args:
         argv: Command-line arguments (sys.argv[1:])
         commands: Available commands
