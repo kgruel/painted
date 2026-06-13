@@ -71,6 +71,25 @@ def test_demos_run_without_name_errors():
     assert main(["demos", "run"]) == 1
 
 
+def test_demos_list_dispatches_to_list_path(monkeypatch):
+    # The detail string advertises a ``list`` subcommand; pin that the front
+    # door routes ``demos list`` into the handler's list path. Spy on
+    # ``list_demos`` (imported lazily inside _demo_dispatch) to prove the
+    # dispatch without depending on the live demo registry's contents.
+    import painted._demo_cli as demo_cli
+
+    seen: list[list[str]] = []
+
+    def spy_list(args: list[str]) -> int:
+        seen.append(args)
+        return 0
+
+    monkeypatch.setattr(demo_cli, "list_demos", spy_list)
+    assert main(["demos", "list"]) == 0
+    # "list" is consumed as the subcommand; the remaining argv reaches list_demos.
+    assert seen == [[]]
+
+
 def test_command_table_routes_without_collision(monkeypatch):
     """The front-door table builds (no alias collision raised) and routes every
     command — proven by spying on each handler instead of executing the real

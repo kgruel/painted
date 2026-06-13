@@ -352,6 +352,14 @@ class TestAliases:
                 commands=(AppCommand("demos", "List demos", lambda argv: 0, aliases=("demos",)),)
             )
 
+    def test_command_lists_same_alias_twice_raises(self):
+        # A single command repeating an alias is its own error class — the
+        # message names the command, not a self-referential "other" owner.
+        with pytest.raises(ValueError, match="lists alias 'x' more than once"):
+            AppRunner(
+                commands=(AppCommand("demos", "List demos", lambda argv: 0, aliases=("x", "x")),)
+            )
+
     def test_run_app_routes_alias(self):
         called = []
         commands = [
