@@ -18,6 +18,7 @@ if __package__ is None:  # invoked as a script: python tools/outputgen.py
 from painted._doc_pages import DOCS as _DOC_PAGES_CATALOG
 
 from tools.capture import capture_demo, import_module_by_path
+from tools.disclosure_specimens import DISCLOSURE as _DISCLOSURE_CATALOG
 from tools.doc_publish import to_html
 from tools.landing_specimens import LANDING as _LANDING_CATALOG
 from tools.reference_specimens import CATALOG as _REFERENCE_CATALOG
@@ -174,6 +175,10 @@ PANELS: dict[str, OutputSpec] = {
     # The hero wordmark + three routing cards for index.astro. Same <module> shape
     # as the reference catalog, sourced from tools/landing_specimens.py.
     **{name: _module_panel(name, "tools/landing_specimens.py") for name in _LANDING_CATALOG},
+    # --- Disclosure ladder (walkthrough branch: /walkthrough/fidelity) ---------
+    # The fidelity exemplar rendered under explicitly built Fidelity specs —
+    # rungs 1–4 of the consumption ladder, sourced from tools/disclosure_specimens.py.
+    **{name: _module_panel(name, "tools/disclosure_specimens.py") for name in _DISCLOSURE_CATALOG},
 }
 
 

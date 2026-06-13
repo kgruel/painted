@@ -1,0 +1,324 @@
+---
+// walkthrough/fidelity.astro — the disclosure ladder, a branch off the hub's
+// fidelity stop. Same register as the hub walkthrough: sticky spine, staged
+// shells, every panel real render_html output.
+//
+// The dataset here is the canonical disclosure exemplar
+// (demos/patterns/fidelity.py — disk usage); the panels are committed
+// fragments produced by tools/disclosure_specimens.py via `./dev panels`.
+import Base from "../../layouts/Base.astro";
+
+import dQ from "../../generated/panels/disclosure_q.html?raw";
+import dDefault from "../../generated/panels/disclosure_default.html?raw";
+import dVv from "../../generated/panels/disclosure_vv.html?raw";
+import dTagQ from "../../generated/panels/disclosure_tag_q.html?raw";
+import dV from "../../generated/panels/disclosure_v.html?raw";
+import dBrief from "../../generated/panels/disclosure_brief.html?raw";
+import dFull from "../../generated/panels/disclosure_full.html?raw";
+import dBudget from "../../generated/panels/disclosure_budget.html?raw";
+import dDocD1 from "../../generated/panels/disclosure_doc_d1.html?raw";
+import dDocD2 from "../../generated/panels/disclosure_doc_d2.html?raw";
+
+const STOPS = [
+  { id: "depth", n: "01", label: "depth", entry: "-q · -v · -vv" },
+  { id: "tags", n: "02", label: "named facets", entry: "--timestamp" },
+  { id: "aliases", n: "03", label: "depth aliases", entry: "--brief · --full" },
+  { id: "budgets", n: "04", label: "density", entry: "--max-lines" },
+  { id: "doc", n: "05", label: "structural", entry: "doc_lens" },
+];
+---
+
+<Base title="painted — the disclosure ladder">
+  <div class="wt-root">
+    <header class="wt-hero">
+      <div class="wt-crumb"><a href="/walkthrough#fidelity">walkthrough</a> / fidelity dial</div>
+      <div class="wt-bigword">the disclosure ladder</div>
+      <p class="wt-intro">
+        The fidelity dial the <a href="/walkthrough#fidelity">hub</a> turned is
+        the first rung of a grammar. One dataset — disk usage — and one render
+        function climb the whole ladder here. Each rung is <strong>additive</strong>:
+        climbing never rewrites the rung below, and a flag exists only because a
+        capability was declared.
+      </p>
+    </header>
+
+    <div class="wt-page">
+      <nav class="wt-spine" aria-label="ladder">
+        <div class="wt-spine-inner">
+          <div class="wt-spine-eyebrow">ONE RENDER FN →</div>
+          <ol class="wt-stops">
+            {STOPS.map((s) => (
+              <li><a href={`#${s.id}`} data-stop={s.id}>
+                <span class="wt-dot"></span>
+                <span class="wt-stop-text">
+                  <span class="wt-stop-label">{s.label}</span>
+                  <span class="wt-stop-entry">{s.entry}</span>
+                </span>
+              </a></li>
+            ))}
+          </ol>
+          <div class="wt-spine-foot">
+            <div class="wt-foot-title">earn each flag</div>
+            <div class="wt-foot-sub">a declared capability must change output — nothing here is decoration.</div>
+          </div>
+        </div>
+      </nav>
+
+      <main class="wt-main">
+        <!-- 01 — depth -->
+        <section id="depth" data-stage="depth" class="wt-stage">
+          <div class="wt-stage-head"><span class="wt-n">01</span><span class="wt-label">depth</span><span class="wt-entry">anonymous detail</span></div>
+          <h2 class="wt-title">The user's word is "verbose". They aren't asking for a thing — just more.</h2>
+          <div class="shell">
+            <div class="shell-bar"><span class="shell-title">bash</span><span class="shell-tty">-q · depth 0</span></div>
+            <div class="shell-body">
+              <div class="cmd"><span class="cmd-prompt">~/svc $ </span>fidelity.py -q</div>
+              <div class="panel" set:html={dQ} />
+            </div>
+          </div>
+          <div class="shell">
+            <div class="shell-bar"><span class="shell-title">bash</span><span class="shell-tty">default · depth 1</span></div>
+            <div class="shell-body">
+              <div class="cmd"><span class="cmd-prompt">~/svc $ </span>fidelity.py</div>
+              <div class="panel" set:html={dDefault} />
+            </div>
+          </div>
+          <div class="shell">
+            <div class="shell-bar"><span class="shell-title">bash</span><span class="shell-tty">-vv · depth 3</span></div>
+            <div class="shell-body">
+              <div class="cmd"><span class="cmd-prompt">~/svc $ </span>fidelity.py -vv</div>
+              <div class="panel" set:html={dVv} />
+            </div>
+          </div>
+          <pre class="code"><span class="c-dim"># rung 1 — you write a comparison; -q/-v/-vv come free</span>
+if ctx.zoom >= Zoom.FULL:
+    block = render_full(data, ctx.width)
+elif ctx.zoom >= Zoom.DETAILED:
+    block = render_styled(data, ctx.width)</pre>
+          <p class="note">
+            Depth is <em>anonymous</em> detail — how closely the user is looking,
+            0 to 3. The flags, their help text, and the parsing exist before you
+            declare anything; your only job is to answer the number. Note depth 3
+            grew a timestamp line — that's the next rung arriving early.
+          </p>
+        </section>
+
+        <!-- 02 — named facets -->
+        <section id="tags" data-stage="tags" class="wt-stage">
+          <div class="wt-stage-head"><span class="wt-n">02</span><span class="wt-label">named facets</span><span class="wt-entry">Tag("timestamp")</span></div>
+          <h2 class="wt-title">Some detail has a name. A user at -q can still ask for it.</h2>
+          <div class="shell">
+            <div class="shell-bar"><span class="shell-title">bash</span><span class="shell-tty">--timestamp at depth 0</span></div>
+            <div class="shell-body">
+              <div class="cmd"><span class="cmd-prompt">~/svc $ </span>fidelity.py -q --timestamp</div>
+              <div class="panel" set:html={dTagQ} />
+            </div>
+          </div>
+          <div class="shell">
+            <div class="shell-bar"><span class="shell-title">bash</span><span class="shell-tty">-v · implied_at=2</span></div>
+            <div class="shell-body">
+              <div class="cmd"><span class="cmd-prompt">~/svc $ </span>fidelity.py -v</div>
+              <div class="panel" set:html={dV} />
+            </div>
+          </div>
+          <pre class="code"><span class="c-dim"># rung 2 — declare the facet; the flag + help entry are generated</span>
+tags=[Tag("timestamp", "Show the measurement timestamp", implied_at=2)]
+
+if ctx.fidelity.shows("timestamp"):
+    block = join_vertical(block, stamp)</pre>
+          <p class="note">
+            A tag is a facet a user would ask for <em>by name</em> at low depth.
+            Declaring it generates <code>--timestamp</code>; <code>implied_at=2</code>
+            folds it into depth so <code>-v</code> carries it automatically. One
+            declaration, one honest rule: the flag exists because the capability
+            does, and the capability visibly changes output.
+          </p>
+        </section>
+
+        <!-- 03 — depth aliases -->
+        <section id="aliases" data-stage="aliases" class="wt-stage">
+          <div class="wt-stage-head"><span class="wt-n">03</span><span class="wt-label">depth aliases</span><span class="wt-entry">depth_aliases={"{ brief: 0, full: 3 }"}</span></div>
+          <h2 class="wt-title">Your users say "brief" and "full". Spell the depth axis in their words.</h2>
+          <div class="shell">
+            <div class="shell-bar"><span class="shell-title">bash</span><span class="shell-tty">--brief · depth 0</span></div>
+            <div class="shell-body">
+              <div class="cmd"><span class="cmd-prompt">~/svc $ </span>fidelity.py --brief</div>
+              <div class="panel" set:html={dBrief} />
+            </div>
+          </div>
+          <div class="shell">
+            <div class="shell-bar"><span class="shell-title">bash</span><span class="shell-tty">--full · depth 3 · carries --timestamp</span></div>
+            <div class="shell-body">
+              <div class="cmd"><span class="cmd-prompt">~/svc $ </span>fidelity.py --full</div>
+              <div class="panel" set:html={dFull} />
+            </div>
+          </div>
+          <pre class="code"><span class="c-dim"># rung 3 — one dict; --brief / --full are generated, mutually exclusive with -q/-v</span>
+run_cli(..., depth_aliases={"{"}"brief": 0, "full": 3{"}"})
+
+<span class="c-dim"># nothing else changes — an alias just sets depth, then compilation proceeds</span>
+<span class="c-dim"># identically. --brief IS -q; --full IS -vv, timestamp implication and all.</span></pre>
+          <p class="note">
+            An alias is <em>pure spelling</em>, not a new axis. <code>--brief</code>
+            sets depth&nbsp;0, so its panel is byte-for-byte the <code>-q</code> rung
+            above. <code>--full</code> sets depth&nbsp;3, so it is the <code>-vv</code>
+            panel — <em>and it carries the timestamp</em>, because landing at depth 3
+            trips the <code>implied_at=2</code> facet from rung two. The named
+            spelling inherits every rung below it; that's what "additive" buys you.
+            These two panels are rendered at the depth each alias resolves to — the
+            same resolution <code>parse_fidelity</code> performs — so the equality is
+            shown, not asserted in prose.
+          </p>
+        </section>
+
+        <!-- 04 — density -->
+        <section id="budgets" data-stage="budgets" class="wt-stage">
+          <div class="wt-stage-head"><span class="wt-n">04</span><span class="wt-label">density</span><span class="wt-entry">budgets=True</span></div>
+          <h2 class="wt-title">Full detail, three lines per section. Density is not depth.</h2>
+          <div class="shell">
+            <div class="shell-bar"><span class="shell-title">bash</span><span class="shell-tty">-vv --max-lines 3</span></div>
+            <div class="shell-body">
+              <div class="cmd"><span class="cmd-prompt">~/svc $ </span>fidelity.py -vv --max-lines 3</div>
+              <div class="panel" set:html={dBudget} />
+            </div>
+          </div>
+          <pre class="code"><span class="c-dim"># rung 4 — opt in; --max-chars/--max-lines exist only now</span>
+run_cli(..., budgets=True)
+
+if ctx.fidelity.has_line_limit:
+    entries = entries[: ctx.fidelity.lines]</pre>
+          <p class="note">
+            The budget caps items per collection while depth stays at full — a
+            cron log wants everything important and nothing long. It's its own
+            axis, orthogonal to depth and tags (unlike an alias, which is just a
+            depth spelling), and it stays out of your flag namespace until you
+            declare you honor it.
+          </p>
+        </section>
+
+        <!-- 05 — structural -->
+        <section id="doc" data-stage="doc" class="wt-stage">
+          <div class="wt-stage-head"><span class="wt-n">05</span><span class="wt-label">structural</span><span class="wt-entry">Doc → doc_lens</span></div>
+          <h2 class="wt-title">Author the structure once; the whole spec applies itself.</h2>
+          <div class="shell">
+            <div class="shell-bar"><span class="shell-title">bash</span><span class="shell-tty">depth 1</span></div>
+            <div class="shell-body">
+              <div class="cmd"><span class="cmd-prompt">~/svc $ </span>painted docs primitives</div>
+              <div class="panel" set:html={dDocD1} />
+            </div>
+          </div>
+          <div class="shell">
+            <div class="shell-bar"><span class="shell-title">bash</span><span class="shell-tty">depth 2 · min_depth sections surface</span></div>
+            <div class="shell-body">
+              <div class="cmd"><span class="cmd-prompt">~/svc $ </span>painted docs primitives -v</div>
+              <div class="panel" set:html={dDocD2} />
+            </div>
+          </div>
+          <pre class="code"><span class="c-dim"># rung 5 — disclosure moves into the content tree</span>
+Section("Why this matters", min_depth=2, body=(...))
+
+doc_lens(doc, fidelity=ctx.fidelity, width=ctx.width)</pre>
+          <p class="note">
+            At the top rung you stop consulting the spec line-by-line: nodes
+            carry <code>min_depth</code> and tags, and <code>doc_lens</code>
+            walks the tree applying depth, facets, and budgets in one pass.
+            The "Why this matters" section above isn't an <code>if</code> in
+            render code — it's a property of the content.
+          </p>
+        </section>
+
+        <footer class="wt-end">
+          <h2>Five stops, one compiled spec.</h2>
+          <p>
+            Depth, named facets, named depth spellings, budgets, structure —
+            every flag compiles into one <code>Fidelity</code> your render
+            function reads. You climb only when the app needs the rung, and the
+            rung below never changes underneath you.
+            <a href="/walkthrough#fidelity">← back to the walkthrough</a>
+          </p>
+        </footer>
+      </main>
+    </div>
+  </div>
+</Base>
+
+<style>
+  .wt-root { max-width: 1180px; margin: 0 auto; padding: var(--sp-7) var(--sp-5) var(--sp-8); }
+  .wt-hero { max-width: 720px; margin-bottom: var(--sp-7); }
+  .wt-crumb { font-size: var(--t-caption); color: var(--fg-dim); letter-spacing: 0.05em; margin-bottom: var(--sp-2); }
+  .wt-crumb a { color: var(--fg-dim); text-decoration: none; }
+  .wt-crumb a:hover { color: var(--cyan); }
+  .wt-bigword { font-size: var(--t-display); font-weight: var(--w-black); color: var(--cyan); line-height: var(--cell-lh-tight); letter-spacing: -0.02em; }
+  .wt-intro { font-size: var(--t-h3); color: var(--fg-2); line-height: 1.6; margin-top: var(--sp-4); }
+  .wt-intro code, .wt-intro a { color: var(--cyan); }
+
+  .wt-page { display: grid; grid-template-columns: 200px 1fr; gap: var(--sp-6); align-items: start; }
+  @media (max-width: 760px) { .wt-page { grid-template-columns: 1fr; } .wt-spine { display: none; } }
+
+  /* Spine */
+  .wt-spine-inner { position: sticky; top: 64px; }
+  .wt-spine-eyebrow { font-size: var(--t-caption); letter-spacing: 0.08em; color: var(--fg-dim); }
+  .wt-stops { list-style: none; margin: var(--sp-4) 0 0; padding: 0; position: relative; }
+  .wt-stops::before { content: ""; position: absolute; left: 6px; top: 6px; bottom: 6px; width: 1px; background: var(--line); }
+  .wt-stops li { margin-bottom: var(--sp-4); }
+  .wt-stops a { display: flex; gap: var(--sp-3); align-items: flex-start; text-decoration: none; }
+  .wt-dot { width: 13px; height: 13px; margin-top: 3px; flex-shrink: 0; background: var(--ink); border: 1px solid var(--line-bold); z-index: 1; }
+  .wt-stops a[aria-current="true"] .wt-dot { background: var(--cyan); border-color: var(--cyan); }
+  .wt-stop-text { display: flex; flex-direction: column; gap: 1px; }
+  .wt-stop-label { font-size: var(--t-small); font-weight: var(--w-bold); color: var(--fg-2); white-space: nowrap; }
+  .wt-stops a[aria-current="true"] .wt-stop-label { color: var(--cyan); }
+  .wt-stop-entry { font-size: var(--t-caption); color: var(--fg-dim); white-space: nowrap; }
+  .wt-spine-foot { margin-top: var(--sp-4); padding-top: var(--sp-3); border-top: 1px solid var(--line); }
+  .wt-foot-title { font-size: var(--t-small); font-weight: var(--w-bold); color: var(--cyan); }
+  .wt-foot-sub { font-size: var(--t-caption); color: var(--fg-dim); margin-top: 2px; line-height: 1.4; }
+
+  /* Stages */
+  .wt-main { min-width: 0; }
+  .wt-stage { margin-bottom: var(--sp-8); scroll-margin-top: var(--sp-5); }
+  .wt-stage-head { display: flex; gap: var(--sp-2); align-items: baseline; margin-bottom: var(--sp-2); flex-wrap: wrap; }
+  .wt-n, .wt-label { font-size: var(--t-caption); letter-spacing: 0.05em; color: var(--cyan); font-weight: var(--w-bold); }
+  .wt-label { text-transform: uppercase; }
+  .wt-entry { font-size: var(--t-caption); color: var(--fg-dim); margin-left: auto; }
+  .wt-title { font-size: var(--t-h2); font-weight: var(--w-bold); color: var(--fg); margin: 0 0 var(--sp-4); letter-spacing: -0.01em; }
+
+  /* Shell window frame */
+  .shell { border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: var(--ink); margin-bottom: var(--sp-3); }
+  .shell-bar { display: flex; justify-content: space-between; align-items: center; padding: var(--sp-1) var(--sp-3); border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--ink) 80%, #fff 4%); }
+  .shell-title { font-size: var(--t-caption); color: var(--fg-dim); }
+  .shell-tty { font-size: var(--t-caption); color: var(--fg-dim); }
+  .shell-body { padding: var(--sp-3) var(--sp-4); }
+  .cmd { white-space: pre-wrap; margin-bottom: var(--sp-2); font-size: var(--t-cell); }
+  .cmd-prompt { color: var(--green); font-weight: var(--w-bold); }
+
+  /* painted-output panels render via the global .painted-output rule (tokens) */
+  .panel :global(.painted-output) { margin: 0; background: transparent; }
+
+  /* "you write" code rung */
+  .code { border-left: 2px solid var(--cyan); background: color-mix(in srgb, var(--ink) 85%, #fff 3%); padding: var(--sp-2) var(--sp-3); font-size: var(--t-small); line-height: 1.6; color: var(--fg-2); white-space: pre-wrap; margin: var(--sp-3) 0 0; }
+  .c-dim { color: var(--fg-dim); }
+
+  .note { font-size: var(--t-small); color: var(--fg-2); line-height: 1.6; margin-top: var(--sp-2); }
+  .note code { color: var(--cyan); }
+
+  .wt-end { border-top: 1px solid var(--line); padding-top: var(--sp-4); margin-top: var(--sp-6); }
+  .wt-end h2 { font-size: var(--t-h3); font-weight: var(--w-bold); color: var(--fg); margin: 0 0 var(--sp-2); }
+  .wt-end p { max-width: 640px; font-size: var(--t-small); color: var(--fg-2); line-height: 1.6; }
+  .wt-end a, .wt-end code { color: var(--cyan); }
+</style>
+
+<script is:inline>
+  // Spine active-state on scroll (same idiom as the hub walkthrough).
+  const stops = Array.from(document.querySelectorAll("[data-stop]"));
+  const stages = Array.from(document.querySelectorAll("[data-stage]"));
+  const byId = (id) => stops.find((a) => a.dataset.stop === id);
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach((e) => {
+      if (e.isIntersecting) {
+        stops.forEach((a) => a.removeAttribute("aria-current"));
+        const a = byId(e.target.id);
+        if (a) a.setAttribute("aria-current", "true");
+      }
+    });
+  }, { rootMargin: "-45% 0px -45% 0px", threshold: 0 });
+  stages.forEach((s) => io.observe(s));
+</script>
