@@ -8,19 +8,18 @@ exactly what the named invocation prints. `tools/outputgen.py` captures them
 through `render_html` into committed fragments consumed by
 `web/src/pages/walkthrough/fidelity.astro`.
 
-This tool is **self-contained**: it does not depend on any demo-internal
-disclosure helper. It pins the exemplar's timestamp (so captures are
-deterministic) and re-derives the density-budget reshaping here, against the
-demo's own `DiskData`/`DirEntry` types — the same operation the CLI would apply
-when `budgets=True`. That keeps the site panels sourced from one place (this
-file) regardless of how the teaching demo evolves.
+Every panel is produced by calling the exemplar's own `_render(ctx, data)` — the
+same entry point the CLI drives — so the renderers, tag implications, and density
+budget are all sourced from one place (the demo), not re-derived here. This tool
+only pins the exemplar's timestamp so the captured panels are deterministic (the
+live `_fetch()` path stamps `now()`).
 
 The ladder the panels walk (docs/FIDELITY_DESIGN.md):
     rung 1  depth          -q / default / -v / -vv          anonymous detail
+            depth aliases   --brief / --full  (named spellings of rung 1, not a new rung)
     rung 2  named facet     --timestamp (explicit at -q; implied at -v)
-    rung 3  depth aliases   --brief / --full  (named spellings of the depth axis)
-    rung 4  budgets         --max-lines  (density, orthogonal to depth)
-    rung 5  structural      doc_lens applies the whole spec to a Doc tree
+    rung 3  budgets         --max-lines  (density, orthogonal to depth)
+    rung 4  structural      doc_lens applies the whole spec to a Doc tree
 
 `depth_aliases` is pure spelling: an alias flag sets `depth`, then compilation
 proceeds identically. So `--brief` (=0) yields the same `Fidelity` as `-q`, and
@@ -70,37 +69,14 @@ _SAMPLE = replace(_DEMO.SAMPLE_DISK, timestamp="2026-06-11T09:30:00")
 _DEPTH_ALIASES = {"brief": 0, "full": 3}
 
 
-def _budgeted(data, fidelity: Fidelity):
-    """Apply the density budget to the demo's data (rung 4).
-
-    `lines` caps items per collection (keeping the largest); `chars` elides long
-    names. Applied to the data once, so every depth renderer honors the budget
-    without knowing it exists — the same shape `run_cli(budgets=True)` would
-    produce. Re-derived here (not imported) to keep this tool self-contained.
-    """
-    if not (fidelity.has_line_limit or fidelity.has_char_limit):
-        return data
-
-    def cut(name: str) -> str:
-        if fidelity.has_char_limit and len(name) > fidelity.chars:
-            return name[: max(fidelity.chars - 1, 1)] + "…"
-        return name
-
-    def cap(entries):
-        ranked = sorted(entries, key=lambda e: e.size_bytes, reverse=True)
-        if fidelity.has_line_limit:
-            ranked = ranked[: fidelity.lines]
-        return tuple(replace(e, name=cut(e.name), children=cap(e.children)) for e in ranked)
-
-    return replace(data, mount=cut(data.mount), entries=cap(data.entries))
-
-
 def _panel(depth: int, *extra: str, chars: int = 0, lines: int = 0) -> Block:
     """Render the exemplar's sample disk under a compiled Fidelity.
 
     Tag implications resolve exactly as the CLI compiler would (the demo's
     `_TAGS`), with `extra` standing in for explicitly passed tag flags, and
-    `chars`/`lines` standing in for `--max-chars`/`--max-lines`.
+    `chars`/`lines` standing in for `--max-chars`/`--max-lines`. The demo's own
+    `_render` applies the density budget from the spec, so the panels exercise
+    that single source — no reshaping is re-derived here.
     """
     fidelity = Fidelity(
         depth=depth,
@@ -108,7 +84,6 @@ def _panel(depth: int, *extra: str, chars: int = 0, lines: int = 0) -> Block:
         chars=chars,
         lines=lines,
     )
-    data = _budgeted(_SAMPLE, fidelity)
     ctx = CliContext(
         fidelity=fidelity,
         mode=OutputMode.STATIC,
@@ -117,7 +92,7 @@ def _panel(depth: int, *extra: str, chars: int = 0, lines: int = 0) -> Block:
         width=_WIDTH,
         height=24,
     )
-    return _DEMO._render(ctx, data)
+    return _DEMO._render(ctx, _SAMPLE)
 
 
 # --- Rung 1: depth — anonymous detail picks the renderer -----------------------
@@ -129,7 +104,7 @@ DISCLOSURE_VV = _panel(3)
 DISCLOSURE_TAG_Q = _panel(0, "timestamp")
 DISCLOSURE_V = _panel(2)  # implied_at=2 — the same facet arrives with depth
 
-# --- Rung 3: depth aliases — named spellings of the depth axis ------------------
+# --- Depth aliases: named spellings of the depth axis (rung 1, respelled) -------
 # An alias is pure spelling: --brief sets depth=0, --full sets depth=3. Rendering
 # at the resolved depth IS what the compiler does, so DISCLOSURE_BRIEF is byte-for
 # -byte DISCLOSURE_Q, and DISCLOSURE_FULL is DISCLOSURE_VV — including the
@@ -137,10 +112,10 @@ DISCLOSURE_V = _panel(2)  # implied_at=2 — the same facet arrives with depth
 DISCLOSURE_BRIEF = _panel(_DEPTH_ALIASES["brief"])
 DISCLOSURE_FULL = _panel(_DEPTH_ALIASES["full"])
 
-# --- Rung 4: density — the budget reshapes every depth without being depth ------
+# --- Rung 3: density — the budget reshapes every depth without being depth ------
 DISCLOSURE_BUDGET = _panel(3, lines=3)
 
-# --- Rung 5: structural — doc_lens applies the whole spec to a node tree --------
+# --- Rung 4: structural — doc_lens applies the whole spec to a node tree --------
 _PRIMITIVES_DOC = _DOC_PAGES["primitives"].build()
 DISCLOSURE_DOC_D1 = doc_lens(_PRIMITIVES_DOC, fidelity=Fidelity(depth=1), width=_WIDTH)
 DISCLOSURE_DOC_D2 = doc_lens(_PRIMITIVES_DOC, fidelity=Fidelity(depth=2), width=_WIDTH)
@@ -160,7 +135,7 @@ DISCLOSURE: dict[str, Block] = {
 }
 
 # Invariants the panels assert by construction — a depth alias must be pure
-# spelling, or the rung-3 teaching is a lie. Checked at import so a renderer or
+# spelling, or the depth-alias teaching is a lie. Checked at import so a renderer or
 # compiler change that broke the equality fails `./dev panels` / the gate loudly,
 # at the source, instead of silently diverging on the page. (`Block` is identity-
 # equal, so the meaningful equality is rendered output — the cells the page shows.)

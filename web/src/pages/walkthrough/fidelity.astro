@@ -153,7 +153,7 @@ if ctx.fidelity.shows("timestamp"):
               <div class="panel" set:html={dFull} />
             </div>
           </div>
-          <pre class="code"><span class="c-dim"># rung 3 — one dict; --brief / --full are generated, mutually exclusive with -q/-v</span>
+          <pre class="code"><span class="c-dim"># still rung 1, respelled — one dict; --brief / --full are generated, mutually exclusive with -q/-v</span>
 run_cli(..., depth_aliases={"{"}"brief": 0, "full": 3{"}"})
 
 <span class="c-dim"># nothing else changes — an alias just sets depth, then compilation proceeds</span>
@@ -182,7 +182,7 @@ run_cli(..., depth_aliases={"{"}"brief": 0, "full": 3{"}"})
               <div class="panel" set:html={dBudget} />
             </div>
           </div>
-          <pre class="code"><span class="c-dim"># rung 4 — opt in; --max-chars/--max-lines exist only now</span>
+          <pre class="code"><span class="c-dim"># rung 3 — opt in; --max-chars/--max-lines exist only now</span>
 run_cli(..., budgets=True)
 
 if ctx.fidelity.has_line_limit:
@@ -214,7 +214,7 @@ if ctx.fidelity.has_line_limit:
               <div class="panel" set:html={dDocD2} />
             </div>
           </div>
-          <pre class="code"><span class="c-dim"># rung 5 — disclosure moves into the content tree</span>
+          <pre class="code"><span class="c-dim"># rung 4 — disclosure moves into the content tree</span>
 Section("Why this matters", min_depth=2, body=(...))
 
 doc_lens(doc, fidelity=ctx.fidelity, width=ctx.width)</pre>

@@ -372,11 +372,14 @@ def _env_baseline(parsed: argparse.Namespace, fidelity: Fidelity) -> Fidelity:
     if depth is None:
         return fidelity  # an unrecognized name is ignored, not an error
     # A flag the user typed beats the env. "No depth flag" = none of the depth
-    # spellings is set in the parsed namespace (the alias dests included).
+    # spellings is set in the parsed namespace (the alias dests included). An
+    # alias name maps to its argparse dest the way the compiler does (kebab →
+    # snake), so a future multi-word alias like "deep-dive" is read from its real
+    # `deep_dive` attr, not the hyphenated name that could never be an attribute.
     flagged = (
         getattr(parsed, "quiet", False)
         or getattr(parsed, "verbose", 0)
-        or any(getattr(parsed, name, False) for name in _DEPTH_ALIASES)
+        or any(getattr(parsed, name.replace("-", "_"), False) for name in _DEPTH_ALIASES)
     )
     if flagged:
         return fidelity

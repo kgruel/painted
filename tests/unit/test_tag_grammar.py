@@ -700,6 +700,59 @@ class TestFidelityDemoDepthAliases:
         assert alias.shows("timestamp")  # implied_at=2 trips at depth 3
 
 
+class TestFidelityDemoBudget:
+    """The density rung's honesty: --max-lines/--max-chars reshape the data
+    once, recursively, so every depth renderer honors the budget without
+    knowing it exists. The most logic-heavy code in the demo, so it earns a
+    direct test like its sibling rungs — and it is the same `_budgeted` the
+    site panels (disclosure_budget) now exercise through `_render`."""
+
+    def test_no_budget_is_inert(self):
+        from tests.helpers import static_ctx
+
+        fid_demo = _load_demo("fidelity.py")
+        data = fid_demo.SAMPLE_DISK
+        # No ceilings → the data passes through untouched (the same object).
+        assert fid_demo._budgeted(data, static_ctx(Zoom.FULL)) is data
+
+    def test_line_limit_caps_each_collection_keeping_largest(self):
+        from tests.helpers import static_ctx
+
+        fid_demo = _load_demo("fidelity.py")
+        data = fid_demo.SAMPLE_DISK
+        out = fid_demo._budgeted(data, static_ctx(Zoom.FULL, lines=2))
+        biggest = sorted(data.entries, key=lambda e: e.size_bytes, reverse=True)[:2]
+        assert [e.name for e in out.entries] == [e.name for e in biggest]
+
+    def test_line_limit_recurses_into_children(self):
+        from tests.helpers import static_ctx
+
+        fid_demo = _load_demo("fidelity.py")
+        out = fid_demo._budgeted(fid_demo.SAMPLE_DISK, static_ctx(Zoom.FULL, lines=2))
+        assert out.entries  # something survived to recurse into
+        assert all(len(e.children) <= 2 for e in out.entries)
+
+    def test_char_limit_elides_long_names_to_budget(self):
+        from tests.helpers import static_ctx
+
+        fid_demo = _load_demo("fidelity.py")
+        data = replace(fid_demo.SAMPLE_DISK, mount="a-very-long-mount-name")
+        out = fid_demo._budgeted(data, static_ctx(Zoom.FULL, chars=8))
+        assert out.mount.endswith("…")
+        assert len(out.mount) == 8  # cut to chars-1 plus the ellipsis
+
+    def test_render_applies_budget_end_to_end(self):
+        """`_render` drives `_budgeted`, so a line cap is visible in the rendered
+        text — the exact path the committed disclosure_budget panel captures."""
+        from tests.helpers import block_to_text, static_ctx
+
+        fid_demo = _load_demo("fidelity.py")
+        data = fid_demo.SAMPLE_DISK
+        capped = block_to_text(fid_demo._render(static_ctx(Zoom.FULL, lines=1), data))
+        full = block_to_text(fid_demo._render(static_ctx(Zoom.FULL), data))
+        assert len(capped.splitlines()) < len(full.splitlines())
+
+
 class TestFidelityDemoEnvBaseline:
     """the teaching demo's build_fidelity escape hatch (below the ladder).
 

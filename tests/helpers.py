@@ -13,15 +13,19 @@ from painted.cli import OutputMode
 from painted.core.writer import print_block
 
 
-def static_ctx(zoom: Zoom, *, visible: tuple[str, ...] = ()) -> CliContext:
+def static_ctx(
+    zoom: Zoom, *, visible: tuple[str, ...] = (), lines: int = 0, chars: int = 0
+) -> CliContext:
     """Build a deterministic CliContext for golden/snapshot testing.
 
     ``visible`` sets fidelity facets explicitly — this harness builds the
     spec directly, so tag implications are the caller's to state (use
     ``painted.cli.implied_visible`` to mirror what the CLI would compile).
+    ``lines``/``chars`` set the density budget (the ``--max-lines``/``--max-chars``
+    ceilings); 0 leaves that dimension unlimited.
     """
     return CliContext(
-        fidelity=Fidelity(depth=int(zoom), visible=frozenset(visible)),
+        fidelity=Fidelity(depth=int(zoom), visible=frozenset(visible), lines=lines, chars=chars),
         mode=OutputMode.STATIC,
         use_ansi=False,
         is_tty=False,
