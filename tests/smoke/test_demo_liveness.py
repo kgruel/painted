@@ -79,6 +79,7 @@ PATTERNS = [
     "profiler",
     "raymarch",
     "responsive",
+    "table",
     "testing",
     "timing",
     "wireworld",
