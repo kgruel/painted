@@ -1,50 +1,39 @@
-"""Entry point for python -m painted."""
+"""Entry point for python -m painted.
+
+painted's own front door dogfoods its multi-command CLI framework: the command
+table below is dispatched by ``run_app`` (``cli/app_runner.py``) — the same
+``run_app`` + ``AppCommand`` painted ships for its consumers. Help, ``-h``
+interception, unknown-command handling, and the ``demo`` alias of ``demos`` all
+fall out of the framework, not hand-rolled dispatch here."""
 
 from __future__ import annotations
 
 import sys
 
-from painted import Block, Style, join_vertical, print_block
-
-
-_PLAIN = Style()
-_USAGE = join_vertical(
-    Block.text("painted — Terminal UI framework", Style(bold=True)),
-    Block.text(" ", _PLAIN),
-    Block.text("Commands", Style(bold=True)),
-    Block.text("  demos [flags]              List available demos", _PLAIN),
-    Block.text("  demos <name> [flags]       Run a demo by name", _PLAIN),
-    Block.text(" ", _PLAIN),
-    Block.text("  docs [flags]               List available docs", _PLAIN),
-    Block.text("  docs <name> [flags]        Render a doc by name", _PLAIN),
-    Block.text(" ", _PLAIN),
-    Block.text("  tour [flags]               Interactive tour", _PLAIN),
-    Block.text(" ", _PLAIN),
-    Block.text("Use painted <command> --help for details.", Style(dim=True)),
-)
+from painted import Block, Style, print_block
+from painted.cli import AppCommand, run_app
 
 
 def main(argv: list[str] | None = None) -> int:
     args = argv if argv is not None else sys.argv[1:]
 
-    if not args or args[0] in ("-h", "--help"):
-        print_block(_USAGE)
-        return 0
-
-    command = args[0]
-
-    if command in ("demos", "demo"):
-        return _demo_dispatch(args[1:])
-
-    if command == "docs":
-        return _docs_dispatch(args[1:])
-
-    if command == "tour":
-        return _tour_dispatch(args[1:])
-
-    print_block(Block.text(f"Unknown command: {command}", Style(fg="red")))
-    print_block(_USAGE)
-    return 1
+    commands = [
+        AppCommand(
+            "demos",
+            "List available demos, or run one by name",
+            _demo_dispatch,
+            detail="painted demos [name] — list demos, or run <name>; 'list'/'run' subcommands too.",
+            aliases=("demo",),
+        ),
+        AppCommand("docs", "List available docs, or render one by name", _docs_dispatch),
+        AppCommand("tour", "Interactive tour", _tour_dispatch),
+    ]
+    return run_app(
+        args,
+        commands,
+        prog="painted",
+        description="painted — Terminal UI framework",
+    )
 
 
 def _demo_dispatch(args: list[str]) -> int:

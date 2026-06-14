@@ -284,6 +284,105 @@ class TestSubcommandHelp:
         assert "loops emit" in captured.out
 
 
+class TestAliases:
+    """AppCommand.aliases: alternate spellings that route to one command."""
+
+    def test_alias_routes_to_handler(self):
+        called = []
+        cmd = AppCommand(
+            "demos", "List demos", lambda argv: (called.append(argv), 0)[1], aliases=("demo",)
+        )
+        runner = AppRunner(commands=(cmd,), prog="painted")
+        # Both the name and the alias dispatch to the same handler.
+        assert runner.run(["demos", "x"]) == 0
+        assert runner.run(["demo", "y"]) == 0
+        assert called == [["x"], ["y"]]
+
+    def test_alias_coerced_to_tuple(self):
+        # A non-tuple sequence is coerced, mirroring help_args/tags.
+        cmd = AppCommand("demos", "List demos", lambda argv: 0, aliases=["demo", "d"])
+        assert cmd.aliases == ("demo", "d")
+
+    def test_alias_appears_in_help(self, capsys):
+        cmd = AppCommand("demos", "List demos", lambda argv: 0, aliases=("demo",))
+        runner = AppRunner(commands=(cmd,), prog="painted")
+        rc = runner.run(["--help", "--plain"])
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert "demos (alias: demo)" in out
+
+    def test_multiple_aliases_pluralize_in_help(self, capsys):
+        cmd = AppCommand("demos", "List demos", lambda argv: 0, aliases=("demo", "d"))
+        runner = AppRunner(commands=(cmd,), prog="painted")
+        rc = runner.run(["--help", "--plain"])
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert "demos (aliases: demo, d)" in out
+
+    def test_alias_in_help_doc_term(self):
+        cmd = AppCommand("demos", "List demos", lambda argv: 0, aliases=("demo",))
+        runner = AppRunner(commands=(cmd,), prog="painted")
+        doc = runner._help_doc()
+        sections = [n for n in doc.body if isinstance(n, Section)]
+        commands = next(s for s in sections if s.heading == "Commands")
+        defs = next(n for n in commands.body if isinstance(n, Defs))
+        assert defs.items[0].term == "demos (alias: demo)"
+
+    def test_duplicate_command_name_raises(self):
+        # Names share the dispatch namespace with aliases; a repeated name would
+        # silently shadow (first handler wins) without this guard. Symmetric with
+        # the alias↔name check below — both spellings are validated, not just one.
+        with pytest.raises(ValueError, match="declared by more than one command"):
+            AppRunner(
+                commands=(
+                    AppCommand("demos", "List demos", lambda argv: 0),
+                    AppCommand("demos", "List demos again", lambda argv: 1),
+                )
+            )
+
+    def test_alias_collides_with_command_name_raises(self):
+        with pytest.raises(ValueError, match="collides with command"):
+            AppRunner(
+                commands=(
+                    AppCommand("demos", "List demos", lambda argv: 0, aliases=("docs",)),
+                    AppCommand("docs", "List docs", lambda argv: 0),
+                )
+            )
+
+    def test_alias_collides_with_other_alias_raises(self):
+        with pytest.raises(ValueError, match="collides with the same alias"):
+            AppRunner(
+                commands=(
+                    AppCommand("demos", "List demos", lambda argv: 0, aliases=("x",)),
+                    AppCommand("docs", "List docs", lambda argv: 0, aliases=("x",)),
+                )
+            )
+
+    def test_alias_duplicates_own_name_raises(self):
+        with pytest.raises(ValueError, match="alias of itself"):
+            AppRunner(
+                commands=(AppCommand("demos", "List demos", lambda argv: 0, aliases=("demos",)),)
+            )
+
+    def test_command_lists_same_alias_twice_raises(self):
+        # A single command repeating an alias is its own error class — the
+        # message names the command, not a self-referential "other" owner.
+        with pytest.raises(ValueError, match="lists alias 'x' more than once"):
+            AppRunner(
+                commands=(AppCommand("demos", "List demos", lambda argv: 0, aliases=("x", "x")),)
+            )
+
+    def test_run_app_routes_alias(self):
+        called = []
+        commands = [
+            AppCommand(
+                "demos", "List demos", lambda argv: (called.append(argv), 0)[1], aliases=("demo",)
+            )
+        ]
+        assert run_app(["demo", "z"], commands, prog="painted") == 0
+        assert called == [["z"]]
+
+
 class TestNesting:
     """Composed AppRunners for nested dispatch."""
 

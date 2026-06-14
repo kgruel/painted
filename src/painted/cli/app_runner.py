@@ -43,6 +43,18 @@ def _render_doc(doc: Doc, zoom: Zoom, width: int) -> "Block":
     return doc_lens(doc, fidelity=Fidelity(depth=int(zoom)), width=width)
 
 
+def _command_term(cmd: AppCommand) -> str:
+    """The command row's term — its name, plus its aliases parenthesized.
+
+    Aliases ride on the term (``demos (alias: demo)``) rather than a separate
+    row: one routable concept, one definition entry. The label pluralizes so the
+    single common case reads naturally."""
+    if not cmd.aliases:
+        return cmd.name
+    label = "alias" if len(cmd.aliases) == 1 else "aliases"
+    return f"{cmd.name} ({label}: {', '.join(cmd.aliases)})"
+
+
 @dataclass(frozen=True)
 class AppCommand:
     """A routable command with name, description, and handler.
@@ -59,6 +71,7 @@ class AppCommand:
     detail: str | None = None  # shown at DETAILED+ zoom, e.g. usage hint
     help_args: Sequence[HelpArg] | None = None  # when set, AppRunner intercepts -h
     tags: Sequence[Tag] | None = None  # declared layers, shown in intercepted help
+    aliases: tuple[str, ...] = ()  # alternate spellings that route to this command
 
     def __post_init__(self) -> None:
         # Defensively coerce a caller-owned sequence to a tuple so this frozen
@@ -67,7 +80,12 @@ class AppCommand:
             object.__setattr__(self, "help_args", tuple(self.help_args))
         if self.tags is not None and not isinstance(self.tags, tuple):
             object.__setattr__(self, "tags", tuple(self.tags))
+        if not isinstance(self.aliases, tuple):
+            object.__setattr__(self, "aliases", tuple(self.aliases))
         # Declarations are promises — validate here, same as parser construction.
+        # Alias↔command collisions need every command's full name set, so they
+        # are checked at AppRunner construction (see _check_alias_collisions),
+        # not here where only this command is in view.
         check_declarations(self.tags, None)
 
 
@@ -83,6 +101,55 @@ class AppRunner:
     prog: str | None = None
     description: str | None = None
 
+    def __post_init__(self) -> None:
+        # The command table is the place where every name and alias is in view,
+        # so cross-command collisions are validated here — the alias analogue of
+        # check_declarations. A spelling that routes to two commands, or an alias
+        # shadowed by a real command name, is a broken promise, caught at wiring
+        # time rather than silently shadowing at dispatch.
+        self._check_alias_collisions()
+
+    def _check_alias_collisions(self) -> None:
+        """Validate names and aliases route unambiguously — no spelling claimed twice.
+
+        Declarations are promises (cf. check_declarations): a command name
+        repeated across commands, an alias that duplicates its own command's
+        name, collides with another command's name, or collides with another
+        command's alias all raise here, at runner construction. Names and
+        aliases share one dispatch namespace (``run`` matches either), so a
+        duplicate name is the same broken promise as a duplicate alias — caught
+        here rather than silently shadowing at dispatch (first handler wins, the
+        rest is dead code).
+        """
+        names: set[str] = set()
+        for cmd in self.commands:
+            if cmd.name in names:
+                raise ValueError(f"Command name {cmd.name!r} is declared by more than one command")
+            names.add(cmd.name)
+        seen_aliases: dict[str, str] = {}  # alias → owning command name
+        for cmd in self.commands:
+            own_aliases: set[str] = set()  # this command's aliases, for intra-command dups
+            for alias in cmd.aliases:
+                if alias == cmd.name:
+                    raise ValueError(f"Command {cmd.name!r} lists {alias!r} as an alias of itself")
+                if alias in own_aliases:
+                    # A single command listing the same alias twice is its own
+                    # error class — reporting it through the alias↔alias branch
+                    # below would name this very command as the "other" owner,
+                    # which reads as self-referential nonsense.
+                    raise ValueError(f"Command {cmd.name!r} lists alias {alias!r} more than once")
+                if alias in names:
+                    raise ValueError(
+                        f"Alias {alias!r} of command {cmd.name!r} collides with command {alias!r}"
+                    )
+                if alias in seen_aliases:
+                    raise ValueError(
+                        f"Alias {alias!r} of command {cmd.name!r} collides with "
+                        f"the same alias of command {seen_aliases[alias]!r}"
+                    )
+                own_aliases.add(alias)
+                seen_aliases[alias] = cmd.name
+
     def run(self, argv: list[str]) -> int:
         """Route argv to command handler, or show help."""
         # No args → painted help
@@ -91,10 +158,10 @@ class AppRunner:
 
         name = argv[0]
 
-        # Command name first → dispatch (or intercept -h for action commands)
+        # Command name (or alias) first → dispatch (or intercept -h for action commands)
         rest = argv[1:]
         for cmd in self.commands:
-            if cmd.name == name:
+            if name == cmd.name or name in cmd.aliases:
                 if cmd.help_args is not None and ("-h" in rest or "--help" in rest):
                     return self._handle_subcommand_help(cmd, rest)
                 return cmd.handler(rest)
@@ -178,7 +245,7 @@ class AppRunner:
             body.append(Prose(self.description))
         commands = Defs(
             tuple(
-                Def(term=cmd.name, summary=cmd.description, detail=cmd.detail)
+                Def(term=_command_term(cmd), summary=cmd.description, detail=cmd.detail)
                 for cmd in self.commands
             )
         )
