@@ -11,7 +11,7 @@ Keys:
   enter      drill into directory
   backspace  go back up
   tab        switch focus (volumes / directories)
-  v          cycle view (tree / bars / chart / flame)
+  v          cycle view (bars / table / tree / chart / flame)
   q          quit
 
 Run: uv run python demos/examples/disk.py
@@ -26,13 +26,24 @@ import threading
 import time
 from dataclasses import dataclass
 
-from painted import Block, Style
+from painted import Align, Block, Line, Style
 from painted.views import SpinnerState
 from painted.inplace import InPlaceRenderer
 from painted.core.buffer import BufferView
 from painted.tui import Region
 from painted.tui import Surface
-from painted.views import ProgressState, chart_lens, flame_lens, progress_bar, tree_lens
+from painted.views import (
+    AUTO,
+    Column,
+    Fill,
+    ProgressState,
+    TableState,
+    chart_lens,
+    flame_lens,
+    progress_bar,
+    table,
+    tree_lens,
+)
 
 
 def _human_size(n: int) -> str:
@@ -317,11 +328,59 @@ def _render_dir_row(
     _put(view, name_x, y, (prefix + entry.name)[:name_w], Style(dim=indent > 0))
 
 
+def _render_table_view(
+    view: BufferView,
+    entries: tuple[DirEntry, ...],
+    parent_bytes: int,
+    selected: int,
+    *,
+    focused: bool = True,
+) -> None:
+    """Directory listing as a responsive table.
+
+    Column-width math is the table's job, not the caller's: ``name`` is a
+    ``Fill`` column that sheds as the pane narrows, while the ``AUTO`` size
+    column and the fixed percent column stay right-aligned and legible. Contrast
+    ``_render_dir_row`` above, which hand-computes ``name_x``/``name_w`` to do the
+    same alignment by hand.
+    """
+    w, h = view.width, view.height
+    if not entries or w <= 0 or h < 3:
+        return
+
+    columns = [
+        Column(header=Line.plain("Name"), width=Fill(), min_width=4),
+        Column(header=Line.plain("Size"), width=AUTO, align=Align.END),
+        Column(header=Line.plain("Used"), width=6, align=Align.END),
+    ]
+    rows: list[list[Line]] = []
+    for e in entries:
+        pct = min(1.0, e.size_bytes / parent_bytes) if parent_bytes > 0 else 0.0
+        name = e.name + ("/" if e.is_dir else "")
+        rows.append(
+            [Line.plain(name), Line.plain(e.size_human), Line.plain(f"{pct * 100:.0f}%")]
+        )
+
+    visible = max(1, h - 2)  # header + separator consume two rows
+    state = (
+        TableState()
+        .with_count(len(rows))
+        .with_visible(visible)
+        .move_to(selected)
+        .scroll_into_view(visible)
+    )
+    selected_style = Style(reverse=True) if focused else Style(dim=True)
+    block = table(
+        state, columns, rows, visible_height=visible, width=w, selected_style=selected_style
+    )
+    block.paint(view, 0, 0)
+
+
 # ---------------------------------------------------------------------------
 # View modes — lens-based rendering of directory entries
 # ---------------------------------------------------------------------------
 
-_VIEW_MODES = ("bars", "tree", "chart", "flame")
+_VIEW_MODES = ("bars", "table", "tree", "chart", "flame")
 
 
 def _entries_to_tree(entries: tuple[DirEntry, ...]) -> dict[str, object]:
@@ -524,6 +583,12 @@ class DiskApp(Surface):
         parts = [vol.mount] + list(self.nav_stack)
         return " > ".join(parts)
 
+    def _parent_bytes(self, vol: Volume) -> int:
+        """Denominator for directory-entry percentages."""
+        if not self.nav_stack:
+            return vol.used_bytes
+        return sum(e.size_bytes for e in self.current_entries) or 1
+
     def _sync_entries(self) -> None:
         """Refresh directory entries for the current navigation path."""
         if not self.nav_stack:
@@ -595,15 +660,20 @@ class DiskApp(Surface):
             # Clamp selection to valid range
             if self.current_entries:
                 self.dir_selected = min(self.dir_selected, len(self.current_entries) - 1)
-            parent_bytes = (
-                vol.used_bytes
-                if not self.nav_stack
-                else (sum(e.size_bytes for e in self.current_entries) or 1)
-            )
             _render_dir_table(
                 self.dir_table_r.view(buf),
                 self.current_entries,
-                parent_bytes,
+                self._parent_bytes(vol),
+                self.dir_selected,
+                focused=self.focus == "dirs",
+            )
+        elif mode == "table":
+            if self.current_entries:
+                self.dir_selected = min(self.dir_selected, len(self.current_entries) - 1)
+            _render_table_view(
+                self.dir_table_r.view(buf),
+                self.current_entries,
+                self._parent_bytes(vol),
                 self.dir_selected,
                 focused=self.focus == "dirs",
             )
@@ -665,7 +735,7 @@ class DiskApp(Surface):
             mode = _VIEW_MODES[self.view_mode]
             if mode == "tree":
                 self._on_key_tree(key)
-            elif mode == "bars":
+            elif mode in ("bars", "table"):
                 self._on_key_bars(key)
             else:
                 # chart/flame: only backspace
