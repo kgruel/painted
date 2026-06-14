@@ -328,6 +328,18 @@ class TestAliases:
         defs = next(n for n in commands.body if isinstance(n, Defs))
         assert defs.items[0].term == "demos (alias: demo)"
 
+    def test_duplicate_command_name_raises(self):
+        # Names share the dispatch namespace with aliases; a repeated name would
+        # silently shadow (first handler wins) without this guard. Symmetric with
+        # the alias↔name check below — both spellings are validated, not just one.
+        with pytest.raises(ValueError, match="declared by more than one command"):
+            AppRunner(
+                commands=(
+                    AppCommand("demos", "List demos", lambda argv: 0),
+                    AppCommand("demos", "List demos again", lambda argv: 1),
+                )
+            )
+
     def test_alias_collides_with_command_name_raises(self):
         with pytest.raises(ValueError, match="collides with command"):
             AppRunner(

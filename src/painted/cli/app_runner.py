@@ -110,14 +110,22 @@ class AppRunner:
         self._check_alias_collisions()
 
     def _check_alias_collisions(self) -> None:
-        """Validate aliases route unambiguously — no spelling claimed twice.
+        """Validate names and aliases route unambiguously — no spelling claimed twice.
 
-        Declarations are promises (cf. check_declarations): an alias that
-        duplicates its own command's name, collides with another command's
-        name, or collides with another command's alias raises here, at runner
-        construction, not at the dispatch that would silently shadow.
+        Declarations are promises (cf. check_declarations): a command name
+        repeated across commands, an alias that duplicates its own command's
+        name, collides with another command's name, or collides with another
+        command's alias all raise here, at runner construction. Names and
+        aliases share one dispatch namespace (``run`` matches either), so a
+        duplicate name is the same broken promise as a duplicate alias — caught
+        here rather than silently shadowing at dispatch (first handler wins, the
+        rest is dead code).
         """
-        names = {cmd.name for cmd in self.commands}
+        names: set[str] = set()
+        for cmd in self.commands:
+            if cmd.name in names:
+                raise ValueError(f"Command name {cmd.name!r} is declared by more than one command")
+            names.add(cmd.name)
         seen_aliases: dict[str, str] = {}  # alias → owning command name
         for cmd in self.commands:
             own_aliases: set[str] = set()  # this command's aliases, for intra-command dups
