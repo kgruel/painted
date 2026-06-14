@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from painted import Cursor, Style, Viewport
 from painted.core.span import Line
-from painted.views import Column, TableState, table
+from painted.views import AUTO, Column, Fill, TableState, table
 from tests.helpers import row_text
 
 
@@ -306,3 +306,56 @@ class TestColumnAlignment:
         right_pad = len(data_text) - len(data_text.rstrip())
         assert left_pad > 0
         assert right_pad > 0
+
+
+class TestResponsiveColumns:
+    def test_default_width_is_auto(self) -> None:
+        # A column declared with no width sizes to its content.
+        cols = [Column(header=Line.plain("Hdr"))]
+        rows = _make_rows([["content"]])
+        state = TableState()
+
+        blk = table(state, cols, rows, visible_height=2)
+
+        assert blk.width == 7  # max(len("Hdr")=3, "content"=7)
+
+    def test_auto_column_sizes_to_widest_cell(self) -> None:
+        cols = [Column(header=Line.plain("X"), width=AUTO)]
+        rows = _make_rows([["a"], ["abcdef"], ["abc"]])
+        state = TableState()
+
+        blk = table(state, cols, rows, visible_height=4)
+
+        assert blk.width == 6
+
+    def test_fill_column_fills_to_budget(self) -> None:
+        cols = [
+            Column(header=Line.plain("Name"), width=8),
+            Column(header=Line.plain("Notes"), width=Fill()),
+        ]
+        rows = _make_rows([["Alice", "hi"]])
+        state = TableState()
+
+        blk = table(state, cols, rows, visible_height=2, width=40)
+
+        assert blk.width == 40  # 8 + 1 sep + 31 fill
+
+    def test_fill_protects_auto_neighbor_when_narrow(self) -> None:
+        # The vertices pattern: a sacrificial Fill column sheds while AUTO
+        # columns keep their natural width. The marker stays, the brief gives way.
+        from painted.core.compose import Align
+
+        cols = [
+            Column(header=Line.plain("name"), width=AUTO),
+            Column(header=Line.plain("brief"), width=Fill()),
+            Column(header=Line.plain("mark"), width=AUTO, align=Align.END),
+        ]
+        rows = _make_rows([["alpha", "a long brief that should shed first", "⊳"]])
+        state = TableState()
+
+        blk = table(state, cols, rows, visible_height=2, width=30)
+
+        # The Fill column absorbs the squeeze so the table fits the budget exactly.
+        assert blk.width == 30
+        # The protected marker column keeps its natural (header) width.
+        assert "mark" in row_text(blk, 0)

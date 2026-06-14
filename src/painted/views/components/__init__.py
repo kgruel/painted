@@ -6,7 +6,7 @@ from ._meter import cost_meter
 from .progress import ProgressState, progress_bar
 from ._sparkline import sparkline, sparkline_with_range
 from ._spinner import BRAILLE, DOTS, LINE, SpinnerFrames, SpinnerState, spinner
-from ._table import Column, TableState, table
+from ._table import AUTO, Column, Fill, TableState, table
 from ._text_input import TextInputState, text_input
 
 __all__ = [
@@ -23,6 +23,8 @@ __all__ = [
     "TextInputState",
     "text_input",
     "Column",
+    "AUTO",
+    "Fill",
     "TableState",
     "table",
     "sparkline",

@@ -142,6 +142,8 @@ STABLE_VIEWS_SURFACE = frozenset(
         "list_view",
         "TableState",
         "Column",
+        "AUTO",
+        "Fill",
         "table",
         "TextInputState",
         "text_input",
