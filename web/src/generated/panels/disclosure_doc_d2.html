@@ -1,0 +1,39 @@
+<pre class="painted-output"><span style="font-weight: bold">Primitives and Blocks                                         </span>
+                                                              
+painted is built from a small set of immutable render-layer   
+value types. These are the inputs to every higher-level       
+feature — composition, buffers, the TUI, widgets.             
+                                                              
+Primitives  Style, Cell, Span, Line                           
+Rectangles  Block                                             
+                                                              
+<span style="font-weight: bold">Style                                                         </span>
+  Style is an immutable bundle of attributes — colors plus    
+  bold/italic/underline/reverse/dim. Styles combine via       
+  merge(), where the overlay wins.                            
+                                                              
+  base = Style(fg=&#x27;blue&#x27;, bold=True)                          
+  merged = base.merge(Style(italic=True))                     
+                                                              
+  <span style="font-weight: bold">bold</span>                                                        
+  <span style="color: #c00000">red</span>                                                         
+  <span style="color: #00c000">green</span>                                                       
+  <span style="color: #0000c0">blue</span>                                                        
+  <span style="font-style: italic; opacity: 0.6">dim italic</span>                                                  
+  <span style="color: var(--painted-bg, var(--code-bg)); background-color: #00c0c0">reverse cyan</span>                                                
+  <span style="opacity: 0.6">Style attributes, rendered live                             </span>
+                                                              
+<span style="font-weight: bold">Cell                                                          </span>
+  Cell is the atom: one character plus one Style. Most code   
+  manipulates Blocks rather than individual cells.            
+                                                              
+<span style="font-weight: bold">Span and Line                                                 </span>
+  Span is text plus Style, measured in display columns        
+  (wide-char aware). A Line is a tuple of spans that paints   
+  into a buffer or converts to a Block.                       
+                                                              
+<span style="font-weight: bold">Why this matters                                              </span>
+  painted pushes complexity up the stack: these immutable     
+  values are safe to share and cache, so higher-level systems 
+  treat rendering as a pure transformation — state to blocks. 
+</pre>

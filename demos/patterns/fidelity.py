@@ -3,28 +3,40 @@
 # requires-python = ">=3.11"
 # dependencies = ["painted"]
 # ///
-"""Fidelity spectrum — same data, four presentations.
+"""Fidelity spectrum — the whole disclosure ladder, one render fn.
 
-Disk usage rendered at every zoom level through run_cli.
-The flags drive the output — the code doesn't switch on modes.
+Disk usage rendered at every zoom level through run_cli. The flags drive the
+output — the code doesn't switch on modes. Each line below climbs a rung of
+the disclosure grammar (docs/FIDELITY_DESIGN.md); every rung is additive.
 
-    uv run demos/patterns/fidelity.py -q        # one line
-    uv run demos/patterns/fidelity.py           # directory list
-    uv run demos/patterns/fidelity.py -v        # styled bars
-    uv run demos/patterns/fidelity.py -vv       # full detail
-    uv run demos/patterns/fidelity.py --timestamp   # a named facet, any depth
+    uv run demos/patterns/fidelity.py -q        # rung 1: depth — one line
+    uv run demos/patterns/fidelity.py           # rung 1: depth — directory list
+    uv run demos/patterns/fidelity.py -v        # rung 1: depth — styled bars
+    uv run demos/patterns/fidelity.py -vv       # rung 1: depth — full detail
+    uv run demos/patterns/fidelity.py --timestamp        # rung 2: a named facet, any depth
+    uv run demos/patterns/fidelity.py --brief            # depth alias: == -q (depth 0)
+    uv run demos/patterns/fidelity.py --full             # depth alias: == -vv (depth 3)
+    uv run demos/patterns/fidelity.py -vv --max-lines 3  # rung 3: density budget
+    FIDELITY_DEPTH=full uv run demos/patterns/fidelity.py  # escape hatch: env baseline
+
+`--brief`/`--full` are depth_aliases — named spellings of the same depth axis,
+not new facets. `FIDELITY_DEPTH` is the build_fidelity escape hatch: residue
+the declarative grammar can't express (see _env_baseline below).
 """
 
 from __future__ import annotations
 
+import argparse
+import os
 import shutil
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 
 from painted import (
     Block,
+    Fidelity,
     Style,
     CliContext,
     Tag,
@@ -37,6 +49,7 @@ from painted import (
     ROUNDED,
     run_cli,
 )
+from painted.cli import implied_visible
 
 
 # --- Data model ---
@@ -147,6 +160,9 @@ SAMPLE_DISK = DiskData(
         DirEntry("pictures", 12 * 1024**3),
         DirEntry(".local", 9 * 1024**3),
     ),
+    # Fixed so harness captures (tools/capture.py, panel specimens) are
+    # deterministic; the real _fetch() path stamps now().
+    timestamp="2026-06-11T09:30:00",
 )
 
 
@@ -319,10 +335,88 @@ def _fetch() -> DiskData:
 # can resolve the same implications the CLI compiles.
 _TAGS = [Tag("timestamp", "Show the measurement timestamp", implied_at=2)]
 
+# The depth axis answers to two named spellings as well as -q/-v/-vv. Pure
+# spelling, so --brief compiles to the same Fidelity as -q (depth 0) and --full
+# to the same as -vv (depth 3) — including --full inheriting the timestamp facet
+# (implied_at=2 trips at depth 3). Matches the site walkthrough's exemplar.
+_DEPTH_ALIASES = {"brief": 0, "full": 3}
+
+# Named depths the FIDELITY_DEPTH env var accepts — the env speaks the user's
+# vocabulary, not raw ints, so the baseline is set the same way --full would be.
+_ENV_DEPTHS = {z.name.lower(): int(z) for z in Zoom}
+
+
+def _env_baseline(parsed: argparse.Namespace, fidelity: Fidelity) -> Fidelity:
+    """build_fidelity escape hatch: an env-var-derived default depth.
+
+    The escape hatch sits *below* the declarative ladder (tags/aliases/budgets),
+    not as a rung on it — it's where residue lands that the grammar can't say.
+
+    WHY this is genuine residue — not expressible by the declarative grammar:
+    Tags, depth_aliases, and budgets all compile from explicit *command-line
+    flags*. The grammar has no vocabulary for "read an environment variable and
+    use it as the baseline when the user passed no depth flag" — that needs a
+    procedure (look up the env, decide whether a flag already won, translate a
+    name to a depth) the declarations can't carry. build_fidelity is exactly
+    that seam: it runs last, after tag compilation, and can do arbitrary work.
+
+    The honesty rule still holds: an explicit -q/-v/-vv/--brief/--full always
+    wins, because we only adopt the env baseline when no depth flag was passed.
+    Inert by default: unset env returns the fidelity untouched, so deterministic
+    captures (panels, sentinels) — which set nothing — never see it move.
+    """
+    raw = os.environ.get("FIDELITY_DEPTH")
+    if raw is None:
+        return fidelity
+    depth = _ENV_DEPTHS.get(raw.strip().lower())
+    if depth is None:
+        return fidelity  # an unrecognized name is ignored, not an error
+    # A flag the user typed beats the env. "No depth flag" = none of the depth
+    # spellings is set in the parsed namespace (the alias dests included). An
+    # alias name maps to its argparse dest the way the compiler does (kebab →
+    # snake), so a future multi-word alias like "deep-dive" is read from its real
+    # `deep_dive` attr, not the hyphenated name that could never be an attribute.
+    flagged = (
+        getattr(parsed, "quiet", False)
+        or getattr(parsed, "verbose", 0)
+        or any(getattr(parsed, name.replace("-", "_"), False) for name in _DEPTH_ALIASES)
+    )
+    if flagged:
+        return fidelity
+    # Re-resolve through the depth: the timestamp facet's implied_at must trip
+    # off the env-chosen depth too, so the baseline behaves like a real depth.
+    # implied_visible is the same resolver the CLI compiler uses, so an env
+    # baseline of `full` carries the timestamp exactly like -vv does.
+    visible = fidelity.visible | implied_visible(_TAGS, depth)
+    return replace(fidelity, depth=depth, visible=visible)
+
+
+def _budgeted(data: DiskData, ctx: CliContext) -> DiskData:
+    # Density budgets (rung 3): lines caps items per collection, chars caps
+    # string values. Applied to the data once, so every depth renderer honors
+    # them without knowing they exist.
+    fid = ctx.fidelity
+    if not (fid.has_line_limit or fid.has_char_limit):
+        return data
+
+    def cut(name: str) -> str:
+        if fid.has_char_limit and len(name) > fid.chars:
+            return name[: max(fid.chars - 1, 1)] + "…"
+        return name
+
+    def cap(entries: tuple[DirEntry, ...]) -> tuple[DirEntry, ...]:
+        ranked = sorted(entries, key=lambda e: e.size_bytes, reverse=True)
+        if fid.has_line_limit:
+            ranked = ranked[: fid.lines]
+        return tuple(replace(e, name=cut(e.name), children=cap(e.children)) for e in ranked)
+
+    return replace(data, mount=cut(data.mount), entries=cap(data.entries))
+
 
 def _render(ctx: CliContext, data: DiskData) -> Block:
     # Depth picks the renderer (anonymous detail); the timestamp is a named
     # facet riding fidelity.visible — --timestamp at any depth, implied at -v.
+    data = _budgeted(data, ctx)
     if ctx.zoom >= Zoom.FULL:
         block = render_full(data, ctx.width)
     elif ctx.zoom >= Zoom.DETAILED:
@@ -345,6 +439,9 @@ def main() -> int:
         description=__doc__,
         prog="fidelity.py",
         tags=_TAGS,
+        depth_aliases=_DEPTH_ALIASES,
+        budgets=True,
+        build_fidelity=_env_baseline,
     )
 
 

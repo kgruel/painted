@@ -125,5 +125,6 @@ The harness keeps a strict separation:
 ╰───────────────────────────────────────────────────────╯
                                                          
 <span style="color: #00c000; font-weight: bold">  Free: 66.0G  </span>                                          
+<span style="opacity: 0.6">  2026-06-11T09:30:00</span>                                    
 </pre>
 <!-- outputgen:end -->

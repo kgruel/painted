@@ -8,7 +8,9 @@ declarations (plus their documented residue hooks), or the grammar is wrong.
 """
 
 import argparse
+import os
 from dataclasses import replace
+from unittest import mock
 
 import pytest
 
@@ -667,6 +669,167 @@ class TestFidelityDemoFacet:
         fid_demo = _load_demo("fidelity.py")
         assert implied_visible(fid_demo._TAGS, int(Zoom.DETAILED)) == frozenset({"timestamp"})
         assert implied_visible(fid_demo._TAGS, int(Zoom.SUMMARY)) == frozenset()
+
+
+class TestFidelityDemoDepthAliases:
+    """depth_aliases on the teaching demo: --brief/--full are pure depth
+    spellings folded onto rung 1 (the depth axis), not new facets.
+
+    The demo declares depth_aliases={"brief": 0, "full": 3}. An alias compiles
+    to the same Fidelity as the anonymous flag at that depth — including the
+    implied timestamp facet --full inherits at depth 3."""
+
+    def test_demo_declares_the_walkthrough_aliases(self):
+        fid_demo = _load_demo("fidelity.py")
+        assert fid_demo._DEPTH_ALIASES == {"brief": 0, "full": 3}
+
+    def test_brief_compiles_like_quiet(self):
+        fid_demo = _load_demo("fidelity.py")
+        _, alias = _parse(["--brief"], tags=fid_demo._TAGS, depth_aliases=fid_demo._DEPTH_ALIASES)
+        _, anon = _parse(["-q"], tags=fid_demo._TAGS, depth_aliases=fid_demo._DEPTH_ALIASES)
+        assert alias == anon
+        assert alias.depth == 0
+        assert not alias.shows("timestamp")
+
+    def test_full_compiles_like_vv_including_implied_facet(self):
+        fid_demo = _load_demo("fidelity.py")
+        _, alias = _parse(["--full"], tags=fid_demo._TAGS, depth_aliases=fid_demo._DEPTH_ALIASES)
+        _, anon = _parse(["-vv"], tags=fid_demo._TAGS, depth_aliases=fid_demo._DEPTH_ALIASES)
+        assert alias == anon
+        assert alias.depth == 3
+        assert alias.shows("timestamp")  # implied_at=2 trips at depth 3
+
+
+class TestFidelityDemoBudget:
+    """The density rung's honesty: --max-lines/--max-chars reshape the data
+    once, recursively, so every depth renderer honors the budget without
+    knowing it exists. The most logic-heavy code in the demo, so it earns a
+    direct test like its sibling rungs — and it is the same `_budgeted` the
+    site panels (disclosure_budget) now exercise through `_render`."""
+
+    def test_no_budget_is_inert(self):
+        from tests.helpers import static_ctx
+
+        fid_demo = _load_demo("fidelity.py")
+        data = fid_demo.SAMPLE_DISK
+        # No ceilings → the data passes through untouched (the same object).
+        assert fid_demo._budgeted(data, static_ctx(Zoom.FULL)) is data
+
+    def test_line_limit_caps_each_collection_keeping_largest(self):
+        from tests.helpers import static_ctx
+
+        fid_demo = _load_demo("fidelity.py")
+        data = fid_demo.SAMPLE_DISK
+        out = fid_demo._budgeted(data, static_ctx(Zoom.FULL, lines=2))
+        biggest = sorted(data.entries, key=lambda e: e.size_bytes, reverse=True)[:2]
+        assert [e.name for e in out.entries] == [e.name for e in biggest]
+
+    def test_line_limit_recurses_into_children(self):
+        from tests.helpers import static_ctx
+
+        fid_demo = _load_demo("fidelity.py")
+        out = fid_demo._budgeted(fid_demo.SAMPLE_DISK, static_ctx(Zoom.FULL, lines=2))
+        assert out.entries  # something survived to recurse into
+        assert all(len(e.children) <= 2 for e in out.entries)
+
+    def test_char_limit_elides_long_names_to_budget(self):
+        from tests.helpers import static_ctx
+
+        fid_demo = _load_demo("fidelity.py")
+        data = replace(fid_demo.SAMPLE_DISK, mount="a-very-long-mount-name")
+        out = fid_demo._budgeted(data, static_ctx(Zoom.FULL, chars=8))
+        assert out.mount.endswith("…")
+        assert len(out.mount) == 8  # cut to chars-1 plus the ellipsis
+
+    def test_render_applies_budget_end_to_end(self):
+        """`_render` drives `_budgeted`, so a line cap is visible in the rendered
+        text — the exact path the committed disclosure_budget panel captures."""
+        from tests.helpers import block_to_text, static_ctx
+
+        fid_demo = _load_demo("fidelity.py")
+        data = fid_demo.SAMPLE_DISK
+        capped = block_to_text(fid_demo._render(static_ctx(Zoom.FULL, lines=1), data))
+        full = block_to_text(fid_demo._render(static_ctx(Zoom.FULL), data))
+        assert len(capped.splitlines()) < len(full.splitlines())
+
+
+class TestFidelityDemoEnvBaseline:
+    """the teaching demo's build_fidelity escape hatch (below the ladder).
+
+    FIDELITY_DEPTH sets the baseline depth when no depth flag was passed —
+    residue the declarative grammar can't express (it has no vocabulary for
+    reading an env var). The honesty rules: an explicit flag always wins, and
+    an unset/unknown env leaves the fidelity untouched (so deterministic
+    captures, which set nothing, never see it move)."""
+
+    def _hook(self, demo, argv, env, *, base=None):
+        """Compile demo flags through the real parser, then run _env_baseline
+        on the result under a given env — the exact slot run_cli calls it in.
+
+        Patches os.environ to exactly `env` for FIDELITY_DEPTH, so an unset case
+        ({}) is a true unset regardless of the ambient environment."""
+        parser = argparse.ArgumentParser()
+        add_cli_args(
+            parser,
+            modes={OutputMode.STATIC},
+            tags=demo._TAGS,
+            depth_aliases=demo._DEPTH_ALIASES,
+            budgets=True,
+        )
+        parsed = parser.parse_args(argv)
+        zoom = parse_zoom(parsed)
+        fid = base or parse_fidelity(
+            parsed, zoom, tags=demo._TAGS, depth_aliases=demo._DEPTH_ALIASES
+        )
+        with mock.patch.dict(os.environ, env, clear=False):
+            if "FIDELITY_DEPTH" not in env:
+                os.environ.pop("FIDELITY_DEPTH", None)
+            return demo._env_baseline(parsed, fid)
+
+    def test_inert_when_env_unset(self):
+        fid_demo = _load_demo("fidelity.py")
+        base = parse_fidelity(argparse.Namespace(), Zoom.SUMMARY)
+        out = self._hook(fid_demo, [], {}, base=base)
+        assert out == base  # untouched — the capture-safe default
+
+    def test_env_sets_baseline_depth(self):
+        fid_demo = _load_demo("fidelity.py")
+        out = self._hook(fid_demo, [], {"FIDELITY_DEPTH": "full"})
+        assert out.depth == 3
+        assert out.shows("timestamp")  # full ⇒ depth 3 ⇒ implied facet resolves
+
+    def test_env_summary_no_implied_facet(self):
+        fid_demo = _load_demo("fidelity.py")
+        out = self._hook(fid_demo, [], {"FIDELITY_DEPTH": "summary"})
+        assert out.depth == 1
+        assert not out.shows("timestamp")
+
+    def test_explicit_flag_beats_env(self):
+        """The honesty rule: a typed depth always wins over the env baseline."""
+        fid_demo = _load_demo("fidelity.py")
+        out = self._hook(fid_demo, ["-q"], {"FIDELITY_DEPTH": "full"})
+        assert out.depth == 0  # -q wins, not the env's full
+        out = self._hook(fid_demo, ["--brief"], {"FIDELITY_DEPTH": "full"})
+        assert out.depth == 0  # the alias counts as a depth flag too
+
+    def test_unknown_env_value_ignored(self):
+        fid_demo = _load_demo("fidelity.py")
+        base = self._hook(fid_demo, [], {})
+        out = self._hook(fid_demo, [], {"FIDELITY_DEPTH": "nonsense"})
+        assert out == base  # an unrecognized name is ignored, not an error
+
+    def test_env_baseline_unreached_by_capture_path(self):
+        """Drift safety: captures render _render(ctx, data) directly — they
+        never call _env_baseline. The hook lives in run_cli only, so an env
+        leak in CI can't perturb committed panels/sentinels."""
+        from tests.helpers import block_to_text, static_ctx
+
+        fid_demo = _load_demo("fidelity.py")
+        with mock.patch.dict("os.environ", {"FIDELITY_DEPTH": "full"}):
+            text = block_to_text(fid_demo._render(static_ctx(Zoom.MINIMAL), fid_demo.SAMPLE_DISK))
+        # MINIMAL stays one line regardless of the env — the capture path is
+        # depth-driven by ctx alone.
+        assert len(text.rstrip().splitlines()) == 1
 
 
 # =============================================================================
