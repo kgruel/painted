@@ -4,6 +4,14 @@ All notable changes to painted are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/); pre-1.0, minor versions may carry
 breaking changes.
 
+## [0.3.1] — 2026-06-15
+
+A point release widening one contract: `record_line` (and `record_line_composed`) now accept `width=None` for natural sizing. Landed where the loops rebuild reached a real call-site — re-grounding the stream/trace lenses on `record_line` requires honoring loops' piped invariant (piped output feeds other tools/prompts and must not be truncated). Backward-compatible: every `width=int` caller is unaffected.
+
+### Changed
+
+- **`record_line`/`record_line_composed` accept `width=None` (natural sizing).** Previously `width` was a mandatory `int` and `record_line(width=None)` raised `TypeError` (it computed `width - meta_width`). `None` now selects natural sizing — no padding, no truncation, the record keeps its intrinsic width — exactly the omit-width escape that `Block.text(text, style)` already documents. `record_line` was the outlier that didn't honor it. At every zoom, content (default summary, `PayloadLens` strings/Blocks, secondary fields, FULL field lines) renders untruncated; `record_line_composed` propagates `None` to the inner line and still applies gutter (height-based) and attention markers. `apply_attention`'s `width` is correspondingly `int | None`. No public-API names added or removed; `width=int` callers render identically.
+
 ## [0.3.0] — 2026-06-15
 
 A focused minor: three additive primitives for fitting content into width budgets and routing a CLI's primary noun, each landed where a downstream consumer (the loops rebuild onto painted) reached a real call-site for it. `table()` columns gain CSS-grid-style track sizing; `budget_fields` allocates labelled fields into a trailing slot with shrink-then-drop; and `run_app` learns a primary-noun fallthrough. All backward-compatible — `width=int` table callers and existing `run_app` apps are unaffected.

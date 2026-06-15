@@ -182,6 +182,56 @@ class TestRecordLineWidth:
         assert block.width <= 40
 
 
+class TestRecordLineNaturalWidth:
+    """width=None → natural sizing: no truncation, no padding.
+
+    Mirrors Block.text's omit-width contract. Piped callers (whose output
+    feeds other tools/prompts) must get full-fidelity records.
+    """
+
+    def test_summary_no_truncation(self):
+        payload = {"topic": "auth", "message": "Z" * 200}
+        text = block_to_text(record_line(_ts(), "decision", payload, Zoom.SUMMARY, None))
+        assert "…" not in text
+        assert "Z" * 200 in text.replace("\n", "")
+
+    def test_detailed_no_truncation(self):
+        payload = {"topic": "auth", "message": "Z" * 200, "extra": "Q" * 120}
+        text = block_to_text(record_line(_ts(), "decision", payload, Zoom.DETAILED, None))
+        assert "…" not in text
+        assert "Q" * 120 in text.replace("\n", "")
+
+    def test_full_no_truncation(self):
+        payload = {"name": "x", "body": "W" * 300}
+        text = block_to_text(record_line(_ts(), "task", payload, Zoom.FULL, None))
+        assert "…" not in text
+        assert "W" * 300 in text.replace("\n", "")
+
+    def test_block_lens_not_clipped(self):
+        def wide_lens(kind: str, payload: dict, zoom: Zoom) -> Block:
+            return Block.text("X" * 200, Style())
+
+        block = record_line(
+            _ts(), "task", {"name": "x"}, Zoom.SUMMARY, None, payload_lens=wide_lens
+        )
+        assert "X" * 200 in block_to_text(block)
+
+    def test_composed_natural_width(self):
+        """record_line_composed propagates None to the inner record_line."""
+        payload = {"topic": "auth", "message": "Z" * 200}
+        text = block_to_text(
+            record_line_composed(
+                _ts(),
+                "decision",
+                payload,
+                Zoom.SUMMARY,
+                None,
+                gutter_fn=gutter_freshness,
+            )
+        )
+        assert "Z" * 200 in text.replace("\n", "")
+
+
 class TestRecordLineKindSummary:
     """Default payload summary for different kinds."""
 

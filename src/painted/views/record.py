@@ -198,12 +198,24 @@ def _payload_summary_raw(kind: str, payload: dict) -> str:
 # ---------------------------------------------------------------------------
 
 
+def _fit(block: Block, width: int | None) -> Block:
+    """Fit to an exact width, or pass through untouched when width is None.
+
+    ``width=None`` is the *natural-sizing* escape of painted's width contract
+    (same as ``Block.text(text, style)`` with no width): the block keeps its
+    intrinsic size, no padding and no truncation. ``record_line`` honors it so
+    piped callers — whose output feeds other tools/prompts and must not be
+    clipped — get full-fidelity records.
+    """
+    return block if width is None else fit_to_width(block, width)
+
+
 def record_line(
     ts: datetime,
     kind: str,
     payload: dict,
     zoom: Zoom,
-    width: int,
+    width: int | None,
     *,
     payload_lens: PayloadLens | None = None,
 ) -> Block:
@@ -248,7 +260,8 @@ def record_line(
     # Content budget = width remaining after meta. The assembled line is fitted to the
     # exact requested width below (fit_to_width), so this only needs a positive floor —
     # the old floor of 10 forced overflow when width < meta_width + 10.
-    content_width = max(width - meta_width, 1)
+    # width=None (natural sizing) → no budget, no truncation anywhere downstream.
+    content_width = None if width is None else max(width - meta_width, 1)
 
     # --- SUMMARY: single line ---
     if zoom <= Zoom.SUMMARY:
@@ -270,16 +283,16 @@ def record_line(
         bracket_r = Block.text("] ", p.muted)
         segments.extend([bracket_l, label_block, bracket_r])
 
-        # Content (truncated to fit)
+        # Content (truncated to fit; untouched when natural-sizing)
         if isinstance(content, Block):
-            segments.append(truncate(content, content_width))
+            segments.append(content if content_width is None else truncate(content, content_width))
         else:
-            if display_width(content_str) > content_width:
+            if content_width is not None and display_width(content_str) > content_width:
                 content_str = truncate_ellipsis(content_str, content_width)
             segments.append(Block.text(content_str, Style()))
 
         # Fit to exact width: pads a short summary, clips a meta-overflow at tiny widths.
-        return fit_to_width(join_horizontal(*segments), width)
+        return _fit(join_horizontal(*segments), width)
 
     # --- DETAILED: summary + secondary fields on continuation lines ---
     if zoom <= Zoom.DETAILED:
@@ -294,10 +307,10 @@ def record_line(
 
         # Use lens content directly — Block or str
         if isinstance(content, Block):
-            segments.append(truncate(content, content_width))
+            segments.append(content if content_width is None else truncate(content, content_width))
         else:
             primary = str(content)
-            if display_width(primary) > content_width:
+            if content_width is not None and display_width(primary) > content_width:
                 primary = truncate_ellipsis(primary, content_width)
             segments.append(Block.text(primary, Style()))
 
@@ -320,11 +333,11 @@ def record_line(
                 or display_width(sv) > 40
             ):
                 field_text = f"{indent}{k}: {sv}"
-                if display_width(field_text) > width:
+                if width is not None and display_width(field_text) > width:
                     field_text = truncate_ellipsis(field_text, width)
                 lines.append(Block.text(field_text, p.muted))
 
-        return fit_to_width(join_vertical(*lines), width)
+        return _fit(join_vertical(*lines), width)
 
     # --- FULL: ISO timestamp + every field on own line ---
     segments = []
@@ -346,7 +359,7 @@ def record_line(
     else:
         segments.append(Block.text(str(content), Style()))
 
-    header_line = fit_to_width(join_horizontal(*segments), width)
+    header_line = _fit(join_horizontal(*segments), width)
     lines = [header_line]
 
     # Shallow indent — gutter rail provides visual continuity to parent.
@@ -360,13 +373,13 @@ def record_line(
         # Each value line wraps to the exact width; Wrap.WORD hard-breaks over-long
         # tokens, so no data is lost.
         value_lines = sv.splitlines()
-        lines.append(
-            Block.text(f"{indent}{k}: {value_lines[0]}", p.muted, width=width, wrap=Wrap.WORD)
-        )
+        # width=None → natural sizing, no wrap (nothing to reflow against).
+        wrap = Wrap.WORD if width is not None else Wrap.NONE
+        lines.append(Block.text(f"{indent}{k}: {value_lines[0]}", p.muted, width=width, wrap=wrap))
         for vl in value_lines[1:]:
-            lines.append(Block.text(vl, p.muted, width=width, wrap=Wrap.WORD))
+            lines.append(Block.text(vl, p.muted, width=width, wrap=wrap))
 
-    return fit_to_width(join_vertical(*lines), width)
+    return _fit(join_vertical(*lines), width)
 
 
 # ---------------------------------------------------------------------------
@@ -459,7 +472,7 @@ def apply_attention(
     attention_fn: AttentionFn,
     *,
     zoom: Zoom = Zoom.SUMMARY,
-    width: int,
+    width: int | None,
     ts: datetime | None = None,
     payload_lens: PayloadLens | None = None,
     score: float | None = None,
@@ -489,7 +502,7 @@ def apply_attention(
     else:
         # Collapse to dim one-liner regardless of zoom
         summary = _default_payload_summary(kind, payload)
-        if display_width(summary) > width - 10:
+        if width is not None and display_width(summary) > width - 10:
             summary = truncate_ellipsis(summary, width - 10)
         ts_str = ts.strftime("%H:%M") if ts else ""
         prefix = f"{ts_str} " if ts_str else ""
@@ -506,7 +519,7 @@ def record_line_composed(
     kind: str,
     payload: dict,
     zoom: Zoom,
-    width: int,
+    width: int | None,
     *,
     payload_lens: PayloadLens | None = None,
     gutter_fn: GutterFn | None = None,
@@ -516,10 +529,16 @@ def record_line_composed(
 
     Composition order: record_line → attention → gutter (outside-in).
     Gutter is outermost because it's a visual frame.
+
+    ``width=None`` (natural sizing) propagates to the inner record_line: no
+    column reservation, no final fit. The gutter rail (height-based) still
+    applies; the attention markers still prepend. Natural-width composed
+    records simply keep their intrinsic width.
     """
     # Reserve width for every modifier that prepends columns, so the composed
     # block lands at exactly `width` and the final fit_to_width is a no-op rather
     # than a right-edge clipper that would silently drop content cells.
+    # width=None: nothing to reserve against — keep inner_width None throughout.
     gutter_cols = 2 if gutter_fn else 0
 
     # Evaluate the attention score ONCE. The AttentionFn protocol does not promise
@@ -533,7 +552,7 @@ def record_line_composed(
     # so it needs no reservation.
     marker_cols = 2 if score is not None and score >= 0.3 else 0
 
-    inner_width = width - gutter_cols - marker_cols
+    inner_width = None if width is None else width - gutter_cols - marker_cols
 
     # Base render
     block = record_line(ts, kind, payload, zoom, inner_width, payload_lens=payload_lens)
@@ -559,7 +578,7 @@ def record_line_composed(
     # Modifiers prepend exactly the columns reserved above, so the composed block
     # is already `width` wide. This fit is a defensive no-op that guarantees the
     # composer honors its width arg — it must never clip content cells.
-    return fit_to_width(block, width)
+    return _fit(block, width)
 
 
 # ---------------------------------------------------------------------------
