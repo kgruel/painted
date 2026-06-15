@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from enum import Enum
+from typing import NamedTuple
 
-from ._text_width import char_width, display_width
+from ._text_width import char_width, display_width, truncate_ellipsis
 from .block import Block, _cells_from_text
 from .borders import ROUNDED, BorderChars
 from .cell import Cell, Style
@@ -412,6 +414,82 @@ def fit_to_width(block: Block, width: int) -> Block:
     if block.width > width:
         return truncate(block, width)
     return pad(block, right=width - block.width)
+
+
+class BudgetFit(NamedTuple):
+    """Result of fitting labelled fields into a width budget (``budget_fields``).
+
+    ``text`` is the kept fields, each truncated to fit, joined by the separator.
+    ``dropped`` is the number of display columns of field *content* that did not
+    appear — from both per-field truncation and whole-field drops, separators
+    excluded. The caller turns it into an overflow hint (e.g. ``[+Nc]``) and owns
+    that badge's layout; this owns only the allocation.
+    """
+
+    text: str
+    dropped: int
+
+
+def budget_fields(
+    fields: Sequence[str],
+    width: int,
+    *,
+    min_field: int = 12,
+    sep: str = " · ",
+) -> BudgetFit:
+    """Fit ordered labelled fields into a ``width`` budget, shrink-then-drop.
+
+    A trailing-slot allocator. Render the longest contiguous *prefix* of the
+    (non-empty) fields such that each one either fits whole or truncates to at
+    least ``min_field`` display columns: the first field claims the full budget,
+    each later field pays the separator cost, then takes whatever remains. The
+    cutoff is the first field that can be shown as neither — order *is* priority,
+    so once a field can't be shown, every field after it drops too (the dropped
+    tail becomes the caller's overflow hint instead). ``min_field`` is a *nub*
+    floor: it gates truncation only — a field that fits whole is always kept,
+    even into a slot narrower than ``min_field`` (a complete short value is not a
+    nub). Empty fields are skipped. Width is display columns (wcwidth), so the
+    fit is correct for wide/combining characters — counting ``len()`` would
+    mis-budget CJK and emoji.
+
+    This is the *shrink-then-drop* track-sizer. It is deliberately distinct from
+    ``resolve_column_widths`` (the table sizer): that one keeps every column and
+    distributes slack to ``Fill`` columns proportionally, clamping (never
+    dropping) at ``min_width`` and never shrinking over-budget content; this one
+    keeps an ordered *prefix* of fields, shrinks each to fit, and drops the rest.
+    They share only separator accounting — two contracts, not one. (When a second
+    drop-style consumer appears, or ``resolve_column_widths`` grows its
+    controlled-shrink follow-up, the two may unify under one prioritized
+    track-sizer; today the policies are genuinely different.)
+
+    Presentation stays with the caller: the overflow badge and any empty-field
+    fallback (e.g. substitute the first non-label field) are the caller's, so
+    this function pulls no palette/Style into a pure character-budget contract.
+
+    Returns a :class:`BudgetFit`: ``text`` (kept fields joined by ``sep``) and
+    ``dropped`` (Σ field columns − rendered columns; ``0`` iff every field fit
+    whole — truncation and whole-field drops both contribute, separators excluded).
+    """
+    nonempty = [(f, w) for f in fields if (w := display_width(f)) > 0]
+    total = sum(w for _, w in nonempty)
+    sep_width = display_width(sep)
+    parts: list[str] = []
+    kept = 0
+    remaining = width
+    for field, field_width in nonempty:
+        sep_cost = sep_width if parts else 0
+        available = remaining - sep_cost
+        if field_width <= available:
+            rendered = field  # fits whole — kept even if available < min_field
+        elif available >= min_field:
+            rendered = truncate_ellipsis(field, available)  # room for a non-nub prefix
+        else:
+            break  # neither whole nor a ≥min_field truncation → drop this field and the rest
+        rendered_width = display_width(rendered)
+        parts.append(rendered)
+        kept += rendered_width
+        remaining -= sep_cost + rendered_width
+    return BudgetFit(text=sep.join(parts), dropped=total - kept)
 
 
 def vslice(block: Block, offset: int, height: int) -> Block:

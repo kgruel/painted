@@ -304,7 +304,9 @@ Not a primitive, but essential for combining Blocks.
 | `pad(block, left=, right=, top=, bottom=)` | Add spacing |
 | `border(block, chars=, style=, title=)` | Wrap with border |
 | `truncate(block, width)` | Clip with ellipsis |
+| `fit_to_width(block, width)` | Resize to exactly width (clip or pad) |
 | `vslice(block, offset, visible)` | Vertical slice for scrolling |
+| `budget_fields(fields, width, *, min_field=, sep=)` | Fit ordered labelled fields into a width budget, shrink-then-drop → `BudgetFit(text, dropped)` |
 
 ```python
 panel = border(pad(content, left=1, right=1), title="Info")
