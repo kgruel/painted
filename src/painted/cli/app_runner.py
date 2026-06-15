@@ -95,11 +95,19 @@ class AppRunner:
 
     Routes argv[0] to the matching AppCommand handler. When no args
     or --help/-h is given, renders help through painted (zoom-aware).
+
+    ``default`` lifts the "primary-noun shorthand" into the framework: when
+    argv[0] matches no command and is not a flag, it routes to the default
+    handler with the *full* argv (the token is positional data, not a consumed
+    command name). This is ``loops <vertex>`` ⇒ ``read <vertex>`` — a CLI whose
+    primary noun is a bare token, without a hand-rolled pre-router in front of
+    the runner. Omitted (``None``), an unmatched token is an error, unchanged.
     """
 
     commands: tuple[AppCommand, ...]
     prog: str | None = None
     description: str | None = None
+    default: AppCommand | None = None
 
     def __post_init__(self) -> None:
         # The command table is the place where every name and alias is in view,
@@ -165,6 +173,16 @@ class AppRunner:
                 if cmd.help_args is not None and ("-h" in rest or "--help" in rest):
                     return self._handle_subcommand_help(cmd, rest)
                 return cmd.handler(rest)
+
+        # No command matched, but a declared default claims an unmatched
+        # non-flag token: route to it with the *full* argv — the token is the
+        # primary noun (positional data), not a consumed command name. Note the
+        # deliberate slicing asymmetry: matched commands above get ``rest``
+        # (argv[1:], name consumed); the default gets ``argv`` (name kept). The
+        # ``startswith("-")`` guard keeps ``-h``/``--help`` (and any leading
+        # flag) falling through to top-level help below, never to the default.
+        if self.default is not None and not name.startswith("-"):
+            return self.default.handler(argv)
 
         # No command matched — check for --help/-h (top-level help)
         if "-h" in argv or "--help" in argv:
@@ -260,6 +278,7 @@ def run_app(
     *,
     prog: str | None = None,
     description: str | None = None,
+    default: AppCommand | None = None,
 ) -> int:
     """Run an app with command routing and painted help.
 
@@ -277,6 +296,10 @@ def run_app(
         commands: Available commands
         prog: Program name for help
         description: Program description for help
+        default: Command for an unmatched non-flag argv[0] (the primary-noun
+            shorthand). Its handler receives the *full* argv. Often the same
+            AppCommand also appears in ``commands`` so it stays in help; omitted,
+            an unmatched token is an error.
 
     Returns:
         Exit code (0 for success)
@@ -285,4 +308,5 @@ def run_app(
         commands=tuple(commands),
         prog=prog,
         description=description,
+        default=default,
     ).run(argv)

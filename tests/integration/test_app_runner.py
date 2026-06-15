@@ -383,6 +383,120 @@ class TestAliases:
         assert called == [["z"]]
 
 
+class TestDefaultCommand:
+    """AppRunner.default: an unmatched non-flag argv[0] routes to a default.
+
+    The primary-noun shorthand (``loops <vertex>`` ⇒ ``read <vertex>``) lifted
+    into the framework, replacing a hand-rolled pre-router.
+    """
+
+    def test_default_fires_on_unmatched_token(self):
+        seen = []
+        default = AppCommand("read", "Read a vertex", lambda argv: (seen.append(argv), 0)[1])
+        runner = AppRunner(
+            commands=(AppCommand("emit", "Emit", lambda argv: 0),),
+            default=default,
+        )
+        assert runner.run(["my-vertex"]) == 0
+        # The default receives the FULL argv — the token is data, not consumed.
+        assert seen == [["my-vertex"]]
+
+    def test_default_receives_full_argv_not_sliced(self):
+        seen = []
+        default = AppCommand("read", "Read", lambda argv: (seen.append(argv), 0)[1])
+        runner = AppRunner(commands=(AppCommand("emit", "Emit", lambda argv: 0),), default=default)
+        runner.run(["my-vertex", "--raw", "-v"])
+        # Asymmetry with matched commands: the default keeps argv[0] (the noun).
+        assert seen == [["my-vertex", "--raw", "-v"]]
+
+    def test_named_command_wins_over_default(self):
+        routed = []
+        default = AppCommand("read", "Read", lambda argv: (routed.append("default"), 0)[1])
+        runner = AppRunner(
+            commands=(AppCommand("emit", "Emit", lambda argv: (routed.append("emit"), 0)[1]),),
+            default=default,
+        )
+        # A token matching a real command dispatches there (with rest), not the default.
+        runner.run(["emit", "x"])
+        assert routed == ["emit"]
+
+    def test_alias_token_wins_over_default(self):
+        routed = []
+        default = AppCommand("read", "Read", lambda argv: (routed.append("default"), 0)[1])
+        runner = AppRunner(
+            commands=(
+                AppCommand(
+                    "emit", "Emit", lambda argv: (routed.append("emit"), 0)[1], aliases=("e",)
+                ),
+            ),
+            default=default,
+        )
+        runner.run(["e", "x"])
+        assert routed == ["emit"]
+
+    def test_leading_flag_falls_through_to_help_not_default(self, capsys):
+        # ``-h``/``--help`` (any leading flag) must reach top-level help, never
+        # the default — the startswith("-") guard.
+        called = []
+        default = AppCommand("read", "Read", lambda argv: (called.append(argv), 0)[1])
+        runner = AppRunner(
+            commands=(AppCommand("emit", "Emit", lambda argv: 0),),
+            prog="loops",
+            default=default,
+        )
+        rc = runner.run(["-h"])
+        assert rc == 0
+        assert called == []  # default did not fire
+        assert "emit" in capsys.readouterr().out
+
+    def test_no_args_still_shows_help_with_default(self, capsys):
+        called = []
+        default = AppCommand("read", "Read", lambda argv: (called.append(argv), 0)[1])
+        runner = AppRunner(
+            commands=(AppCommand("emit", "Emit", lambda argv: 0),),
+            prog="loops",
+            default=default,
+        )
+        rc = runner.run([])
+        assert rc == 0
+        assert called == []  # bare invocation is help, not the default
+        assert "emit" in capsys.readouterr().out
+
+    def test_no_default_keeps_unknown_command_error(self, capsys):
+        # Regression guard: the default is opt-in. Without it, an unmatched
+        # token is still an error — today's behavior is unchanged.
+        runner = AppRunner(commands=(AppCommand("emit", "Emit", lambda argv: 0),), prog="loops")
+        rc = runner.run(["bogus"])
+        assert rc == 1
+        assert "Unknown command: bogus" in capsys.readouterr().err
+
+    def test_default_also_listed_appears_once_in_help(self, capsys):
+        # The idiom: the default is usually ALSO a named command, so it stays
+        # discoverable in help and rides collision validation. It appears once.
+        read = AppCommand("read", "Read a vertex", lambda argv: 0)
+        runner = AppRunner(
+            commands=(read, AppCommand("emit", "Emit", lambda argv: 0)),
+            prog="loops",
+            default=read,
+        )
+        rc = runner.run(["--help", "--plain"])
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert out.count("read") == 1
+
+    def test_default_exit_code_propagates(self):
+        default = AppCommand("read", "Read", lambda argv: 7)
+        runner = AppRunner(commands=(AppCommand("emit", "Emit", lambda argv: 0),), default=default)
+        assert runner.run(["v"]) == 7
+
+    def test_run_app_passes_default_through(self):
+        seen = []
+        default = AppCommand("read", "Read", lambda argv: (seen.append(argv), 0)[1])
+        commands = [AppCommand("emit", "Emit", lambda argv: 0)]
+        assert run_app(["my-vertex", "extra"], commands, prog="loops", default=default) == 0
+        assert seen == [["my-vertex", "extra"]]
+
+
 class TestNesting:
     """Composed AppRunners for nested dispatch."""
 
