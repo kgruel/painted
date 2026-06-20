@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+from enum import Enum
 from typing import TYPE_CHECKING
 
 from ...core.block import Block
@@ -52,6 +53,24 @@ class Fill:
 ColumnWidth = int | _Auto | Fill
 
 
+class Overflow(Enum):
+    """How ``table()`` reconciles a too-wide table with its ``width`` budget.
+
+    - ``CLIP`` (default, historical): columns keep their resolved widths and the
+      assembled block is truncated at the right edge if it exceeds the budget —
+      trailing columns can disappear.
+    - ``FIT``: size columns to content, but when the table is over budget shrink
+      the ``Fill`` columns (ellipsized per their ``ellipsis``/``ellipsis_side``)
+      to bring it within the budget, and *never stretch* a ``Fill`` past its
+      content when there is slack. If the non-``Fill`` columns alone exceed the
+      budget the table overflows (natural width) rather than clipping data — no
+      column or value is silently dropped.
+    """
+
+    CLIP = "clip"
+    FIT = "fit"
+
+
 @dataclass(frozen=True)
 class Column:
     """Column definition for a table.
@@ -61,6 +80,13 @@ class Column:
     ``min_width``/``max_width`` clamp the resolved width. The responsive
     resolution runs whenever ``table()`` is given a ``width`` budget; without
     one, columns size naturally — the historical behavior.
+
+    ``ellipsis`` adds a ``…`` marker when a cell is truncated to its column
+    width; ``ellipsis_side`` chooses which end the marker sits on —
+    ``Align.END`` keeps the head (``"long descrip…"``), ``Align.START`` keeps
+    the tail (``"…Code/siftd-7"``, so a path leaf survives). Without
+    ``ellipsis`` an over-wide cell is cut on the right with no marker (historical
+    behavior).
     """
 
     header: Line
@@ -68,6 +94,8 @@ class Column:
     align: Align = Align.START
     min_width: int | None = None
     max_width: int | None = None
+    ellipsis: bool = False
+    ellipsis_side: Align = Align.END
 
 
 @dataclass(frozen=True)
@@ -123,10 +151,75 @@ class TableState:
         return replace(self, viewport=vp)
 
 
-def _pad_line(line: Line, target_width: int, align: Align, style: Style) -> Line:
-    """Truncate or pad a Line to exactly target_width columns."""
+def _truncate_keep_end(line: Line, max_width: int) -> Line:
+    """Truncate a Line keeping its *rightmost* ``max_width`` columns.
+
+    The mirror of ``Line.truncate`` (which keeps the leftmost) — used for the
+    left-ellipsis case where the tail (a path leaf) is the part worth keeping.
+    Display-width aware; preserves each span's style across the cut.
+    """
+    remaining = max_width
+    kept: list[Span] = []
+    for span in reversed(line.spans):
+        sw = span.width
+        if sw <= remaining:
+            kept.append(span)
+            remaining -= sw
+        else:
+            chars: list[str] = []
+            used = 0
+            for ch in reversed(span.text):
+                cw = display_width(ch) or 1
+                if used + cw > remaining:
+                    break
+                chars.append(ch)
+                used += cw
+            if chars:
+                kept.append(Span("".join(reversed(chars)), span.style))
+            break
+    return Line(spans=tuple(reversed(kept)), style=line.style)
+
+
+def _ellipsize_line(line: Line, max_width: int, side: Align, style: Style) -> Line:
+    """Truncate ``line`` to ``max_width`` columns with a ``…`` marker.
+
+    ``side == Align.START`` puts the ellipsis on the left and keeps the tail;
+    any other side puts it on the right and keeps the head. Falls back to a
+    plain cut (kept side preserved) when there is no room for the marker.
+    """
+    ellipsis = "…"
+    ell_w = display_width(ellipsis)
+    if max_width <= ell_w:
+        if side == Align.START:
+            return _truncate_keep_end(line, max_width)
+        return line.truncate(max_width)
+    budget = max_width - ell_w
+    ell_span = Span(ellipsis, style)
+    if side == Align.START:
+        kept = _truncate_keep_end(line, budget)
+        return Line(spans=(ell_span, *kept.spans), style=line.style)
+    kept = line.truncate(budget)
+    return Line(spans=(*kept.spans, ell_span), style=line.style)
+
+
+def _pad_line(
+    line: Line,
+    target_width: int,
+    align: Align,
+    style: Style,
+    *,
+    ellipsis: bool = False,
+    ellipsis_side: Align = Align.END,
+) -> Line:
+    """Truncate or pad a Line to exactly target_width columns.
+
+    When ``ellipsis`` is set, an over-wide line is truncated with a ``…`` marker
+    on ``ellipsis_side``; otherwise it is cut on the right with no marker.
+    """
     current = line.width
     if current > target_width:
+        if ellipsis:
+            return _ellipsize_line(line, target_width, ellipsis_side, style)
         return line.truncate(target_width)
     if current == target_width:
         return line
@@ -150,6 +243,7 @@ def resolve_column_widths(
     available: int | None,
     *,
     sep_width: int = 1,
+    overflow: Overflow = Overflow.CLIP,
 ) -> list[int]:
     """Resolve each column's track-sizing function to an exact integer width.
 
@@ -160,16 +254,19 @@ def resolve_column_widths(
 
     ``available`` is the total width budget *including* separators. When it is
     ``None`` there is no budget, so ``Fill`` falls back to natural width and the
-    returned widths sum to the table's natural size. When a budget is given and
-    at least one *uncapped* ``Fill`` column is present, the widths plus
-    separators fill it exactly. A ``max_width`` cap takes precedence over exact
-    fill: a ``Fill`` that hits its cap stops there and the table under-fills its
-    budget — clamp-shed space is not redistributed to the other ``Fill`` columns
-    (that redistribution, like shrinking over-budget columns, is the deliberate
-    controlled-shrink follow-up). With no ``Fill`` column and content wider than
-    the budget, the widths are returned unshrunk — ``table()`` clips the
-    assembled block at the right edge; add a ``Fill`` column to choose which
-    column sheds.
+    returned widths sum to the table's natural size.
+
+    Under ``Overflow.CLIP`` (default): a budget makes the uncapped ``Fill``
+    columns stretch to fill it exactly; with no ``Fill`` column and content
+    wider than the budget, the widths are returned unshrunk and ``table()``
+    clips the assembled block at the right edge.
+
+    Under ``Overflow.FIT``: ``Fill`` columns size to their content and never
+    stretch past it. When the natural table exceeds the budget, the ``Fill``
+    columns shrink (toward their ``min_width`` floors) to absorb the overflow;
+    if even their floors plus the non-``Fill`` columns exceed the budget, the
+    widths are returned at natural/floor size and the table is allowed to
+    overflow — ``table()`` does not clip, so no column or value is dropped.
     """
     n = len(columns)
     if n == 0:
@@ -209,13 +306,48 @@ def resolve_column_widths(
             widths[i] = clamp(natural[i], columns[i])
         return widths
 
+    sep_total = sep_width * (n - 1)
+
+    if overflow == Overflow.FIT:
+        # Fit-to-content: Fill columns sit at natural width and only *shrink*
+        # (never stretch) when the table is over budget. If they can't shrink
+        # enough, the table overflows rather than clipping — table() honors that.
+        for i in fill_idx:
+            widths[i] = clamp(natural[i], columns[i])
+        natural_total = sum(widths) + sep_total
+        if natural_total <= available or not fill_idx:
+            return widths
+
+        nonfill_total = sum(widths[i] for i in range(n) if i not in fills) + sep_total
+        leftover = available - nonfill_total  # combined width for all Fill columns
+        floors = {i: (columns[i].min_width or 1) for i in fill_idx}
+        total_weight = sum(f.weight for f in fills.values())
+        if leftover <= sum(floors.values()) or total_weight <= 0:
+            # Non-Fill columns already overflow: hold Fills at their floors and
+            # let the table exceed the budget (lossless — table() won't clip).
+            for i in fill_idx:
+                widths[i] = floors[i]
+            return widths
+
+        # Share the leftover across Fill columns by weight (largest-remainder),
+        # clamped to [floor, natural] — shrink only, never stretch past content.
+        exact = {i: leftover * fills[i].weight / total_weight for i in fill_idx}
+        share = {i: int(exact[i]) for i in fill_idx}
+        remainder = leftover - sum(share.values())
+        by_frac = sorted(fill_idx, key=lambda i: (exact[i] - share[i], -i), reverse=True)
+        for i in by_frac[:remainder]:
+            share[i] += 1
+        for i in fill_idx:
+            w = max(floors[i], share[i])
+            widths[i] = min(w, clamp(natural[i], columns[i]))
+        return widths
+
     if not fill_idx:
         # No flex columns: fixed/AUTO widths stand. If they exceed the budget,
         # table()'s tail truncate clips the block (over-budget fallback).
         return widths
 
     # 3. Distribute leftover budget across Fill columns by weight.
-    sep_total = sep_width * (n - 1)
     budget = available - sep_total
     floor = {i: (columns[i].min_width or 0) for i in fill_idx}
     used = sum(widths[i] for i in range(n) if i not in fills) + sum(floor.values())
@@ -248,6 +380,7 @@ def table(
     visible_height: int,
     *,
     width: int | None = None,
+    overflow: Overflow = Overflow.CLIP,
     header_style: Style | None = None,
     selected_style: Style | None = None,
     separator_style: Style | None = None,
@@ -260,6 +393,10 @@ def table(
     Explicit style/border arguments override the ambient values.
 
     Args:
+        overflow: How a too-wide table reconciles with ``width`` — ``CLIP``
+            (default) right-clips the block; ``FIT`` shrinks ``Fill`` columns
+            (ellipsized) to fit and otherwise overflows rather than dropping
+            columns. See ``Overflow``.
         header_style: Style for header row. Defaults to palette.accent + bold.
         selected_style: Style for selected data row. Defaults to reverse.
         separator_style: Style for the separator line. Defaults to palette.muted.
@@ -288,7 +425,9 @@ def table(
     # budget, then lay out exactly as before from the resolved integer widths.
     # Display columns, not codepoints — separator is caller-overridable via borders=.
     sep_width = display_width(separator)
-    resolved = resolve_column_widths(columns, rows, available=width, sep_width=sep_width)
+    resolved = resolve_column_widths(
+        columns, rows, available=width, sep_width=sep_width, overflow=overflow
+    )
     total_width = sum(resolved) + sep_width * (len(columns) - 1)
 
     # Total rows: header + separator + visible data
@@ -299,7 +438,14 @@ def table(
     col_x = 0
     for i, col in enumerate(columns):
         cw = resolved[i]
-        header_line = _pad_line(col.header, cw, col.align, hs)
+        header_line = _pad_line(
+            col.header,
+            cw,
+            col.align,
+            hs,
+            ellipsis=col.ellipsis,
+            ellipsis_side=col.ellipsis_side,
+        )
         header_line = Line(spans=header_line.spans, style=hs)
         view = buf.region(col_x, 0, cw, 1)
         header_line.paint(view, 0, 0)
@@ -331,7 +477,14 @@ def table(
         for i, col in enumerate(columns):
             cw = resolved[i]
             cell_line = row_data[i] if i < len(row_data) else Line.plain("")
-            padded = _pad_line(cell_line, cw, col.align, row_style)
+            padded = _pad_line(
+                cell_line,
+                cw,
+                col.align,
+                row_style,
+                ellipsis=col.ellipsis,
+                ellipsis_side=col.ellipsis_side,
+            )
             padded = Line(spans=padded.spans, style=row_style)
             view = buf.region(col_x, buf_y, cw, 1)
             padded.paint(view, 0, 0)
@@ -348,6 +501,8 @@ def table(
         block_rows.append(row)
 
     result = Block(block_rows, total_width)
-    if width is not None and result.width > width:
+    # CLIP truncates an over-budget block at the right edge; FIT has already
+    # shrunk or chosen to overflow, so it never clips (no column/value dropped).
+    if overflow is Overflow.CLIP and width is not None and result.width > width:
         result = truncate(result, width)
     return result

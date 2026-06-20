@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from painted import Cursor, Style, Viewport
+from painted import Align, Cursor, Style, Viewport
 from painted.core.span import Line
-from painted.views import AUTO, Column, Fill, TableState, table
+from painted.views import AUTO, Column, Fill, Overflow, TableState, table
 from tests.helpers import row_text
 
 
@@ -359,3 +359,97 @@ class TestResponsiveColumns:
         assert blk.width == 30
         # The protected marker column keeps its natural (header) width.
         assert "mark" in row_text(blk, 0)
+
+
+class TestOverflowFitRender:
+    """End-to-end table() behavior under Overflow.FIT, including cell ellipsis."""
+
+    def test_fit_does_not_balloon_when_it_fits(self) -> None:
+        cols = [
+            Column(header=Line.plain("day"), width=AUTO),
+            Column(header=Line.plain("n"), width=Fill(), align=Align.END),
+        ]
+        rows = _make_rows([["2026-06-20", "5"]])
+        blk = table(
+            state=TableState(),
+            columns=cols,
+            rows=rows,
+            visible_height=1,
+            width=80,
+            overflow=Overflow.FIT,
+        )
+        assert blk.width < 20  # compact, not stretched toward 80
+
+    def test_fit_left_ellipsis_keeps_tail(self) -> None:
+        cols = [
+            Column(header=Line.plain("id"), width=AUTO),
+            Column(
+                header=Line.plain("ws"),
+                width=Fill(),
+                min_width=8,
+                ellipsis=True,
+                ellipsis_side=Align.START,
+            ),
+        ]
+        rows = _make_rows([["01ABCDEF1234", "-Users-kaygee-Code-siftd--7"]])
+        blk = table(
+            state=TableState(),
+            columns=cols,
+            rows=rows,
+            visible_height=1,
+            width=30,
+            overflow=Overflow.FIT,
+        )
+        assert blk.width == 30
+        cell = row_text(blk, 2)
+        assert "…" in cell
+        assert cell.rstrip().endswith("siftd--7")  # leaf survived
+
+    def test_fit_right_ellipsis_keeps_head(self) -> None:
+        cols = [
+            Column(header=Line.plain("k"), width=AUTO),
+            Column(header=Line.plain("desc"), width=Fill(), min_width=8, ellipsis=True),
+        ]
+        rows = _make_rows([["a", "Foreign key constraint violations in the main database"]])
+        blk = table(
+            state=TableState(),
+            columns=cols,
+            rows=rows,
+            visible_height=1,
+            width=30,
+            overflow=Overflow.FIT,
+        )
+        assert blk.width == 30
+        cell = row_text(blk, 2)
+        assert cell.rstrip().endswith("…")  # head kept, marker on the right
+        assert "Foreign key" in cell
+
+    def test_fit_overflows_lossless_when_too_many_columns(self) -> None:
+        cols = [
+            Column(header=Line.plain("aa"), width=AUTO),
+            Column(header=Line.plain("bb"), width=AUTO),
+            Column(header=Line.plain("cc"), width=AUTO),
+            Column(header=Line.plain("d"), width=Fill(), min_width=5),
+        ]
+        rows = _make_rows([["x" * 30, "y" * 30, "z" * 30, "w"]])
+        blk = table(
+            state=TableState(),
+            columns=cols,
+            rows=rows,
+            visible_height=1,
+            width=40,
+            overflow=Overflow.FIT,
+        )
+        assert blk.width > 40  # not clipped to the budget
+        header = row_text(blk, 0)
+        for h in ("aa", "bb", "cc", "d"):
+            assert h in header  # every column survives
+
+    def test_clip_default_still_truncates_block(self) -> None:
+        cols = [
+            Column(header=Line.plain("a"), width=AUTO),
+            Column(header=Line.plain("b"), width=AUTO),
+        ]
+        rows = _make_rows([["x" * 30, "y" * 30]])
+        blk = table(state=TableState(), columns=cols, rows=rows, visible_height=1, width=20)
+        assert blk.width == 20  # CLIP remains the default

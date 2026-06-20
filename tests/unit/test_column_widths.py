@@ -9,7 +9,7 @@ rendered-table integration lives in test_table_render.py.
 from __future__ import annotations
 
 from painted.core.span import Line
-from painted.views import AUTO, Column, Fill
+from painted.views import AUTO, Column, Fill, Overflow
 from painted.views.components._table import resolve_column_widths
 
 
@@ -124,3 +124,56 @@ class TestEdgeCases:
         cols = [_col(AUTO, "A"), _col(AUTO, "B")]
         rows = [[Line.plain("xxxx")]]  # only one cell for two columns
         assert resolve_column_widths(cols, rows, None) == [4, 1]
+
+
+class TestOverflowFit:
+    """Overflow.FIT: Fill columns size to content and shrink (not stretch) to fit;
+    an unshrinkable table overflows rather than clipping."""
+
+    def test_fill_does_not_stretch_when_it_fits(self) -> None:
+        # The balloon fix: under FIT a Fill column sits at natural width when the
+        # table already fits, instead of consuming the whole budget (CLIP does).
+        cols = [_col(AUTO, "day"), _col(Fill(), "n")]
+        rows = _rows(["2026-06-20", "5"])
+        assert resolve_column_widths(cols, rows, available=80, overflow=Overflow.FIT) == [10, 1]
+        # CLIP, for contrast, stretches the Fill to fill the budget.
+        assert resolve_column_widths(cols, rows, available=80) == [10, 69]
+
+    def test_fill_shrinks_to_absorb_overflow(self) -> None:
+        cols = [_col(AUTO, "id"), _col(Fill(), "ws", min_width=5)]
+        rows = _rows(["01ABCDEF1234", "-Users-kaygee-Code-siftd--7"])  # id=12, ws=27 natural
+        # natural 12+27+1sep=40 > 20; nonfill 12+1sep=13; leftover 7 >= floor 5 → fill=7.
+        assert resolve_column_widths(cols, rows, available=20, overflow=Overflow.FIT) == [12, 7]
+
+    def test_unshrinkable_overflows_at_floor_not_clipped(self) -> None:
+        # Non-Fill columns alone exceed the budget: Fill holds at its floor and
+        # the returned widths exceed the budget (table() won't clip them).
+        cols = [_col(AUTO, "a"), _col(AUTO, "b"), _col(Fill(), "c", min_width=5)]
+        rows = _rows(["x" * 30, "y" * 30, "z"])
+        resolved = resolve_column_widths(cols, rows, available=40, overflow=Overflow.FIT)
+        assert resolved == [30, 30, 5]
+        assert sum(resolved) + 2 > 40  # overflow, lossless
+
+    def test_no_fill_returns_natural_under_fit(self) -> None:
+        cols = [_col(AUTO, "a"), _col(AUTO, "b")]
+        rows = _rows(["x" * 30, "y" * 30])
+        # No Fill to shrink → natural widths; table() under FIT lets it overflow.
+        assert resolve_column_widths(cols, rows, available=20, overflow=Overflow.FIT) == [30, 30]
+
+    def test_weighted_fills_split_leftover(self) -> None:
+        cols = [
+            _col(AUTO, "k"),
+            _col(Fill(weight=2), "a", min_width=2),
+            _col(Fill(weight=1), "b", min_width=2),
+        ]
+        rows = _rows(["k", "a" * 20, "b" * 20])  # k=1, fills natural 20 each
+        # nonfill 1 + 2sep = 3; leftover 15-3 = 12; split 2:1 → 8 and 4.
+        assert resolve_column_widths(cols, rows, available=15, overflow=Overflow.FIT) == [1, 8, 4]
+
+    def test_clip_is_the_default(self) -> None:
+        cols = [_col(AUTO, "a"), _col(Fill(), "b")]
+        rows = _rows(["x", "y"])
+        # Omitting overflow == CLIP: Fill stretches to fill the budget.
+        assert resolve_column_widths(cols, rows, available=20) == resolve_column_widths(
+            cols, rows, available=20, overflow=Overflow.CLIP
+        )
