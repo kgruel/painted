@@ -46,6 +46,16 @@ class IconSet:
     check: str = "✓"
     cross: str = "✗"
 
+    # Severity glyphs (callouts, findings) — a coherent 4-level ladder with
+    # single-char ASCII so they align in a left gutter. Distinct from the
+    # generic check/cross pass-fail markers above (which use bracketed ASCII).
+    ok: str = "✓"
+    info: str = "ℹ"
+    warn: str = "⚠"
+    error: str = "✗"
+    # "Leads-to" arrow for hint / next-step continuation lines.
+    arrow: str = "↳"
+
     # Sparkline (8 levels, low to high)
     sparkline: tuple[str, ...] = ("▁", "▂", "▃", "▄", "▅", "▆", "▇", "█")
 
@@ -71,6 +81,11 @@ ASCII_ICONS = IconSet(
     tree_space="    ",
     check="[x]",
     cross="[!]",
+    ok="+",
+    info="i",
+    warn="!",
+    error="x",
+    arrow="->",
     sparkline=("_", ".", "-", "~", "^", "*", "#", "@"),
     bar_fill="#",
     bar_empty="-",
