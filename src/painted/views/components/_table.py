@@ -325,7 +325,10 @@ def resolve_column_widths(
 
         nonfill_total = sum(widths[i] for i in range(n) if i not in fills) + sep_total
         leftover = available - nonfill_total  # combined width for all Fill columns
-        floors = {i: (columns[i].min_width or 1) for i in fill_idx}
+        # Floor at the explicit min_width (0 when unset), matching the CLIP path
+        # below — an explicit ``min_width=0`` must mean 0 in both modes, not get
+        # silently clamped up to 1 under FIT.
+        floors = {i: (columns[i].min_width or 0) for i in fill_idx}
         total_weight = sum(f.weight for f in fills.values())
         if leftover <= sum(floors.values()) or total_weight <= 0:
             # Non-Fill columns already overflow: hold Fills at their floors and

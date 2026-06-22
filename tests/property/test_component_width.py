@@ -16,7 +16,7 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 from painted.core.span import Line
-from painted.views import AUTO, Column, Fill, ProgressState, current_icons, progress_bar
+from painted.views import AUTO, Column, Fill, Overflow, ProgressState, current_icons, progress_bar
 from painted.views.components._table import resolve_column_widths
 
 _ratio = st.floats(min_value=0.0, max_value=1.0, allow_nan=False, allow_infinity=False)
@@ -109,3 +109,22 @@ def test_resolution_is_deterministic(cols: list[Column], available: int) -> None
     assert resolve_column_widths(cols, rows, available) == resolve_column_widths(
         cols, rows, available
     )
+
+
+@given(cols=_columns(), available=st.integers(min_value=0, max_value=300))
+def test_fit_is_shrink_only_never_stretches_past_natural(
+    cols: list[Column], available: int
+) -> None:
+    """Overflow.FIT's defining invariant: no column is ever wider than its
+    unbudgeted (natural) resolution.
+
+    FIT sizes Fill columns to content and only *shrinks* them under budget
+    pressure — it never stretches a Fill into leftover slack the way CLIP does.
+    So for every column the FIT width is bounded above by the natural width and
+    is non-negative. This is the law CLIP-only coverage left unpinned."""
+    rows = [[Line.plain("x" * 12) for _ in cols]]
+    natural = resolve_column_widths(cols, rows, None)
+    fit = resolve_column_widths(cols, rows, available, overflow=Overflow.FIT)
+    assert len(fit) == len(cols)
+    for f, nt in zip(fit, natural):
+        assert 0 <= f <= nt
