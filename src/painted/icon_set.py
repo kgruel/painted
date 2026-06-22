@@ -52,16 +52,6 @@ class IconSet:
     # mid-render on the "…" codepoint.
     ellipsis: str = "…"
 
-    # Severity glyphs (callouts, findings) — a coherent 4-level ladder with
-    # single-char ASCII so they align in a left gutter. Distinct from the
-    # generic check/cross pass-fail markers above (which use bracketed ASCII).
-    ok: str = "✓"
-    info: str = "ℹ"
-    warn: str = "⚠"
-    error: str = "✗"
-    # "Leads-to" arrow for hint / next-step continuation lines.
-    arrow: str = "↳"
-
     # Rank-tier ladder for attention/relevance rails: a high-rank marker, a
     # mid-rank continuation bar, and a low-rank dot. A glyph vocabulary so a
     # relevance rail can theme and ASCII-degrade like every other gutter glyph
@@ -99,11 +89,6 @@ ASCII_ICONS = IconSet(
     check="[x]",
     cross="[!]",
     ellipsis="...",
-    ok="+",
-    info="i",
-    warn="!",
-    error="x",
-    arrow="->",
     rank_top="*",
     rank_mid="|",
     rank_tail=".",
