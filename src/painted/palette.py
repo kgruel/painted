@@ -60,7 +60,7 @@ class Palette:
     # ``bg`` is unset. Both default to ``None`` — the terminal's own fg/bg, i.e.
     # today's behavior byte-for-byte. An explicit ``fg``/``bg`` on the cell always
     # wins. This lets a Theme own "body text" (and optionally a base canvas)
-    # rather than coloring only the five roles. See ``resolve_against`` and the
+    # rather than coloring only the five roles. See ``resolve_style`` and the
     # writer's emission boundary. (Roles are *meaning*; ``text``/``surface`` are
     # the *substrate* those roles sit on.)
     text: Style | None = None
