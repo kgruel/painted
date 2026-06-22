@@ -12,7 +12,7 @@ from .buffer import BufferView
 from .cell import Cell, Style
 
 if TYPE_CHECKING:
-    from .block import Block
+    from .block import Block, Wrap
 
 
 @dataclass(frozen=True, slots=True)
@@ -82,6 +82,25 @@ class Line:
                     kept.append(Span("".join(chars), span.style))
                 break
         return Line(spans=tuple(kept), style=self.style)
+
+    def wrap(self, width: int, *, wrap: Wrap | None = None) -> Block:
+        """Reflow this multi-style Line to `width`, returning a multi-row Block.
+
+        The multi-line generalization of `to_block` (which is single-line
+        `Wrap.NONE`): each span's style is merged onto the Line style and rides
+        with its characters across line breaks. `wrap` mirrors `Block.text`'s
+        modes exactly — the same operation `Block.text(..., wrap=...)` gives a
+        single-style `str`, one rung up in style richness. Defaults to
+        `Wrap.WORD`. Pad cells and the ELLIPSIS marker inherit the Line's base
+        style.
+        """
+        from .block import Wrap, _wrap_styled
+
+        if wrap is None:
+            wrap = Wrap.WORD
+
+        chars = [(ch, self.style.merge(span.style)) for span in self.spans for ch in span.text]
+        return _wrap_styled(chars, width, wrap=wrap, pad_style=self.style)
 
     def to_block(self, width: int) -> Block:
         """Convert this Line to a Block of the given width.

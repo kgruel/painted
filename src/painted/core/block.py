@@ -438,16 +438,84 @@ def _cells_from_text(text: str, style: Style, *, max_width: int | None = None) -
     return cells
 
 
-def _char_wrap(text: str, width: int, style: Style) -> list[list[Cell]]:
-    """Wrap text at any character boundary by display width."""
-    if not text:
-        return [_pad_row([], width, style)]
+# --- Styled wrap engine -----------------------------------------------------
+#
+# The wrap algorithms operate on a *styled-char stream* — one (char, Style)
+# entry per source character. Single-style text (`str`) is the degenerate case
+# where every entry shares one style, so the `str` entry points below are thin
+# adapters over these cores. This is the one wrap engine; there is no parallel
+# str/styled logic to keep in sync.
+
+_StyledChars = list[tuple[str, Style]]
+
+
+def _styled_from_text(text: str, style: Style) -> _StyledChars:
+    """Expand a single-style string into a styled-char stream."""
+    return [(ch, style) for ch in text]
+
+
+def _cells_from_styled(chars: _StyledChars, *, max_width: int | None = None) -> list[Cell]:
+    """Materialize a styled-char stream into cells, expanding wide chars.
+
+    Each character carries its own style; a space placeholder follows a wide
+    char and inherits that char's style. Mirrors `_cells_from_text` but
+    per-char rather than per-string.
+    """
+    cells: list[Cell] = []
+    used = 0
+    for ch, st in chars:
+        w = char_width(ch)
+        if w == 0:
+            continue
+        if max_width is not None and used + w > max_width:
+            break
+        cells.append(Cell(ch, st))
+        if w == 2:
+            cells.append(Cell(" ", st))
+        used += w
+        if max_width is not None and used >= max_width:
+            break
+    return cells
+
+
+def _styled_width(chars: _StyledChars) -> int:
+    """Display width of a styled-char stream."""
+    return sum(w for w in (char_width(ch) for ch, _ in chars) if w > 0)
+
+
+def _take_styled_prefix(seg: _StyledChars, width: int) -> tuple[_StyledChars, int]:
+    """Take a styled prefix within width columns; returns (prefix, consumed)."""
+    used = 0
+    out: _StyledChars = []
+    consumed = 0
+    for i, (ch, st) in enumerate(seg):
+        w = char_width(ch)
+        if w == 0:
+            out.append((ch, st))
+            consumed = i + 1
+            continue
+        if w > width:
+            break
+        if used + w > width:
+            break
+        out.append((ch, st))
+        used += w
+        consumed = i + 1
+        if used == width:
+            break
+    return out, consumed
+
+
+def _char_wrap_styled(chars: _StyledChars, width: int, pad_style: Style) -> list[list[Cell]]:
+    """Wrap a styled-char stream at any character boundary by display width."""
+    if not chars:
+        return [_pad_row([], width, pad_style)]
 
     rows: list[list[Cell]] = []
     current: list[Cell] = []
     used = 0
 
-    for ch in text:
+    for ch, st in chars:
         w = char_width(ch)
         if w == 0:
             continue
@@ -456,16 +524,16 @@ def _char_wrap(text: str, width: int, style: Style) -> list[list[Cell]]:
             continue
 
         if used + w > width and current:
-            rows.append(_pad_row(current, width, style))
+            rows.append(_pad_row(current, width, pad_style))
             current = []
             used = 0
 
         if used + w > width:
             continue
 
-        current.append(Cell(ch, style))
+        current.append(Cell(ch, st))
         if w == 2:
-            current.append(Cell(" ", style))
+            current.append(Cell(" ", st))
         used += w
 
         if used == width:
@@ -474,81 +542,149 @@ def _char_wrap(text: str, width: int, style: Style) -> list[list[Cell]]:
             used = 0
 
     if current or not rows:
-        rows.append(_pad_row(current, width, style))
+        rows.append(_pad_row(current, width, pad_style))
 
     return rows
 
 
-def _word_wrap(text: str, width: int) -> list[str]:
-    """Break text at word boundaries to fit within width."""
-    if width <= 0:
-        return [""]
-    if not text:
-        return [""]
+def _word_wrap_styled(chars: _StyledChars, width: int) -> list[_StyledChars]:
+    """Break a styled-char stream at word boundaries to fit within width.
 
-    words = text.split(" ")
-    lines: list[str] = []
-    current_line = ""
+    Source spaces (and their styles) are preserved between words on the same
+    line; the break space at a wrap point is dropped (lines are right-trimmed).
+    For uniform-style input where pad style equals the content style, this
+    yields cells identical to the legacy string wrap.
+    """
+    if width <= 0 or not chars:
+        return [[]]
 
-    for word in words:
-        if not current_line:
-            # First word on line — take it even if too long
-            if display_width(word) <= width:
-                current_line = word
-            else:
-                # Word itself exceeds width, break it
-                while word and display_width(word) > width:
-                    prefix, consumed = _take_word_prefix(word, width)
-                    if consumed == 0:
-                        # Unrepresentable (e.g., width=1 and next char is wide)
-                        word = word[1:]
-                        continue
-                    lines.append(prefix)
-                    word = word[consumed:]
-                current_line = word
-        elif display_width(current_line) + 1 + display_width(word) <= width:
-            current_line += " " + word
+    # Group into alternating space / non-space segments, style preserved.
+    segments: list[tuple[bool, _StyledChars]] = []
+    cur: _StyledChars = []
+    cur_sp: bool | None = None
+    for ch, st in chars:
+        sp = ch == " "
+        if cur and sp != cur_sp:
+            segments.append((cast(bool, cur_sp), cur))
+            cur = []
+        cur.append((ch, st))
+        cur_sp = sp
+    if cur:
+        segments.append((cast(bool, cur_sp), cur))
+
+    lines: list[_StyledChars] = []
+    line: _StyledChars = []
+    line_w = 0
+    pending: _StyledChars = []  # space segment awaiting a following word
+
+    for is_sp, seg in segments:
+        if is_sp:
+            pending = seg
+            continue
+
+        word_w = _styled_width(seg)
+        if line:
+            sp_w = _styled_width(pending)
+            if line_w + sp_w + word_w <= width:
+                line = line + pending + seg
+                line_w += sp_w + word_w
+                pending = []
+                continue
+            # Word does not fit; wrap and drop the break space.
+            lines.append(line)
+            line = []
+            line_w = 0
+        pending = []
+
+        # Place the word on a fresh line.
+        if word_w <= width:
+            line = list(seg)
+            line_w = word_w
         else:
-            lines.append(current_line)
-            if display_width(word) <= width:
-                current_line = word
-            else:
-                while word and display_width(word) > width:
-                    prefix, consumed = _take_word_prefix(word, width)
-                    if consumed == 0:
-                        word = word[1:]
-                        continue
-                    lines.append(prefix)
-                    word = word[consumed:]
-                current_line = word
+            rest = seg
+            while rest and _styled_width(rest) > width:
+                prefix, consumed = _take_styled_prefix(rest, width)
+                if consumed == 0:
+                    # Unrepresentable lead char (e.g. width=1, wide char).
+                    rest = rest[1:]
+                    continue
+                lines.append(prefix)
+                rest = rest[consumed:]
+            line = list(rest)
+            line_w = _styled_width(rest)
 
-    if current_line:
-        lines.append(current_line)
+    lines.append(line)
+    return lines
 
-    return lines if lines else [""]
+
+# --- str adapters over the styled engine ------------------------------------
+
+
+def _char_wrap(text: str, width: int, style: Style) -> list[list[Cell]]:
+    """Wrap a single-style string at any character boundary."""
+    return _char_wrap_styled(_styled_from_text(text, style), width, style)
+
+
+def _word_wrap(text: str, width: int) -> list[str]:
+    """Break a single-style string at word boundaries (legacy str view)."""
+    if width <= 0 or not text:
+        return [""]
+    lines = _word_wrap_styled(_styled_from_text(text, Style()), width)
+    return ["".join(ch for ch, _ in ln) for ln in lines] or [""]
 
 
 def _take_word_prefix(word: str, width: int) -> tuple[str, int]:
     """Take a word prefix within width columns; returns (prefix, consumed)."""
-    used = 0
-    chars: list[str] = []
-    consumed = 0
+    out, consumed = _take_styled_prefix(_styled_from_text(word, Style()), width)
+    return "".join(ch for ch, _ in out), consumed
 
-    for i, ch in enumerate(word):
-        w = char_width(ch)
-        if w == 0:
-            chars.append(ch)
-            consumed = i + 1
-            continue
-        if w > width:
-            # Can't fit this char at all.
-            break
-        if used + w > width:
-            break
-        chars.append(ch)
-        used += w
-        consumed = i + 1
-        if used == width:
-            break
 
-    return ("".join(chars), consumed)
+def _wrap_styled(
+    chars: _StyledChars,
+    width: int,
+    *,
+    wrap: Wrap = Wrap.WORD,
+    pad_style: Style = Style(),
+) -> Block:
+    """Wrap a styled-char stream into a Block — the seam behind `Line.wrap`.
+
+    `pad_style` styles the trailing pad cells (and the ellipsis marker); it is
+    the multi-line generalization of `Line.to_block`, which is itself
+    single-line `Wrap.NONE`. The four `Wrap` modes mirror `Block.text` exactly.
+    """
+    if width <= 0:
+        return Block([[]], 0)
+
+    if wrap == Wrap.CHAR:
+        rows = _char_wrap_styled(chars, width, pad_style)
+        return Block(rows, width)
+
+    if wrap == Wrap.WORD:
+        lines = _word_wrap_styled(chars, width)
+        rows = [
+            _pad_row(_cells_from_styled(line, max_width=width), width, pad_style) for line in lines
+        ]
+        return Block(rows, width)
+
+    if wrap == Wrap.NONE:
+        cells = _pad_row(_cells_from_styled(chars, max_width=width), width, pad_style)
+        return Block([cells], width)
+
+    if wrap == Wrap.ELLIPSIS:
+        if _styled_width(chars) <= width:
+            cells = _cells_from_styled(chars, max_width=width)
+        else:
+            from ..icon_set import current_icons
+
+            ellipsis = current_icons().ellipsis
+            ell_w = display_width(ellipsis)
+            ell_chars = _styled_from_text(ellipsis, pad_style)
+            if ell_w >= width:
+                cells = _cells_from_styled(ell_chars, max_width=width)
+            else:
+                cells = _cells_from_styled(chars, max_width=width - ell_w)
+                cells.extend(_cells_from_styled(ell_chars))
+        cells = _pad_row(cells, width, pad_style)
+        return Block([cells], width)
+
+    raise ValueError(f"Unknown wrap mode: {wrap}")

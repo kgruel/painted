@@ -241,3 +241,87 @@ class TestLineToBlock:
         line = Line(spans=(Span("\u4e16"),))
         block = line.to_block(1)
         assert block.row(0)[0].char == " "
+
+
+class TestLineWrap:
+    """Line.wrap — multi-line reflow of multi-style text (the rung above to_block)."""
+
+    def _chars(self, block, row):
+        return [c.char for c in block.row(row)]
+
+    def test_word_wrap_basic(self):
+        line = Line(spans=(Span("hello world"),))
+        block = line.wrap(6)  # WORD is the default
+        assert block.width == 6
+        assert block.height == 2
+        assert "".join(self._chars(block, 0)).rstrip() == "hello"
+        assert "".join(self._chars(block, 1)).rstrip() == "world"
+
+    def test_default_mode_is_word(self):
+        from painted import Wrap
+
+        line = Line(spans=(Span("hello world"),))
+        a, b = line.wrap(6), line.wrap(6, wrap=Wrap.WORD)
+        assert [a.row(i) for i in range(a.height)] == [b.row(i) for i in range(b.height)]
+
+    def test_style_rides_across_wrap_boundary(self):
+        # A bold word and a plain word wrap to separate rows; each keeps its style.
+        line = Line(spans=(Span("aaa", Style(bold=True)), Span(" bbb")))
+        block = line.wrap(3)
+        assert block.height == 2
+        assert all(c.char == "a" or c.char == " " for c in block.row(0))
+        assert block.row(0)[0].style.bold is True
+        assert block.row(1)[0].char == "b"
+        assert block.row(1)[0].style.bold is False
+
+    def test_word_straddling_style_boundary(self):
+        # Mixed styles inside one whitespace-delimited word survive char-wrapping.
+        from painted import Wrap
+
+        line = Line(spans=(Span("ab", Style(fg="red")), Span("cd", Style(fg="blue"))))
+        block = line.wrap(2, wrap=Wrap.CHAR)
+        assert block.height == 2
+        assert block.row(0)[0].style.fg == "red"
+        assert block.row(1)[0].char == "c"
+        assert block.row(1)[0].style.fg == "blue"
+
+    def test_char_wrap(self):
+        from painted import Wrap
+
+        line = Line(spans=(Span("abcdef"),))
+        block = line.wrap(3, wrap=Wrap.CHAR)
+        assert block.width == 3
+        assert block.height == 2
+        assert "".join(self._chars(block, 0)) == "abc"
+        assert "".join(self._chars(block, 1)) == "def"
+
+    def test_pad_inherits_line_style(self):
+        line = Line(spans=(Span("hi", Style(fg="red")),), style=Style(bg="navy"))
+        block = line.wrap(5, wrap=__import__("painted").Wrap.NONE)
+        # Trailing pad cell carries the Line's base style, not the span style.
+        assert block.row(0)[4].char == " "
+        assert block.row(0)[4].style.bg == "navy"
+
+    def test_ellipsis_truncates(self):
+        from painted import Wrap
+
+        line = Line(spans=(Span("hello world"),))
+        block = line.wrap(8, wrap=Wrap.ELLIPSIS)
+        assert block.width == 8
+        assert block.height == 1
+        assert "…" in "".join(self._chars(block, 0))
+
+    def test_rows_fit_width(self):
+        line = Line(spans=(Span("the quick", Style(bold=True)), Span(" brown fox jumps")))
+        for w in (3, 5, 7, 12):
+            block = line.wrap(w)
+            assert all(len(block.row(i)) == w for i in range(block.height))
+
+    def test_empty_line(self):
+        block = Line().wrap(4)
+        assert block.width == 4
+        assert block.height == 1
+
+    def test_zero_width(self):
+        block = Line(spans=(Span("hi"),)).wrap(0)
+        assert block.width == 0
