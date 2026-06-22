@@ -46,6 +46,8 @@ __all__ = [
     # Text primitives
     "Span",
     "Line",
+    # Measurement
+    "display_width",
     # Rendering constraint
     "Zoom",
     # Output
@@ -87,6 +89,7 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "CellWrite": (".buffer", "CellWrite"),
     "Span": (".span", "Span"),
     "Line": (".span", "Line"),
+    "display_width": ("._text_width", "display_width"),
     "Zoom": (".zoom", "Zoom"),
     "Writer": (".writer", "Writer"),
     "ColorDepth": (".writer", "ColorDepth"),

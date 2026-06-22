@@ -62,6 +62,8 @@ STABLE_CORE_SURFACE = frozenset(
         "vslice",
         "budget_fields",
         "BudgetFit",
+        # Measurement
+        "display_width",
         # Borders
         "BorderChars",
         "ROUNDED",
