@@ -151,6 +151,15 @@ class TestTruncateEllipsis:
         result = truncate_ellipsis("hello world", 5, ellipsis="")
         assert display_width(result) <= 5
 
+    def test_ellipsis_none_reads_ambient_icon(self):
+        from painted.icon_set import ASCII_ICONS, reset_icons, use_icons
+
+        # Default (ellipsis omitted) reads the ambient IconSet.
+        assert truncate_ellipsis("hello world", 8) == "hello w…"
+        with use_icons(ASCII_ICONS):
+            assert truncate_ellipsis("hello world", 8) == "hello..."
+        reset_icons()
+
 
 # =============================================================================
 # index_for_col

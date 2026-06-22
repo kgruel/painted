@@ -26,21 +26,6 @@ def _get_cell_map(style: Style) -> dict[str, Cell]:
     return m
 
 
-def _ascii_cells(text: str, style: Style) -> list[Cell]:
-    """Convert ASCII text to cached Cell list using fast map() lookup."""
-    m = _style_cell_maps.get(style)
-    if m is None:
-        m = {}
-        _style_cell_maps[style] = m
-    try:
-        return list(map(m.__getitem__, text))
-    except KeyError:
-        for ch in text:
-            if ch not in m:
-                m[ch] = Cell(ch, style)
-        return list(map(m.__getitem__, text))
-
-
 def _ascii_row_tuple(chars: str, width: int, style: Style) -> tuple[Cell, ...]:
     """Build a padded ASCII row as a frozen tuple, bypassing list intermediates."""
     m = _style_cell_maps.get(style)
@@ -192,26 +177,27 @@ class Block:
             return Block._create((tuple(cells),), width, id=id)
 
         if wrap == Wrap.ELLIPSIS:
-            # Truncate with ellipsis if needed
-            if content.isascii():
-                if content[width:]:
-                    if width == 1:
-                        cells = [Cell("…", style)]
-                    else:
-                        cells = _ascii_cells(content[: width - 1], style)
-                        cells.append(Cell("…", style))
-                else:
+            # Truncate with the ambient marker if needed. The marker is read from
+            # current_icons() (not a hardcoded "…") so it degrades to ASCII under
+            # use_icons(ASCII_ICONS) and a strict-ASCII stream never raises on the
+            # "…" codepoint. The marker may be wider than one column ("..."), so
+            # reserve its display width — never assume a 1-column ellipsis.
+            from ..icon_set import current_icons
+
+            if display_width(content) <= width:
+                if content.isascii():
                     return Block._create((_ascii_row_tuple(content, width, style),), width, id=id)
-                cells = _pad_row(cells, width, style)
-                return Block._create((tuple(cells),), width, id=id)
-            if display_width(content) > width:
-                if width == 1:
-                    cells = [Cell("…", style)]
-                else:
-                    cells = _cells_from_text(content, style, max_width=width - 1)
-                    cells.append(Cell("…", style))
-            else:
                 cells = _cells_from_text(content, style, max_width=width)
+            else:
+                ellipsis = current_icons().ellipsis
+                ell_w = display_width(ellipsis)
+                if ell_w >= width:
+                    # No room for content beside the marker — show the marker
+                    # alone, itself clipped to the budget.
+                    cells = _cells_from_text(ellipsis, style, max_width=width)
+                else:
+                    cells = _cells_from_text(content, style, max_width=width - ell_w)
+                    cells.extend(_cells_from_text(ellipsis, style))
             cells = _pad_row(cells, width, style)
             return Block._create((tuple(cells),), width, id=id)
 

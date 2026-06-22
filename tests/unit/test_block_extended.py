@@ -98,6 +98,27 @@ class TestBlockTextEllipsis:
         assert row[-1] == " " or "…" in row
         assert "…" in row
 
+    def test_ellipsis_degrades_to_ascii(self):
+        """Wrap.ELLIPSIS reads the ambient marker — '...' under ASCII icons.
+
+        The marker is 3 columns wide, so content is cut to width-3 to make room
+        (no assuming a 1-column ellipsis)."""
+        from painted.icon_set import ASCII_ICONS, reset_icons, use_icons
+
+        with use_icons(ASCII_ICONS):
+            b = Block.text("hello world", S, width=8, wrap=Wrap.ELLIPSIS)
+            assert "".join(_chars(b)) == "hello..."
+        reset_icons()
+
+    def test_ellipsis_ascii_no_room_for_content(self):
+        from painted.icon_set import ASCII_ICONS, reset_icons, use_icons
+
+        with use_icons(ASCII_ICONS):
+            b = Block.text("hello", S, width=2, wrap=Wrap.ELLIPSIS)
+            # marker (3) wider than budget (2) -> marker alone, clipped
+            assert "".join(_chars(b)) == ".."
+        reset_icons()
+
 
 # --- Block.text() Wrap.CHAR ---
 

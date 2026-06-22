@@ -37,9 +37,15 @@ def test_ascii_icons_are_ascii_safe():
         "tree_branch",
         "tree_last",
         "tree_indent",
+        "ellipsis",
     ):
         val = getattr(ASCII_ICONS, field_name)
         assert all(ord(c) < 128 for c in val), f"ASCII_ICONS.{field_name} has non-ASCII"
+
+
+def test_ellipsis_slot_degrades():
+    assert IconSet().ellipsis == "…"
+    assert ASCII_ICONS.ellipsis == "..."
 
 
 def test_sparkline_chars_length():

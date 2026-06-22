@@ -200,6 +200,16 @@ class TestTruncateIdPropagation:
         assert result.height == 1
         assert _row_ids(result, 0) == []
 
+    def test_truncate_ellipsis_degrades_to_ascii(self):
+        """truncate(ellipsis=None) reads the ambient marker; '...' under ASCII."""
+        from painted.icon_set import ASCII_ICONS, reset_icons, use_icons
+
+        b = text_block(["hello world"])
+        assert "".join(c.char for c in truncate(b, 8).row(0)) == "hello w…"
+        with use_icons(ASCII_ICONS):
+            assert "".join(c.char for c in truncate(b, 8).row(0)) == "hello..."
+        reset_icons()
+
     def test_truncate_width_one(self):
         """truncate() to width 1 produces just the ellipsis."""
         b = _text_block_with_ids(["abc"], ids=[["x", "y", "z"]])

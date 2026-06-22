@@ -341,11 +341,20 @@ def border(
     return Block(rows, new_width, ids=ids_rows)
 
 
-def truncate(block: Block, width: int, ellipsis: str = "…") -> Block:
-    """Truncate a block to width, appending ellipsis if truncated."""
+def truncate(block: Block, width: int, ellipsis: str | None = None) -> Block:
+    """Truncate a block to width, appending ellipsis if truncated.
+
+    ``ellipsis=None`` (the default) reads the ambient ``IconSet.ellipsis`` so the
+    marker degrades to ASCII under ``use_icons(ASCII_ICONS)``; pass an explicit
+    string to override.
+    """
     if block.width <= width:
         return block
 
+    if ellipsis is None:
+        from ..icon_set import current_icons
+
+        ellipsis = current_icons().ellipsis
     ellipsis_width = display_width(ellipsis)
     rows: list[list[Cell]] = []
     ids_rows: list[list[str | None]] | None = [] if block._ids is not None else None

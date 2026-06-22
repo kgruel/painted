@@ -186,8 +186,13 @@ def _ellipsize_line(line: Line, max_width: int, side: Align, style: Style) -> Li
     ``side == Align.START`` puts the ellipsis on the left and keeps the tail;
     any other side puts it on the right and keeps the head. Falls back to a
     plain cut (kept side preserved) when there is no room for the marker.
+
+    The marker is the ambient ``IconSet.ellipsis`` so it degrades to ASCII under
+    ``use_icons(ASCII_ICONS)`` like every other glyph.
     """
-    ellipsis = "…"
+    from ...icon_set import current_icons
+
+    ellipsis = current_icons().ellipsis
     ell_w = display_width(ellipsis)
     if max_width <= ell_w:
         if side == Align.START:

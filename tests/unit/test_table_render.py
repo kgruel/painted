@@ -405,6 +405,28 @@ class TestOverflowFitRender:
         assert "…" in cell
         assert cell.rstrip().endswith("siftd--7")  # leaf survived
 
+    def test_fit_ellipsis_degrades_to_ascii(self) -> None:
+        from painted.icon_set import ASCII_ICONS, reset_icons, use_icons
+
+        cols = [
+            Column(header=Line.plain("k"), width=AUTO),
+            Column(header=Line.plain("desc"), width=Fill(), min_width=8, ellipsis=True),
+        ]
+        rows = _make_rows([["a", "Foreign key constraint violations in the main database"]])
+        with use_icons(ASCII_ICONS):
+            blk = table(
+                state=TableState(),
+                columns=cols,
+                rows=rows,
+                visible_height=1,
+                width=30,
+                overflow=Overflow.FIT,
+            )
+            cell = row_text(blk, 2)
+            assert "…" not in cell
+            assert "..." in cell  # ASCII marker
+        reset_icons()
+
     def test_fit_right_ellipsis_keeps_head(self) -> None:
         cols = [
             Column(header=Line.plain("k"), width=AUTO),

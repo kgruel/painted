@@ -46,6 +46,12 @@ class IconSet:
     check: str = "✓"
     cross: str = "✗"
 
+    # Truncation marker — appended when text is cut to a width budget. A glyph
+    # slot (not a hardcoded literal) so it degrades on a non-Unicode target the
+    # way every other glyph does, and a strict-ASCII stream never raises
+    # mid-render on the "…" codepoint.
+    ellipsis: str = "…"
+
     # Severity glyphs (callouts, findings) — a coherent 4-level ladder with
     # single-char ASCII so they align in a left gutter. Distinct from the
     # generic check/cross pass-fail markers above (which use bracketed ASCII).
@@ -81,6 +87,7 @@ ASCII_ICONS = IconSet(
     tree_space="    ",
     check="[x]",
     cross="[!]",
+    ellipsis="...",
     ok="+",
     info="i",
     warn="!",

@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from wcwidth import wcswidth, wcwidth
 
+from ..icon_set import current_icons
+
 
 _display_width_cache: dict[str, int] = {}
 
@@ -86,8 +88,15 @@ def truncate(text: str, max_width: int) -> str:
     return prefix
 
 
-def truncate_ellipsis(text: str, max_width: int, *, ellipsis: str = "…") -> str:
-    """Truncate text with an ellipsis if it exceeds max_width columns."""
+def truncate_ellipsis(text: str, max_width: int, *, ellipsis: str | None = None) -> str:
+    """Truncate text with an ellipsis if it exceeds max_width columns.
+
+    ``ellipsis=None`` (the default) reads the ambient ``IconSet.ellipsis`` so the
+    marker degrades to ASCII under ``use_icons(ASCII_ICONS)``; pass an explicit
+    string to override.
+    """
+    if ellipsis is None:
+        ellipsis = current_icons().ellipsis
     if max_width <= 0:
         return ""
 
