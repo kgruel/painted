@@ -6,7 +6,13 @@ breaking changes.
 
 ## [0.3.1] — 2026-06-15
 
-A point release widening one contract: `record_line` (and `record_line_composed`) now accept `width=None` for natural sizing. Landed where the loops rebuild reached a real call-site — re-grounding the stream/trace lenses on `record_line` requires honoring loops' piped invariant (piped output feeds other tools/prompts and must not be truncated). Backward-compatible: every `width=int` caller is unaffected.
+A point release widening one contract and adding three width-honest table/message primitives, each landed where a downstream consumer reached a real call-site. `record_line`/`record_line_composed` now accept `width=None` for natural sizing (the loops rebuild's piped invariant); `table()` gains a controlled-shrink overflow mode and per-column ellipsis markers, and a new `callout` primitive renders severity-tagged messages. All backward-compatible — `width=int` callers and existing tables render identically.
+
+### Added
+
+- **`table()` `Overflow.FIT` mode + per-column ellipsis.** `Overflow.FIT` is a controlled-shrink policy (the `resolve_column_widths` follow-up): `Fill` columns size to content and never stretch into slack; when over budget they shrink toward their `min_width` floors to absorb the overflow; and if the non-`Fill` columns alone exceed the budget the table overflows at natural width rather than clipping — so no column or value is ever silently dropped. `Overflow.CLIP` (default) keeps the historical right-clip. `Column.ellipsis=True` adds a `…` marker on truncation, with `ellipsis_side` choosing which end survives: `Align.END` keeps the head (`"long descrip…"`), `Align.START` keeps the tail (`"…Code/siftd"`, so a path leaf survives), backed by a right-anchored `_truncate_keep_end`. `ellipsis=False` keeps the historical marker-less cut. `Overflow` is exported from `painted.views`.
+- **`callout` message primitive.** `painted.views.callout(subject, *, severity, detail, hint, box, width) -> Block` renders a severity-tagged message line: `severity` (`"success"`/`"info"`/`"warning"`/`"error"`) drives both the glyph (ambient `IconSet`) and the color (ambient `Palette` role), with an optional muted `detail` line, an optional muted `↳ hint` next-step line, and an optional bordered panel. Fills the message/callout gap alongside `table`/`record_line`/`progress`.
+- **`IconSet` severity ladder.** A coherent 4-level severity ladder (`ok ✓` / `info ℹ` / `warn ⚠` / `error ✗`) plus a `↳` hint arrow, each with aligned single-char ASCII (`+` / `i` / `!` / `x` / `->`) so callouts degrade canonically under `use_icons(ASCII_ICONS)`. Distinct from the generic `check`/`cross` pass-fail markers.
 
 ### Changed
 
