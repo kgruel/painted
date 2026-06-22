@@ -159,6 +159,7 @@ STABLE_VIEWS_SURFACE = frozenset(
         "AUTO",
         "Fill",
         "Overflow",
+        "EllipsisSide",
         "table",
         "TextInputState",
         "text_input",

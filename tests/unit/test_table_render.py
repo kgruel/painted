@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from painted import Align, Cursor, Style, Viewport
 from painted.core.span import Line
-from painted.views import AUTO, Column, Fill, Overflow, TableState, table
+from painted.views import AUTO, Column, EllipsisSide, Fill, Overflow, TableState, table
 from tests.helpers import row_text
 
 
@@ -388,7 +388,7 @@ class TestOverflowFitRender:
                 width=Fill(),
                 min_width=8,
                 ellipsis=True,
-                ellipsis_side=Align.START,
+                ellipsis_side=EllipsisSide.START,
             ),
         ]
         rows = _make_rows([["01ABCDEF1234", "-Users-kaygee-Code-siftd--7"]])
@@ -404,6 +404,33 @@ class TestOverflowFitRender:
         cell = row_text(blk, 2)
         assert "…" in cell
         assert cell.rstrip().endswith("siftd--7")  # leaf survived
+
+    def test_fit_end_ellipsis_keeps_head(self) -> None:
+        """EllipsisSide.END (the default) keeps the head and marks the right."""
+        cols = [
+            Column(header=Line.plain("id"), width=AUTO),
+            Column(
+                header=Line.plain("desc"),
+                width=Fill(),
+                min_width=8,
+                ellipsis=True,
+                ellipsis_side=EllipsisSide.END,
+            ),
+        ]
+        rows = _make_rows([["01ABCDEF1234", "a-long-description-that-overflows"]])
+        blk = table(
+            state=TableState(),
+            columns=cols,
+            rows=rows,
+            visible_height=1,
+            width=30,
+            overflow=Overflow.FIT,
+        )
+        assert blk.width == 30
+        cell = row_text(blk, 2)
+        assert cell.rstrip().endswith("…")  # END: marker on the right
+        assert "a-long-descript" in cell  # head survived (tail "overflows" dropped)
+        assert "overflows" not in cell
 
     def test_fit_ellipsis_degrades_to_ascii(self) -> None:
         from painted.icon_set import ASCII_ICONS, reset_icons, use_icons

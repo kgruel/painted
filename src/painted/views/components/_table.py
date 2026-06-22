@@ -71,6 +71,23 @@ class Overflow(Enum):
     FIT = "fit"
 
 
+class EllipsisSide(Enum):
+    """Which end of a truncated cell the ``…`` marker sits on (and thus which
+    end of the content survives).
+
+    A dedicated two-valued type rather than a reuse of ``Align``: the choice is
+    *which content is kept*, not how a short value is positioned, and ``Align``
+    would admit a meaningless ``CENTER``.
+
+    - ``END`` (default): marker on the right, keep the head — ``"long descrip…"``.
+    - ``START``: marker on the left, keep the tail — ``"…Code/siftd"`` (so a path
+      leaf survives).
+    """
+
+    END = "end"
+    START = "start"
+
+
 @dataclass(frozen=True)
 class Column:
     """Column definition for a table.
@@ -83,8 +100,8 @@ class Column:
 
     ``ellipsis`` adds a ``…`` marker when a cell is truncated to its column
     width; ``ellipsis_side`` chooses which end the marker sits on —
-    ``Align.END`` keeps the head (``"long descrip…"``), ``Align.START`` keeps
-    the tail (``"…Code/siftd-7"``, so a path leaf survives). Without
+    ``EllipsisSide.END`` keeps the head (``"long descrip…"``), ``EllipsisSide.START``
+    keeps the tail (``"…Code/siftd-7"``, so a path leaf survives). Without
     ``ellipsis`` an over-wide cell is cut on the right with no marker (historical
     behavior).
     """
@@ -95,7 +112,7 @@ class Column:
     min_width: int | None = None
     max_width: int | None = None
     ellipsis: bool = False
-    ellipsis_side: Align = Align.END
+    ellipsis_side: EllipsisSide = EllipsisSide.END
 
 
 @dataclass(frozen=True)
@@ -180,12 +197,13 @@ def _truncate_keep_end(line: Line, max_width: int) -> Line:
     return Line(spans=tuple(reversed(kept)), style=line.style)
 
 
-def _ellipsize_line(line: Line, max_width: int, side: Align, style: Style) -> Line:
+def _ellipsize_line(line: Line, max_width: int, side: EllipsisSide, style: Style) -> Line:
     """Truncate ``line`` to ``max_width`` columns with a ``…`` marker.
 
-    ``side == Align.START`` puts the ellipsis on the left and keeps the tail;
-    any other side puts it on the right and keeps the head. Falls back to a
-    plain cut (kept side preserved) when there is no room for the marker.
+    ``side == EllipsisSide.START`` puts the ellipsis on the left and keeps the
+    tail; ``EllipsisSide.END`` puts it on the right and keeps the head. Falls
+    back to a plain cut (kept side preserved) when there is no room for the
+    marker.
 
     The marker is the ambient ``IconSet.ellipsis`` so it degrades to ASCII under
     ``use_icons(ASCII_ICONS)`` like every other glyph.
@@ -195,12 +213,12 @@ def _ellipsize_line(line: Line, max_width: int, side: Align, style: Style) -> Li
     ellipsis = current_icons().ellipsis
     ell_w = display_width(ellipsis)
     if max_width <= ell_w:
-        if side == Align.START:
+        if side == EllipsisSide.START:
             return _truncate_keep_end(line, max_width)
         return line.truncate(max_width)
     budget = max_width - ell_w
     ell_span = Span(ellipsis, style)
-    if side == Align.START:
+    if side == EllipsisSide.START:
         kept = _truncate_keep_end(line, budget)
         return Line(spans=(ell_span, *kept.spans), style=line.style)
     kept = line.truncate(budget)
@@ -214,7 +232,7 @@ def _pad_line(
     style: Style,
     *,
     ellipsis: bool = False,
-    ellipsis_side: Align = Align.END,
+    ellipsis_side: EllipsisSide = EllipsisSide.END,
 ) -> Line:
     """Truncate or pad a Line to exactly target_width columns.
 
