@@ -123,6 +123,65 @@ def test_mono_series_has_no_colors():
     assert len(set(MONO_PALETTE.series)) >= 3
 
 
+# --- text/surface: substrate ownership --------------------------------------
+
+
+def test_resolve_style_identity_when_no_substrate():
+    """text=None and surface=None => resolve_style returns the input unchanged.
+
+    Identity (not just equality) so the writer's `!= last_style` dedup and the
+    byte-for-byte back-compat guarantee both hold."""
+    p = Palette()
+    s = Style(fg="red", bold=True)
+    assert p.resolve_style(s) is s
+    assert p.resolve_style(Style()) is not None
+    assert p.resolve_style(Style()) == Style()
+
+
+def test_resolve_style_supplies_text_fg_for_unstyled():
+    p = Palette(text=Style(fg="#e4d9bf"))
+    assert p.resolve_style(Style()).fg == "#e4d9bf"
+
+
+def test_resolve_style_explicit_fg_wins():
+    p = Palette(text=Style(fg="#e4d9bf"))
+    assert p.resolve_style(Style(fg="red")).fg == "red"
+
+
+def test_resolve_style_surface_supplies_bg():
+    p = Palette(surface=Style(bg="#101010"))
+    resolved = p.resolve_style(Style(fg="red"))
+    assert resolved.fg == "red"
+    assert resolved.bg == "#101010"
+    # explicit bg still wins
+    assert p.resolve_style(Style(bg="blue")).bg == "blue"
+
+
+def test_resolve_style_combines_text_and_surface():
+    p = Palette(text=Style(fg="#e4d9bf"), surface=Style(bg="#101010"))
+    resolved = p.resolve_style(Style())
+    assert resolved.fg == "#e4d9bf"
+    assert resolved.bg == "#101010"
+
+
+def test_writer_output_byte_identical_without_substrate():
+    """The whole point: a palette without text/surface emits exactly today's SGR."""
+    from painted.core.block import Block
+    from painted.core.writer import ColorDepth, Writer, render_block_ansi
+
+    w = Writer(color_depth=ColorDepth.TRUECOLOR)
+    block = Block.text("hi", Style())
+    with use_palette(DEFAULT_PALETTE):
+        plain = render_block_ansi(block, w)
+    with use_palette(Palette(text=Style(fg="#e4d9bf"))):
+        themed = render_block_ansi(block, w)
+
+    assert "\x1b[" in plain  # reset only, no fg
+    assert "38;2;228;217;191" not in plain
+    assert "38;2;228;217;191" in themed  # cream applied to unstyled body
+    reset_palette()
+
+
 def test_painted_palette_is_vivid_hex():
     """PAINTED_PALETTE roles and ramp are truecolor hex strings."""
     for role in ("success", "warning", "error", "accent", "muted"):

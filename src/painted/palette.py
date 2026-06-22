@@ -54,6 +54,17 @@ class Palette:
     error: Style = field(default_factory=lambda: Style(fg="red"))
     accent: Style = field(default_factory=lambda: Style(fg="cyan"))
     muted: Style = field(default_factory=lambda: Style(dim=True))
+    # Substrate ownership: the default style for otherwise-unstyled content.
+    # ``text`` supplies a foreground (and any attributes) wherever a cell's
+    # ``Style`` leaves ``fg`` unset; ``surface`` supplies a background wherever
+    # ``bg`` is unset. Both default to ``None`` — the terminal's own fg/bg, i.e.
+    # today's behavior byte-for-byte. An explicit ``fg``/``bg`` on the cell always
+    # wins. This lets a Theme own "body text" (and optionally a base canvas)
+    # rather than coloring only the five roles. See ``resolve_against`` and the
+    # writer's emission boundary. (Roles are *meaning*; ``text``/``surface`` are
+    # the *substrate* those roles sit on.)
+    text: Style | None = None
+    surface: Style | None = None
     series: tuple[Style, ...] = field(
         default_factory=lambda: (
             Style(fg="red"),
@@ -62,6 +73,23 @@ class Palette:
             Style(fg="cyan"),
         )
     )
+
+    def resolve_style(self, style: Style) -> Style:
+        """Resolve a cell ``Style`` against this palette's substrate defaults.
+
+        ``text`` is layered *under* the cell style (so the cell's explicit
+        ``fg``/attributes win) and ``surface`` supplies the base ``bg``. When
+        both are ``None`` the input is returned unchanged — identity, so output
+        is byte-identical to a palette without a substrate. This is the single
+        point where the ambient palette reaches the SGR-emission boundary; the
+        writer's ``Style → SGR`` conversion stays pure.
+        """
+        base: Style | None = self.text
+        if self.surface is not None:
+            base = self.surface if base is None else base.merge(self.surface)
+        if base is None:
+            return style
+        return base.merge(style)
 
 
 # --- Presets ---

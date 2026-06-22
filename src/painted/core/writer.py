@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, TextIO
 
 from wcwidth import wcwidth
 
+from ..palette import current_palette
 from .buffer import CellWrite
 from .cell import NAMED_COLORS, Style
 from ._color import _nearest_basic, _rgb_to_256, _rgb_to_basic
@@ -217,7 +218,7 @@ class Writer:
 
             if w.cell.style != last_style:
                 parts.append(self.reset_style())
-                sgr = self.apply_style(w.cell.style)
+                sgr = self.apply_style(current_palette().resolve_style(w.cell.style))
                 if sgr:
                     parts.append(sgr)
                 last_style = w.cell.style
@@ -336,7 +337,7 @@ def render_row_ansi(block: Block, row_idx: int, writer: Writer, *, clear_eol: bo
         cell = span.cells[0]
         if cell.style != last_style:
             out.append(writer.reset_style())
-            sgr = writer.apply_style(cell.style)
+            sgr = writer.apply_style(current_palette().resolve_style(cell.style))
             if sgr:
                 out.append(sgr)
             last_style = cell.style
