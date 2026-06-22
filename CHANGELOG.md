@@ -4,9 +4,9 @@ All notable changes to painted are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/); pre-1.0, minor versions may carry
 breaking changes.
 
-## [0.3.1] — 2026-06-22
+## [0.4.0] — 2026-06-22
 
-A point release widening one contract and adding a batch of consumer-driven primitives, each landed where a downstream consumer (the loops rebuild, and the siftd terminal-UI refresh) reached a real call-site. `record_line`/`record_line_composed` now accept `width=None` for natural sizing; `table()` gains a controlled-shrink overflow mode and per-column ellipsis markers; the `Palette` can now own body text (and an optional canvas); the truncation marker degrades to ASCII via a new `IconSet` slot; a `rule()` divider plus rank-tier glyphs round out the gutter vocabulary; multi-style `Line`s gain a `wrap()` reflow rung to match single-style `Block.text`; and the wcwidth-aware `display_width` measurement graduates from a private module to the stable `painted.core` surface. All backward-compatible — defaults are byte-identical to today, and `width=int`/existing callers render unchanged.
+A minor release adding a batch of consumer-driven primitives and widening one contract, each landed where a downstream consumer (the loops rebuild, and the siftd terminal-UI refresh) reached a real call-site. `record_line`/`record_line_composed` now accept `width=None` for natural sizing; `table()` gains a controlled-shrink overflow mode and per-column ellipsis markers; the `Palette` can now own body text (and an optional canvas); the truncation marker degrades to ASCII via a new `IconSet` slot; a `rule()` divider plus rank-tier glyphs round out the gutter vocabulary; multi-style `Line`s gain a `wrap()` reflow rung to match single-style `Block.text`; and the wcwidth-aware `display_width` measurement graduates from a private module to the stable `painted.core` surface. All backward-compatible — defaults are byte-identical to today, and `width=int`/existing callers render unchanged.
 
 ### Added
 

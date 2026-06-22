@@ -25,7 +25,7 @@ The second direction is deliberate. ``painted.core``/``painted.views`` are
 published stable name — there is no "stage it now, commit to it later" state for
 these namespaces (that's what the evolving ``painted.cli``/``painted.tui`` are
 for). An earlier one-directional guard let an addition ship silently unsnapshotted
-— ``callout`` and ``Overflow`` both reached ``views.__all__`` in the 0.3.1 batch
+— ``callout`` and ``Overflow`` both reached ``views.__all__`` in the 0.4.0 batch
 while the snapshot, and the green suite, said nothing. Requiring equality forces
 every new stable export to be a conscious entry here, reviewed in the diff — it
 catches the *omission*, not just the removal.
