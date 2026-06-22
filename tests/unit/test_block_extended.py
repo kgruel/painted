@@ -158,6 +158,20 @@ class TestBlockTextWordWrap:
         assert b.width == 3
         assert b.height >= 3
 
+    def test_word_wrap_trailing_unrepresentable_char_no_phantom_row(self):
+        """A final word that cannot be represented in the budget (a width-2 char
+        in a width-1 column) must not leave a phantom blank trailing row.
+
+        Regression: the unified word-wrap engine appended its accumulator
+        unconditionally, so a trailing word drained to empty by the
+        too-wide-to-place path added an all-blank row — inflating height and
+        diverging from the pre-unification ``lines if lines else ['']`` contract
+        (and from CHAR wrap, which never had the bug)."""
+        b = Block.text("a 中", S, width=1, wrap=Wrap.WORD)
+        assert b.width == 1
+        assert b.height == 1
+        assert _chars(b, 0) == ["a"]
+
 
 # --- Block.empty() with id ---
 

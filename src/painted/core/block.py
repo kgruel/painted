@@ -613,7 +613,14 @@ def _word_wrap_styled(chars: _StyledChars, width: int) -> list[_StyledChars]:
             line = list(rest)
             line_w = _styled_width(rest)
 
-    lines.append(line)
+    # Emit the trailing line, but only if it carries content or is the sole row.
+    # A final word that is entirely unrepresentable (e.g. a width-2 char in a
+    # width-1 budget) drains ``line`` to empty after the wrap above; appending it
+    # unconditionally would add a phantom blank row, inflating height and
+    # diverging from the legacy ``lines if lines else ['']`` contract. Mirrors
+    # the guard in ``_char_wrap_styled``.
+    if line or not lines:
+        lines.append(line)
     return lines
 
 
