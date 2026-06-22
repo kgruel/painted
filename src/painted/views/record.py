@@ -25,6 +25,7 @@ from ..core.block import Block, Wrap
 from ..core.cell import Style
 from ..core.compose import fit_to_width, join_horizontal, join_vertical, pad, truncate
 from ..core.zoom import Zoom
+from ..icon_set import current_icons
 from ..palette import current_palette
 from ..core._text_width import display_width, truncate_ellipsis
 
@@ -491,10 +492,11 @@ def apply_attention(
     if score is None:
         score = attention_fn(kind, payload)
     p = current_palette()
+    icons = current_icons()
 
     if score >= 0.7:
-        # Full rendering with highlight marker
-        marker = Block.text("◆ ", _kind_style(kind))
+        # Full rendering with the high-rank marker (ambient, so it degrades).
+        marker = Block.text(f"{icons.rank_top} ", _kind_style(kind))
         return join_horizontal(marker, block)
     elif score >= 0.3:
         # Normal rendering, no marker
@@ -506,7 +508,7 @@ def apply_attention(
             summary = truncate_ellipsis(summary, width - 10)
         ts_str = ts.strftime("%H:%M") if ts else ""
         prefix = f"{ts_str} " if ts_str else ""
-        return Block.text(f"· {prefix}{kind}: {summary}", p.muted, width=width)
+        return Block.text(f"{icons.rank_tail} {prefix}{kind}: {summary}", p.muted, width=width)
 
 
 # ---------------------------------------------------------------------------

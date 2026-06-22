@@ -56,6 +56,7 @@ STABLE_CORE_SURFACE = frozenset(
         "join_responsive",
         "pad",
         "border",
+        "rule",
         "truncate",
         "fit_to_width",
         "vslice",

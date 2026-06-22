@@ -38,6 +38,10 @@ def test_ascii_icons_are_ascii_safe():
         "tree_last",
         "tree_indent",
         "ellipsis",
+        "rule",
+        "rank_top",
+        "rank_mid",
+        "rank_tail",
     ):
         val = getattr(ASCII_ICONS, field_name)
         assert all(ord(c) < 128 for c in val), f"ASCII_ICONS.{field_name} has non-ASCII"
@@ -46,6 +50,16 @@ def test_ascii_icons_are_ascii_safe():
 def test_ellipsis_slot_degrades():
     assert IconSet().ellipsis == "…"
     assert ASCII_ICONS.ellipsis == "..."
+
+
+def test_rule_slot_degrades():
+    assert IconSet().rule == "─"
+    assert ASCII_ICONS.rule == "-"
+
+
+def test_rank_slots_degrade():
+    assert (IconSet().rank_top, IconSet().rank_mid, IconSet().rank_tail) == ("◆", "│", "·")
+    assert (ASCII_ICONS.rank_top, ASCII_ICONS.rank_mid, ASCII_ICONS.rank_tail) == ("*", "|", ".")
 
 
 def test_sparkline_chars_length():

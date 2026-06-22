@@ -405,6 +405,30 @@ def truncate(block: Block, width: int, ellipsis: str | None = None) -> Block:
     return Block(rows, width, ids=ids_rows)
 
 
+def rule(width: int, *, char: str | None = None, style: Style | None = None) -> Block:
+    """A horizontal divider: one row of ``char`` exactly ``width`` columns wide.
+
+    ``char=None`` (the default) reads the ambient ``IconSet.rule`` so the divider
+    degrades to ASCII (``-``) under ``use_icons(ASCII_ICONS)``; ``style=None``
+    reads ``current_palette().muted``. Honors the width contract exactly (clipped
+    or padded to ``width``); ``width <= 0`` yields an empty block.
+
+    Consumers were hand-drawing ``char * n`` plus a fallback; this is the general
+    form (a second consumer beyond siftd justified graduating it into painted).
+    """
+    if width <= 0:
+        return Block.empty(0, 0)
+    if char is None:
+        from ..icon_set import current_icons
+
+        char = current_icons().rule
+    if style is None:
+        from ..palette import current_palette
+
+        style = current_palette().muted
+    return Block.text(char * width, style, width=width)
+
+
 def fit_to_width(block: Block, width: int) -> Block:
     """Resize a block to EXACTLY ``width`` columns.
 

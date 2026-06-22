@@ -6,9 +6,40 @@ from painted import (
     Style,
     join_responsive,
     join_vertical,
+    rule,
     vslice,
 )
+from painted.palette import Palette
 from tests.helpers import row_text, text_block
+
+
+def _row(b: Block) -> str:
+    return "".join(c.char for c in b.row(0))
+
+
+class TestRule:
+    def test_default_fills_width_with_box_char(self):
+        r = rule(10)
+        assert r.width == 10
+        assert _row(r) == "─" * 10
+
+    def test_default_style_is_muted(self):
+        assert rule(3).row(0)[0].style == Palette().muted
+
+    def test_custom_char_and_style(self):
+        r = rule(5, char="=", style=Style(fg="red"))
+        assert _row(r) == "====="
+        assert r.row(0)[0].style.fg == "red"
+
+    def test_zero_width_is_empty(self):
+        assert rule(0).width == 0
+
+    def test_degrades_to_ascii(self):
+        from painted.icon_set import ASCII_ICONS, reset_icons, use_icons
+
+        with use_icons(ASCII_ICONS):
+            assert _row(rule(8)) == "-" * 8
+        reset_icons()
 
 
 class TestVslice:

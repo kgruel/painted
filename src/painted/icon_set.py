@@ -62,6 +62,17 @@ class IconSet:
     # "Leads-to" arrow for hint / next-step continuation lines.
     arrow: str = "↳"
 
+    # Rank-tier ladder for attention/relevance rails: a high-rank marker, a
+    # mid-rank continuation bar, and a low-rank dot. A glyph vocabulary so a
+    # relevance rail can theme and ASCII-degrade like every other gutter glyph
+    # (rather than hardcoding the literals outside the IconSet).
+    rank_top: str = "◆"
+    rank_mid: str = "│"
+    rank_tail: str = "·"
+
+    # Horizontal rule / divider fill character.
+    rule: str = "─"
+
     # Sparkline (8 levels, low to high)
     sparkline: tuple[str, ...] = ("▁", "▂", "▃", "▄", "▅", "▆", "▇", "█")
 
@@ -93,6 +104,10 @@ ASCII_ICONS = IconSet(
     warn="!",
     error="x",
     arrow="->",
+    rank_top="*",
+    rank_mid="|",
+    rank_tail=".",
+    rule="-",
     sparkline=("_", ".", "-", "~", "^", "*", "#", "@"),
     bar_fill="#",
     bar_empty="-",

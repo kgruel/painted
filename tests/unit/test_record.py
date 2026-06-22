@@ -600,6 +600,24 @@ class TestApplyAttention:
         text = block_to_text(result)
         assert "·" in text  # collapsed marker
 
+    def test_markers_degrade_to_ascii(self):
+        from painted.icon_set import ASCII_ICONS, reset_icons, use_icons
+
+        with use_icons(ASCII_ICONS):
+            high = block_to_text(
+                apply_attention(
+                    Block.text("c", Style()), "decision", {}, lambda k, p: 1.0, width=60
+                )
+            )
+            assert "◆" not in high and "*" in high
+            low = block_to_text(
+                apply_attention(
+                    Block.text("c", Style()), "tick", {"name": "x"}, lambda k, p: 0.1, width=60
+                )
+            )
+            assert "·" not in low and "." in low
+        reset_icons()
+
     def test_medium_attention_no_marker(self):
         inner = Block.text("content", Style())
         result = apply_attention(inner, "task", {}, lambda k, p: 0.5, width=60)
