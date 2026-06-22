@@ -16,6 +16,7 @@ from painted.views import shape_lens, tree_lens, chart_lens, flame_lens, sparkli
 - **`flame_lens`** — proportional visualization (flame graph style).
 - **`sparkline`** / **`sparkline_with_range`** — inline mini-charts from numeric sequences.
 - **`cost_meter`** — one-row gauge of observed per-frame costs against a time budget; returns `None` when there are no observations, so static output stays undressed.
+- **`callout`** — severity-tagged message line (`callout(subject, *, severity, detail, hint, box, width)`); `severity` is a `Severity` enum driving glyph + color, with optional muted detail / `↳ hint` lines and an optional box (width-exact, border included).
 - **`NodeRenderer`** — callback protocol for custom tree node rendering.
 
 ## Components

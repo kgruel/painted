@@ -140,6 +140,9 @@ STABLE_VIEWS_SURFACE = frozenset(
         "sparkline",
         "sparkline_with_range",
         "cost_meter",
+        # Callout (severity-tagged message)
+        "callout",
+        "Severity",
         "SpinnerState",
         "SpinnerFrames",
         "spinner",
