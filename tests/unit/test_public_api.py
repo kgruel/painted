@@ -16,10 +16,19 @@ in-repo continuation of the contract precedent set by the width arc: *state the
 contract → encode it as a law → guard it* — never let a published guarantee live
 only in prose.
 
-The guard is one-directional on purpose:
-  * Removing/renaming a name -> FAILS (semver-major; intentional friction).
-  * Adding a new name        -> PASSES (semver-minor; freely allowed). Add it to
-    the snapshot below once you intend to commit to its stability.
+The guard is bidirectional: the snapshot must equal ``__all__`` exactly.
+  * Removing/renaming a snapshotted name -> FAILS (semver-major break).
+  * Publishing a name in ``__all__`` that is not in the snapshot -> FAILS too.
+
+The second direction is deliberate. ``painted.core``/``painted.views`` are
+*wholly* the semver-stable surface: a name in their ``__all__`` is already a
+published stable name — there is no "stage it now, commit to it later" state for
+these namespaces (that's what the evolving ``painted.cli``/``painted.tui`` are
+for). An earlier one-directional guard let an addition ship silently unsnapshotted
+— ``callout`` and ``Overflow`` both reached ``views.__all__`` in the 0.3.1 batch
+while the snapshot, and the green suite, said nothing. Requiring equality forces
+every new stable export to be a conscious entry here, reviewed in the diff — it
+catches the *omission*, not just the removal.
 
 Resolution is checked too: every snapshotted name must actually resolve through
 the module's lazy ``__getattr__``. The smoke tier checks this for the root
@@ -149,6 +158,7 @@ STABLE_VIEWS_SURFACE = frozenset(
         "Column",
         "AUTO",
         "Fill",
+        "Overflow",
         "table",
         "TextInputState",
         "text_input",
@@ -182,7 +192,11 @@ STABLE_VIEWS_SURFACE = frozenset(
 
 
 def _removed(snapshot: frozenset[str], current: list[str]) -> set[str]:
-    return snapshot - set(current)
+    return set(snapshot - set(current))
+
+
+def _unsnapshotted(snapshot: frozenset[str], current: list[str]) -> set[str]:
+    return set(current) - snapshot
 
 
 class TestStableCoreSurface:
@@ -193,6 +207,20 @@ class TestStableCoreSurface:
             "semver-MAJOR break: painted.core dropped/renamed stable names "
             f"{sorted(removed)}. If intentional, this is a major-version change — "
             "update the snapshot in this test deliberately."
+        )
+
+    def test_no_unsnapshotted_additions(self) -> None:
+        """Every name published in ``core.__all__`` is in the snapshot.
+
+        ``painted.core`` is wholly semver-stable, so a published name is a
+        committed name — it must be entered here deliberately, not slip in
+        unguarded against a future rename/removal."""
+        extra = _unsnapshotted(STABLE_CORE_SURFACE, painted.core.__all__)
+        assert not extra, (
+            "painted.core publishes stable names not in the snapshot: "
+            f"{sorted(extra)}. Add them to STABLE_CORE_SURFACE — a name in the "
+            "stable namespace's __all__ is a permanent public commitment and must "
+            "be guarded against future rename/removal."
         )
 
     def test_every_stable_name_resolves(self) -> None:
@@ -220,6 +248,20 @@ class TestStableViewsSurface:
             "semver-MAJOR break: painted.views dropped/renamed stable names "
             f"{sorted(removed)}. If intentional, this is a major-version change — "
             "update the snapshot in this test deliberately."
+        )
+
+    def test_no_unsnapshotted_additions(self) -> None:
+        """Every name published in ``views.__all__`` is in the snapshot.
+
+        ``painted.views`` is wholly semver-stable, so a published name is a
+        committed name — it must be entered here deliberately, not slip in
+        unguarded against a future rename/removal."""
+        extra = _unsnapshotted(STABLE_VIEWS_SURFACE, painted.views.__all__)
+        assert not extra, (
+            "painted.views publishes stable names not in the snapshot: "
+            f"{sorted(extra)}. Add them to STABLE_VIEWS_SURFACE — a name in the "
+            "stable namespace's __all__ is a permanent public commitment and must "
+            "be guarded against future rename/removal."
         )
 
     def test_every_stable_name_resolves(self) -> None:
