@@ -13,12 +13,12 @@ animation, and the plain-text pipe. Two grid rows share one terminal row via
 half-block glyphs (▀ ▄ █), so the picture stays square-ish without color
 tricks — it survives `| cat` untouched.
 
-    uv run demos/patterns/life.py                    # snapshot at generation 100
-    uv run demos/patterns/life.py --live             # animate from the seed
-    uv run demos/patterns/life.py --seed acorn -v    # grid + population sparkline
-    uv run demos/patterns/life.py --gen 300 -vv      # bordered, full stats
-    uv run demos/patterns/life.py -q                 # one-line census
-    uv run demos/patterns/life.py --json             # the grid as data
+    uv run demos/showcase/life.py                    # snapshot at generation 100
+    uv run demos/showcase/life.py --live             # animate from the seed
+    uv run demos/showcase/life.py --seed acorn -v    # grid + population sparkline
+    uv run demos/showcase/life.py --gen 300 -vv      # bordered, full stats
+    uv run demos/showcase/life.py -q                 # one-line census
+    uv run demos/showcase/life.py --json             # the grid as data
 """
 
 from __future__ import annotations

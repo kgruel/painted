@@ -19,12 +19,12 @@ maps through a fire gradient (per-cell truecolor, downsampled by the
 writer) and an intensity glyph ramp, so a pipe gets the flame in pure
 ASCII.
 
-    uv run demos/patterns/fire.py                    # one pose, steady burn
-    uv run demos/patterns/fire.py --live             # let it burn
-    uv run demos/patterns/fire.py --seed 13 -v       # different chance, legend
-    uv run demos/patterns/fire.py --frame 20 -vv     # early ignition, full stats
-    uv run demos/patterns/fire.py -q                 # one-line census
-    uv run demos/patterns/fire.py --json             # the heat field as data
+    uv run demos/showcase/fire.py                    # one pose, steady burn
+    uv run demos/showcase/fire.py --live             # let it burn
+    uv run demos/showcase/fire.py --seed 13 -v       # different chance, legend
+    uv run demos/showcase/fire.py --frame 20 -vv     # early ignition, full stats
+    uv run demos/showcase/fire.py -q                 # one-line census
+    uv run demos/showcase/fire.py --json             # the heat field as data
 """
 
 from __future__ import annotations

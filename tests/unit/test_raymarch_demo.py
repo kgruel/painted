@@ -19,7 +19,7 @@ from pathlib import Path
 from painted import Zoom
 from tests.helpers import block_to_text, static_ctx
 
-_DEMO = Path(__file__).resolve().parent.parent.parent / "demos" / "patterns" / "raymarch.py"
+_DEMO = Path(__file__).resolve().parent.parent.parent / "demos" / "showcase" / "raymarch.py"
 
 
 def _load():

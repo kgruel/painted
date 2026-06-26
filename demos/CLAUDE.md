@@ -22,7 +22,8 @@ because it exists.
 
 ## Demo Tiers
 
-Three tiers, distinguished by where state lives and how you test them.
+Four test-shape tiers (distinguished by where state lives and how you test them),
+plus **Showcase** — a *presentation* tier, not a new test shape.
 
 | Tier | Lesson | State | Test shape |
 |------|--------|-------|------------|
@@ -30,6 +31,7 @@ Three tiers, distinguished by where state lives and how you test them.
 | **Pattern** | Workflow | Data only | `_render(ctx, data) → Block` |
 | **App** | Interaction | Mutable (Surface) | `TestSurface(keys) → frames` |
 | **Example** | Real app | Mutable (Surface) | `TestSurface(keys) → frames` |
+| **Showcase** | Spectacle | Data only | `_render(ctx, data) → Block` *(pattern shape)* |
 
 **Primitives** teach a single type or composition. No `main()`, no CLI flags.
 Output via `print_block` / `show`. The output is the lesson.
@@ -51,9 +53,18 @@ assert on captured frames and emissions.
 individual concepts. They use the full API freely — the experience is the lesson,
 the code is reference material. Same test shape as apps (TestSurface).
 
-The test shape *is* the boundary. If you can test the full lesson by calling
-`_render(ctx, data)`, it's a pattern. If you need to send keys and inspect
-frames, it's an app.
+**Showcase** demos share the pattern test shape exactly (`_fetch()` + `_render`
+at every zoom, surface-delivered animation) — they are *not* a new boundary. They
+live in their own `showcase/` directory because pedagogically they're spectacle,
+not teaching: full-screen, animated, "look what painted can do." The defining
+property is `live_delivery="surface"` in their `run_cli` call. `painted demos`
+renders them as a distinct fifth column (the finale); the liveness smoke exercises
+them via `test_showcase_demo_renders`, identical assertions to patterns.
+
+The test shape *is* the boundary between primitive / pattern / app. If you can
+test the full lesson by calling `_render(ctx, data)`, it's a pattern (or, if it's
+animated spectacle, a showcase). If you need to send keys and inspect frames,
+it's an app.
 
 ## Demo Ladder
 
@@ -78,14 +89,6 @@ patterns/
   testing.py        Replay testing: emit capture, observation traces      ✓
   profiler.py       Self-profiling: frame cost, emission timeline, flame  ✓
   help.py           Zoom-aware help: HelpData rendered at each zoom level ✓
-  life.py           Conway's Life: pure step + fetch_stream animation     ✓
-  donut.py          donut.c: scene as pure function of a frame counter    ✓
-  plasma.py         Plasma field: per-cell color as data, truecolor ramp  ✓
-  fire.py           Doom fire: seeded LCG — randomness as frozen data     ✓
-  boids.py          Boids: continuous agents projected onto cells         ✓
-  lorenz.py         Lorenz: trails as frozen data, chaos law-tested       ✓
-  wireworld.py      Wireworld: ASCII-art circuits, laws verify computing  ✓
-  raymarch.py       SDF raymarcher: scene as expression tree, donut re-derived ✓
 
 apps/
   (behavior graduated to tests/unit/test_*_app.py — TestSurface drives keys,
@@ -96,6 +99,16 @@ examples/
   big_text.py       Block character rendering (multiple sizes)
   lenses.py         Tree and chart data visualization
   theme_carnival.py Interactive palette explorer
+
+showcase/           (pattern test shape; surface-delivered animated spectacle)
+  life.py           Conway's Life: pure step + fetch_stream animation     ✓
+  donut.py          donut.c: scene as pure function of a frame counter    ✓
+  plasma.py         Plasma field: per-cell color as data, truecolor ramp  ✓
+  fire.py           Doom fire: seeded LCG — randomness as frozen data     ✓
+  boids.py          Boids: continuous agents projected onto cells         ✓
+  lorenz.py         Lorenz: trails as frozen data, chaos law-tested       ✓
+  wireworld.py      Wireworld: ASCII-art circuits, laws verify computing  ✓
+  raymarch.py       SDF raymarcher: scene as expression tree, donut re-derived ✓
 ```
 
 Old stepping stones (`block.py`, `buffer.py`, `buffer_view.py`) deleted —

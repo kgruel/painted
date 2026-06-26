@@ -51,7 +51,7 @@ kept (free, correct) but is not load-bearing for this problem.
 
 ## 3. What already exists
 
-- `demos/patterns/life.py` / `donut.py` `_run_interactive()` — hand-rolled
+- `demos/showcase/life.py` / `donut.py` `_run_interactive()` — hand-rolled
   versions of exactly this delivery: a `Surface` subclass whose `update()`
   advances pure state, `render()` paints `_render(ctx, state)` at (0,0),
   `q` quits / space pauses. The generic path replaces these hand-rolled

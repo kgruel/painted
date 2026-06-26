@@ -24,13 +24,13 @@ portrait. Same scene, same pure render; only the state asked for more. A
 pipe receives the pose carried honestly by the classic luminance ramp
 (.,-~:;=!*#$@) alone.
 
-    uv run demos/patterns/raymarch.py                # one portrait pose
-    uv run demos/patterns/raymarch.py --live         # orbit, then settle
-    uv run demos/patterns/raymarch.py --frame 200 -v # later pose + legend
-    uv run demos/patterns/raymarch.py -vv            # bordered, march stats
-    uv run demos/patterns/raymarch.py --stats        # the stats facet by name
-    uv run demos/patterns/raymarch.py -q             # one-line pose census
-    uv run demos/patterns/raymarch.py --json         # the pose as data
+    uv run demos/showcase/raymarch.py                # one portrait pose
+    uv run demos/showcase/raymarch.py --live         # orbit, then settle
+    uv run demos/showcase/raymarch.py --frame 200 -v # later pose + legend
+    uv run demos/showcase/raymarch.py -vv            # bordered, march stats
+    uv run demos/showcase/raymarch.py --stats        # the stats facet by name
+    uv run demos/showcase/raymarch.py -q             # one-line pose census
+    uv run demos/showcase/raymarch.py --json         # the pose as data
 """
 
 from __future__ import annotations

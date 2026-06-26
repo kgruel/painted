@@ -19,12 +19,12 @@ styled span (one SGR sequence on a TTY), so the field's smoothness sets
 the style-run load. `-vv` surfaces runs/row — the SGR economics of a
 frame, measured in the frame.
 
-    uv run demos/patterns/plasma.py                  # one pose of the field
-    uv run demos/patterns/plasma.py --live           # let it swirl
-    uv run demos/patterns/plasma.py --frame 200 -v   # later pose + shade legend
-    uv run demos/patterns/plasma.py -vv              # bordered, runs/row stats
-    uv run demos/patterns/plasma.py -q               # one-line census
-    uv run demos/patterns/plasma.py --json           # the pose as data
+    uv run demos/showcase/plasma.py                  # one pose of the field
+    uv run demos/showcase/plasma.py --live           # let it swirl
+    uv run demos/showcase/plasma.py --frame 200 -v   # later pose + shade legend
+    uv run demos/showcase/plasma.py -vv              # bordered, runs/row stats
+    uv run demos/showcase/plasma.py -q               # one-line census
+    uv run demos/showcase/plasma.py --json           # the pose as data
 """
 
 from __future__ import annotations

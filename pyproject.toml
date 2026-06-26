@@ -1,6 +1,6 @@
 [project]
 name = "painted"
-version = "0.4.0"
+version = "0.4.1"
 description = "A cell-buffer terminal UI framework"
 readme = "README.md"
 license = "MIT"
@@ -44,6 +44,12 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/painted"]
+
+# The demo curriculum lives at the repo root (so tests and tooling reach it via
+# repo-relative paths) but must ship inside the wheel for `painted demos` to work
+# on an installed copy. force-include maps it under the package without moving it.
+[tool.hatch.build.targets.wheel.force-include]
+"demos" = "painted/demos"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

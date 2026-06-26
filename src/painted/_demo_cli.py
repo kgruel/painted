@@ -8,7 +8,20 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from painted import Block, CliContext, Style, Zoom, join_vertical, print_block, run_cli, truncate
+from painted import (
+    Block,
+    CliContext,
+    Style,
+    Zoom,
+    border,
+    current_palette,
+    join_horizontal,
+    join_vertical,
+    pad,
+    print_block,
+    run_cli,
+    truncate,
+)
 
 # ---------------------------------------------------------------------------
 # DemoEntry
@@ -31,19 +44,24 @@ class DemoEntry:
 
 _CACHE: list[DemoEntry] | None = None
 
-_GROUPS = ("primitives", "patterns", "apps", "examples")
+_GROUPS = ("primitives", "patterns", "apps", "examples", "showcase")
 
 
 def _find_demos_root() -> Path | None:
-    """Walk up from package source to find demos/ directory."""
-    # src/painted/_demo_cli.py -> src/painted -> src -> project root
-    candidate = Path(__file__).resolve().parent.parent.parent / "demos"
-    if candidate.is_dir():
-        return candidate
-    # Fallback: cwd
-    candidate = Path.cwd() / "demos"
-    if candidate.is_dir():
-        return candidate
+    """Locate the demos/ directory across dev checkout and installed wheel."""
+    here = Path(__file__).resolve()
+    candidates = (
+        # Dev checkout: src/painted/_demo_cli.py -> src/painted -> src -> project root
+        here.parent.parent.parent / "demos",
+        # Installed wheel: demos/ is force-included under the package itself
+        # (site-packages/painted/demos), so it sits beside this module.
+        here.parent / "demos",
+        # Last resort: running from a project root that has a demos/ tree
+        Path.cwd() / "demos",
+    )
+    for candidate in candidates:
+        if candidate.is_dir():
+            return candidate
     return None
 
 
@@ -124,43 +142,123 @@ _DIM = Style(dim=True)
 _BOLD = Style(bold=True)
 
 
+# The four tiers form a deliberate progression: each rung adds one concept over
+# the one below. The blurb names what you learn at that rung.
+_GROUP_BLURB = {
+    "primitives": "the atoms — Cell, Span, Block, compose",
+    "patterns": "data → Block: pure render functions",
+    "apps": "interactive Surface apps — keyboard + state",
+    "examples": "complete miniature applications",
+    "showcase": "full-screen, animated — painted showing off",
+}
+
+# The showcase tier is the spectacle finale: a heavier rail and a star marker
+# set it apart by treatment, not just hue, regardless of the active palette.
+_SHOWCASE = "showcase"
+
+
+def _tier_style(palette, group: str, index: int) -> Style:
+    """Categorical color for a tier.
+
+    The series ramp (4 entries) colors the four structural tiers. Showcase is the
+    odd one out — it borrows ``accent`` so it never collides with a ramp slot
+    (and is further set apart by a heavier rail + star marker when rendered).
+    """
+    if group == _SHOWCASE:
+        return palette.accent
+    ramp = palette.series or (palette.accent,)
+    return ramp[index % len(ramp)]
+
+
+def _demo_header(palette) -> Block:
+    """A bordered title that orients a fresh user toward tour and the run command."""
+    accent = palette.accent.merge(_BOLD)
+    body = join_vertical(
+        Block.text("a progression from atoms to apps", palette.muted),
+        Block.text("", _PLAIN),
+        join_horizontal(
+            Block.text("start here  ", palette.muted),
+            Block.text("painted tour", accent),
+            Block.text("     run one  ", palette.muted),
+            Block.text("painted demos <name>", accent),
+        ),
+    )
+    return border(
+        pad(body, left=1, right=1),
+        title="painted",
+        title_style=accent,
+        style=palette.muted,
+    )
+
+
 def render_demo_list(ctx: CliContext, entries: list[DemoEntry]) -> Block:
-    """Render demo list at the requested zoom level."""
-    # Filter out tour — it has its own command
+    """Render the demo curriculum as a progression — painted rendering itself."""
+    # Tour has its own command; it's the entry point, surfaced in the header.
     demos = [e for e in entries if e.group]
 
     if ctx.zoom == Zoom.MINIMAL:
-        # One name per line, for scripting
-        names = "\n".join(e.name for e in demos if e.has_main)
+        # One name per line, for scripting — every demo is runnable by name.
+        names = "\n".join(e.name for e in demos)
         return Block.text(names, _PLAIN) if names else Block.empty(0, 0)
 
-    # Group demos
+    palette = current_palette()
+    muted = palette.muted
+
     groups: dict[str, list[DemoEntry]] = {}
     for e in demos:
         groups.setdefault(e.group, []).append(e)
 
-    # Find max name width for alignment
     max_name = max((len(e.name) for e in demos), default=10)
 
-    blocks: list[Block] = []
-    for group in _GROUPS:
+    blocks: list[Block] = [_demo_header(palette)]
+
+    for index, group in enumerate(_GROUPS):
         group_entries = groups.get(group, [])
         if not group_entries:
             continue
 
-        if blocks:
-            blocks.append(Block.text(" ", _PLAIN))  # spacer between groups
+        tier = _tier_style(palette, group, index)
+        blurb = _GROUP_BLURB.get(group, "")
+        is_showcase = group == _SHOWCASE
+        # Showcase gets a heavier rail and a star marker — distinct by treatment,
+        # not just hue. Names are plain bold so the rail color carries the tier.
+        rail = "┃ " if is_showcase else "│ "
+        marker = "✦ " if is_showcase else ""
 
-        blocks.append(Block.text(group, _BOLD))
+        blocks.append(Block.text("", _PLAIN))  # spacer between tiers
+        # Tier header: numbered badge + name in the tier color + muted blurb.
+        blocks.append(
+            join_horizontal(
+                Block.text(f"{index + 1} {marker}", tier.merge(_BOLD)),
+                Block.text(group, tier.merge(_BOLD)),
+                Block.text(f"   {blurb}", muted) if blurb else Block.empty(0, 1),
+            )
+        )
+        # Each demo sits behind a continuous gutter rail colored by its tier —
+        # the rail's one dimension is "which rung of the progression".
         for e in group_entries:
-            suffix = "" if e.has_main else "  (run directly)"
-            line = f"  {e.name:<{max_name}}  {e.description}{suffix}"
-            blocks.append(Block.text(line, _PLAIN))
+            row = join_horizontal(
+                Block.text(rail, tier),
+                Block.text(f"{e.name:<{max_name}}", _BOLD),
+                Block.text(f"  {e.description}", _PLAIN),
+            )
+            blocks.append(row)
 
-            # DETAILED+: show invocation examples
+            # DETAILED+: show invocation examples under the same rail.
             if ctx.zoom >= Zoom.DETAILED and e.invocations:
                 for inv in e.invocations:
-                    blocks.append(Block.text(f"    {inv}", _DIM))
+                    blocks.append(
+                        join_horizontal(Block.text(rail, tier), Block.text(f"  {inv}", _DIM))
+                    )
+
+    # Progression footer: the ladder spelled out, each rung in its tier color.
+    footer_parts: list[Block] = []
+    for index, group in enumerate(_GROUPS):
+        if index:
+            footer_parts.append(Block.text(" → ", muted))
+        footer_parts.append(Block.text(group, _tier_style(palette, group, index).merge(_BOLD)))
+    blocks.append(Block.text("", _PLAIN))
+    blocks.append(join_horizontal(*footer_parts))
 
     result = join_vertical(*blocks) if blocks else Block.empty(0, 0)
     return truncate(result, ctx.width)
@@ -188,8 +286,8 @@ def run_demo(name: str, args: list[str]) -> int:
     match = next((e for e in entries if e.name == name), None)
 
     if match is None:
-        # Suggest similar names
-        all_names = [e.name for e in entries if e.has_main]
+        # Suggest similar names (every tiered demo is runnable; tour is separate)
+        all_names = [e.name for e in entries if e.group]
         suggestions = [n for n in all_names if name in n or n in name]
         msg = f"Unknown demo: {name}"
         if suggestions:
@@ -199,19 +297,16 @@ def run_demo(name: str, args: list[str]) -> int:
         print_block(Block.text(msg, Style(fg="red")))
         return 1
 
-    if not match.has_main:
-        print_block(
-            Block.text(f"Run directly: uv run {match.path}", _DIM),
-        )
-        return 1
-
-    # Import and run
-    spec = importlib.util.spec_from_file_location(f"demo_{match.name}", match.path)
+    # Guard-only demos (primitives) have no main(); they run via their
+    # `if __name__ == "__main__"` block. Loading them under that module name
+    # fires the guard during exec. main()-based demos load under a private name
+    # so their guard stays inert and we call main() ourselves below.
+    mod_name = "__main__" if not match.has_main else f"demo_{match.name}"
+    spec = importlib.util.spec_from_file_location(mod_name, match.path)
     if spec is None or spec.loader is None:
         print_block(Block.text(f"Cannot load: {match.path}", Style(fg="red")))
         return 1
 
-    mod_name = f"demo_{match.name}"
     module = importlib.util.module_from_spec(spec)
     saved_argv = sys.argv[:]
     saved_mod = sys.modules.get(mod_name)
@@ -219,6 +314,8 @@ def run_demo(name: str, args: list[str]) -> int:
         sys.argv = [str(match.path)] + args
         sys.modules[mod_name] = module
         spec.loader.exec_module(module)
+        if not match.has_main:
+            return 0
         main_fn = getattr(module, "main", None)
         if main_fn is None:
             print_block(Block.text(f"No main() in {match.path}", Style(fg="red")))

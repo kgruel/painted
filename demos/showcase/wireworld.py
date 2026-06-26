@@ -20,12 +20,12 @@ diodes facing opposite ways — one lane passes, one lane goes dead. The
 law tests run the actual circuits and assert the computation: measured
 periods, pulses beyond the open diode, silence beyond the closed one.
 
-    uv run demos/patterns/wireworld.py                    # the diode, mid-run
-    uv run demos/patterns/wireworld.py --live             # watch it compute
-    uv run demos/patterns/wireworld.py --circuit clocks   # two rhythms
-    uv run demos/patterns/wireworld.py --gen 5 -vv        # early ticks, stats
-    uv run demos/patterns/wireworld.py -q                 # one-line census
-    uv run demos/patterns/wireworld.py --json             # the machine as data
+    uv run demos/showcase/wireworld.py                    # the diode, mid-run
+    uv run demos/showcase/wireworld.py --live             # watch it compute
+    uv run demos/showcase/wireworld.py --circuit clocks   # two rhythms
+    uv run demos/showcase/wireworld.py --gen 5 -vv        # early ticks, stats
+    uv run demos/showcase/wireworld.py -q                 # one-line census
+    uv run demos/showcase/wireworld.py --json             # the machine as data
 """
 
 from __future__ import annotations

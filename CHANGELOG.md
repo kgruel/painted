@@ -4,6 +4,20 @@ All notable changes to painted are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/); pre-1.0, minor versions may carry
 breaking changes.
 
+## [0.4.1] — 2026-06-26
+
+A packaging and demos patch: the demo curriculum now ships inside the wheel, so `painted demos` works on an installed copy (`uv tool install painted`) instead of listing nothing. No change to the semver-stable `painted.core`/`painted.views` surface.
+
+### Fixed
+
+- **Demos ship in the wheel.** The demo curriculum lives at the repo root (`demos/`), outside `src/painted/`, so it was never packaged — an installed `painted demos` discovered nothing and printed an empty list. The wheel now force-includes `demos/` under the package (`painted/demos/`), and demo discovery resolves the installed location as well as the dev checkout. Tests and tooling still reach the tree by its repo-root path, unchanged.
+- **Primitive demos run from an installed copy.** Guard-only demos (the primitives, which run via `if __name__ == "__main__"` with no `main()`) printed a dead-end "run directly: `uv run <site-packages path>`" message. `painted demos <name>` now executes them under `__main__` so their guard fires; `main()`-based demos are unaffected.
+
+### Changed
+
+- **`painted demos` renders a progressive, painted catalog.** The listing is now built with painted itself — a bordered title, per-tier colored gutter rails, and a progression footer — orienting a fresh user from atoms to apps and pointing at `painted tour` as the entry point. It degrades honestly: piped output is plain, `-q` stays bare names for scripting, and it clips to terminal width.
+- **New `showcase` demo tier.** The eight surface-delivered animated demos (`boids`, `donut`, `fire`, `life`, `lorenz`, `plasma`, `raymarch`, `wireworld`) moved from `patterns/` into their own `showcase/` tier — spectacle, not teaching — rendered as a distinct fifth column. They keep the pattern test shape exactly; the split is presentational.
+
 ## [0.4.0] — 2026-06-22
 
 A minor release adding a batch of consumer-driven primitives and widening one contract, each landed where a downstream consumer (the loops rebuild, and the siftd terminal-UI refresh) reached a real call-site. `record_line`/`record_line_composed` now accept `width=None` for natural sizing; `table()` gains a controlled-shrink overflow mode and per-column ellipsis markers; a new `callout` primitive renders severity-tagged messages; the `Palette` can now own body text (and an optional canvas); the truncation marker degrades to ASCII via a new `IconSet` slot; a `rule()` divider plus rank-tier glyphs round out the gutter vocabulary; multi-style `Line`s gain a `wrap()` reflow rung to match single-style `Block.text`; and the wcwidth-aware `display_width` measurement graduates from a private module to the stable `painted.core` surface. Backward-compatible for well-formed input — `width=int` and existing callers render unchanged; the one behavior change is that C0/C1 control characters in text are now neutralized to spaces instead of emitted verbatim (see Changed).

@@ -16,12 +16,12 @@ luminance ramp (.,-~:;=!*#$@). The ramp is pure ASCII, so a pipe receives
 the authentic 1997 artifact; a TTY additionally gets the shading tiered
 through dim/normal/bold spans.
 
-    uv run demos/patterns/donut.py                   # one frame, mid-spin
-    uv run demos/patterns/donut.py --live            # spin it
-    uv run demos/patterns/donut.py --frame 200 -v    # later pose + shading legend
-    uv run demos/patterns/donut.py -vv               # bordered, full stats
-    uv run demos/patterns/donut.py -q                # one-line pose census
-    uv run demos/patterns/donut.py --json            # the pose as data
+    uv run demos/showcase/donut.py                   # one frame, mid-spin
+    uv run demos/showcase/donut.py --live            # spin it
+    uv run demos/showcase/donut.py --frame 200 -v    # later pose + shading legend
+    uv run demos/showcase/donut.py -vv               # bordered, full stats
+    uv run demos/showcase/donut.py -q                # one-line pose census
+    uv run demos/showcase/donut.py --json            # the pose as data
 """
 
 from __future__ import annotations

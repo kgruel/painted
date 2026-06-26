@@ -21,12 +21,12 @@ falls as the flock finds itself. Initial scatter comes from the seeded
 LCG settled by fire.py — randomness as frozen data, same seed, same
 flight.
 
-    uv run demos/patterns/boids.py                   # one pose, mid-flight
-    uv run demos/patterns/boids.py --live            # watch them flock
-    uv run demos/patterns/boids.py --seed 13 -v      # new scatter + spread spark
-    uv run demos/patterns/boids.py --frame 30 -vv    # early chaos, full stats
-    uv run demos/patterns/boids.py -q                # one-line census
-    uv run demos/patterns/boids.py --json            # the flock as data
+    uv run demos/showcase/boids.py                   # one pose, mid-flight
+    uv run demos/showcase/boids.py --live            # watch them flock
+    uv run demos/showcase/boids.py --seed 13 -v      # new scatter + spread spark
+    uv run demos/showcase/boids.py --frame 30 -vv    # early chaos, full stats
+    uv run demos/showcase/boids.py -q                # one-line census
+    uv run demos/showcase/boids.py --json            # the flock as data
 """
 
 from __future__ import annotations

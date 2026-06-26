@@ -62,27 +62,19 @@ def test_primitive_demo_renders(name: str) -> None:
 # --- Patterns: _fetch() then _render(ctx, data) at every zoom ---
 
 PATTERNS = [
-    "boids",
-    "donut",
     "fidelity",
-    "fire",
     "focus",
     "help",
     "hit_testing",
     "layers",
-    "life",
     "live",
-    "lorenz",
     "monitor",
     "palette_icons",
-    "plasma",
     "profiler",
-    "raymarch",
     "responsive",
     "table",
     "testing",
     "timing",
-    "wireworld",
 ]
 
 
@@ -93,6 +85,29 @@ def test_pattern_demo_renders(name: str) -> None:
     for zoom in Zoom:
         block = mod._render(static_ctx(zoom), data)
         assert block.width > 0, f"patterns/{name} rendered an empty block at {zoom.name}"
+
+
+# --- Showcase: surface-delivered spectacle. Same pattern test shape
+# (_fetch() then _render at every zoom); separated only as a presentation tier.
+SHOWCASE = [
+    "boids",
+    "donut",
+    "fire",
+    "life",
+    "lorenz",
+    "plasma",
+    "raymarch",
+    "wireworld",
+]
+
+
+@pytest.mark.parametrize("name", SHOWCASE)
+def test_showcase_demo_renders(name: str) -> None:
+    mod = _load(f"showcase/{name}.py")
+    data = mod._fetch()
+    for zoom in Zoom:
+        block = mod._render(static_ctx(zoom), data)
+        assert block.width > 0, f"showcase/{name} rendered an empty block at {zoom.name}"
 
 
 # rendering.py is the one deviant pattern: no _fetch/_render, flag-dispatched

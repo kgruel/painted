@@ -18,7 +18,7 @@ from pathlib import Path
 from painted import Zoom
 from tests.helpers import block_to_text, static_ctx
 
-_DEMO = Path(__file__).resolve().parent.parent.parent / "demos" / "patterns" / "boids.py"
+_DEMO = Path(__file__).resolve().parent.parent.parent / "demos" / "showcase" / "boids.py"
 
 
 def _load():

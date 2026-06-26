@@ -17,12 +17,12 @@ invisible to the attractor's width, which is also the demo's sharpest
 law (deterministic divergence under a fixed integrator). The classic
 parameters: sigma 10, rho 28, beta 8/3, integrated with RK4.
 
-    uv run demos/patterns/lorenz.py                  # the butterfly, mid-flight
-    uv run demos/patterns/lorenz.py --live           # watch it trace
-    uv run demos/patterns/lorenz.py --frame 80 -v    # early flight + separation
-    uv run demos/patterns/lorenz.py -vv              # bordered, full stats
-    uv run demos/patterns/lorenz.py -q               # one-line census
-    uv run demos/patterns/lorenz.py --json           # tracers + trails as data
+    uv run demos/showcase/lorenz.py                  # the butterfly, mid-flight
+    uv run demos/showcase/lorenz.py --live           # watch it trace
+    uv run demos/showcase/lorenz.py --frame 80 -v    # early flight + separation
+    uv run demos/showcase/lorenz.py -vv              # bordered, full stats
+    uv run demos/showcase/lorenz.py -q               # one-line census
+    uv run demos/showcase/lorenz.py --json           # tracers + trails as data
 """
 
 from __future__ import annotations
