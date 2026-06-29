@@ -26,6 +26,8 @@ from typing import TYPE_CHECKING
 from ..core.doc import Def, Defs, Doc, Node, Prose, Section, doc_lens
 
 if TYPE_CHECKING:
+    import argparse
+
     from ..core.block import Block
 from .help import (
     HelpArg,
@@ -63,6 +65,18 @@ class AppCommand:
     returns an exit code. ``tags`` mirrors the handler's own declarations so
     the intercepted ``-h`` path renders the same Layers group the handler's
     run_cli would — declare in one place and pass the same list to both.
+
+    ``add_args`` is the same convention-single-source mirror for the command's
+    own arguments: the author passes the *same* callback to both this field and
+    the handler's ``run_cli(add_args=...)`` call (cf. ``tags``). Declaring it
+    here lets one callback serve three consumers — the parse (the handler's
+    run_cli), the intercepted ``-h`` (derived via ``command_defs``), and
+    completion (which walks ``build_parser(add_args=...)``) — without the
+    handler ceasing to be opaque. It supersedes ``help_args``: where
+    ``help_args`` re-describes args already declared in code, ``add_args`` *is*
+    the declaration, introspected directly. The callback must be a pure parser
+    builder (it is invoked to introspect the args; it must only call
+    ``parser.add_argument`` and never act on them).
     """
 
     name: str  # "status"
@@ -71,6 +85,9 @@ class AppCommand:
     detail: str | None = None  # shown at DETAILED+ zoom, e.g. usage hint
     help_args: Sequence[HelpArg] | None = None  # when set, AppRunner intercepts -h
     tags: Sequence[Tag] | None = None  # declared layers, shown in intercepted help
+    add_args: Callable[[argparse.ArgumentParser], None] | None = (
+        None  # declared args; intercepts -h
+    )
     aliases: tuple[str, ...] = ()  # alternate spellings that route to this command
 
     def __post_init__(self) -> None:
@@ -170,7 +187,8 @@ class AppRunner:
         rest = argv[1:]
         for cmd in self.commands:
             if name == cmd.name or name in cmd.aliases:
-                if cmd.help_args is not None and ("-h" in rest or "--help" in rest):
+                intercepts = cmd.help_args is not None or cmd.add_args is not None
+                if intercepts and ("-h" in rest or "--help" in rest):
                     return self._handle_subcommand_help(cmd, rest)
                 return cmd.handler(rest)
 
@@ -239,10 +257,15 @@ class AppRunner:
         return 0
 
     def _subcommand_help_doc(self, cmd: AppCommand) -> Doc:
-        """Help Doc for a subcommand — its own args plus the Help group."""
-        assert cmd.help_args is not None
+        """Help Doc for a subcommand — its own args plus the Help group.
 
-        cmd_defs = command_defs(cmd.help_args, None)
+        Args come from either declaration mirror: ``help_args`` (re-described)
+        or ``add_args`` (introspected). command_defs merges both, so a command
+        migrating help_args → add_args renders the same arg list throughout.
+        """
+        assert cmd.help_args is not None or cmd.add_args is not None
+
+        cmd_defs = command_defs(cmd.help_args, cmd.add_args)
         # Help subordinates only when the command has its own args to lead with.
         framework_depth = Zoom.SUMMARY if cmd_defs else Zoom.MINIMAL
 
@@ -287,9 +310,11 @@ def run_app(
     Each command's handler receives the remaining argv and returns an exit
     code; the expected shape is a function that calls ``run_cli`` with that
     argv, so every subcommand gets the framework flags (zoom, format, mode,
-    declared tags). Per-subcommand ``-h`` is intercepted only when the
-    AppCommand sets ``help_args`` (and ``tags``, mirroring the handler's own
-    declarations) — without them, ``-h`` falls through to the handler.
+    declared tags). Per-subcommand ``-h`` is intercepted when the AppCommand
+    sets ``help_args`` *or* ``add_args`` (and ``tags``, mirroring the handler's
+    own declarations) — without any of them, ``-h`` falls through to the
+    handler. Prefer ``add_args`` (the same callback the handler passes to
+    ``run_cli``): one declaration introspected for help and completion alike.
 
     Args:
         argv: Command-line arguments (sys.argv[1:])

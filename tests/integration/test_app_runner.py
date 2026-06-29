@@ -561,3 +561,79 @@ class TestNesting:
         assert rc == 1
         captured = capsys.readouterr()
         assert "Unknown command: bogus" in captured.err
+
+
+class TestAddArgsDeclaration:
+    """AppCommand.add_args — the convention-single-source arg mirror (decision
+    B, additive form): one callback drives intercepted -h and completion, and
+    coexists with help_args."""
+
+    @staticmethod
+    def _frame_args(p):
+        p.add_argument("vertex")
+        p.add_argument("-s", "--since", help="Lower time bound")
+        p.add_argument("--dry-run", action="store_true", help="Print without storing")
+
+    def _make_runner(self):
+        called = []
+        handler = lambda argv: (called.append(argv), 0)[1]
+        commands = (
+            AppCommand("status", "Show status", handler),  # no decls — passes through
+            AppCommand("read", "Read a vertex", handler, add_args=self._frame_args),
+        )
+        return AppRunner(commands=commands, prog="loops"), called
+
+    def test_add_args_intercepts_help(self, capsys):
+        runner, called = self._make_runner()
+        rc = runner.run(["read", "-h", "--plain"])
+        assert rc == 0
+        assert called == []  # handler not reached — -h intercepted
+        assert "Read a vertex" in capsys.readouterr().out
+
+    def test_add_args_passes_through_without_h(self):
+        runner, called = self._make_runner()
+        assert runner.run(["read", "myvertex"]) == 0
+        assert called == [["myvertex"]]
+
+    def test_add_args_derives_arg_list(self, capsys):
+        runner, _ = self._make_runner()
+        rc = runner.run(["read", "-h", "--plain"])
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert "vertex" in out
+        # both option strings kept, not just one alias
+        assert "-s, --since" in out
+        assert "--dry-run" in out
+
+    def test_no_decls_still_passes_through(self):
+        runner, called = self._make_runner()
+        runner.run(["status", "-h"])
+        assert called == [["-h"]]
+
+    def test_help_args_and_add_args_merge(self, capsys):
+        """Both mirrors feed command_defs; a command can carry either or both."""
+        cmd = AppCommand(
+            "mix",
+            "Mixed",
+            lambda argv: 0,
+            help_args=[HelpArg("--legacy", "Old-style described arg")],
+            add_args=lambda p: p.add_argument("--fresh", help="New-style declared arg"),
+        )
+        runner = AppRunner(commands=(cmd,), prog="loops")
+        rc = runner.run(["mix", "-h", "--plain"])
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert "--legacy" in out
+        assert "--fresh" in out
+
+    def test_build_parser_walks_command_add_args(self):
+        """The completion consumer: build_parser(add_args=cmd.add_args) lists the
+        command's flags alongside the framework flags."""
+        from painted.cli import build_parser
+
+        cmd = AppCommand("read", "Read", lambda argv: 0, add_args=self._frame_args)
+        parser = build_parser(add_args=cmd.add_args, prog="loops read")
+        opts = {s for a in parser._actions for s in a.option_strings}
+        assert "--since" in opts
+        assert "--dry-run" in opts
+        assert {"-q", "--json"} <= opts  # framework flags present too
