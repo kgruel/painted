@@ -20,9 +20,10 @@ import os
 import re
 import shutil
 import sys
-from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass, field
 from enum import Enum
+from types import MappingProxyType
 
 from ..core.fidelity import Fidelity
 from ..core.zoom import Zoom
@@ -34,9 +35,11 @@ __all__ = [
     "OutputMode",
     "Format",
     "CliContext",
+    "ArgsView",
     "resolve_mode",
     "detect_context",
     "add_cli_args",
+    "build_parser",
     "parse_zoom",
     "parse_mode",
     "parse_format",
@@ -69,6 +72,57 @@ class Format(Enum):
 
 
 # =============================================================================
+# ArgsView — the shared parsed-args substrate
+# =============================================================================
+
+
+class ArgsView:
+    """Read-only attribute view over the consumer's parsed CLI args.
+
+    The shared trunk of the three parser reflections: PARSE exposes it as
+    ``ctx.args`` (``ctx.args.frame``), and COMPLETE reuses the same view so a
+    domain completer can scope candidates to what's already been typed without
+    re-parsing the line. Attribute access over a frozen snapshot — assignment
+    raises (honoring the frozen-state invariant), and an unknown name raises
+    ``AttributeError`` rather than fabricating a value (the honesty rule).
+    """
+
+    __slots__ = ("_data",)
+
+    _data: Mapping[str, object]
+
+    def __init__(self, data: Mapping[str, object] | None = None) -> None:
+        object.__setattr__(self, "_data", MappingProxyType(dict(data or {})))
+
+    def __getattr__(self, name: str) -> object:
+        try:
+            return self._data[name]
+        except KeyError:
+            raise AttributeError(name) from None
+
+    def __setattr__(self, name: str, value: object) -> None:
+        raise AttributeError("ArgsView is read-only")
+
+    def __getitem__(self, name: str) -> object:
+        return self._data[name]
+
+    def __contains__(self, name: object) -> bool:
+        return name in self._data
+
+    def __iter__(self):
+        return iter(self._data)
+
+    def __len__(self) -> int:
+        return len(self._data)
+
+    def get(self, name: str, default: object = None) -> object:
+        return self._data.get(name, default)
+
+    def __repr__(self) -> str:
+        return f"ArgsView({dict(self._data)!r})"
+
+
+# =============================================================================
 # CliContext
 # =============================================================================
 
@@ -79,6 +133,8 @@ class CliContext:
 
     ``fidelity`` is the compiled disclosure spec — the canonical field.
     ``ctx.zoom`` is the rung-1 view of it, blessed permanently.
+    ``args`` is the read-only view of the consumer's parsed args (the same
+    trunk completion walks); empty when no ``add_args`` were declared.
     """
 
     fidelity: Fidelity
@@ -87,6 +143,7 @@ class CliContext:
     is_tty: bool
     width: int
     height: int
+    args: ArgsView = field(default_factory=ArgsView)
 
     @property
     def zoom(self) -> Zoom:
@@ -160,11 +217,13 @@ def detect_context(
     *,
     force_plain: bool = False,
     default_mode: OutputMode = OutputMode.LIVE,
+    args: ArgsView | None = None,
 ) -> CliContext:
     """Detect and resolve full runtime context.
 
     JSON is not a context concern — callers handle it before reaching here.
     ``force_plain`` suppresses ANSI when the user passes ``--plain``.
+    ``args`` carries the consumer's parsed args onto ``ctx.args``.
     """
     stdout = sys.stdout
     is_tty = hasattr(stdout, "isatty") and stdout.isatty()
@@ -189,6 +248,7 @@ def detect_context(
         is_tty=is_tty,
         width=width,
         height=height,
+        args=args if args is not None else ArgsView(),
     )
 
 
@@ -314,6 +374,99 @@ def depth_alias_help(depth: int) -> str:
 # =============================================================================
 # Argument parsing
 # =============================================================================
+
+
+# Namespace dests the framework itself owns. Everything else on a parsed
+# namespace came from the consumer's add_args, and that is what ctx.args
+# surfaces. Declared tag/alias dests are owned too — they compile into
+# fidelity, so re-exposing them as args would double-carry the same intent.
+_FRAMEWORK_DESTS = frozenset(
+    {
+        "quiet",
+        "verbose",
+        "interactive",
+        "static",
+        "live",
+        "json",
+        "plain",
+        "max_chars",
+        "max_lines",
+    }
+)
+
+
+def _check_add_args_dests(
+    added: Sequence[argparse.Action],
+    tags: Sequence[Tag] | None,
+    depth_aliases: Mapping[str, int] | None,
+) -> None:
+    """Custom args must not land on a declared tag/alias dest.
+
+    argparse raises only on duplicate option strings, not duplicate dests — a
+    custom arg (or positional) whose dest matches a declared name would
+    silently turn the tag on or override depth at compile time. Same promise as
+    the name collision check, extended to the escape hatch.
+    """
+    declared = declared_dests(tags, depth_aliases)
+    if not declared:
+        return
+    for action in added:
+        if action.dest in declared:
+            raise ValueError(
+                f"add_args registers dest {action.dest!r}, which collides "
+                "with a declared tag or depth alias"
+            )
+
+
+def build_parser(
+    *,
+    add_args: Callable[[argparse.ArgumentParser], None] | None = None,
+    tags: Sequence[Tag] | None = None,
+    depth_aliases: Mapping[str, int] | None = None,
+    budgets: bool = False,
+    modes: set[OutputMode] | None = None,
+    prog: str | None = None,
+    description: str | None = None,
+) -> argparse.ArgumentParser:
+    """Build a painted CLI parser without render/fetch.
+
+    The single parser the three reflections share: PARSE dispatches it, HELP
+    harvests it, COMPLETE lists its options. Extracted from
+    ``CliRunner._get_parser`` (minus render/fetch) so completion can construct
+    the same parser — same flags, same declaration checks — without
+    instantiating a runner or touching the renderer.
+
+    ``modes`` selects which mode flags exist (``-i``/``--live``/``--static``);
+    that set depends on fetch_stream/handlers, which the runner computes and
+    passes in — the parser stays render/fetch-free.
+    """
+    parser = argparse.ArgumentParser(description=description, prog=prog, add_help=False)
+    # Re-add -h/--help so argparse still recognizes it for error messages.
+    parser.add_argument("-h", "--help", action="help", help=argparse.SUPPRESS)
+
+    add_cli_args(parser, modes=modes, tags=tags, depth_aliases=depth_aliases, budgets=budgets)
+
+    if add_args is not None:
+        framework_actions = len(parser._actions)
+        add_args(parser)
+        _check_add_args_dests(parser._actions[framework_actions:], tags, depth_aliases)
+
+    return parser
+
+
+def consumer_args(
+    parsed: argparse.Namespace,
+    tags: Sequence[Tag] | None = None,
+    depth_aliases: Mapping[str, int] | None = None,
+) -> ArgsView:
+    """The add_args-declared args on a parsed namespace, as a read-only view.
+
+    Framework flags and declared tag/alias dests are the framework's own
+    carriers (compiled into fidelity); everything else came from the consumer's
+    add_args, and that is what ``ctx.args`` exposes.
+    """
+    owned = _FRAMEWORK_DESTS | declared_dests(tags, depth_aliases)
+    return ArgsView({k: v for k, v in vars(parsed).items() if k not in owned})
 
 
 def add_cli_args(

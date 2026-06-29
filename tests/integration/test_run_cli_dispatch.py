@@ -713,3 +713,191 @@ class TestCliRunnerLiveStreaming:
         renderer: StubRenderer = renderers[0]  # type: ignore[assignment]
         assert renderer.finalized is True
         assert "fetch broke" in "".join(c.char for c in renderer.blocks[-1].row(0))
+
+
+# =============================================================================
+# Slice 1 — additive completion enablers: build_parser, ctx.args, fetch arity
+# =============================================================================
+
+
+class TestBuildParser:
+    """build_parser builds the same parser without render/fetch — the parser
+    completion and help walk."""
+
+    def test_builds_framework_flags(self):
+        from painted.cli.types import build_parser
+
+        parser = build_parser()
+        opts = {s for a in parser._actions for s in a.option_strings}
+        assert {"-q", "--verbose", "--json", "--plain"} <= opts
+
+    def test_add_args_extends_parser(self):
+        from painted.cli.types import build_parser
+
+        def add_args(p):
+            p.add_argument("--frame", type=int, default=0)
+
+        parser = build_parser(add_args=add_args)
+        parsed = parser.parse_args(["--frame", "7"])
+        assert parsed.frame == 7
+
+    def test_add_args_dest_collision_raises(self):
+        from painted.cli import Tag
+        from painted.cli.types import build_parser
+
+        def add_args(p):
+            # distinct option string, same dest — argparse won't catch it,
+            # the dest-collision check must.
+            p.add_argument("--think", dest="thinking")
+
+        with pytest.raises(ValueError, match="collides"):
+            build_parser(add_args=add_args, tags=[Tag("thinking", "reasoning")])
+
+    def test_mode_flags_follow_modes(self):
+        from painted.cli.types import build_parser
+
+        with_live = {
+            s
+            for a in build_parser(modes={OutputMode.STATIC, OutputMode.LIVE})._actions
+            for s in a.option_strings
+        }
+        assert "--live" in with_live
+        without_live = {
+            s for a in build_parser(modes={OutputMode.STATIC})._actions for s in a.option_strings
+        }
+        assert "--live" not in without_live
+
+
+class TestArgsView:
+    """ArgsView is a read-only attribute view; unknown names raise, never
+    fabricate."""
+
+    def test_attribute_access(self):
+        from painted.cli import ArgsView
+
+        view = ArgsView({"frame": 7, "name": "x"})
+        assert view.frame == 7
+        assert view["name"] == "x"
+        assert "frame" in view
+        assert view.get("missing", 99) == 99
+
+    def test_unknown_name_raises(self):
+        from painted.cli import ArgsView
+
+        with pytest.raises(AttributeError):
+            ArgsView({}).nope
+
+    def test_read_only(self):
+        from painted.cli import ArgsView
+
+        with pytest.raises(AttributeError):
+            ArgsView({"frame": 1}).frame = 2
+
+    def test_empty_default(self):
+        from painted.cli import ArgsView
+
+        assert len(ArgsView()) == 0
+
+
+class TestCtxArgs:
+    """run_cli surfaces consumer add_args via ctx.args, excluding framework
+    flags and declared tag/alias dests."""
+
+    def test_consumer_arg_on_ctx(self, monkeypatch):
+        monkeypatch.setattr("sys.stdout.isatty", lambda: False)
+        seen = {}
+
+        def add_args(p):
+            p.add_argument("--frame", type=int, default=0)
+
+        def render(ctx, data):
+            seen["frame"] = ctx.args.frame
+            seen["has_quiet"] = "quiet" in ctx.args
+            return Block.text("x", Style())
+
+        run_cli(["--frame", "5"], render=render, fetch=lambda: "d", add_args=add_args)
+        assert seen["frame"] == 5
+        # framework flags are owned by the framework, not surfaced as args
+        assert seen["has_quiet"] is False
+
+    def test_declared_dest_excluded_from_args(self, monkeypatch):
+        from painted.cli import Tag
+
+        monkeypatch.setattr("sys.stdout.isatty", lambda: False)
+        seen = {}
+
+        def render(ctx, data):
+            seen["has_thinking"] = "thinking" in ctx.args
+            return Block.text("x", Style())
+
+        run_cli(
+            ["--thinking"],
+            render=render,
+            fetch=lambda: "d",
+            tags=[Tag("thinking", "reasoning")],
+        )
+        # the tag compiles into fidelity, not ctx.args
+        assert seen["has_thinking"] is False
+
+    def test_empty_args_on_bare_invocation(self, monkeypatch):
+        monkeypatch.setattr("sys.stdout.isatty", lambda: False)
+        seen = {}
+
+        def render(ctx, data):
+            seen["len"] = len(ctx.args)
+            return Block.text("x", Style())
+
+        run_cli([], render=render, fetch=lambda: "d")
+        assert seen["len"] == 0
+
+
+class TestFetchArityShim:
+    """A 0-param fetch is called nullary (unchanged); a 1-param fetch receives
+    ctx."""
+
+    def test_nullary_fetch_untouched(self, monkeypatch):
+        monkeypatch.setattr("sys.stdout.isatty", lambda: False)
+        calls = []
+
+        def fetch():
+            calls.append("nullary")
+            return "d"
+
+        run_cli([], render=lambda ctx, d: Block.text(d, Style()), fetch=fetch)
+        assert calls == ["nullary"]
+
+    def test_ctx_fetch_receives_ctx(self, monkeypatch):
+        monkeypatch.setattr("sys.stdout.isatty", lambda: False)
+        seen = {}
+
+        def add_args(p):
+            p.add_argument("--frame", type=int, default=0)
+
+        def fetch(ctx):
+            seen["frame"] = ctx.args.frame
+            return "d"
+
+        run_cli(
+            ["--frame", "3"],
+            render=lambda ctx, d: Block.text(d, Style()),
+            fetch=fetch,
+            add_args=add_args,
+        )
+        assert seen["frame"] == 3
+
+    def test_ctx_fetch_on_json_path(self, monkeypatch):
+        """JSON export carries ctx too, so an arity-1 fetch still works."""
+        monkeypatch.setattr("sys.stdout.isatty", lambda: False)
+        seen = {}
+
+        def fetch(ctx):
+            seen["called"] = True
+            return {"ok": True}
+
+        code = run_cli(
+            ["--json"],
+            render=lambda ctx, d: Block.text("x", Style()),
+            fetch=fetch,
+        )
+        assert code == 0
+        assert seen["called"] is True
