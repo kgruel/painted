@@ -17,13 +17,15 @@ from typing import TYPE_CHECKING, Generic, TypeVar
 from contextlib import nullcontext
 
 from .types import (
+    ArgsView,
     CliContext,
     Fidelity,
     Format,
     OutputMode,
     Tag,
     Zoom,
-    add_cli_args,
+    build_parser,
+    consumer_args,
     detect_context,
     parse_fidelity,
     parse_format,
@@ -48,11 +50,13 @@ class CliRunner(Generic[T]):
     # Required: how to render state to Block
     render: Callable[[CliContext, T], Block]
 
-    # Required: how to fetch state (sync)
-    fetch: Callable[[], T]
+    # Required: how to fetch state (sync). Arity-polymorphic via the run()
+    # shim: declared nullary it's called fetch(), declared with a parameter it
+    # receives ctx — hence Callable[..., T] rather than a fixed arity.
+    fetch: Callable[..., T]
 
-    # Optional: streaming fetch for live mode
-    fetch_stream: Callable[[], AsyncIterator[T]] | None = None
+    # Optional: streaming fetch for live mode (same arity shim as fetch)
+    fetch_stream: Callable[..., AsyncIterator[T]] | None = None
 
     # Optional: custom handlers for specific modes
     handlers: dict[OutputMode, Callable[[CliContext], R]] | None = None
@@ -127,6 +131,7 @@ class CliRunner(Generic[T]):
             mode = OutputMode.AUTO
             fmt = Format.AUTO
             fidelity = Fidelity(depth=int(zoom))
+            args_view = ArgsView()
         else:
             parser = self._get_parser()
             parsed = parser.parse_args(args)
@@ -139,12 +144,9 @@ class CliRunner(Generic[T]):
             )
             if self.build_fidelity is not None:
                 fidelity = self.build_fidelity(parsed, fidelity)
+            args_view = consumer_args(parsed, self.tags, self.depth_aliases)
 
-        # JSON short-circuits — it's data export, not rendering
         is_json = fmt == Format.JSON
-        if is_json:
-            return self._export_json()
-
         force_plain = fmt == Format.PLAIN
 
         # Plain text and minimal depth imply static mode. Checked on the
@@ -154,23 +156,26 @@ class CliRunner(Generic[T]):
             mode = OutputMode.STATIC
 
         ctx = detect_context(
-            fidelity, mode, force_plain=force_plain, default_mode=self.default_mode
+            fidelity, mode, force_plain=force_plain, default_mode=self.default_mode, args=args_view
         )
+
+        # JSON short-circuits — it's data export, not rendering — but still
+        # carries ctx so an arity-1 fetch reads the same resolved invocation.
+        if is_json:
+            return self._export_json(ctx)
 
         return self._dispatch(ctx)
 
     def _get_parser(self) -> argparse.ArgumentParser:
-        """Build and cache the parser for repeated invocations."""
+        """Build and cache the parser for repeated invocations.
+
+        Delegates to the standalone ``build_parser`` — the same parser
+        completion and help walk. The runner's only job here is to compute the
+        supported mode set (which depends on fetch_stream/handlers/delivery,
+        things build_parser deliberately doesn't know).
+        """
         if self._parser_cache is not None:
             return self._parser_cache
-
-        parser = argparse.ArgumentParser(
-            description=self.description,
-            prog=self.prog,
-            add_help=False,
-        )
-        # Re-add -h/--help so argparse still recognizes it for error messages
-        parser.add_argument("-h", "--help", action="help", help=argparse.SUPPRESS)
 
         modes: set[OutputMode] = {OutputMode.STATIC}
         if self.fetch_stream is not None:
@@ -183,42 +188,16 @@ class CliRunner(Generic[T]):
         ):
             modes.add(OutputMode.INTERACTIVE)
 
-        add_cli_args(
-            parser,
-            modes=modes,
+        self._parser_cache = build_parser(
+            add_args=self.add_args,
             tags=self.tags,
             depth_aliases=self.depth_aliases,
             budgets=self.budgets,
+            modes=modes,
+            prog=self.prog,
+            description=self.description,
         )
-
-        if self.add_args is not None:
-            framework_actions = len(parser._actions)
-            self.add_args(parser)
-            self._check_add_args_dests(parser._actions[framework_actions:])
-
-        self._parser_cache = parser
-        return parser
-
-    def _check_add_args_dests(self, added: list[argparse.Action]) -> None:
-        """Custom args must not land on a declared tag/alias dest.
-
-        argparse raises only on duplicate option strings, not duplicate
-        dests — a custom arg (or positional) whose dest matches a declared
-        name would silently turn the tag on or override depth at compile
-        time. Same promise as the name collision check, extended to the
-        escape hatch.
-        """
-        from .types import declared_dests
-
-        declared = declared_dests(self.tags, self.depth_aliases)
-        if not declared:
-            return
-        for action in added:
-            if action.dest in declared:
-                raise ValueError(
-                    f"add_args registers dest {action.dest!r}, which collides "
-                    "with a declared tag or depth alias"
-                )
+        return self._parser_cache
 
     def _handle_help(self, args: list[str]) -> int:
         """Render zoom-aware help and return 0."""
@@ -246,7 +225,37 @@ class CliRunner(Generic[T]):
         print_block(block, use_ansi=use_ansi)
         return 0
 
-    def _export_json(self) -> int:
+    @staticmethod
+    def _wants_ctx(fn: Callable[..., object]) -> bool:
+        """Arity shim: a 0-param fetch is called nullary (the existing
+        contract, untouched), a fetch that declares a positional parameter
+        receives ``ctx``. Lets a fetch read ``ctx.args`` without breaking every
+        nullary fetch already in the wild. Callables whose signature can't be
+        introspected fall back to nullary — the conservative, back-compatible
+        default."""
+        import inspect
+
+        try:
+            sig = inspect.signature(fn)
+        except (TypeError, ValueError):
+            return False
+        return any(
+            p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD, p.VAR_POSITIONAL)
+            for p in sig.parameters.values()
+        )
+
+    def _do_fetch(self, ctx: CliContext) -> T:
+        """Call fetch through the arity shim."""
+        return self.fetch(ctx) if self._wants_ctx(self.fetch) else self.fetch()
+
+    def _stream_iter(self, ctx: CliContext) -> AsyncIterator[T]:
+        """Open the fetch_stream async iterator through the arity shim."""
+        assert self.fetch_stream is not None
+        if self._wants_ctx(self.fetch_stream):
+            return self.fetch_stream(ctx)
+        return self.fetch_stream()
+
+    def _export_json(self, ctx: CliContext) -> int:
         """Export data as JSON — bypasses render pipeline entirely.
 
         Dataclass state is exported via ``asdict``; anything else is handed
@@ -256,7 +265,7 @@ class CliRunner(Generic[T]):
         not a failure.
         """
         try:
-            state = self.fetch()
+            state = self._do_fetch(ctx)
         except Exception as exc:
             message = self._exception_message(exc)
             print(json.dumps({"error": message}))
@@ -303,7 +312,7 @@ class CliRunner(Generic[T]):
         from ..core.writer import print_block
 
         try:
-            state = self.fetch()
+            state = self._do_fetch(ctx)
         except Exception as exc:
             block = self._fetch_error_block(ctx, exc)
             print_block(block, use_ansi=ctx.use_ansi)
@@ -340,7 +349,7 @@ class CliRunner(Generic[T]):
 
                     last_block = None
                     try:
-                        async for state in self.fetch_stream():  # type: ignore[misc]
+                        async for state in self._stream_iter(ctx):
                             try:
                                 last_block = self.render(ctx, state)
                             except Exception as exc:
@@ -362,7 +371,7 @@ class CliRunner(Generic[T]):
                     meter = LiveMeter()
                 with InPlaceRenderer() as renderer:
                     try:
-                        async for state in self.fetch_stream():  # type: ignore[misc]
+                        async for state in self._stream_iter(ctx):
                             if meter is not None:
                                 meter.start()
                             try:
@@ -394,7 +403,7 @@ class CliRunner(Generic[T]):
 
         # No streaming: just fetch and render
         try:
-            state = self.fetch()
+            state = self._do_fetch(ctx)
         except Exception as exc:
             block = self._fetch_error_block(ctx, exc)
             print_block(block, use_ansi=ctx.use_ansi)
@@ -427,7 +436,7 @@ class CliRunner(Generic[T]):
         surface = StreamSurface(
             ctx=ctx,
             render=self.render,
-            fetch_stream=self.fetch_stream,
+            fetch_stream=lambda: self._stream_iter(ctx),
             live_meter=self.live_meter,
         )
         try:
@@ -500,9 +509,9 @@ class CliRunner(Generic[T]):
 def run_cli(
     args: list[str],
     render: Callable[[CliContext, T], Block],
-    fetch: Callable[[], T],
+    fetch: Callable[..., T],
     *,
-    fetch_stream: Callable[[], AsyncIterator[T]] | None = None,
+    fetch_stream: Callable[..., AsyncIterator[T]] | None = None,
     handlers: dict[OutputMode, Callable[[CliContext], R]] | None = None,
     default_zoom: Zoom = Zoom.SUMMARY,
     default_mode: OutputMode = OutputMode.LIVE,
