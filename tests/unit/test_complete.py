@@ -350,3 +350,43 @@ class TestCompleteDebugCommand:
 
         main(["--help", "--plain"])
         assert "__complete" not in capsys.readouterr().out
+
+
+class TestRendererFreeGuard:
+    """The no-renderer-on-TAB guarantee (C-LAZY): the completion path must not
+    pull core.block / core.doc. Checked in a fresh subprocess — the pytest
+    process has the renderer loaded already."""
+
+    def _imports_renderer(self, script: str) -> dict:
+        import subprocess
+        import sys
+
+        probe = script + (
+            "\nimport sys, json\n"
+            "print(json.dumps({"
+            "'block': 'painted.core.block' in sys.modules, "
+            "'doc': 'painted.core.doc' in sys.modules}))\n"
+        )
+        out = subprocess.run(
+            [sys.executable, "-c", probe], capture_output=True, text=True, check=True
+        )
+        import json
+
+        return json.loads(out.stdout.strip().splitlines()[-1])
+
+    def test_importing_producer_is_render_free(self):
+        flags = self._imports_renderer("import painted.cli.complete")
+        assert flags == {"block": False, "doc": False}
+
+    def test_building_roster_and_completing_is_render_free(self):
+        flags = self._imports_renderer(
+            "from painted.cli import AppCommand, complete_app\n"
+            "cmds = [AppCommand('read', 'Read', lambda a: 0)]\n"
+            "complete_app(cmds, [], '')\n"
+        )
+        assert flags == {"block": False, "doc": False}
+
+    def test_importing_runner_is_render_free(self):
+        # run_cli's module must import without the renderer (paid only on render)
+        flags = self._imports_renderer("import painted.cli.runner")
+        assert flags == {"block": False, "doc": False}

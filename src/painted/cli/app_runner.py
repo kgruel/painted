@@ -23,23 +23,25 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from ..core.doc import Def, Defs, Doc, Node, Prose, Section, doc_lens
+from .types import Format, Tag, Zoom, check_declarations
 
 if TYPE_CHECKING:
     import argparse
 
     from ..core.block import Block
-from .help import (
-    HelpArg,
-    command_defs,
-    framework_sections,
-    scan_help_args,
-)
-from .types import Format, Tag, Zoom, check_declarations
+    from ..core.doc import Doc, Node
+    from .help import HelpArg
+
+# core.doc and .help are imported lazily inside the render methods below, never
+# at module top: constructing an AppCommand and completing it must not pull the
+# renderer (the no-renderer-on-TAB rule). The render path pays the import only
+# when -h / no-args actually renders help — mirroring how _render_doc already
+# defers core.fidelity.
 
 
 def _render_doc(doc: Doc, zoom: Zoom, width: int) -> "Block":
     """Project a help Doc to a Block at the given zoom (Format strips styles)."""
+    from ..core.doc import doc_lens
     from ..core.fidelity import Fidelity
 
     return doc_lens(doc, fidelity=Fidelity(depth=int(zoom)), width=width)
@@ -240,6 +242,8 @@ class AppRunner:
         """Project a help Doc to the active format and print it."""
         from ..core.writer import print_block
 
+        from .help import scan_help_args
+
         zoom, fmt = scan_help_args(args)
 
         if fmt == Format.JSON:
@@ -263,6 +267,9 @@ class AppRunner:
         or ``add_args`` (introspected). command_defs merges both, so a command
         migrating help_args → add_args renders the same arg list throughout.
         """
+        from ..core.doc import Defs, Doc, Prose
+        from .help import command_defs, framework_sections
+
         assert cmd.help_args is not None or cmd.add_args is not None
 
         cmd_defs = command_defs(cmd.help_args, cmd.add_args)
@@ -281,6 +288,9 @@ class AppRunner:
 
     def _help_doc(self) -> Doc:
         """Top-level help Doc — the command list leads, framework groups follow."""
+        from ..core.doc import Def, Defs, Doc, Prose, Section
+        from .help import framework_sections
+
         body: list[Node] = []
         if self.description:
             body.append(Prose(self.description))
