@@ -109,7 +109,16 @@ def complete_args(
     from ._argwalk import walk_args
 
     specs = walk_args(parser)
-    ctx_args = args if args is not None else ArgsView()
+    # ctx.args is the args-so-far a completer scopes against. Caller-supplied
+    # wins; otherwise derive it by tolerantly parsing ``preceding`` through this
+    # parser — but only when a completer is actually present (the parse is the
+    # producer's one moment of execution, skipped when nothing reads it).
+    if args is not None:
+        ctx_args = args
+    elif any(s.completer is not None for s in specs):
+        ctx_args = _tolerant_args(parser, preceding)
+    else:
+        ctx_args = ArgsView()
 
     value_spec = _pending_value_spec(specs, preceding)
     if value_spec is not None:
@@ -122,6 +131,29 @@ def complete_args(
     if pos_spec is not None:
         cands.extend(_value_candidates(pos_spec, ctx_args, prefix))
     return _finish(cands, prefix)
+
+
+def _tolerant_args(parser: argparse.ArgumentParser, preceding: Sequence[str]) -> ArgsView:
+    """The namespace ``preceding`` resolves to on ``parser``, as an ArgsView.
+
+    A completer's typed context (loops ``--key`` narrowed to the vertex already
+    on the line) — the args-so-far reflected through the very parser TAB is
+    completing. Tolerant by construction: an incomplete line is the normal case
+    at TAB time, so a missing required positional or an unknown token must yield
+    a partial namespace, never a usage error into the shell. ``parse_known_args``
+    keeps what parsed; ``SystemExit`` (argparse's ``error()``) and its usage
+    text are swallowed, leaving whatever defaults the parser declared."""
+    import argparse as _argparse
+    import contextlib
+    import io
+
+    namespace = _argparse.Namespace()
+    try:
+        with contextlib.redirect_stderr(io.StringIO()):
+            namespace, _ = parser.parse_known_args(list(preceding), namespace)
+    except (SystemExit, Exception):
+        pass
+    return ArgsView(vars(namespace))
 
 
 def _pending_value_spec(specs: list[ArgSpec], preceding: Sequence[str]) -> ArgSpec | None:

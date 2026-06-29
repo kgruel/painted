@@ -120,6 +120,16 @@ class CliRunner(Generic[T]):
 
     def run(self, args: list[str]) -> int:
         """Parse args, resolve context, dispatch."""
+        # Completion gate first — before -h, before parsing. When the shell glue
+        # calls back (the _PAINTED_COMPLETE env var), complete this command's own
+        # parser and exit, never touching the renderer. Lazy import keeps the
+        # transport off the no-completion path.
+        from .completion_shell import completion_active, run_single_completion
+
+        shell = completion_active()
+        if shell is not None:
+            return run_single_completion(self._get_parser(), shell=shell)
+
         # Intercept --help before argparse
         if "-h" in args or "--help" in args:
             return self._handle_help(args)

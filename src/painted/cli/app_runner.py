@@ -179,6 +179,16 @@ class AppRunner:
 
     def run(self, argv: list[str]) -> int:
         """Route argv to command handler, or show help."""
+        # Completion gate first: when the shell glue calls back (the
+        # _PAINTED_COMPLETE env var), emit candidates and exit before any
+        # routing or rendering — the no-renderer-on-TAB path. The import is
+        # lazy so constructing/running normally never pulls the transport.
+        from .completion_shell import completion_active, run_completion
+
+        shell = completion_active()
+        if shell is not None:
+            return run_completion(self.commands, prog=self.prog, default=self.default, shell=shell)
+
         # No args → painted help
         if not argv:
             return self._handle_help([])
@@ -340,8 +350,37 @@ def run_app(
         Exit code (0 for success)
     """
     return AppRunner(
-        commands=tuple(commands),
+        commands=_with_completion(tuple(commands), prog),
         prog=prog,
         description=description,
         default=default,
     ).run(argv)
+
+
+def _with_completion(commands: tuple[AppCommand, ...], prog: str | None) -> tuple[AppCommand, ...]:
+    """Append the framework's ``completion`` command unless the app owns the name.
+
+    Every ``run_app`` roster gains ``completion`` (emit shell glue) for free —
+    the third reflection delivered without per-app wiring. If the consumer
+    already declares a ``completion`` command or alias, theirs stands and the
+    injection is skipped: the auto-add must not turn a working app into a
+    construction-time collision (the alias-collision check would otherwise
+    raise). Lazy import keeps the transport off the module-load path."""
+    from .completion_shell import (
+        COMPLETION_COMMAND_NAME,
+        completion_add_args,
+        completion_handler,
+    )
+
+    taken = {c.name for c in commands} | {a for c in commands for a in c.aliases}
+    if COMPLETION_COMMAND_NAME in taken:
+        return commands
+    return commands + (
+        AppCommand(
+            COMPLETION_COMMAND_NAME,
+            "Print shell completion setup (e.g. `completion zsh`)",
+            completion_handler(prog),
+            detail=f'{prog or "app"} completion zsh > "${{fpath[1]}}/_{prog or "app"}"',
+            add_args=completion_add_args,
+        ),
+    )

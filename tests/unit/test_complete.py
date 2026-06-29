@@ -202,6 +202,32 @@ class TestProducer:
         p.add_argument("--key").completer = lambda ctx: ["b", "a", "b", "a"]
         assert self._values(complete_args(p, ["--key"], "")) == ["a", "b"]
 
+    def test_ctx_args_derived_from_preceding_when_unset(self):
+        # No caller-supplied args: the completer's typed context is the namespace
+        # `preceding` resolves to on this very parser (slice 4).
+        seen = {}
+
+        def key_completer(ctx):
+            seen["vertex"] = ctx.args.get("vertex")
+            return ["k"]
+
+        p = argparse.ArgumentParser(add_help=False)
+        p.add_argument("vertex", choices=["loops", "painted"])
+        p.add_argument("--key").completer = key_completer
+        complete_args(p, ["loops", "--key"], "")
+        assert seen["vertex"] == "loops"
+
+    def test_tolerant_derivation_swallows_incomplete_line(self):
+        # a partial line (missing the required positional) must not error out —
+        # the completer still runs, with whatever parsed.
+        def key_completer(ctx):
+            return ["ok"]
+
+        p = argparse.ArgumentParser(add_help=False)
+        p.add_argument("required_pos")
+        p.add_argument("--key").completer = key_completer
+        assert self._values(complete_args(p, ["--key"], "")) == ["ok"]
+
 
 class TestAppProducer:
     """complete_app — roster completion and forwarding into a command parser."""

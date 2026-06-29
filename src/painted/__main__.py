@@ -28,9 +28,10 @@ def main(argv: list[str] | None = None) -> int:
         AppCommand("docs", "List available docs, or render one by name", _docs_dispatch),
         AppCommand("tour", "Interactive tour", _tour_dispatch),
     ]
-    # Hidden completion smoke backdoor — kept off the roster (out of help) until
-    # decision E lands the real `completion` command in S4. Lets you poke the
-    # producer directly: `painted __complete "painted de"` → demos/demo/docs.
+    # Hidden completion smoke backdoor — a render-free way to eyeball the
+    # producer without the shell transport's env vars (the real path is the
+    # injected `completion` command + the _PAINTED_COMPLETE gate, S4). Pokes the
+    # *raw* roster directly: `painted __complete "painted de"` → demos/demo/docs.
     if args and args[0] == "__complete":
         return _complete_dispatch(args[1:], commands)
 
