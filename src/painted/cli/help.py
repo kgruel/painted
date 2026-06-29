@@ -61,22 +61,14 @@ def _arg_def(arg: HelpArg) -> Def:
 
 
 def _add_args_defs(add_args_fn: Callable[[argparse.ArgumentParser], None]) -> list[Def]:
-    """Introspect an add_args callback into Defs, keeping each option's full term
-    ("-s, --since"), not just one alias."""
+    """Introspect an add_args callback into Defs via the shared parser walk —
+    the help projection of ArgSpec (completion projects the same walk to
+    Candidates). Each option's full term ("-s, --since") is kept intact."""
+    from ._argwalk import walk_args
+
     parser = argparse.ArgumentParser(add_help=False)
     add_args_fn(parser)
-    defs: list[Def] = []
-    for action in parser._actions:
-        if isinstance(action, argparse._HelpAction):
-            continue
-        if action.help is argparse.SUPPRESS:
-            continue
-        if not action.option_strings:  # positional
-            defs.append(Def(term=action.dest, summary=action.help or ""))
-            continue
-        term = ", ".join(action.option_strings)  # "-s, --since" — both aliases
-        defs.append(Def(term=term, summary=action.help or ""))
-    return defs
+    return [Def(term=spec.term, summary=spec.help) for spec in walk_args(parser)]
 
 
 def command_defs(
