@@ -280,3 +280,73 @@ class TestAppProducer:
         from painted.cli.complete import complete_app
 
         assert complete_app(self._commands(), ["nope"], "--") == []
+
+
+class TestCompleteLine:
+    """complete_line — raw-line convenience over complete_app."""
+
+    def _commands(self):
+        from painted.cli import AppCommand
+
+        return [
+            AppCommand(
+                "read",
+                "Read",
+                lambda a: 0,
+                add_args=lambda p: p.add_argument("--kind", choices=["log", "thread"]),
+            ),
+            AppCommand("emit", "Emit", lambda a: 0),
+        ]
+
+    def _values(self, line, point=None):
+        from painted.cli.complete import complete_line
+
+        return [c.value for c in complete_line(line, point, commands=self._commands(), prog="sl")]
+
+    def test_roster_after_prog_space(self):
+        assert self._values("sl ") == ["emit", "read"]
+
+    def test_roster_prefix_no_trailing_space(self):
+        assert self._values("sl re") == ["read"]
+
+    def test_forward_after_command(self):
+        assert "--kind" in self._values("sl read --")
+
+    def test_value_choices_after_option(self):
+        assert self._values("sl read --kind ") == ["log", "thread"]
+
+    def test_point_truncates_line(self):
+        # cursor sits right after "re", ignoring the trailing "ad xyz"
+        assert self._values("sl read xyz", point=len("sl re")) == ["read"]
+
+    def test_unbalanced_quote_tolerated(self):
+        # a dangling quote must not raise — falls back to a naive split
+        vals = self._values('sl read --kind "lo')
+        assert isinstance(vals, list)
+
+
+class TestCompleteDebugCommand:
+    """The hidden `painted __complete` smoke backdoor."""
+
+    def test_roster_output(self, capsys):
+        from painted.__main__ import main
+
+        rc = main(["__complete", "painted "])
+        assert rc == 0
+        out = capsys.readouterr().out
+        names = {ln.split("\t")[0] for ln in out.splitlines()}
+        assert {"demos", "demo", "docs", "tour"} <= names
+
+    def test_description_tab_separated(self, capsys):
+        from painted.__main__ import main
+
+        main(["__complete", "painted docs"])
+        out = capsys.readouterr().out
+        # docs roster entry carries its description after a tab
+        assert any(ln.startswith("docs\t") and "docs" in ln for ln in out.splitlines())
+
+    def test_not_in_help_roster(self, capsys):
+        from painted.__main__ import main
+
+        main(["--help", "--plain"])
+        assert "__complete" not in capsys.readouterr().out

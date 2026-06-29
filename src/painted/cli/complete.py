@@ -263,6 +263,47 @@ def _match_command(commands: Sequence[AppCommand], token: str) -> AppCommand | N
     return None
 
 
+def complete_line(
+    line: str,
+    point: int | None = None,
+    *,
+    commands: Sequence[AppCommand],
+    prog: str | None = None,
+    default: AppCommand | None = None,
+) -> list[Candidate]:
+    """Candidates for a raw command line, completing the token at ``point``.
+
+    A convenience over ``complete_app`` for smoke-testing and simple transports:
+    it splits the line and locates the prefix token (the partial word under the
+    cursor, or ``""`` after a trailing space), drops the program name, and
+    forwards to ``complete_app``. ``point`` defaults to the end of the line.
+
+    This is the *naive* split — robust COMP_LINE/COMP_POINT handling (quoting,
+    ``--opt=val`` splitting, word boundaries) is the shell transport's job (S4).
+    """
+    if point is None:
+        point = len(line)
+    left = line[:point]
+    words = _split_line(left)
+    if left and not left[-1].isspace():
+        prefix = words[-1] if words else ""
+        preceding = words[1:-1]
+    else:
+        prefix = ""
+        preceding = words[1:]
+    return complete_app(commands, preceding, prefix, prog=prog, default=default)
+
+
+def _split_line(text: str) -> list[str]:
+    """Tokenize a partial command line, tolerating an unbalanced quote."""
+    import shlex
+
+    try:
+        return shlex.split(text)
+    except ValueError:
+        return text.split()
+
+
 def _command_parser(cmd: AppCommand, prog: str | None) -> argparse.ArgumentParser:
     """The command's parser, built render-free with the conservative mode set.
 
