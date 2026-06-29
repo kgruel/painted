@@ -201,3 +201,82 @@ class TestProducer:
         p = argparse.ArgumentParser(add_help=False)
         p.add_argument("--key").completer = lambda ctx: ["b", "a", "b", "a"]
         assert self._values(complete_args(p, ["--key"], "")) == ["a", "b"]
+
+
+class TestAppProducer:
+    """complete_app — roster completion and forwarding into a command parser."""
+
+    def _commands(self):
+        from painted.cli import AppCommand
+
+        def read_args(p):
+            p.add_argument("vertex")
+            p.add_argument("--kind", choices=["log", "decision", "thread"])
+
+        return [
+            AppCommand("read", "Read a vertex", lambda a: 0, add_args=read_args),
+            AppCommand("emit", "Emit a fact", lambda a: 0, aliases=("add",)),
+        ]
+
+    def _values(self, cands):
+        return [c.value for c in cands]
+
+    def test_roster_names_and_aliases(self):
+        from painted.cli.complete import complete_app
+
+        vals = self._values(complete_app(self._commands(), [], ""))
+        assert vals == ["add", "emit", "read"]  # sorted; alias included
+
+    def test_roster_candidate_carries_description(self):
+        from painted.cli.complete import complete_app
+
+        cand = next(c for c in complete_app(self._commands(), [], "") if c.value == "read")
+        assert cand.description == "Read a vertex"
+
+    def test_roster_prefix_filter(self):
+        from painted.cli.complete import complete_app
+
+        assert self._values(complete_app(self._commands(), [], "re")) == ["read"]
+
+    def test_forward_into_command_flags(self):
+        from painted.cli.complete import complete_app
+
+        vals = self._values(complete_app(self._commands(), ["read"], "--"))
+        assert "--kind" in vals
+        assert "--json" in vals  # framework flags forwarded too
+        assert "--live" not in vals  # conservative mode default omits it
+        assert "--static" not in vals
+
+    def test_forward_command_value_choices(self):
+        from painted.cli.complete import complete_app
+
+        vals = self._values(complete_app(self._commands(), ["read", "--kind"], ""))
+        assert vals == ["decision", "log", "thread"]
+
+    def test_forward_via_alias(self):
+        from painted.cli.complete import complete_app
+
+        # 'add' is an alias of 'emit' — forwarding resolves it
+        vals = self._values(complete_app(self._commands(), ["add"], "--"))
+        assert "--json" in vals  # emit has no add_args, but framework flags appear
+
+    def test_default_first_positional_coexists_with_roster(self):
+        from painted.cli import AppCommand
+        from painted.cli.complete import complete_app
+
+        default = AppCommand(
+            "read",
+            "Read",
+            lambda a: 0,
+            add_args=lambda p: p.add_argument("vertex", choices=["loops", "painted"]),
+        )
+        cmds = [default, AppCommand("emit", "Emit", lambda a: 0)]
+        vals = self._values(complete_app(cmds, [], "", default=default))
+        # command names AND the default's vertex choices both at the first slot
+        assert "emit" in vals and "read" in vals
+        assert "loops" in vals and "painted" in vals
+
+    def test_unmatched_no_default_is_empty(self):
+        from painted.cli.complete import complete_app
+
+        assert complete_app(self._commands(), ["nope"], "--") == []

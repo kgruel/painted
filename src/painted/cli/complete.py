@@ -23,12 +23,13 @@ from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from .types import ArgsView
+from .types import ArgsView, OutputMode, build_parser
 
 if TYPE_CHECKING:
     import argparse
 
     from ._argwalk import ArgSpec
+    from .app_runner import AppCommand
 
 
 @dataclass(frozen=True)
@@ -195,3 +196,83 @@ def _finish(cands: list[Candidate], prefix: str) -> list[Candidate]:
         out.append(c)
     out.sort(key=lambda c: c.value)
     return out
+
+
+# =============================================================================
+# The app level — roster completion + forwarding into a command's parser
+# =============================================================================
+
+
+def complete_app(
+    commands: Sequence[AppCommand],
+    preceding: Sequence[str],
+    prefix: str = "",
+    *,
+    prog: str | None = None,
+    default: AppCommand | None = None,
+    args: ArgsView | None = None,
+) -> list[Candidate]:
+    """Completion candidates for a ``run_app`` command line.
+
+    ``preceding`` are the typed tokens after the program name; ``prefix`` is the
+    token under the cursor. The first token is the command name:
+
+    * **empty preceding** — completing the command itself: every command name and
+      alias (described by the command's summary), plus, when a ``default`` is
+      declared, that command's first positional (the ``loops <vertex>``
+      shorthand — names *and* vertices coexist at the first slot).
+    * **matched command** — forward to that command's parser, built render-free
+      via ``build_parser`` with the conservative mode default (``-i``/``--live``/
+      ``--static`` omitted unless the command declares delivery — it can't yet,
+      so they stay off; the honesty rule prefers under-listing).
+    * **no match but a default** — forward to the default's parser with the full
+      ``preceding`` (the default keeps argv[0] as positional data).
+
+    ``AppCommand`` is read by attribute only (never imported at runtime) so this
+    stays on the no-renderer-on-TAB path.
+    """
+    if not preceding:
+        cands = _roster_candidates(commands)
+        if default is not None:
+            cands.extend(complete_args(_command_parser(default, prog), [], prefix, args=args))
+        return _finish(cands, prefix)
+
+    head, rest = preceding[0], preceding[1:]
+    cmd = _match_command(commands, head)
+    if cmd is not None:
+        return complete_args(_command_parser(cmd, prog), rest, prefix, args=args)
+    if default is not None:
+        return complete_args(_command_parser(default, prog), preceding, prefix, args=args)
+    return []
+
+
+def _roster_candidates(commands: Sequence[AppCommand]) -> list[Candidate]:
+    """Every command name and alias, described by its command's summary."""
+    cands: list[Candidate] = []
+    for cmd in commands:
+        cands.append(Candidate(cmd.name, cmd.description))
+        cands.extend(Candidate(alias, cmd.description) for alias in cmd.aliases)
+    return cands
+
+
+def _match_command(commands: Sequence[AppCommand], token: str) -> AppCommand | None:
+    """The command a token routes to — its name or one of its aliases."""
+    for cmd in commands:
+        if token == cmd.name or token in cmd.aliases:
+            return cmd
+    return None
+
+
+def _command_parser(cmd: AppCommand, prog: str | None) -> argparse.ArgumentParser:
+    """The command's parser, built render-free with the conservative mode set.
+
+    modes={STATIC} suppresses the whole mode group (-i/--live/--static): an
+    AppCommand can't declare its delivery capability, so completion under-lists
+    rather than suggest a flag the command may reject."""
+    prog_str = f"{prog} {cmd.name}" if prog else cmd.name
+    return build_parser(
+        add_args=cmd.add_args,
+        tags=cmd.tags,
+        modes={OutputMode.STATIC},
+        prog=prog_str,
+    )
