@@ -28,12 +28,30 @@ def main(argv: list[str] | None = None) -> int:
         AppCommand("docs", "List available docs, or render one by name", _docs_dispatch),
         AppCommand("tour", "Interactive tour", _tour_dispatch),
     ]
+    # Hidden completion smoke backdoor — kept off the roster (out of help) until
+    # decision E lands the real `completion` command in S4. Lets you poke the
+    # producer directly: `painted __complete "painted de"` → demos/demo/docs.
+    if args and args[0] == "__complete":
+        return _complete_dispatch(args[1:], commands)
+
     return run_app(
         args,
         commands,
         prog="painted",
         description="painted — Terminal UI framework",
     )
+
+
+def _complete_dispatch(args: list[str], commands: list[AppCommand]) -> int:
+    """Print completion candidates for a raw line — value, then a tab and the
+    description when present (the zsh _describe shape the S4 transport formats)."""
+    from painted.cli.complete import complete_line
+
+    line = args[0] if args else ""
+    point = int(args[1]) if len(args) > 1 else None
+    for cand in complete_line(line, point, commands=commands, prog="painted"):
+        print(f"{cand.value}\t{cand.description}" if cand.description else cand.value)
+    return 0
 
 
 def _demo_dispatch(args: list[str]) -> int:

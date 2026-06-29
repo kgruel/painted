@@ -32,12 +32,16 @@ from .types import (
     parse_mode,
     parse_zoom,
 )
-from .help import HelpArg, help_doc, scan_help_args
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
     from ..core.block import Block
+    from .help import HelpArg
+
+# .help is imported lazily inside _handle_help, never at module top: it pulls
+# core.doc (the renderer), and importing the runner must not — the no-renderer-
+# on-TAB rule. The help-render path pays the import only when -h actually fires.
 
 T = TypeVar("T")  # State type
 R = TypeVar("R")  # Return type
@@ -201,6 +205,8 @@ class CliRunner(Generic[T]):
 
     def _handle_help(self, args: list[str]) -> int:
         """Render zoom-aware help and return 0."""
+        from .help import help_doc, scan_help_args
+
         # Build the parser for its validation side effects — a broken
         # declaration must raise on the help path too, not render the
         # contradiction it would refuse to parse.
