@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 
 from painted.cli._argwalk import walk_args
-from painted.cli.complete import Candidate, CompletionContext
+from painted.cli.complete import Candidate, CompletionContext, complete_args
 from painted.cli.types import ArgsView
 
 
@@ -103,3 +103,101 @@ class TestContractTypes:
         # in a renderer module on its own account.
         assert "painted.cli.complete" in sys.modules
         assert "painted.cli._argwalk" in sys.modules
+
+
+class TestProducer:
+    """complete_args — the single-parser producer engine."""
+
+    def _parser(self):
+        p = argparse.ArgumentParser(add_help=False)
+        p.add_argument("vertex", choices=["loops", "painted", "siftd"])
+        p.add_argument("-s", "--since", help="Lower bound")
+        p.add_argument("--format", choices=["ansi", "plain", "json"])
+        p.add_argument("--dry-run", action="store_true")
+        return p
+
+    def _values(self, cands):
+        return [c.value for c in cands]
+
+    def test_flags_in_word_context(self):
+        cands = complete_args(self._parser(), [], "--")
+        vals = self._values(cands)
+        assert "--since" in vals and "--format" in vals and "--dry-run" in vals
+        assert "-s" not in vals  # filtered by the "--" prefix
+
+    def test_short_flag_prefix(self):
+        vals = self._values(complete_args(self._parser(), [], "-s"))
+        assert vals == ["-s"]
+
+    def test_value_context_offers_choices_only(self):
+        # cursor sits right after --format → only its choices, no flags
+        cands = complete_args(self._parser(), ["--format"], "")
+        assert self._values(cands) == ["ansi", "json", "plain"]  # sorted
+
+    def test_value_context_prefix_filter(self):
+        cands = complete_args(self._parser(), ["--format"], "j")
+        assert self._values(cands) == ["json"]
+
+    def test_positional_choices_on_fresh_word(self):
+        cands = complete_args(self._parser(), [], "")
+        vals = self._values(cands)
+        # both flags and the first positional's choices appear on empty prefix
+        assert "loops" in vals and "painted" in vals
+        assert "--format" in vals
+
+    def test_positional_value_prefix_excludes_flags(self):
+        vals = self._values(complete_args(self._parser(), [], "pa"))
+        assert vals == ["painted"]  # only the positional choice matches
+
+    def test_consumed_positional_advances(self):
+        p = argparse.ArgumentParser(add_help=False)
+        p.add_argument("a", choices=["x"])
+        p.add_argument("b", choices=["y"])
+        # first positional filled with "x" → active positional is b
+        vals = self._values(complete_args(p, ["x"], ""))
+        assert "y" in vals and "x" not in vals
+
+    def test_option_value_not_counted_as_positional(self):
+        # "--since 2020" must not consume the vertex positional slot
+        vals = self._values(complete_args(self._parser(), ["--since", "2020"], ""))
+        assert "loops" in vals  # vertex still active
+
+    def test_completer_seam_invoked_with_context(self):
+        seen = {}
+
+        def key_completer(ctx):
+            seen["prefix"] = ctx.prefix
+            seen["vertex"] = ctx.args.get("vertex")
+            return [Candidate("alpha", "first"), "beta"]
+
+        p = argparse.ArgumentParser(add_help=False)
+        p.add_argument("--key").completer = key_completer
+        cands = complete_args(p, ["--key"], "a", args=ArgsView({"vertex": "loops"}))
+        assert seen == {"prefix": "a", "vertex": "loops"}
+        assert self._values(cands) == ["alpha"]  # "beta" filtered by prefix "a"
+
+    def test_completer_bare_str_normalized(self):
+        p = argparse.ArgumentParser(add_help=False)
+        p.add_argument("--key").completer = lambda ctx: ["one", "two"]
+        cands = complete_args(p, ["--key"], "")
+        assert all(isinstance(c, Candidate) for c in cands)
+        assert self._values(cands) == ["one", "two"]
+
+    def test_raising_completer_yields_nothing(self):
+        def boom(ctx):
+            raise RuntimeError("completer bug")
+
+        p = argparse.ArgumentParser(add_help=False)
+        p.add_argument("--key").completer = boom
+        assert complete_args(p, ["--key"], "") == []  # no traceback into the shell
+
+    def test_described_candidate_carries_description(self):
+        p = argparse.ArgumentParser(add_help=False)
+        p.add_argument("--key").completer = lambda ctx: [Candidate("k1", "the first key")]
+        cands = complete_args(p, ["--key"], "")
+        assert cands[0].description == "the first key"
+
+    def test_dedup_and_sort(self):
+        p = argparse.ArgumentParser(add_help=False)
+        p.add_argument("--key").completer = lambda ctx: ["b", "a", "b", "a"]
+        assert self._values(complete_args(p, ["--key"], "")) == ["a", "b"]
