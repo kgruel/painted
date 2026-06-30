@@ -2,11 +2,8 @@
 
 from __future__ import annotations
 
-import ast
 import importlib.util
 import sys
-from dataclasses import dataclass
-from pathlib import Path
 
 from painted import (
     Block,
@@ -23,114 +20,27 @@ from painted import (
     truncate,
 )
 
-# ---------------------------------------------------------------------------
-# DemoEntry
-# ---------------------------------------------------------------------------
+# Discovery lives in the render-free _demo_discovery module so the demos
+# completer can list names without pulling the renderer (no-renderer-on-TAB).
+# Re-exported here so existing importers (__main__, tests) are unaffected.
+from painted._demo_discovery import (
+    _GROUPS,
+    DemoEntry,
+    _find_demos_root,
+    _parse_demo,
+    discover_demos,
+)
 
-
-@dataclass(frozen=True)
-class DemoEntry:
-    name: str  # "fidelity"
-    group: str  # "patterns"
-    path: Path  # absolute path to .py file
-    description: str  # first line of docstring
-    invocations: tuple[str, ...] = ()  # "uv run ..." lines from docstring
-    has_main: bool = True  # False for primitives/apps
-
-
-# ---------------------------------------------------------------------------
-# Discovery
-# ---------------------------------------------------------------------------
-
-_CACHE: list[DemoEntry] | None = None
-
-_GROUPS = ("primitives", "patterns", "apps", "examples", "showcase")
-
-
-def _find_demos_root() -> Path | None:
-    """Locate the demos/ directory across dev checkout and installed wheel."""
-    here = Path(__file__).resolve()
-    candidates = (
-        # Dev checkout: src/painted/_demo_cli.py -> src/painted -> src -> project root
-        here.parent.parent.parent / "demos",
-        # Installed wheel: demos/ is force-included under the package itself
-        # (site-packages/painted/demos), so it sits beside this module.
-        here.parent / "demos",
-        # Last resort: running from a project root that has a demos/ tree
-        Path.cwd() / "demos",
-    )
-    for candidate in candidates:
-        if candidate.is_dir():
-            return candidate
-    return None
-
-
-def _parse_demo(path: Path, group: str) -> DemoEntry | None:
-    """Extract demo metadata via ast without executing the file."""
-    try:
-        source = path.read_text(encoding="utf-8")
-        tree = ast.parse(source, filename=str(path))
-    except (SyntaxError, OSError):
-        return None
-
-    docstring = ast.get_docstring(tree) or ""
-    first_line = docstring.split("\n")[0].strip() if docstring else path.stem
-
-    # Extract invocation lines: lines starting with whitespace + "uv run"
-    invocations: list[str] = []
-    for line in docstring.split("\n"):
-        stripped = line.strip()
-        if stripped.startswith("uv run"):
-            invocations.append(stripped)
-
-    # has_main: check for top-level def main or async def main
-    has_main = any(
-        isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == "main"
-        for node in ast.iter_child_nodes(tree)
-    )
-
-    return DemoEntry(
-        name=path.stem,
-        group=group,
-        path=path.resolve(),
-        description=first_line,
-        invocations=tuple(invocations),
-        has_main=has_main,
-    )
-
-
-def discover_demos() -> list[DemoEntry]:
-    """Find all demos, sorted by group then name. Cached."""
-    global _CACHE
-    if _CACHE is not None:
-        return _CACHE
-
-    root = _find_demos_root()
-    if root is None:
-        _CACHE = []
-        return _CACHE
-
-    entries: list[DemoEntry] = []
-    for group in _GROUPS:
-        group_dir = root / group
-        if not group_dir.is_dir():
-            continue
-        for path in sorted(group_dir.glob("*.py")):
-            if path.name.startswith("_"):
-                continue
-            entry = _parse_demo(path, group)
-            if entry is not None:
-                entries.append(entry)
-
-    # Also discover tour.py at demos root
-    tour_path = root / "tour.py"
-    if tour_path.exists():
-        entry = _parse_demo(tour_path, "")
-        if entry is not None:
-            entries.append(entry)
-
-    _CACHE = entries
-    return _CACHE
+__all__ = [
+    "DemoEntry",
+    "discover_demos",
+    "_find_demos_root",
+    "_parse_demo",
+    "_GROUPS",
+    "list_demos",
+    "run_demo",
+    "render_demo_list",
+]
 
 
 # ---------------------------------------------------------------------------

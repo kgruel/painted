@@ -9,9 +9,19 @@ fall out of the framework, not hand-rolled dispatch here."""
 from __future__ import annotations
 
 import sys
+from typing import TYPE_CHECKING
 
-from painted import Block, Style, print_block
 from painted.cli import AppCommand, run_app
+
+if TYPE_CHECKING:
+    import argparse
+
+    from painted.cli import Candidate, CompletionContext
+
+# painted's own front door stays render-free until it actually renders: the
+# top-level `from painted import Block, …` is deferred into the dispatch
+# functions that print, so `painted <TAB>` (the completion gate) and the demos
+# completer below never pull the renderer.
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -24,8 +34,14 @@ def main(argv: list[str] | None = None) -> int:
             _demo_dispatch,
             detail="painted demos [name] — list demos, or run <name>; 'list'/'run' subcommands too.",
             aliases=("demo",),
+            add_args=_demos_add_args,
         ),
-        AppCommand("docs", "List available docs, or render one by name", _docs_dispatch),
+        AppCommand(
+            "docs",
+            "List available docs, or render one by name",
+            _docs_dispatch,
+            add_args=_docs_add_args,
+        ),
         AppCommand("tour", "Interactive tour", _tour_dispatch),
     ]
     # Hidden completion smoke backdoor — a render-free way to eyeball the
@@ -55,7 +71,47 @@ def _complete_dispatch(args: list[str], commands: list[AppCommand]) -> int:
     return 0
 
 
+def _demos_add_args(parser: argparse.ArgumentParser) -> None:
+    """Declare the demos `name` positional and hang the demo-name completer.
+
+    The handler stays opaque (it dispatches name/list/run itself); this mirror
+    exists so completion and intercepted `-h` can see the one argument that
+    matters — the demo to run. The completer is the T3 dynamic seam: demo names
+    are runtime data no static `choices` can hold."""
+    arg = parser.add_argument("name", nargs="?", help="Demo to run (omit to list)")
+    arg.completer = _complete_demo_names  # type: ignore[attr-defined]
+
+
+def _complete_demo_names(ctx: CompletionContext) -> list[Candidate]:
+    """Every runnable demo as a described candidate (render-free discovery)."""
+    from painted._demo_discovery import discover_demos
+    from painted.cli import Candidate
+
+    # tour has its own command (group == "") — exclude it, mirroring the list.
+    return [Candidate(e.name, e.description) for e in discover_demos() if e.group]
+
+
+def _docs_add_args(parser: argparse.ArgumentParser) -> None:
+    """Declare the docs `name` positional and hang the doc-name completer.
+
+    Unlike demos, the doc registry *is* doc-IR (each page carries live figures),
+    so this completer legitimately loads the renderer when invoked — the honest
+    contrast to the render-free demos completer: a domain completer pays for the
+    data it reflects (cf. loops `--key` hitting the store)."""
+    arg = parser.add_argument("name", nargs="?", help="Doc to render (omit to list)")
+    arg.completer = _complete_doc_names  # type: ignore[attr-defined]
+
+
+def _complete_doc_names(ctx: CompletionContext) -> list[Candidate]:
+    """Every doc page as a described candidate."""
+    from painted._doc_pages import DOCS
+    from painted.cli import Candidate
+
+    return [Candidate(entry.name, entry.description) for entry in DOCS.values()]
+
+
 def _demo_dispatch(args: list[str]) -> int:
+    from painted import Block, Style, print_block
     from painted._demo_cli import list_demos, run_demo
 
     # No args or flags only → list demos
@@ -93,7 +149,8 @@ def _tour_dispatch(args: list[str]) -> int:
     import asyncio
     import importlib.util
 
-    from painted._demo_cli import _find_demos_root
+    from painted import Block, Style, print_block
+    from painted._demo_discovery import _find_demos_root
 
     root = _find_demos_root()
     if root is None:
