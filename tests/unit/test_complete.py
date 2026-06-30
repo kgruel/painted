@@ -229,6 +229,73 @@ class TestProducer:
         assert self._values(complete_args(p, ["--key"], "")) == ["ok"]
 
 
+class TestWantsFileCompletion:
+    """wants_file_completion — classify a slot as open (→ shell file completion)."""
+
+    def test_open_positional_wants_files(self):
+        from painted.cli.complete import wants_file_completion
+
+        p = argparse.ArgumentParser(add_help=False)
+        p.add_argument("path")
+        assert wants_file_completion(p, []) is True
+
+    def test_positional_with_choices_does_not(self):
+        from painted.cli.complete import wants_file_completion
+
+        p = argparse.ArgumentParser(add_help=False)
+        p.add_argument("mode", choices=["a", "b"])
+        assert wants_file_completion(p, []) is False
+
+    def test_positional_with_completer_does_not(self):
+        from painted.cli.complete import wants_file_completion
+
+        p = argparse.ArgumentParser(add_help=False)
+        p.add_argument("name").completer = lambda ctx: ["x"]
+        assert wants_file_completion(p, []) is False
+
+    def test_open_option_value_wants_files(self):
+        from painted.cli.complete import wants_file_completion
+
+        p = argparse.ArgumentParser(add_help=False)
+        p.add_argument("--out")
+        assert wants_file_completion(p, ["--out"]) is True
+
+    def test_option_value_with_choices_does_not(self):
+        from painted.cli.complete import wants_file_completion
+
+        p = argparse.ArgumentParser(add_help=False)
+        p.add_argument("--fmt", choices=["json"])
+        assert wants_file_completion(p, ["--fmt"]) is False
+
+    def test_no_positional_no_pending_value(self):
+        from painted.cli.complete import wants_file_completion
+
+        p = argparse.ArgumentParser(add_help=False)
+        p.add_argument("--flag", action="store_true")
+        assert wants_file_completion(p, []) is False
+
+    def test_app_command_name_is_never_files(self):
+        from painted.cli import AppCommand
+        from painted.cli.complete import app_wants_file_completion
+
+        cmds = [AppCommand("open", "Open", lambda a: 0, add_args=lambda p: p.add_argument("path"))]
+        assert app_wants_file_completion(cmds, [], prog="x") is False
+
+    def test_app_forwards_to_command_slot(self):
+        from painted.cli import AppCommand
+        from painted.cli.complete import app_wants_file_completion
+
+        cmds = [AppCommand("open", "Open", lambda a: 0, add_args=lambda p: p.add_argument("path"))]
+        assert app_wants_file_completion(cmds, ["open"], prog="x") is True
+
+    def test_app_unmatched_without_default_is_not_files(self):
+        from painted.cli import AppCommand
+        from painted.cli.complete import app_wants_file_completion
+
+        cmds = [AppCommand("open", "Open", lambda a: 0)]
+        assert app_wants_file_completion(cmds, ["nope"], prog="x") is False
+
+
 class TestAppProducer:
     """complete_app — roster completion and forwarding into a command parser."""
 

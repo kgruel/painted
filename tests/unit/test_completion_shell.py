@@ -115,6 +115,52 @@ class TestRunCompletion:
         assert capsys.readouterr().out.startswith("read")
 
 
+class TestFileDirective:
+    """The file/dir directive — an open slot tells the glue to add files."""
+
+    def _open_cmd(self):
+        return AppCommand("open", "Open", lambda a: 0, add_args=lambda p: p.add_argument("path"))
+
+    def _lines(self, line, cmds, capsys, monkeypatch, shell="zsh"):
+        monkeypatch.setenv("COMP_LINE", line)
+        monkeypatch.setenv("COMP_POINT", str(len(line)))
+        run_completion(cmds, prog="x", default=None, shell=shell)
+        return capsys.readouterr().out.splitlines()
+
+    def test_directive_emitted_for_open_slot(self, capsys, monkeypatch):
+        from painted.cli.completion_shell import _FILE_DIRECTIVE
+
+        lines = self._lines("x open ", [self._open_cmd()], capsys, monkeypatch)
+        assert _FILE_DIRECTIVE in lines
+
+    def test_no_directive_for_choices_slot(self, capsys, monkeypatch):
+        from painted.cli.completion_shell import _FILE_DIRECTIVE
+
+        cmd = AppCommand(
+            "fmt", "F", lambda a: 0, add_args=lambda p: p.add_argument("m", choices=["a"])
+        )
+        lines = self._lines("x fmt ", [cmd], capsys, monkeypatch)
+        assert _FILE_DIRECTIVE not in lines
+
+    def test_directive_starts_with_unit_separator(self, capsys, monkeypatch):
+        # control-char prefix can't collide with a real candidate value
+        lines = self._lines("x open ", [self._open_cmd()], capsys, monkeypatch)
+        assert any(ln.startswith("\x1f") for ln in lines)
+
+    def test_no_directive_when_completing_command_name(self, capsys, monkeypatch):
+        from painted.cli.completion_shell import _FILE_DIRECTIVE
+
+        lines = self._lines("x ", [self._open_cmd()], capsys, monkeypatch)
+        assert _FILE_DIRECTIVE not in lines
+
+    def test_directive_suppressed_under_opt_eq_value(self, capsys, monkeypatch):
+        from painted.cli.completion_shell import _FILE_DIRECTIVE
+
+        cmd = AppCommand("o", "O", lambda a: 0, add_args=lambda p: p.add_argument("--out"))
+        lines = self._lines("x o --out=fo", [cmd], capsys, monkeypatch)
+        assert _FILE_DIRECTIVE not in lines
+
+
 class TestRunSingleCompletion:
     """The run_cli-level transport: a single parser, no roster."""
 
@@ -144,6 +190,7 @@ class TestCompletionCommand:
         assert out.startswith("#compdef sl")
         assert "_PAINTED_COMPLETE=zsh" in out
         assert "_describe" in out
+        assert "_files" in out  # the file directive triggers filesystem completion
 
     def test_defaults_to_zsh(self, capsys):
         completion_handler("sl")([])
@@ -153,9 +200,10 @@ class TestCompletionCommand:
         rc = completion_handler("sl")(["bash"])
         out = capsys.readouterr().out
         assert rc == 0
-        assert "complete -o default -F _sl_complete sl" in out
+        assert "complete -F _sl_complete sl" in out
         assert "_PAINTED_COMPLETE=bash" in out
-        assert "COMPREPLY=" in out
+        assert "COMPREPLY" in out
+        assert "compopt -o default" in out  # the file directive path
 
     def test_bash_is_an_offered_shell(self):
         parser = argparse.ArgumentParser(add_help=False)
