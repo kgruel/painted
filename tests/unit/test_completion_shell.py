@@ -149,6 +149,20 @@ class TestCompletionCommand:
         completion_handler("sl")([])
         assert capsys.readouterr().out.startswith("#compdef sl")
 
+    def test_emits_bash_complete_script(self, capsys):
+        rc = completion_handler("sl")(["bash"])
+        out = capsys.readouterr().out
+        assert rc == 0
+        assert "complete -o default -F _sl_complete sl" in out
+        assert "_PAINTED_COMPLETE=bash" in out
+        assert "COMPREPLY=" in out
+
+    def test_bash_is_an_offered_shell(self):
+        parser = argparse.ArgumentParser(add_help=False)
+        completion_add_args(parser)
+        action = next(a for a in parser._actions if a.dest == "shell")
+        assert action.choices is not None and {"bash", "zsh"} <= set(action.choices)
+
     def test_unsupported_shell_errors(self, capsys):
         rc = completion_handler("sl")(["fish"])
         assert rc == 1
