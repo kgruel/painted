@@ -156,6 +156,55 @@ def _tolerant_args(parser: argparse.ArgumentParser, preceding: Sequence[str]) ->
     return ArgsView(vars(namespace))
 
 
+def wants_file_completion(parser: argparse.ArgumentParser, preceding: Sequence[str]) -> bool:
+    """True when the value slot under the cursor is an *open* value — one the
+    parser can't enumerate (no static ``choices``, no ``.completer``).
+
+    This is the producer's half of file/dir completion: it classifies the slot,
+    the shell does the filesystem walk (zsh ``_files`` / bash ``compopt -o
+    default``). painted never reads the disk — completion stays render-free and
+    side-effect-free; the shell already knows how to complete paths (``~``
+    expansion, hidden-file rules, the user's own ``zstyle``).
+
+    The open slot is the value-taking option whose value the cursor is on
+    (``--output <cursor>``), or otherwise the active positional. An option or
+    positional that declares choices/a completer is *not* open — its candidates
+    are the completion, and offering files alongside would be noise. A consumer
+    who wants a free-text value with *no* file fallback gives it a completer that
+    returns ``[]`` (the explicit opt-out).
+    """
+    from ._argwalk import walk_args
+
+    specs = walk_args(parser)
+    slot = _pending_value_spec(specs, preceding)
+    if slot is None:
+        slot = _active_positional(specs, preceding)
+    return slot is not None and not slot.choices and slot.completer is None
+
+
+def app_wants_file_completion(
+    commands: Sequence[AppCommand],
+    preceding: Sequence[str],
+    *,
+    prog: str | None = None,
+    default: AppCommand | None = None,
+) -> bool:
+    """``wants_file_completion`` at the app level — mirrors ``complete_app``'s
+    routing so the transport asks the same parser the candidates came from.
+
+    Completing the command name itself (empty ``preceding``) is never a file
+    slot — you're choosing a verb, not a path."""
+    if not preceding:
+        return False
+    head, rest = preceding[0], preceding[1:]
+    cmd = _match_command(commands, head)
+    if cmd is not None:
+        return wants_file_completion(_command_parser(cmd, prog), rest)
+    if default is not None:
+        return wants_file_completion(_command_parser(default, prog), preceding)
+    return False
+
+
 def _pending_value_spec(specs: list[ArgSpec], preceding: Sequence[str]) -> ArgSpec | None:
     """The option whose value the cursor is on — the last token is a
     value-taking option string. ``None`` in word context."""
