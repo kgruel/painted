@@ -71,7 +71,9 @@ class CompletionContext:
 # hold (loops vertex/--kind/--key): hang it on an argument as ``action.completer``
 # (the argcomplete-compatible attribute convention) and the producer invokes it
 # with the CompletionContext. It returns bare strings or described Candidates;
-# the producer normalizes either.
+# the producer normalizes either. A completer that is genuinely expensive to run
+# (a scan, a network call) can memoize inside its own callable — the seam is the
+# callable, so painted needs no cache framework for it (see docs/COMPLETION_DESIGN.md §7).
 Completer = Callable[["CompletionContext"], Iterable["str | Candidate"]]
 
 
@@ -132,7 +134,13 @@ def complete_args(
         if opt not in blocked
     ]
     pos_spec = _active_positional(specs, preceding)
-    if pos_spec is not None:
+    # A prefix that starts with "-" is a flag being typed, not a positional
+    # value: the positional's candidates can't survive the prefix filter, so
+    # skip its (possibly expensive) completer entirely — no cache needed, just
+    # don't compute what provably can't match. "--" as end-of-options flips
+    # subsequent "-"-leading tokens back to positional values.
+    completing_flag = prefix.startswith("-") and "--" not in preceding
+    if pos_spec is not None and not completing_flag:
         cands.extend(_value_candidates(pos_spec, ctx_args, prefix))
     return _finish(cands, prefix)
 

@@ -133,9 +133,47 @@ improvement even where it under-fires. Resolving abbreviations would mean
 re-implementing argparse's prefix matching across the whole producer — a separate
 concern, deferred.
 
-## 7. Cache
+## 7. Cache — MEASURED → DEFERRED (no cache), plus a dissolution fix
 
-*(S10 — see §"Roadmap" until landed.)*
+The roadmap said *"cache (if measured)"* — a skeptic gate. The measurement (macOS,
+warm FS, py3.13, fresh process per TAB as the shell does):
+
+| TAB context | latency |
+|-------------|---------|
+| `import painted` (lazy facade) | ~11ms (≈ bare interpreter — render-free win) |
+| roster `painted ` | ~26ms |
+| flag context `painted docs -` | ~35ms |
+| **`painted demos ` (name context)** | **~65ms** |
+
+Everything sits well under the ~100ms instantaneous-feel floor. The one outlier is
+painted's **own** `demos` dogfood completer: ~40ms of the 65ms is `ast.parse` of
+~39 demo files, and it's a *consumer* completer, not a framework path. Verdict:
+**build no cache.** A cross-process disk cache would trade an imperceptible ~40ms
+for a write on the render-free TAB path plus a staleness class that can serve a
+candidate the completer would no longer produce (an honesty-rule violation). By
+the dissolution test and simple-by-default, that's the wrong trade.
+
+**The dissolution fix that shipped instead.** The measurement exposed real *wasted
+work*, not a caching need: `complete_args` in word context ran the positional's
+completer even when the prefix starts with `-` (a flag being typed), where none of
+those values can survive the prefix filter. `painted demos -<TAB>` therefore paid
+the full ~40ms ast-parse for candidates it then discarded. The producer now skips
+the positional completer in flag context (`prefix` starts with `-`, no `--`
+end-of-options marker) — `demos -<TAB>` drops from ~65ms to the ~26ms roster
+baseline, with no cache, no staleness, and identical output.
+
+**If discovery is ever measured hot** (a real consumer completer over the floor —
+e.g. a store query over a slow link), the homes are, by axis:
+
+- *static self-discovery* (painted's own demos): a build-time drift-gated
+  `demos/_manifest.json` — reuse the `./dev panels`/outputgen pattern, move the
+  `ast.parse` to build, gate drift in CI. A JSON read at runtime, zero write, zero
+  staleness. **Preferred.**
+- *dynamic/live consumer values*: consumers memoize inside their own `Completer`
+  callable (the seam already exists); a general `cached_completer(fn, *, token)`
+  wrapper is the second-choice home, deferred until measured pain names it. A
+  build-time manifest cannot serve a live query, so the two axes don't share a
+  home.
 
 ## 8. Install
 
