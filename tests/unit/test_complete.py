@@ -283,6 +283,15 @@ class TestFlagContextSkipsPositionalCompleter:
         complete_args(p, ["--"], "-")
         assert calls["n"] == 1  # completer DID run (not flag context anymore)
 
+    def test_dash_leading_choices_survive_flag_context(self):
+        # static choices are cheap and CAN be dash-leading (a negative-number
+        # choice) — they must still be offered even when the prefix starts "-".
+        # Only the (expensive) completer is skipped, not choices.
+        p = argparse.ArgumentParser(add_help=False)
+        p.add_argument("level", choices=["-1", "-2", "0", "5"])
+        assert [c.value for c in complete_args(p, [], "-1")] == ["-1"]
+        assert [c.value for c in complete_args(p, [], "-")] == ["-1", "-2"]
+
 
 class TestMutexExclusions:
     """A mutually-exclusive sibling is suppressed once one member is on the line

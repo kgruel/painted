@@ -394,11 +394,12 @@ def completion_doc() -> Doc:
                     ),
                     Prose(
                         "Placement in the ecosystem is deliberate and honest. The "
-                        ".completer attribute is the argcomplete convention, so a "
-                        "completer written for painted is portable; what painted adds is "
-                        "the render-free promise and zsh descriptions sourced from the "
-                        "same help text — distinct value, not a reimplementation. Full "
-                        "design: docs/COMPLETION_DESIGN.md."
+                        ".completer attribute is the argcomplete convention, so you "
+                        "attach a completer the same way — though painted calls it with "
+                        "a single CompletionContext, so the function body differs. What "
+                        "painted adds is the render-free promise and zsh descriptions "
+                        "sourced from the same help text — distinct value, not a "
+                        "reimplementation. Full design: docs/COMPLETION_DESIGN.md."
                     ),
                     Figure(
                         _reflections_diagram(),
