@@ -87,6 +87,12 @@ The shell glue (`completion zsh`/`bash`) re-invokes the program with
   than dropping the request.
 - **`--opt=val` splitting** — the value is completed in the option's value
   context, then re-prefixed so the shell replaces the whole word.
+- **Command-scoped buffer (zsh)** — the zsh glue reconstructs `COMP_LINE` from
+  `${words[1,$CURRENT]}` (the per-command `$words` array, already scoped to the
+  current command by zsh) rather than from `$BUFFER` (the full edit buffer). On
+  a compound line like `git pull && sl dem<TAB>`, `$BUFFER` would send the wrong
+  tokens to the transport; `$words` is already scoped correctly. bash provides
+  per-command `COMP_LINE`/`COMP_POINT` via readline and needs no adjustment.
 - **Dialect** — zsh gets `value:description` for `_describe` (colon-escaped);
   bash and the fallback get bare values.
 - **File directive** — an open slot emits a `\x1f`-prefixed line (Unit

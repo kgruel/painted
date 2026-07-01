@@ -241,6 +241,92 @@ def app_wants_file_completion(
     return False
 
 
+def _walk_preceding(
+    specs: list[ArgSpec], preceding: Sequence[str]
+) -> list[tuple[str, frozenset[str]]]:
+    """Walk ``preceding`` once, classifying each token as one of four kinds.
+
+    Returns a list of ``(kind, present)`` pairs where:
+
+    * ``kind`` is one of ``"option"`` / ``"option_value"`` / ``"positional"`` /
+      ``"separator"``.
+    * ``present`` is a ``frozenset`` of the option strings this token marks as
+      *present on the line* — non-empty only for ``"option"`` tokens.
+
+    This is the **single walk** that both ``_count_consumed_positionals`` and
+    ``_present_option_strings`` are built on, so they can never disagree. Before
+    this shared walk they were independent and could produce contradictory results
+    for inline short values (``-n5``) because one walk would classify the token
+    differently from the other.
+
+    Token forms handled:
+
+    * Exact long option (``--verbose``): kind ``option``, present ``{"--verbose"}``.
+    * Long option with inline value (``--opt=val``): ONE token, kind ``option``,
+      present ``{"--opt"}``; the next token is *not* consumed as a value.
+    * Long value-taking option without inline value (``--since 2020``): TWO tokens;
+      ``--since`` → ``option``, ``2020`` → ``option_value``.
+    * Exact short option (``-q``): kind ``option``; next consumed if value-taking.
+    * Short cluster — all-flag (``-vv``, ``-qv``): kind ``option``, present is the
+      union of recognized short flags.
+    * Short cluster with inline value (``-n5``): kind ``option``, present ``{"-n"}``;
+      the inline value is part of the same token, so the next token is *not* skipped.
+    * Bare ``-`` and ``--``: kind ``separator``.
+    * Anything else (non-option-starting): kind ``positional``.
+
+    Documented limitation: ``nargs=N>1`` positionals are not modelled — each token
+    is counted independently of how many tokens one positional action actually
+    consumes. Completing multi-token positionals correctly would require the
+    ``nargs`` field from ``ArgSpec`` and a more complex walk; that is a completeness
+    gap, documented here and deferred, not a regression from the prior independent
+    walks (which had the same blind spot)."""
+    value_taking = {opt for s in specs for opt in s.option_strings if not s.is_flag}
+    short_flags = {
+        opt
+        for s in specs
+        if s.is_flag
+        for opt in s.option_strings
+        if len(opt) == 2 and opt.startswith("-") and not opt.startswith("--")
+    }
+
+    result: list[tuple[str, frozenset[str]]] = []
+    skip_next = False
+    for tok in preceding:
+        if skip_next:
+            skip_next = False
+            result.append(("option_value", frozenset()))
+            continue
+        if not tok.startswith("-") or tok in ("-", "--"):
+            kind = "separator" if tok in ("-", "--") else "positional"
+            result.append((kind, frozenset()))
+            continue
+        if tok.startswith("--"):
+            head = tok.split("=", 1)[0]
+            if "=" not in tok and head in value_taking:
+                skip_next = True
+            result.append(("option", frozenset([head])))
+        elif len(tok) == 2:
+            # exact short option
+            if tok in value_taking:
+                skip_next = True
+            result.append(("option", frozenset([tok])))
+        else:
+            # short cluster: -vv / -qv / -n5 (value-taking short with inline value)
+            present: set[str] = set()
+            for ch in tok[1:]:
+                opt = f"-{ch}"
+                if opt in short_flags:
+                    present.add(opt)
+                elif opt in value_taking:
+                    # inline value: rest of cluster is the value, no next-token skip
+                    present.add(opt)
+                    break
+                else:
+                    break  # unknown char — stop decomposing
+            result.append(("option", frozenset(present)))
+    return result
+
+
 def _pending_value_spec(specs: list[ArgSpec], preceding: Sequence[str]) -> ArgSpec | None:
     """The option whose value the cursor is on — the last token is a
     value-taking option string. ``None`` in word context."""
@@ -290,77 +376,34 @@ def _active_positional(specs: list[ArgSpec], preceding: Sequence[str]) -> ArgSpe
 
 
 def _count_consumed_positionals(specs: list[ArgSpec], preceding: Sequence[str]) -> int:
-    """How many positional values ``preceding`` already supplies — bare tokens,
-    skipping each value-taking option's own value."""
-    value_taking = {opt for s in specs for opt in s.option_strings if not s.is_flag}
-    count = 0
-    skip = False
-    for tok in preceding:
-        if skip:
-            skip = False
-            continue
-        if tok.startswith("-"):
-            if tok in value_taking:
-                skip = True  # the next token is this option's value, not a positional
-            continue
-        count += 1
-    return count
+    """How many positional values ``preceding`` already supplies.
+
+    Counts tokens classified as ``"positional"`` by ``_walk_preceding`` — bare
+    non-option tokens that are not the value of a value-taking option."""
+    return sum(1 for kind, _ in _walk_preceding(specs, preceding) if kind == "positional")
 
 
 def _present_option_strings(specs: list[ArgSpec], preceding: Sequence[str]) -> set[str]:
     """Option strings already on the line — the input to mutex suppression.
 
-    Handles the three ways an option can appear: exact (``--static``, ``-q``),
-    the ``--opt=val`` long form (its head is present), and a short-flag cluster
-    (``-vv`` / ``-qv`` is ``-v``/``-q`` repeated — argparse-valid for nargs-0
-    options, so its members count as present). A value-taking option's *value*
-    is skipped, mirroring ``_count_consumed_positionals`` — the token after
-    ``--since`` is a timestamp, not a present option.
+    Collects the ``present`` sets from ``_walk_preceding`` so the classification
+    is guaranteed consistent with ``_count_consumed_positionals`` (both walk the
+    same shared tokenizer; independent walks could disagree on inline short values
+    like ``-n5``).
+
+    Handles: exact options (``--static``, ``-q``), the ``--opt=val`` inline form
+    (head is present), and short-flag clusters (``-vv`` / ``-qv`` members count
+    as present). A value-taking option's *separate* value token is classified as
+    ``"option_value"`` by the walk and contributes nothing to ``present``.
 
     Abbreviations (argparse's ``allow_abbrev``) are matched by exact spelling,
-    not resolved: a typed ``--stat`` does not register ``--static``. This mirrors
-    the rest of the producer's exact-match handling and is a documented
-    limitation, not a correctness claim — the pre-mutex behavior over-listed the
-    same cases, so suppression is a strict improvement even where it under-fires.
-    """
-    value_taking = {opt for s in specs for opt in s.option_strings if not s.is_flag}
-    short_flags = {
-        opt
-        for s in specs
-        if s.is_flag
-        for opt in s.option_strings
-        if len(opt) == 2 and opt.startswith("-") and not opt.startswith("--")
-    }
-    present: set[str] = set()
-    skip = False
-    for tok in preceding:
-        if skip:
-            skip = False
-            continue
-        if not tok.startswith("-") or tok in ("-", "--"):
-            continue
-        if tok.startswith("--"):
-            head = tok.split("=", 1)[0]
-            present.add(head)
-            if "=" not in tok and head in value_taking:
-                skip = True  # the next token is this option's value
-        elif len(tok) == 2:
-            present.add(tok)  # exact short option
-            if tok in value_taking:
-                skip = True
-        else:
-            # short-flag cluster: -vv / -qv. Decompose while each char is a known
-            # short flag; a value-taking short option ends the cluster (the rest
-            # of the token is its inline value, e.g. -n5).
-            for ch in tok[1:]:
-                opt = f"-{ch}"
-                if opt in short_flags:
-                    present.add(opt)
-                    continue
-                if opt in value_taking:
-                    present.add(opt)
-                break
-    return present
+    not resolved — a typed ``--stat`` does not register ``--static``. Documented
+    limitation, not a correctness claim: suppression is a strict improvement over
+    the pre-mutex behavior even where it under-fires."""
+    result: set[str] = set()
+    for _kind, present in _walk_preceding(specs, preceding):
+        result |= present
+    return result
 
 
 def _mutex_blocked(specs: list[ArgSpec], preceding: Sequence[str]) -> set[str]:
@@ -489,7 +532,7 @@ def complete_line(
     if point is None:
         point = len(line)
     left = line[:point]
-    words = _split_line(left)
+    words = _tolerant_split(left)
     if left and not left[-1].isspace():
         prefix = words[-1] if words else ""
         preceding = words[1:-1]
@@ -499,13 +542,26 @@ def complete_line(
     return complete_app(commands, preceding, prefix, prog=prog, default=default)
 
 
-def _split_line(text: str) -> list[str]:
-    """Tokenize a partial command line, tolerating an unbalanced quote."""
+def _tolerant_split(text: str) -> list[str]:
+    """Tokenize a partial line, tolerating an unbalanced quote.
+
+    Canonical home for this helper — ``completion_shell.py`` re-imports it from
+    here so both the transport and ``complete_line`` share one implementation.
+
+    A half-typed ``--kind "lo`` makes ``shlex`` raise; closing the quote recovers
+    the intended token (``lo``, without the stray quote char) so the prefix filter
+    still matches. If even that fails, fall back to a naive whitespace split rather
+    than dropping the completion request."""
     import shlex
 
     try:
         return shlex.split(text)
     except ValueError:
+        for close in ('"', "'"):
+            try:
+                return shlex.split(text + close)
+            except ValueError:
+                continue
         return text.split()
 
 

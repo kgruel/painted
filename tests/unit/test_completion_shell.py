@@ -408,6 +408,48 @@ class TestRendererFreeGuard:
         assert flags == {"block": False, "doc": False}
 
 
+class TestZshGlueCommandScope:
+    """_zsh_script must reconstruct COMP_LINE from $words/$CURRENT, not from
+    $BUFFER/$CURSOR — Finding 1: compound-line bug on `git pull && painted dem`."""
+
+    def _script(self):
+        from painted.cli.completion_shell import _zsh_script
+
+        return _zsh_script("sl")
+
+    def test_no_buffer_in_zsh_script(self):
+        # $BUFFER is the ENTIRE edit buffer (compound line); using it with
+        # && or ; sequences sends the wrong line to the transport.
+        assert "$BUFFER" not in self._script()
+
+    def test_no_cursor_in_zsh_script(self):
+        assert "$CURSOR" not in self._script()
+
+    def test_words_array_used(self):
+        # $words is the zsh completion array for the current command only.
+        assert "$words" in self._script() or "${words" in self._script()
+
+    def test_current_index_used(self):
+        # $CURRENT is the index of the word under the cursor in $words.
+        assert "$CURRENT" in self._script()
+
+    def test_comp_line_comp_point_still_present(self):
+        # The transport still reads COMP_LINE/COMP_POINT; they must be set
+        # (just sourced from the command-scoped reconstruction, not from $BUFFER).
+        script = self._script()
+        assert "COMP_LINE=" in script
+        assert "COMP_POINT=" in script
+
+    def test_script_uses_words_1_as_program(self):
+        # ${words[1]} is the program as actually invoked — still correct.
+        assert "${words[1]}" in self._script()
+
+    def test_tolerant_split_still_importable_from_shell(self):
+        # completion_shell.py re-exports _tolerant_split (from complete.py);
+        # the existing import in tests and potential external consumers must work.
+        from painted.cli.completion_shell import _tolerant_split  # noqa: F401
+
+
 @pytest.mark.parametrize("dangle", ['"', "'"])
 def test_no_raise_on_any_dangling_quote(dangle):
     # property-ish: a dangling quote of either kind never raises

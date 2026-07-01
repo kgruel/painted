@@ -389,8 +389,20 @@ def test_tui_does_not_import_views_or_cli() -> None:
 def test_public_modules_do_not_import_private_symbols_from_siblings() -> None:
     """Public modules may use internal modules, but not private sibling symbols.
 
-    Exception: `painted._color` is the shared internal for color conversions.
+    Exceptions (deliberate intra-package sharing, not accidental coupling):
+
+    * ``painted._color`` — shared internal for color conversions; used across
+      multiple rendering modules in the same package.
+    * ``painted.cli.complete`` — cli-internal shared utilities (``_tolerant_split``,
+      ``_walk_preceding``) used by both ``complete.py`` (canonical home) and
+      ``completion_shell.py`` (transport). Analogous to the ``core``-internal
+      exception above: both modules are in ``painted.cli`` and the sharing is
+      intentional, not a coupling leak.
     """
+    # Modules whose private symbols may be imported by public sibling modules.
+    # Keep this list narrow and document each entry above.
+    _ALLOWED_SOURCES = {"painted._color", "painted.cli.complete"}
+
     painted_root = Path(__file__).resolve().parents[2] / "src" / "painted"
     src_root = painted_root.parent
 
@@ -405,7 +417,7 @@ def test_public_modules_do_not_import_private_symbols_from_siblings() -> None:
                 continue
             base = _resolve_relative_module(current_pkg, level=node.level, module=node.module)
             for alias in node.names:
-                if alias.name.startswith("_") and base != "painted._color":
+                if alias.name.startswith("_") and base not in _ALLOWED_SOURCES:
                     bad.append(f"{base}:{alias.name}")
         return bad
 

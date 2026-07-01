@@ -555,6 +555,161 @@ class TestAppProducer:
         assert complete_app(self._commands(), ["nope"], "--") == []
 
 
+class TestTolerantSplit:
+    """_tolerant_split lives in complete.py (canonical) and is re-exported by
+    completion_shell.py — Finding 3: deduplication of the weaker _split_line."""
+
+    def test_importable_from_complete(self):
+        from painted.cli.complete import _tolerant_split  # canonical home
+
+        assert callable(_tolerant_split)
+
+    def test_no_split_line_in_complete(self):
+        import painted.cli.complete as m
+
+        assert not hasattr(m, "_split_line"), (
+            "_split_line was the weaker duplicate and should have been removed"
+        )
+
+    def test_tolerant_split_plain(self):
+        from painted.cli.complete import _tolerant_split
+
+        assert _tolerant_split("sl read --kind") == ["sl", "read", "--kind"]
+
+    def test_tolerant_split_closes_double_quote(self):
+        from painted.cli.complete import _tolerant_split
+
+        result = _tolerant_split('sl read --kind "lo')
+        assert result == ["sl", "read", "--kind", "lo"]
+
+    def test_tolerant_split_closes_single_quote(self):
+        from painted.cli.complete import _tolerant_split
+
+        result = _tolerant_split("sl read --kind 'lo")
+        assert result == ["sl", "read", "--kind", "lo"]
+
+    def test_tolerant_split_fallback_to_whitespace(self):
+        from painted.cli.complete import _tolerant_split
+
+        # pathological: nothing closeable → naive split, never a raise
+        result = _tolerant_split("a 'b \"c")
+        assert isinstance(result, list) and len(result) > 0
+
+
+class TestWalkPreceding:
+    """_walk_preceding is the ONE shared tokenizer — Finding 2.
+
+    Both _count_consumed_positionals and _present_option_strings are built on top
+    of it so they can never disagree. These tests pin the classification for every
+    token form the two consumers care about."""
+
+    def _specs(self, **kwargs):
+        """Build specs for a parser with customizable args.
+
+        kwargs recognized: value_taking (list of option strings), flags (list),
+        positionals (list of dest names).
+        """
+        import argparse
+
+        from painted.cli._argwalk import walk_args
+
+        p = argparse.ArgumentParser(add_help=False)
+        for opt in kwargs.get("value_taking", []):
+            p.add_argument(opt)
+        for opt in kwargs.get("flags", []):
+            p.add_argument(opt, action="store_true")
+        for dest in kwargs.get("positionals", []):
+            p.add_argument(dest)
+        return walk_args(p)
+
+    def _kinds(self, specs, preceding):
+        from painted.cli.complete import _walk_preceding
+
+        return [kind for kind, _ in _walk_preceding(specs, preceding)]
+
+    def _present(self, specs, preceding):
+        from painted.cli.complete import _walk_preceding
+
+        result: set[str] = set()
+        for _, present in _walk_preceding(specs, preceding):
+            result |= present
+        return result
+
+    def test_plain_flag_is_option(self):
+        specs = self._specs(flags=["-q"])
+        kinds = self._kinds(specs, ["-q"])
+        assert kinds == ["option"]
+
+    def test_long_flag_is_option(self):
+        specs = self._specs(flags=["--verbose"])
+        assert self._kinds(specs, ["--verbose"]) == ["option"]
+
+    def test_separate_option_value_not_positional(self):
+        specs = self._specs(value_taking=["--since"])
+        kinds = self._kinds(specs, ["--since", "2020"])
+        assert kinds == ["option", "option_value"]
+
+    def test_inline_eq_value_single_token(self):
+        # --since=2020 is ONE token; no skip of the next token
+        specs = self._specs(value_taking=["--since"])
+        kinds = self._kinds(specs, ["--since=2020", "foo"])
+        assert kinds == ["option", "positional"]
+
+    def test_short_cluster_vv_is_option(self):
+        specs = self._specs(flags=["-v"])
+        kinds = self._kinds(specs, ["-vv"])
+        assert kinds == ["option"]
+
+    def test_short_cluster_marks_repeated_flag_present(self):
+        specs = self._specs(flags=["-v"])
+        present = self._present(specs, ["-vv"])
+        assert "-v" in present
+
+    def test_inline_short_value_n5_no_next_skip(self):
+        # -n5 means -n with inline value 5; next token must NOT be consumed
+        specs = self._specs(value_taking=["-n"])
+        kinds = self._kinds(specs, ["-n5", "pos"])
+        assert kinds == ["option", "positional"]
+
+    def test_inline_short_value_marks_option_present(self):
+        specs = self._specs(value_taking=["-n"])
+        present = self._present(specs, ["-n5"])
+        assert "-n" in present
+
+    def test_bare_dash_is_separator(self):
+        specs = self._specs()
+        kinds = self._kinds(specs, ["-"])
+        assert kinds == ["separator"]
+
+    def test_double_dash_is_separator(self):
+        specs = self._specs()
+        kinds = self._kinds(specs, ["--"])
+        assert kinds == ["separator"]
+
+    def test_positional_value_is_positional(self):
+        specs = self._specs(positionals=["vertex"])
+        kinds = self._kinds(specs, ["loops"])
+        assert kinds == ["positional"]
+
+    def test_consumers_agree_on_inline_short_value(self):
+        """Regression: _count_consumed_positionals and _present_option_strings
+        must agree on -n5 — before the shared walk they could disagree."""
+        import argparse
+
+        from painted.cli._argwalk import walk_args
+        from painted.cli.complete import _count_consumed_positionals, _present_option_strings
+
+        p = argparse.ArgumentParser(add_help=False)
+        p.add_argument("-n")  # value-taking
+        p.add_argument("target")
+        specs = walk_args(p)
+        # -n5 consumes no positional slot (it's a value-taking option with inline val)
+        n_positionals = _count_consumed_positionals(specs, ["-n5"])
+        present = _present_option_strings(specs, ["-n5"])
+        assert n_positionals == 0, "inline short value should not count as a positional"
+        assert "-n" in present, "inline short value option head must be marked present"
+
+
 class TestCompleteLine:
     """complete_line — raw-line convenience over complete_app."""
 
