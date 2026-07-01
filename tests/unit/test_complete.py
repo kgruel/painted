@@ -63,6 +63,19 @@ class TestWalkArgs:
         spec = next(s for s in walk_args(self._parser()) if s.dest == "since")
         assert spec.completer is None
 
+    def test_mutex_group_index_captured(self):
+        p = argparse.ArgumentParser(add_help=False)
+        p.add_argument("target")  # positional — never grouped
+        g = p.add_mutually_exclusive_group()
+        g.add_argument("--fast", action="store_true")
+        g.add_argument("--slow", action="store_true")
+        p.add_argument("--loud", action="store_true")  # ungrouped option
+        specs = {s.dest: s for s in walk_args(p)}
+        assert specs["fast"].mutex_group == specs["slow"].mutex_group  # same group
+        assert specs["fast"].mutex_group is not None
+        assert specs["loud"].mutex_group is None  # ungrouped
+        assert specs["target"].mutex_group is None  # positional
+
 
 class TestContractTypes:
     """Candidate / CompletionContext — the renderer-free contract."""
@@ -227,6 +240,83 @@ class TestProducer:
         p.add_argument("required_pos")
         p.add_argument("--key").completer = key_completer
         assert self._values(complete_args(p, ["--key"], "")) == ["ok"]
+
+
+class TestMutexExclusions:
+    """A mutually-exclusive sibling is suppressed once one member is on the line
+    (the honesty rule: argparse would reject offering it). Uses the real
+    framework groups: zoom (-q/-v/--quiet/--verbose) and mode (--static/--live)."""
+
+    def _parser(self):
+        from painted.cli import OutputMode
+        from painted.cli.types import build_parser
+
+        return build_parser(modes={OutputMode.STATIC, OutputMode.LIVE})
+
+    def _offered(self, preceding, prefix="-"):
+        return {c.value for c in complete_args(self._parser(), preceding, prefix)}
+
+    def test_baseline_offers_all_members(self):
+        offered = self._offered([])
+        assert {"-q", "-v", "--static", "--live"} <= offered
+
+    def test_quiet_suppresses_verbose_sibling(self):
+        offered = self._offered(["-q"])
+        assert "-v" not in offered and "--verbose" not in offered
+        assert "-q" in offered  # own spelling still offered (argparse allows -q -q)
+
+    def test_verbose_long_form_suppresses_quiet(self):
+        offered = self._offered(["--verbose"])
+        assert "-q" not in offered and "--quiet" not in offered
+
+    def test_vv_cluster_suppresses_quiet(self):
+        # -vv is a VALID cluster (verbose=2); argparse REJECTS -vv -q, so -q must
+        # not be offered — the cluster must decompose to a present -v.
+        offered = self._offered(["-vv"])
+        assert "-q" not in offered and "--quiet" not in offered
+        assert "-v" in offered and "--verbose" in offered  # own spelling kept
+
+    def test_repeated_flag_keeps_own_spelling(self):
+        # -v -v (=-vv) is accepted by argparse; -v/--verbose stay offered.
+        offered = self._offered(["-v", "-v"])
+        assert "-v" in offered and "--verbose" in offered
+        assert "-q" not in offered  # sibling still suppressed
+
+    def test_static_suppresses_live(self):
+        offered = self._offered(["--static"])
+        assert "--live" not in offered and "--static" in offered
+
+    def test_live_suppresses_static(self):
+        offered = self._offered(["--live"])
+        assert "--static" not in offered and "--live" in offered
+
+    def test_ungrouped_flags_never_suppressed(self):
+        # --json / --plain are not in a mutex group; a present -q leaves them.
+        offered = self._offered(["-q"])
+        assert "--json" in offered and "--plain" in offered
+
+    def test_cross_group_independence(self):
+        # a present mode member does not touch the zoom group and vice versa.
+        offered = self._offered(["--static"])
+        assert {"-q", "-v"} <= offered  # zoom group untouched
+
+    def test_value_option_value_is_not_a_present_flag(self):
+        # a value that looks like a flag (the token after a value-taking option)
+        # must not register as a present option and wrongly suppress a sibling.
+        from painted.cli.complete import _present_option_strings
+        from painted.cli._argwalk import walk_args
+
+        p = argparse.ArgumentParser(add_help=False)
+        p.add_argument("--since")  # value-taking
+        g = p.add_mutually_exclusive_group()
+        g.add_argument("-q", action="count")
+        g.add_argument("-v", action="count")
+        specs = walk_args(p)
+        # "--since -q" → -q is --since's value, not a present flag (only --since
+        # itself is present; -q is skipped, so it can't suppress its -v sibling).
+        present = _present_option_strings(specs, ["--since", "-q"])
+        assert "-q" not in present
+        assert present == {"--since"}
 
 
 class TestWantsFileCompletion:

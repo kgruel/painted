@@ -124,8 +124,12 @@ def complete_args(
     if value_spec is not None:
         return _finish(_value_candidates(value_spec, ctx_args, prefix), prefix)
 
+    blocked = _mutex_blocked(specs, preceding)
     cands: list[Candidate] = [
-        Candidate(opt, spec.help) for spec in specs for opt in spec.option_strings
+        Candidate(opt, spec.help)
+        for spec in specs
+        for opt in spec.option_strings
+        if opt not in blocked
     ]
     pos_spec = _active_positional(specs, preceding)
     if pos_spec is not None:
@@ -264,6 +268,89 @@ def _count_consumed_positionals(specs: list[ArgSpec], preceding: Sequence[str]) 
             continue
         count += 1
     return count
+
+
+def _present_option_strings(specs: list[ArgSpec], preceding: Sequence[str]) -> set[str]:
+    """Option strings already on the line — the input to mutex suppression.
+
+    Handles the three ways an option can appear: exact (``--static``, ``-q``),
+    the ``--opt=val`` long form (its head is present), and a short-flag cluster
+    (``-vv`` / ``-qv`` is ``-v``/``-q`` repeated — argparse-valid for nargs-0
+    options, so its members count as present). A value-taking option's *value*
+    is skipped, mirroring ``_count_consumed_positionals`` — the token after
+    ``--since`` is a timestamp, not a present option.
+
+    Abbreviations (argparse's ``allow_abbrev``) are matched by exact spelling,
+    not resolved: a typed ``--stat`` does not register ``--static``. This mirrors
+    the rest of the producer's exact-match handling and is a documented
+    limitation, not a correctness claim — the pre-mutex behavior over-listed the
+    same cases, so suppression is a strict improvement even where it under-fires.
+    """
+    value_taking = {opt for s in specs for opt in s.option_strings if not s.is_flag}
+    short_flags = {
+        opt
+        for s in specs
+        if s.is_flag
+        for opt in s.option_strings
+        if len(opt) == 2 and opt.startswith("-") and not opt.startswith("--")
+    }
+    present: set[str] = set()
+    skip = False
+    for tok in preceding:
+        if skip:
+            skip = False
+            continue
+        if not tok.startswith("-") or tok in ("-", "--"):
+            continue
+        if tok.startswith("--"):
+            head = tok.split("=", 1)[0]
+            present.add(head)
+            if "=" not in tok and head in value_taking:
+                skip = True  # the next token is this option's value
+        elif len(tok) == 2:
+            present.add(tok)  # exact short option
+            if tok in value_taking:
+                skip = True
+        else:
+            # short-flag cluster: -vv / -qv. Decompose while each char is a known
+            # short flag; a value-taking short option ends the cluster (the rest
+            # of the token is its inline value, e.g. -n5).
+            for ch in tok[1:]:
+                opt = f"-{ch}"
+                if opt in short_flags:
+                    present.add(opt)
+                    continue
+                if opt in value_taking:
+                    present.add(opt)
+                break
+    return present
+
+
+def _mutex_blocked(specs: list[ArgSpec], preceding: Sequence[str]) -> set[str]:
+    """Option strings to drop from the word-context flag list because a
+    mutually-exclusive *sibling* is already present.
+
+    A member is never blocked by its OWN presence — argparse accepts ``-v -v``
+    (=``-vv``) and ``-q -q``, so the honesty rule keeps offering it; only a
+    *different* group member blocks. So ``-v`` present suppresses ``-q``/
+    ``--quiet``/``--brief``/``--full`` (its zoom-group siblings) but not
+    ``-v``/``--verbose`` (its own spelling)."""
+    present = _present_option_strings(specs, preceding)
+    present_by_group: dict[int, set[str]] = {}
+    for spec in specs:
+        if spec.mutex_group is None:
+            continue
+        hit = present.intersection(spec.option_strings)
+        if hit:
+            present_by_group.setdefault(spec.mutex_group, set()).update(hit)
+    blocked: set[str] = set()
+    for spec in specs:
+        if spec.mutex_group is None:
+            continue
+        group_present = present_by_group.get(spec.mutex_group)
+        if group_present and (group_present - set(spec.option_strings)):
+            blocked.update(spec.option_strings)
+    return blocked
 
 
 def _finish(cands: list[Candidate], prefix: str) -> list[Candidate]:

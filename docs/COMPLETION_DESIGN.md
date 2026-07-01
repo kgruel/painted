@@ -104,7 +104,34 @@ opt-out for a free-text value with no path fallback is a completer returning
 
 ## 6. Mutex-exclusions
 
-*(S9 — see §"Roadmap" until landed.)*
+argparse builds mutually-exclusive groups (painted's own CLI has two: the zoom
+group `-q`/`-v`/depth-aliases and the mode group `--static`/`--live`). argparse
+*rejects* two members of one group on the same line, so offering `--live` after
+`--static` — or `-q` after `-v` — violates the honesty rule.
+
+The fix carries the one structural fact through the **single walk**:
+`ArgSpec.mutex_group` is the action's group index (`None` when ungrouped),
+computed in `walk_args` from `parser._mutually_exclusive_groups`. The
+*suppression policy* lives in the producer (`complete.py`), where the honesty
+rule is enforced: `_mutex_blocked` drops a candidate whose group already has a
+*different* member present. A member is never blocked by its **own** spelling —
+argparse accepts `-v -v` (=`-vv`) and `-q --quiet`, so those keep completing;
+only a genuine sibling blocks.
+
+Presence detection (`_present_option_strings`) handles the three ways an option
+appears: exact (`--static`), `--opt=val` (the head), and short-flag **clusters**
+(`-vv`/`-qv` decompose to their nargs-0 members — argparse-valid, so they count
+as present). A value-taking option's value is skipped, mirroring
+`_count_consumed_positionals`.
+
+**Scoped limitation (honest, not a claim of completeness):** abbreviations
+(argparse's `allow_abbrev`, on by default) are matched by exact spelling, not
+resolved — a typed `--stat` does not register `--static`, so its sibling isn't
+suppressed. This mirrors the rest of the producer's exact-match handling; the
+pre-mutex behavior over-listed the same case, so suppression is a strict
+improvement even where it under-fires. Resolving abbreviations would mean
+re-implementing argparse's prefix matching across the whole producer — a separate
+concern, deferred.
 
 ## 7. Cache
 

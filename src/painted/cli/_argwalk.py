@@ -28,6 +28,11 @@ class ArgSpec:
     action consumes no value (store_true/store_false/count) — completion offers
     the flag itself, never a value after it. ``choices`` and ``completer`` are
     the two value sources: static (T2) and dynamic (T3).
+
+    ``mutex_group`` records which mutually-exclusive group the action joins — its
+    index into ``parser._mutually_exclusive_groups``, or ``None`` when ungrouped
+    — so completion can suppress a group sibling once one member is on the line
+    (the honesty half of the walk). Help ignores it.
     """
 
     dest: str
@@ -36,6 +41,7 @@ class ArgSpec:
     choices: tuple[str, ...] | None
     is_flag: bool
     completer: Completer | None
+    mutex_group: int | None = None
 
     @property
     def is_positional(self) -> bool:
@@ -54,6 +60,14 @@ def walk_args(parser: argparse.ArgumentParser) -> list[ArgSpec]:
     Skips the help action and SUPPRESS-helped actions — neither is a candidate
     the user completes nor a row help renders.
     """
+    # Which mutually-exclusive group each action joins, keyed by identity (an
+    # argparse action belongs to at most one such group). Same private-attribute
+    # footing as the ``parser._actions`` read below.
+    mutex_of = {
+        id(action): index
+        for index, group in enumerate(parser._mutually_exclusive_groups)
+        for action in group._group_actions
+    }
     specs: list[ArgSpec] = []
     for action in parser._actions:
         if isinstance(action, argparse._HelpAction):
@@ -69,6 +83,7 @@ def walk_args(parser: argparse.ArgumentParser) -> list[ArgSpec]:
                 choices=choices,
                 is_flag=action.nargs == 0,
                 completer=getattr(action, "completer", None),
+                mutex_group=mutex_of.get(id(action)),
             )
         )
     return specs
