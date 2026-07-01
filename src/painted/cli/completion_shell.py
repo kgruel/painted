@@ -4,8 +4,9 @@ widget and painted's render-free producer (``complete.py``).
 Two halves of decision E (loops ``design/completion-install-shape``):
 
 * **emit** — ``painted completion zsh`` prints the shell glue (a ``#compdef``
-  function for ``$fpath``). Print-only: the user installs it; painted never
-  edits a dotfile (lifecycle deferred to the roadmap).
+  function for ``$fpath``); ``--install`` writes it to a completions file painted
+  owns instead. Either way painted never edits a dotfile — it tells the user the
+  one line to add if their shell isn't already looking where the glue lives.
 * **transport** — that glue re-invokes the program with ``_PAINTED_COMPLETE``
   set and ``COMP_LINE``/``COMP_POINT`` carrying the edit buffer. The gate is
   intercepted at the top of ``AppRunner.run`` / ``CliRunner.run``; this module
@@ -19,6 +20,7 @@ gate intercept stays on the no-renderer-on-TAB path.
 
 from __future__ import annotations
 
+import argparse
 import os
 import shlex
 import sys
@@ -35,8 +37,6 @@ from .complete import (
 )
 
 if TYPE_CHECKING:
-    import argparse
-
     from .app_runner import AppCommand
 
 
@@ -198,14 +198,15 @@ def _emit(
 # =============================================================================
 
 
-def _detect_shell() -> str:
-    """The user's shell from ``$SHELL`` when the shell argument is omitted.
+def _detect_shell() -> str | None:
+    """The user's shell from ``$SHELL``, or ``None`` when it can't be determined.
 
-    Falls back to the established ``zsh`` default when ``$SHELL`` is unset or
-    names a shell painted can't emit for — a smarter default for an emit command,
-    still overridable by naming the shell explicitly."""
+    ``None`` when ``$SHELL`` is unset or names a shell painted can't emit for.
+    The caller decides the fallback: print defaults to ``zsh`` (harmless — it
+    goes to stdout), but ``--install`` refuses rather than silently write the
+    wrong shell's glue to disk."""
     name = Path(os.environ.get("SHELL", "")).name
-    return name if name in _EMITTERS else "zsh"
+    return name if name in _EMITTERS else None
 
 
 def _install_target(shell: str, prog: str) -> Path | None:
@@ -328,27 +329,53 @@ def completion_add_args(parser: argparse.ArgumentParser) -> None:
     )
 
 
+class _CompletionArgError(Exception):
+    """A parse error from the ``completion`` command's own parser — raised
+    instead of argparse's ``sys.exit(2)`` so the handler returns a friendly 1."""
+
+
+def _completion_parser(prog: str | None) -> argparse.ArgumentParser:
+    """The ``completion`` command's parser — the SAME grammar ``completion_add_args``
+    declares (so ``-h``, TAB completion, and execution never diverge), but with
+    ``error`` rerouted to a raise so a bad invocation is rc=1, not exit-2."""
+    parser = argparse.ArgumentParser(prog=f"{prog or 'painted'} completion", add_help=False)
+    completion_add_args(parser)
+
+    def _raise(message: str) -> None:
+        raise _CompletionArgError(message)
+
+    parser.error = _raise  # type: ignore[method-assign]
+    return parser
+
+
 def completion_handler(prog: str | None) -> Callable[[list[str]], int]:
     """The ``completion`` command handler, closed over ``prog``.
 
     Prints the glue for the requested shell (default: detected from ``$SHELL``)
     and returns 0; ``--install`` writes it to the completions dir instead, and
-    ``--dry-run`` previews that. Hand-scans ``argv`` rather than argparse-parsing
-    so an unsupported shell is a friendly rc=1, not an argparse exit-2."""
+    ``--dry-run`` previews that. Parses with the command's own declared grammar
+    (``completion_add_args``) so ``-h``, TAB completion, and execution agree — a
+    malformed invocation is a friendly rc=1, not an argparse exit-2."""
 
     def handler(argv: list[str]) -> int:
-        install = "--install" in argv
-        dry_run = "--dry-run" in argv
-        shell = next((a for a in argv if not a.startswith("-")), None) or _detect_shell()
-        prog_name = prog or "painted"
-        if install or dry_run:
-            return install_completion(shell, prog_name, dry_run=dry_run)
-        emit = _EMITTERS.get(shell)
-        if emit is None:
-            supported = ", ".join(sorted(_EMITTERS))
-            sys.stderr.write(f"Unsupported shell: {shell!r} (supported: {supported})\n")
+        try:
+            ns = _completion_parser(prog).parse_args(argv)
+        except _CompletionArgError as exc:
+            sys.stderr.write(f"{exc}\n")
             return 1
-        sys.stdout.write(emit(prog_name))
+        prog_name = prog or "painted"
+        if ns.install or ns.dry_run:
+            shell = ns.shell or _detect_shell()
+            if shell is None:
+                sys.stderr.write(
+                    "Could not detect your shell from $SHELL; name it explicitly, "
+                    f"e.g. `{prog_name} completion zsh --install`\n"
+                )
+                return 1
+            return install_completion(shell, prog_name, dry_run=ns.dry_run)
+        # print path: the benign zsh fallback is fine — it goes to stdout.
+        shell = ns.shell or _detect_shell() or "zsh"
+        sys.stdout.write(_EMITTERS[shell](prog_name))
         return 0
 
     return handler

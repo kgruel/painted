@@ -231,7 +231,14 @@ class TestCompletionCommand:
     def test_unsupported_shell_errors(self, capsys):
         rc = completion_handler("sl")(["fish"])
         assert rc == 1
-        assert "Unsupported shell" in capsys.readouterr().err
+        assert "invalid choice" in capsys.readouterr().err  # rejected by the declared grammar
+
+    def test_handler_rejects_malformed_invocations(self, capsys, monkeypatch):
+        # the handler parses with its OWN declared grammar — no lenient hand-scan.
+        monkeypatch.setenv("SHELL", "/bin/zsh")
+        for argv in (["--install=x"], ["--frobnicate"], ["bash", "zsh"]):
+            assert completion_handler("sl")(argv) == 1, argv
+            capsys.readouterr()  # drain
 
     def test_add_args_declares_shell_choice(self):
         parser = argparse.ArgumentParser(add_help=False)
@@ -267,11 +274,21 @@ class TestCompletionInstall:
         monkeypatch.setenv("SHELL", "/bin/bash")
         assert _detect_shell() == "bash"
 
-    def test_detect_shell_falls_back(self, monkeypatch):
+    def test_detect_shell_none_when_unknown(self, monkeypatch):
         monkeypatch.setenv("SHELL", "/usr/bin/fish")  # not an emitter
-        assert _detect_shell() == "zsh"
+        assert _detect_shell() is None
         monkeypatch.delenv("SHELL", raising=False)
-        assert _detect_shell() == "zsh"
+        assert _detect_shell() is None
+
+    def test_install_refuses_when_shell_undetected(self, monkeypatch, tmp_path, capsys):
+        # a fish user running `completion --install` must NOT get a silent zsh
+        # file written — the auto-detect fallback refuses rather than guess.
+        monkeypatch.setenv("SHELL", "/usr/bin/fish")
+        monkeypatch.setenv("ZDOTDIR", str(tmp_path))
+        rc = completion_handler("sl")(["--install"])
+        assert rc == 1
+        assert "detect your shell" in capsys.readouterr().err
+        assert not (tmp_path / ".zsh" / "completions" / "_sl").exists()
 
     def test_install_target_zsh_honors_zdotdir(self, monkeypatch, tmp_path):
         monkeypatch.setenv("ZDOTDIR", str(tmp_path))

@@ -134,14 +134,18 @@ def complete_args(
         if opt not in blocked
     ]
     pos_spec = _active_positional(specs, preceding)
-    # A prefix that starts with "-" is a flag being typed, not a positional
-    # value: the positional's candidates can't survive the prefix filter, so
-    # skip its (possibly expensive) completer entirely — no cache needed, just
-    # don't compute what provably can't match. "--" as end-of-options flips
-    # subsequent "-"-leading tokens back to positional values.
-    completing_flag = prefix.startswith("-") and "--" not in preceding
-    if pos_spec is not None and not completing_flag:
-        cands.extend(_value_candidates(pos_spec, ctx_args, prefix))
+    if pos_spec is not None:
+        # A "-" prefix (with no "--" end-of-options marker) is a flag being typed.
+        # Static choices are still offered — they're cheap and a value can be
+        # dash-leading (a negative-number choice like -1) — but the positional's
+        # dynamic completer is skipped: its discovery can be expensive (a scan, a
+        # network call) and its values are almost never dash-leading (painted's
+        # own demos/docs completers never are). A completer that does emit a
+        # dash-leading value (rare) is simply not consulted in flag context.
+        completing_flag = prefix.startswith("-") and "--" not in preceding
+        cands.extend(
+            _value_candidates(pos_spec, ctx_args, prefix, include_completer=not completing_flag)
+        )
     return _finish(cands, prefix)
 
 
@@ -231,15 +235,20 @@ def _pending_value_spec(specs: list[ArgSpec], preceding: Sequence[str]) -> ArgSp
     return None
 
 
-def _value_candidates(spec: ArgSpec, ctx_args: ArgsView, prefix: str) -> list[Candidate]:
+def _value_candidates(
+    spec: ArgSpec, ctx_args: ArgsView, prefix: str, *, include_completer: bool = True
+) -> list[Candidate]:
     """An argument's value candidates: static ``choices`` then its ``.completer``.
 
+    ``include_completer=False`` yields only the (cheap, static) ``choices`` and
+    skips the dynamic completer — used in flag context, where the completer's
+    discovery can be expensive and its values are almost never dash-leading.
     A raising completer yields nothing rather than a traceback into the shell —
     completion must degrade quietly at TAB time."""
     cands: list[Candidate] = []
     if spec.choices:
         cands.extend(Candidate(c) for c in spec.choices)
-    if spec.completer is not None:
+    if include_completer and spec.completer is not None:
         ctx = CompletionContext(args=ctx_args, prefix=prefix)
         try:
             items = list(spec.completer(ctx))

@@ -1,7 +1,8 @@
 # Shell completion — the third reflection of the parser
 
 **Status: IMPLEMENTED 2026-06-30** (umbrella branch `autocomplete`, slices
-S1–S7). Native, zero-dependency, *dynamic* shell completion delivered as a
+S1–S11 — S1–S7 the renderer/transport, S8–S11 docs + roadmap polish). Native,
+zero-dependency, *dynamic* shell completion delivered as a
 painted capability rather than a generated static script. This document is the
 design of record — the tying narrative the per-file docstrings
 (`cli/complete.py`, `cli/_argwalk.py`, `cli/completion_shell.py`) don't hold on
@@ -155,12 +156,17 @@ the dissolution test and simple-by-default, that's the wrong trade.
 
 **The dissolution fix that shipped instead.** The measurement exposed real *wasted
 work*, not a caching need: `complete_args` in word context ran the positional's
-completer even when the prefix starts with `-` (a flag being typed), where none of
-those values can survive the prefix filter. `painted demos -<TAB>` therefore paid
-the full ~40ms ast-parse for candidates it then discarded. The producer now skips
-the positional completer in flag context (`prefix` starts with `-`, no `--`
-end-of-options marker) — `demos -<TAB>` drops from ~65ms to the ~26ms roster
-baseline, with no cache, no staleness, and identical output.
+completer even when the prefix starts with `-` (a flag being typed). `painted demos
+-<TAB>` therefore paid the full ~40ms ast-parse for demo names, none of which are
+dash-leading, so they were all discarded. The producer now skips the positional's
+*dynamic completer* in flag context (`prefix` starts with `-`, no `--` end-of-options
+marker) — `demos -<TAB>` drops from ~65ms to the ~26ms roster baseline, no cache.
+Static *choices* are still offered there (they're cheap, and a value can legitimately
+be dash-leading — a negative-number choice like `-1`); only the completer is skipped.
+The one accepted limitation: a completer that itself emits a dash-leading value (the
+`-` stdin sentinel, say) isn't consulted in flag context — painted's own completers
+never do, and it under-lists (a completeness gap) rather than over-lists (an honesty
+violation).
 
 **If discovery is ever measured hot** (a real consumer completer over the floor —
 e.g. a store query over a slow link), the homes are, by axis:
@@ -217,8 +223,11 @@ for single-command `run_cli` tools (they have the transport but no roster comman
 ## 9. Ecosystem placement
 
 The design twin is **argcomplete**: painted reuses the same `action.completer`
-attribute convention, so a completer written for painted is portable to
-argcomplete and back. The difference is philosophical — argcomplete's model is
+attribute, so a completer *attaches* the same way. The calling convention differs,
+though — painted passes one `CompletionContext`, argcomplete passes keyword
+`prefix`/`action`/`parser`/`parsed_args` — so the function bodies aren't drop-in
+portable without a small signature adapter; it's the attachment idiom that's
+shared, not the completer itself. The difference is philosophical — argcomplete's model is
 "re-run the program under a completion monkeypatch," importing and partially
 executing the app on every TAB; painted's gate intercepts *before* any render
 machinery loads (§3). **shtab** was mined narrowly (the zsh `_describe`
@@ -230,9 +239,9 @@ Python ecosystem makes explicit: the render-free promise, structurally enforced,
 because nothing else in the ecosystem is a rendering library that would pay for
 it.
 
-## 10. Slice topology (S1–S7, shipped)
+## 10. Slice topology (S1–S11, shipped)
 
-The v1 arc, per-slice branches off umbrella `autocomplete`, merged `--no-ff`:
+The arc, per-slice branches off umbrella `autocomplete`, merged `--no-ff`:
 
 | Slice | Delivered |
 |-------|-----------|
@@ -243,6 +252,10 @@ The v1 arc, per-slice branches off umbrella `autocomplete`, merged `--no-ff`:
 | S5 | Dogfood: `painted demos <TAB>` (render-free discovery) and `painted docs <TAB>` (honest renderer-loading contrast) |
 | S6 | bash emitter (`completion bash`) |
 | S7 | File/dir fallback (open-slot classification + `\x1f` directive) |
+| S8 | This design-of-record + the doc-IR page (`painted docs completion`, dogfooded) |
+| S9 | Mutex-exclusions: `ArgSpec.mutex_group` carried through the walk, sibling suppression (§6) |
+| S10 | Cache measured → deferred; the flag-context dissolution fix instead (§7) |
+| S11 | Install-polish: `completion [shell] [--install] [--dry-run]`, owned-file-not-dotfile (§8) |
 
 ## 11. Roadmap
 
