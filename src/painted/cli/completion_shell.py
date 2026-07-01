@@ -401,8 +401,14 @@ while IFS= read -r line; do
   if [[ $line == $'\\x1f'* ]]; then files=1; continue; fi
   reply+=("$line")
 done < <(_PAINTED_COMPLETE=zsh COMP_LINE="$_cmd_line" COMP_POINT="${{#_cmd_line}}" "${{words[1]}}" 2>/dev/null)
-(( $#reply )) && _describe -t {prog} '{prog}' reply
-(( files )) && _files
+# Explicit status: `(( files )) && _files` as the last line would return 1
+# whenever no file directive was sent, making compsys think the function found
+# nothing and retry it once per matcher-list entry — re-adding every candidate
+# each round (visible as duplicated match groups).
+local ret=1
+(( $#reply )) && _describe -t {prog} '{prog}' reply && ret=0
+(( files )) && _files && ret=0
+return ret
 """
 
 

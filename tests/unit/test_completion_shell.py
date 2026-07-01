@@ -444,6 +444,14 @@ class TestZshGlueCommandScope:
         # ${words[1]} is the program as actually invoked — still correct.
         assert "${words[1]}" in self._script()
 
+    def test_explicit_return_status(self):
+        # The function must return 0 when it added matches. `(( files )) && _files`
+        # as the last line returns 1 when files=0, making compsys retry the
+        # function once per matcher-list entry and duplicate every candidate.
+        script = self._script()
+        assert "return ret" in script
+        assert not script.rstrip().endswith("_files")
+
     def test_tolerant_split_still_importable_from_shell(self):
         # completion_shell.py re-exports _tolerant_split (from complete.py);
         # the existing import in tests and potential external consumers must work.
