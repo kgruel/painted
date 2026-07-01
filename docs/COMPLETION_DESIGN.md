@@ -177,7 +177,42 @@ e.g. a store query over a slow link), the homes are, by axis:
 
 ## 8. Install
 
-*(S11 — see §"Roadmap" until landed.)*
+`completion [shell] [--install] [--dry-run]`. Print stays the default (backward
+compatible); writing is opt-in. The grammar keeps `shell` a single-meaning
+positional (a flag, not a `completion install zsh` subverb, which would fight
+`choices` and make the positional ambiguous between shells and actions).
+
+- **Auto-detect** — with no shell argument, the shell is detected from `$SHELL`
+  (`_detect_shell`), falling back to `zsh` when unset or unrecognized. A named
+  shell always wins.
+- **`--install`** — writes the glue to the standard user completions *file*
+  (`_install_target`: zsh `${ZDOTDIR:-~}/.zsh/completions/_prog`, bash the
+  bash-completion user dir under `$XDG_DATA_HOME`) via an atomic temp+rename, then
+  prints the one remaining manual step (`_post_install_hint`).
+- **`--dry-run`** — previews the target and glue, writes nothing.
+
+**The consent line:** painted writes a file it *owns* in a completions directory;
+it **never edits a dotfile**. When the shell isn't already looking at that
+directory, painted prints the single line to add (`fpath=(...)` for zsh, the
+`eval` fallback for bash) as *advice* — it can't read the live `$fpath` (a zsh
+runtime array) or verify bash-completion is active, so it states the conditional
+step honestly rather than claiming success. This is also why the **printed** glue
+keeps the universally-correct `${fpath[1]}` placeholder — `--install` knows where
+it wrote and names that path; plain `completion zsh` defers to the user's real
+`$fpath`.
+
+`_install_target` returning `None` is the single source of truth for "installable"
+— a shell painted can emit for but has no install convention for is refused, not
+guessed. Any filesystem or `$HOME` error degrades to printed advice (rc=1), never a
+traceback. The handler and helpers are stdlib-only; `install_completion` is never
+on the TAB path (the gate returns before routing), and `--dry-run` keeps the
+render-free guard's subprocess probe write-free.
+
+**Deferred:** `completion uninstall` (honest symmetry, but the file is one known
+path to `rm`); `--force`/conflict detection (content is deterministic, overwrite
+is safe); any dotfile editing (permanently behind the ownership line); an emit path
+for single-command `run_cli` tools (they have the transport but no roster command
+— a separate `--print-completion` item).
 
 ## 9. Ecosystem placement
 
@@ -211,9 +246,9 @@ The v1 arc, per-slice branches off umbrella `autocomplete`, merged `--no-ff`:
 
 ## 11. Roadmap
 
-- **mutex-exclusions** (S9, this arc) — see §6.
-- **cache** (S10, this arc) — see §7.
-- **install-polish** (S11, this arc) — see §8.
+- **mutex-exclusions** (S9, shipped) — see §6.
+- **cache** (S10, shipped: measured → deferred, dissolution fix) — see §7.
+- **install-polish** (S11, shipped) — see §8.
 - **fish / pwsh emitters** — deferred; `_EMITTERS` and the dialect-aware `_emit`
   make adding them cheap, but the shells aren't there yet.
 - **`complete_via` sugar** — a declarative shorthand for attaching a completer,

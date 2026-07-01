@@ -15,7 +15,13 @@ from painted.cli.completion_shell import (
     run_completion,
     run_single_completion,
 )
-from painted.cli.completion_shell import _parse_comp_line, _tolerant_split
+from painted.cli.completion_shell import (
+    _detect_shell,
+    _install_target,
+    _parse_comp_line,
+    _tolerant_split,
+    install_completion,
+)
 
 
 class TestParseCompLine:
@@ -192,8 +198,19 @@ class TestCompletionCommand:
         assert "_describe" in out
         assert "_files" in out  # the file directive triggers filesystem completion
 
-    def test_defaults_to_zsh(self, capsys):
+    def test_no_arg_falls_back_to_zsh_when_shell_unknown(self, capsys, monkeypatch):
+        monkeypatch.delenv("SHELL", raising=False)
         completion_handler("sl")([])
+        assert capsys.readouterr().out.startswith("#compdef sl")
+
+    def test_no_arg_detects_shell_from_env(self, capsys, monkeypatch):
+        monkeypatch.setenv("SHELL", "/usr/bin/bash")
+        completion_handler("sl")([])
+        assert "complete -F _sl_complete sl" in capsys.readouterr().out
+
+    def test_explicit_shell_overrides_detection(self, capsys, monkeypatch):
+        monkeypatch.setenv("SHELL", "/usr/bin/bash")
+        completion_handler("sl")(["zsh"])
         assert capsys.readouterr().out.startswith("#compdef sl")
 
     def test_emits_bash_complete_script(self, capsys):
@@ -241,6 +258,90 @@ class TestCompletionCommand:
         assert "completion:" in out  # the injected command is itself a candidate
 
 
+class TestCompletionInstall:
+    """`completion --install` writes an owned completion file (never a dotfile)."""
+
+    def test_detect_shell_from_env(self, monkeypatch):
+        monkeypatch.setenv("SHELL", "/opt/homebrew/bin/zsh")
+        assert _detect_shell() == "zsh"
+        monkeypatch.setenv("SHELL", "/bin/bash")
+        assert _detect_shell() == "bash"
+
+    def test_detect_shell_falls_back(self, monkeypatch):
+        monkeypatch.setenv("SHELL", "/usr/bin/fish")  # not an emitter
+        assert _detect_shell() == "zsh"
+        monkeypatch.delenv("SHELL", raising=False)
+        assert _detect_shell() == "zsh"
+
+    def test_install_target_zsh_honors_zdotdir(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("ZDOTDIR", str(tmp_path))
+        assert _install_target("zsh", "sl") == tmp_path / ".zsh" / "completions" / "_sl"
+
+    def test_install_target_bash_xdg(self, monkeypatch, tmp_path):
+        monkeypatch.delenv("BASH_COMPLETION_USER_DIR", raising=False)
+        monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+        expected = tmp_path / "bash-completion" / "completions" / "sl"
+        assert _install_target("bash", "sl") == expected
+
+    def test_install_target_unknown_shell_is_none(self):
+        assert _install_target("fish", "sl") is None
+
+    def test_install_writes_the_file(self, monkeypatch, tmp_path, capsys):
+        monkeypatch.setenv("ZDOTDIR", str(tmp_path))
+        rc = install_completion("zsh", "sl")
+        target = tmp_path / ".zsh" / "completions" / "_sl"
+        assert rc == 0
+        assert target.read_text(encoding="utf-8").startswith("#compdef sl")
+        assert str(target) in capsys.readouterr().out  # hint names the file
+
+    def test_dry_run_writes_nothing(self, monkeypatch, tmp_path, capsys):
+        monkeypatch.setenv("ZDOTDIR", str(tmp_path))
+        rc = install_completion("zsh", "sl", dry_run=True)
+        target = tmp_path / ".zsh" / "completions" / "_sl"
+        out = capsys.readouterr().out
+        assert rc == 0
+        assert not target.exists()
+        assert "Would write" in out and str(target) in out and "#compdef sl" in out
+
+    def test_idempotent_reinstall(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("ZDOTDIR", str(tmp_path))
+        install_completion("zsh", "sl")
+        install_completion("zsh", "sl")
+        target = tmp_path / ".zsh" / "completions" / "_sl"
+        assert target.is_file()  # single file, no .tmp residue
+        assert not (target.parent / "_sl.tmp").exists()
+
+    def test_unsupported_install_shell_refuses(self, capsys):
+        rc = install_completion("fish", "sl")
+        assert rc == 1
+        assert "installable" in capsys.readouterr().err
+
+    def test_write_error_degrades_to_advice(self, monkeypatch, tmp_path, capsys):
+        # make the target dir unwritable-into by pointing at a file, not a dir
+        blocker = tmp_path / "blocker"
+        blocker.write_text("x")
+        monkeypatch.setenv("ZDOTDIR", str(blocker))  # .zsh under a file -> OSError
+        rc = install_completion("zsh", "sl")
+        assert rc == 1
+        assert "manually" in capsys.readouterr().err  # falls back to advice
+
+    def test_flags_declared_and_shell_default_none(self):
+        parser = argparse.ArgumentParser(add_help=False)
+        completion_add_args(parser)
+        dests = {a.dest for a in parser._actions}
+        assert {"install", "dry_run", "shell"} <= dests
+        shell_action = next(a for a in parser._actions if a.dest == "shell")
+        assert shell_action.default is None
+        assert shell_action.choices is not None and {"bash", "zsh"} <= set(shell_action.choices)
+
+    def test_install_flags_complete_honestly(self):
+        from painted.cli.complete import complete_app
+
+        cmd = AppCommand("completion", "setup", lambda a: 0, add_args=completion_add_args)
+        vals = {c.value for c in complete_app([cmd], ["completion"], "--")}
+        assert "--install" in vals and "--dry-run" in vals
+
+
 class TestRendererFreeGuard:
     """The transport stays on the no-renderer-on-TAB path."""
 
@@ -275,6 +376,17 @@ class TestRendererFreeGuard:
             "from painted.cli.completion_shell import run_completion\n"
             "cmds=[AppCommand('read','Read',lambda a:0)]\n"
             "run_completion(cmds, prog='sl', default=None, shell='zsh')\n"
+        )
+        assert flags == {"block": False, "doc": False}
+
+    def test_install_is_render_free(self):
+        # writing the glue must not pull the renderer either (dry_run avoids the
+        # actual filesystem write in the probe).
+        flags = self._imports_renderer(
+            "import os, tempfile\n"
+            "os.environ['ZDOTDIR']=tempfile.mkdtemp()\n"
+            "from painted.cli.completion_shell import install_completion\n"
+            "install_completion('zsh','sl', dry_run=True)\n"
         )
         assert flags == {"block": False, "doc": False}
 
