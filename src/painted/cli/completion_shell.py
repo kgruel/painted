@@ -23,6 +23,7 @@ import os
 import shlex
 import sys
 from collections.abc import Callable, Sequence
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .complete import (
@@ -193,38 +194,161 @@ def _emit(
 
 
 # =============================================================================
-# The auto-injected `completion` command — emit-only glue
+# The auto-injected `completion` command — print glue, or --install it
 # =============================================================================
 
 
+def _detect_shell() -> str:
+    """The user's shell from ``$SHELL`` when the shell argument is omitted.
+
+    Falls back to the established ``zsh`` default when ``$SHELL`` is unset or
+    names a shell painted can't emit for — a smarter default for an emit command,
+    still overridable by naming the shell explicitly."""
+    name = Path(os.environ.get("SHELL", "")).name
+    return name if name in _EMITTERS else "zsh"
+
+
+def _install_target(shell: str, prog: str) -> Path | None:
+    """The standard user completions *file* for ``shell`` (``None`` when painted
+    has no install convention for it).
+
+    Single source of truth for "is this shell installable": ``None`` here means
+    the handler refuses — install is a subset of emit, painted won't write to a
+    directory whose completion protocol it doesn't know. May raise ``RuntimeError``
+    if ``$HOME`` is unresolvable; the caller degrades that to advice."""
+    if shell == "zsh":
+        base = Path(os.environ.get("ZDOTDIR") or Path.home())
+        return base / ".zsh" / "completions" / f"_{prog}"
+    if shell == "bash":
+        user_dir = os.environ.get("BASH_COMPLETION_USER_DIR")
+        base = (
+            Path(user_dir)
+            if user_dir
+            else Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share")
+            / "bash-completion"
+        )
+        return base / "completions" / prog
+    return None
+
+
+def _post_install_hint(shell: str, prog: str, target: Path) -> str:
+    """The one remaining manual step, in plain text.
+
+    Honest by construction: painted can't read the live ``$fpath`` (a zsh runtime
+    array) or verify bash-completion is active, so it states the conditional step
+    as advice rather than claiming success."""
+    if shell == "zsh":
+        return (
+            f"Wrote {target}.\n"
+            f"If {target.parent} is not on your $fpath, add to ~/.zshrc before compinit:\n"
+            f"  fpath=({target.parent} $fpath)\n"
+            "  autoload -Uz compinit && compinit\n"
+            "Then restart your shell."
+        )
+    return (
+        f"Wrote {target}.\n"
+        "Restart your shell. If completions do not appear, ensure bash-completion "
+        f'is installed, or add to ~/.bashrc:\n  eval "$({prog} completion bash)"'
+    )
+
+
+def _atomic_write(target: Path, content: str) -> None:
+    """Write via a temp file + ``os.replace`` so a killed or failed write never
+    leaves a truncated completion file (``os.replace`` is atomic on one
+    filesystem; the temp sits beside the target, so it always is)."""
+    tmp = target.with_name(f"{target.name}.tmp")
+    tmp.write_text(content, encoding="utf-8")
+    os.replace(tmp, target)
+
+
+def install_completion(shell: str, prog: str, *, dry_run: bool = False) -> int:
+    """Write the shell glue to the standard user completions file and print the
+    one remaining manual step. ``dry_run`` previews the plan without writing.
+
+    Never edits a dotfile — it writes a file painted *owns* in a completions
+    directory, and tells the user the single line to add if their shell isn't
+    already looking there. Returns 0, or 1 with a manual fallback on an
+    unsupported shell or a filesystem/``$HOME`` error — completion setup must
+    degrade to advice, never a traceback."""
+    emit = _EMITTERS.get(shell)
+    if emit is None:
+        installable = ", ".join(sorted(_EMITTERS))
+        sys.stderr.write(f"Cannot install for {shell!r} (installable: {installable})\n")
+        return 1
+    content = emit(prog)
+    try:
+        target = _install_target(shell, prog)
+    except (OSError, RuntimeError):
+        target = None
+    if target is None:
+        sys.stderr.write(
+            f"No install location for {shell!r}; print the glue instead:\n"
+            f"  {prog} completion {shell}\n"
+        )
+        return 1
+    hint = _post_install_hint(shell, prog, target)
+    if dry_run:
+        sys.stdout.write(f"Would write {target}:\n\n{content}\n{hint}\n")
+        return 0
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        _atomic_write(target, content)
+    except (OSError, RuntimeError) as exc:
+        sys.stderr.write(
+            f"Could not write {target}: {exc}\n"
+            f"Print and install manually: {prog} completion {shell}\n"
+        )
+        return 1
+    sys.stdout.write(hint + "\n")
+    return 0
+
+
 def completion_add_args(parser: argparse.ArgumentParser) -> None:
-    """The ``completion`` command's one argument: the shell to emit glue for.
+    """The ``completion`` command's arguments: which shell, and whether to write.
 
     Declared via ``add_args`` so the command self-describes under ``-h`` and
-    completes its own value (``painted completion <TAB>`` → ``zsh``)."""
+    completes its own value (``painted completion <TAB>`` → ``zsh``/``bash``, and
+    ``painted completion --<TAB>`` → ``--install``/``--dry-run``)."""
     parser.add_argument(
         "shell",
         nargs="?",
-        default="zsh",
+        default=None,
         choices=sorted(_EMITTERS),
-        help="Shell to print completion setup for",
+        help="Shell to set up (default: detected from $SHELL)",
+    )
+    parser.add_argument(
+        "--install",
+        action="store_true",
+        help="Write the glue to your completions dir instead of printing it",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Preview the install (target + glue) without writing",
     )
 
 
 def completion_handler(prog: str | None) -> Callable[[list[str]], int]:
     """The ``completion`` command handler, closed over ``prog``.
 
-    Prints the glue for the requested shell to stdout (default ``zsh``) and
-    returns 0; an unsupported shell is a render-free error to stderr."""
+    Prints the glue for the requested shell (default: detected from ``$SHELL``)
+    and returns 0; ``--install`` writes it to the completions dir instead, and
+    ``--dry-run`` previews that. Hand-scans ``argv`` rather than argparse-parsing
+    so an unsupported shell is a friendly rc=1, not an argparse exit-2."""
 
     def handler(argv: list[str]) -> int:
-        shell = next((a for a in argv if not a.startswith("-")), "zsh")
+        install = "--install" in argv
+        dry_run = "--dry-run" in argv
+        shell = next((a for a in argv if not a.startswith("-")), None) or _detect_shell()
+        prog_name = prog or "painted"
+        if install or dry_run:
+            return install_completion(shell, prog_name, dry_run=dry_run)
         emit = _EMITTERS.get(shell)
         if emit is None:
             supported = ", ".join(sorted(_EMITTERS))
             sys.stderr.write(f"Unsupported shell: {shell!r} (supported: {supported})\n")
             return 1
-        sys.stdout.write(emit(prog or "painted"))
+        sys.stdout.write(emit(prog_name))
         return 0
 
     return handler

@@ -378,9 +378,12 @@ def _with_completion(commands: tuple[AppCommand, ...], prog: str | None) -> tupl
     return commands + (
         AppCommand(
             COMPLETION_COMMAND_NAME,
-            "Print shell completion setup (e.g. `completion zsh`)",
+            "Set up shell completion (print the glue, or --install it)",
             completion_handler(prog),
-            detail=f'{prog or "app"} completion zsh > "${{fpath[1]}}/_{prog or "app"}"',
+            detail=(
+                f"{prog or 'app'} completion --install"
+                f'   (or print: completion zsh > "${{fpath[1]}}/_{prog or "app"}")'
+            ),
             add_args=completion_add_args,
         ),
     )

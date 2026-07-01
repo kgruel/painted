@@ -255,6 +255,14 @@ def completion_doc() -> Doc:
                         lang="bash",
                     ),
                     Prose(
+                        "Or let painted write the file for you: yourapp completion "
+                        "--install detects your shell from $SHELL and drops the glue in "
+                        "your completions directory (--dry-run previews it first). It "
+                        "writes only a file painted owns and prints the one line to add "
+                        "if your shell isn't already looking there — it never edits a "
+                        "dotfile on your behalf."
+                    ),
+                    Prose(
                         "A multi-command app built with run_app gets the completion "
                         "command for free — yourapp completion <TAB> even completes its "
                         "own shell argument (zsh, bash). The same machinery drives a "
