@@ -65,6 +65,8 @@ class TestGateEndToEnd:
     def test_docs_tab_emits_names(self, capsys, monkeypatch):
         values = {ln.split(":")[0] for ln in self._complete("painted docs ", capsys, monkeypatch)}
         assert "primitives" in values
+        # dogfood: the completion page the feature documents now completes itself.
+        assert "completion" in values
 
 
 class TestRenderFree:

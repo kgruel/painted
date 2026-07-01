@@ -1,0 +1,86 @@
+<article class="painted-doc">
+<h1>Shell completion</h1>
+<p>Press TAB and your painted CLI completes itself — command names, flags, their choices, and the dynamic values you hang on an argument. Completion is the third reflection of your argparse parser, after parse and help: the same declarations that drive -h drive TAB, so what completes is exactly what the parser accepts — never a flag it would reject.</p>
+<dl>
+<dt>yourapp completion zsh|bash</dt>
+<dd>Print the shell glue to install — completion is opt-in setup you run once.</dd>
+<dd class="detail">run_app adds this command for you; painted prints the function, you install it, painted never edits a dotfile.</dd>
+<dt>Candidate(value, description)</dt>
+<dd>One completion result. The description shows beside the value in zsh.</dd>
+<dd class="detail">A bare str candidate is normalized to Candidate(value, &#x27;&#x27;); descriptions are painted&#x27;s edge over a names-only completer.</dd>
+<dt>.completer</dt>
+<dd>A callable you hang on an argument to complete values the parser can&#x27;t enumerate.</dd>
+<dd class="detail">action.completer = fn — the argcomplete-compatible attribute; the producer invokes it with a CompletionContext.</dd>
+<dt>CompletionContext</dt>
+<dd>What a completer sees: the args typed so far (ctx.args) plus the prefix under the cursor.</dd>
+<dd class="detail">ctx.args is the same read-only view render/fetch receive, so a completer can scope candidates to what&#x27;s already on the line.</dd>
+</dl>
+<section>
+<h2>Install</h2>
+<p>Completion is opt-in: painted prints the shell glue and you install it once. Nothing is edited on your behalf — the glue is a small function that calls your program back for candidates as you type.</p>
+<pre><code class="language-bash"># zsh — save the function on your $fpath, then restart the shell
+yourapp completion zsh &gt; &quot;${fpath[1]}/_yourapp&quot;</code></pre>
+<pre><code class="language-bash"># bash — source the function from your ~/.bashrc
+eval &quot;$(yourapp completion bash)&quot;</code></pre>
+<p>A multi-command app built with run_app gets the completion command for free — yourapp completion &lt;TAB&gt; even completes its own shell argument (zsh, bash). The same machinery drives a single-command run_cli tool: once the glue is installed, TAB completes its flags too.</p>
+</section>
+<section>
+<h2>What you get for free</h2>
+<p>Every command name (with its one-line summary), every flag your parser declares, and every static choice complete with no extra work — they are already in the parser that powers -h. In zsh, each candidate&#x27;s help text rides along as a description; bash shows the values alone.</p>
+<figure>
+<pre class="painted-output"><span style="color: #00c0c0">--json</span><span style="opacity: 0.6">     JSON output (implies --static)</span>               
+<span style="color: #00c0c0">--kind</span><span style="opacity: 0.6">     filter by kind</span>                               
+<span style="color: #00c0c0">--plain</span><span style="opacity: 0.6">    Plain text, no ANSI codes</span>                    
+<span style="color: #00c0c0">--quiet</span><span style="opacity: 0.6">    Minimal output (zoom=0)</span>                      
+<span style="color: #00c0c0">--since</span><span style="opacity: 0.6">    only rows after this time</span>                    
+<span style="color: #00c0c0">--verbose</span><span style="opacity: 0.6">  Increase detail level (-v=detailed, -vv=full)</span>
+</pre>
+<figcaption>Live producer output for `yourapp --&lt;TAB&gt;`: your declared flags plus the framework flags you get free, each with its description.</figcaption>
+</figure>
+</section>
+<section>
+<h2>Dynamic values: the .completer seam</h2>
+<p>Static choices cover the values you know at parse time. For values that are runtime data — a record id, a branch name, a vertex — hang a completer on the argument. It receives a CompletionContext and returns bare strings or described Candidates; painted normalizes either and never invents a result the completer didn&#x27;t yield.</p>
+<pre><code class="language-python">from painted.cli import Candidate, CompletionContext
+
+def complete_branch(ctx: CompletionContext) -&gt; list[Candidate]:
+    # ctx.prefix is the partial token; ctx.args is what&#x27;s already typed.
+    return [Candidate(name, subject) for name, subject in recent_branches()]
+
+def add_args(parser):
+    arg = parser.add_argument(&quot;branch&quot;, help=&quot;branch to check out&quot;)
+    arg.completer = complete_branch   # the .completer seam</code></pre>
+<p>Return Candidate(value, description) to show context in zsh, or a bare string when the value speaks for itself. Scope to the line via ctx.args — a --to completer can narrow to branches that aren&#x27;t the --from already typed. A completer that raises degrades to no candidates rather than spilling a traceback into the shell.</p>
+</section>
+<section>
+<h2>File and directory completion</h2>
+<p>An argument with no choices and no completer is an open slot — a free-text value the parser can&#x27;t enumerate. painted classifies it and lets the shell complete paths there (zsh _files, bash&#x27;s default), so ~ expansion, hidden-file rules, and your own zstyle all keep working. painted never reads the disk; the shell already knows how. To take a free-text value with no path fallback, give the argument a completer that returns an empty list — the explicit opt-out.</p>
+<pre><code class="language-python">def add_args(parser):
+    # open slot -&gt; shell completes paths here
+    parser.add_argument(&quot;path&quot;, help=&quot;file to read&quot;)
+    # free text, no file fallback -&gt; explicit opt-out
+    msg = parser.add_argument(&quot;--message&quot;, help=&quot;commit message&quot;)
+    msg.completer = lambda ctx: []</code></pre>
+</section>
+<section>
+<h2>Why this matters</h2>
+<p>Pressing TAB imports none of painted&#x27;s renderer and runs none of your fetch — completion answers from the parser&#x27;s declarations alone. So completion is instant no matter how expensive your program is to run, and typing TAB can never trigger the work your command would do. That guarantee is structural, not a promise: the completion path physically cannot reach the rendering code.</p>
+</section>
+<section>
+<h2>Design note</h2>
+<p>Completion is the third reflection of one argparse parser. A single walk over the parser&#x27;s actions (walk_args → ArgSpec) feeds both projectors: help renders each spec to a Def, completion renders it to a Candidate. There is no second source of truth to drift — the flag you see under -h is the flag that completes.</p>
+<p>The honesty rule governs every candidate: it exists only because the parser, or a declared .completer, produced it. painted under-lists rather than suggest a flag the parser would reject. A candidate you can&#x27;t act on is worse than one that&#x27;s missing.</p>
+<p>The render-free guarantee is enforced by construction. The producer, the transport, and the walk import only stdlib and each other; an AppCommand is read by attribute, never constructed. Pressing TAB cannot pull core.block or core.doc — the no-renderer-on-TAB property is a structural fact the module boundaries keep true.</p>
+<p>Placement in the ecosystem is deliberate and honest. The .completer attribute is the argcomplete convention, so a completer written for painted is portable; what painted adds is the render-free promise and zsh descriptions sourced from the same help text — distinct value, not a reimplementation. Full design: docs/COMPLETION_DESIGN.md.</p>
+<figure>
+<pre class="painted-output"><span style="color: #00c0c0">build_parser → walk_args → ArgSpec</span>         
+                                           
+╭─────────────╮  ╭───────╮  ╭─────────────╮
+│ <span style="font-weight: bold">parse</span>       │  │ <span style="font-weight: bold">help</span>  │  │ <span style="font-weight: bold">complete</span>    │
+│ <span style="opacity: 0.6">→ Namespace</span> │  │ <span style="opacity: 0.6">→ Def</span> │  │ <span style="opacity: 0.6">→ Candidate</span> │
+╰─────────────╯  ╰───────╯  ╰─────────────╯
+</pre>
+<figcaption>One walk, three reflections: build_parser → walk_args → ArgSpec, projected to parse, help, and completion.</figcaption>
+</figure>
+</section>
+</article>

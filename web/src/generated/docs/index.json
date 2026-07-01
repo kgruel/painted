@@ -2,5 +2,9 @@
   {
     "name": "primitives",
     "description": "The render-layer value types: Style, Cell, Span, Line, Block"
+  },
+  {
+    "name": "completion",
+    "description": "Shell completion: TAB completes commands, flags, choices, and dynamic values"
   }
 ]
