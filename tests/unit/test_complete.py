@@ -242,6 +242,48 @@ class TestProducer:
         assert self._values(complete_args(p, ["--key"], "")) == ["ok"]
 
 
+class TestFlagContextSkipsPositionalCompleter:
+    """A "-" prefix is a flag being typed, so the positional's (possibly
+    expensive) completer is not run — its values can't survive the prefix filter.
+    The dissolution fix behind the cache decision (docs/COMPLETION_DESIGN.md §7)."""
+
+    def _spy_parser(self):
+        calls = {"n": 0}
+
+        def completer(ctx):
+            calls["n"] += 1
+            return ["alpha", "beta"]
+
+        p = argparse.ArgumentParser(add_help=False)
+        p.add_argument("name").completer = completer
+        p.add_argument("--flag", action="store_true")
+        return p, calls
+
+    def test_flag_context_does_not_invoke_completer(self):
+        p, calls = self._spy_parser()
+        vals = [c.value for c in complete_args(p, [], "-")]
+        assert calls["n"] == 0  # completer skipped — no wasted work
+        assert "--flag" in vals and "alpha" not in vals
+
+    def test_empty_prefix_still_lists_positional_values(self):
+        p, calls = self._spy_parser()
+        vals = [c.value for c in complete_args(p, [], "")]
+        assert calls["n"] == 1
+        assert "alpha" in vals and "beta" in vals
+
+    def test_bare_prefix_still_invokes_completer(self):
+        p, calls = self._spy_parser()
+        vals = [c.value for c in complete_args(p, [], "al")]
+        assert calls["n"] == 1
+        assert vals == ["alpha"]  # prefix-filtered positional value
+
+    def test_end_of_options_restores_positional_context(self):
+        # after "--", a "-"-leading token is a positional value again.
+        p, calls = self._spy_parser()
+        complete_args(p, ["--"], "-")
+        assert calls["n"] == 1  # completer DID run (not flag context anymore)
+
+
 class TestMutexExclusions:
     """A mutually-exclusive sibling is suppressed once one member is on the line
     (the honesty rule: argparse would reject offering it). Uses the real

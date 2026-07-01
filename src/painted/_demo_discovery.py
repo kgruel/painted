@@ -33,6 +33,17 @@ class DemoEntry:
 # Discovery
 # ---------------------------------------------------------------------------
 
+# In-process memo, BY DESIGN not a cross-process one. It serves the `painted
+# demos` render path (one process, discover_demos called repeatedly); it is COLD
+# on every TAB, because each completion is a fresh subprocess that calls
+# discover_demos exactly once. So it does not reduce TAB latency — measured ~40ms
+# to ast.parse the ~39 demo files (of a ~65ms TAB). That cost was weighed and left
+# alone (docs/COMPLETION_DESIGN.md §7): nothing crosses the ~100ms perception
+# floor, and a cross-process disk cache would trade an imperceptible saving for a
+# write on the render-free TAB path plus a staleness class. If demo discovery is
+# ever measured genuinely hot, the home is a build-time drift-gated manifest
+# (the ./dev panels / outputgen pattern), not a runtime cache — a JSON read, zero
+# runtime write, zero staleness. Do not promote this memo to disk.
 _CACHE: list[DemoEntry] | None = None
 
 _GROUPS = ("primitives", "patterns", "apps", "examples", "showcase")
