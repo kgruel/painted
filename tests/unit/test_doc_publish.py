@@ -167,3 +167,35 @@ class TestEmit:
         entries = json.loads((tmp_path / "index.json").read_text(encoding="utf-8"))
         assert [e["name"] for e in entries] == list(DOCS)
         assert all(e["description"] == DOCS[e["name"]].description for e in entries)
+
+
+class TestCompletionPage:
+    """The 'completion' doc-IR page (dogfoods the feature it documents)."""
+
+    def test_registered(self):
+        assert "completion" in DOCS
+        assert isinstance(DOCS["completion"].build(), Doc)
+
+    def test_renders_at_every_depth(self):
+        doc = DOCS["completion"].build()
+        for depth in (Zoom.MINIMAL, Zoom.DETAILED, Zoom.FULL):
+            block = doc_lens(doc, fidelity=Fidelity(depth=depth), width=80)
+            assert block.height > 0, depth
+
+    def test_figures_render(self):
+        # guards the lazy producer import + the column math in _candidate_gallery.
+        from painted._doc_pages import _candidate_gallery, _reflections_diagram
+
+        for fig in (_candidate_gallery(), _reflections_diagram()):
+            assert fig.width > 0 and fig.height > 0
+
+    def test_has_rationale_layer(self):
+        from painted._docs_cli import _collect_tags
+
+        names = {tag.name for tag in _collect_tags(DOCS["completion"].build())}
+        assert "rationale" in names  # so `painted docs completion --rationale` exists
+
+    def test_publishes_figure_and_rationale(self):
+        html = to_html(DOCS["completion"].build())
+        assert "<figure>" in html  # the live producer gallery routed through render_html
+        assert "Design note" in html  # the tag="rationale" section
