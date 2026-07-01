@@ -11,7 +11,7 @@ from __future__ import annotations
 import sys
 from typing import TYPE_CHECKING
 
-from painted.cli import AppCommand, run_app
+from painted.cli import AppCommand, complete_via, run_app
 
 if TYPE_CHECKING:
     import argparse
@@ -78,8 +78,10 @@ def _demos_add_args(parser: argparse.ArgumentParser) -> None:
     exists so completion and intercepted `-h` can see the one argument that
     matters — the demo to run. The completer is the T3 dynamic seam: demo names
     are runtime data no static `choices` can hold."""
-    arg = parser.add_argument("name", nargs="?", help="Demo to run (omit to list)")
-    arg.completer = _complete_demo_names  # type: ignore[attr-defined]
+    complete_via(
+        parser.add_argument("name", nargs="?", help="Demo to run (omit to list)"),
+        _complete_demo_names,
+    )
 
 
 def _complete_demo_names(ctx: CompletionContext) -> list[Candidate]:
@@ -98,8 +100,10 @@ def _docs_add_args(parser: argparse.ArgumentParser) -> None:
     so this completer legitimately loads the renderer when invoked — the honest
     contrast to the render-free demos completer: a domain completer pays for the
     data it reflects (cf. loops `--key` hitting the store)."""
-    arg = parser.add_argument("name", nargs="?", help="Doc to render (omit to list)")
-    arg.completer = _complete_doc_names  # type: ignore[attr-defined]
+    complete_via(
+        parser.add_argument("name", nargs="?", help="Doc to render (omit to list)"),
+        _complete_doc_names,
+    )
 
 
 def _complete_doc_names(ctx: CompletionContext) -> list[Candidate]:

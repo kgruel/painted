@@ -77,6 +77,26 @@ class CompletionContext:
 Completer = Callable[["CompletionContext"], Iterable["str | Candidate"]]
 
 
+def complete_via(action: argparse.Action, completer: Completer) -> argparse.Action:
+    """Attach a dynamic ``completer`` to an argparse ``action`` and return it.
+
+    The typed front door for the ``.completer`` seam — composes inline with
+    ``add_argument`` so the attachment is one declarative line::
+
+        complete_via(parser.add_argument("branch", help="..."), complete_branch)
+
+    ``action.completer = completer`` works too and is what argcomplete reads, but
+    argparse's ``Action`` has no ``completer`` field, so a direct assignment
+    trips the editor's type checker at every call site. This sets the attribute
+    the same way the producer reads it (``getattr(action, "completer", None)``) —
+    symmetric ``setattr``/``getattr`` on one conventional attribute — so no site,
+    painted's own included, has to reach past the type. A completer attached this
+    way stays visible to argcomplete; ``complete_via`` is the front door, not a
+    replacement for the underlying attribute."""
+    setattr(action, "completer", completer)
+    return action
+
+
 # =============================================================================
 # The producer — one parser's candidates for the token under the cursor
 # =============================================================================

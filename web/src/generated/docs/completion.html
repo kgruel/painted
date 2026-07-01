@@ -8,9 +8,9 @@
 <dt>Candidate(value, description)</dt>
 <dd>One completion result. The description shows beside the value in zsh.</dd>
 <dd class="detail">A bare str candidate is normalized to Candidate(value, &#x27;&#x27;); descriptions are painted&#x27;s edge over a names-only completer.</dd>
-<dt>.completer</dt>
-<dd>A callable you hang on an argument to complete values the parser can&#x27;t enumerate.</dd>
-<dd class="detail">action.completer = fn — the argcomplete-compatible attribute; the producer invokes it with a CompletionContext.</dd>
+<dt>complete_via / .completer</dt>
+<dd>Attach a callable that completes values the parser can&#x27;t enumerate.</dd>
+<dd class="detail">complete_via(action, fn) is the typed front door; it sets the argcomplete-compatible action.completer, which the producer invokes with a CompletionContext.</dd>
 <dt>CompletionContext</dt>
 <dd>What a completer sees: the args typed so far (ctx.args) plus the prefix under the cursor.</dd>
 <dd class="detail">ctx.args is the same read-only view render/fetch receive, so a completer can scope candidates to what&#x27;s already on the line.</dd>
@@ -42,16 +42,15 @@ eval &quot;$(yourapp completion bash)&quot;</code></pre>
 <section>
 <h2>Dynamic values: the .completer seam</h2>
 <p>Static choices cover the values you know at parse time. For values that are runtime data — a record id, a branch name, a vertex — hang a completer on the argument. It receives a CompletionContext and returns bare strings or described Candidates; painted normalizes either and never invents a result the completer didn&#x27;t yield.</p>
-<pre><code class="language-python">from painted.cli import Candidate, CompletionContext
+<pre><code class="language-python">from painted.cli import Candidate, CompletionContext, complete_via
 
 def complete_branch(ctx: CompletionContext) -&gt; list[Candidate]:
     # ctx.prefix is the partial token; ctx.args is what&#x27;s already typed.
     return [Candidate(name, subject) for name, subject in recent_branches()]
 
 def add_args(parser):
-    arg = parser.add_argument(&quot;branch&quot;, help=&quot;branch to check out&quot;)
-    arg.completer = complete_branch   # the .completer seam</code></pre>
-<p>Return Candidate(value, description) to show context in zsh, or a bare string when the value speaks for itself. Scope to the line via ctx.args — a --to completer can narrow to branches that aren&#x27;t the --from already typed. A completer that raises degrades to no candidates rather than spilling a traceback into the shell.</p>
+    complete_via(parser.add_argument(&quot;branch&quot;, help=&quot;...&quot;), complete_branch)</code></pre>
+<p>complete_via attaches the completer in one line and returns the argument; it&#x27;s the typed front door for the argcomplete-style action.completer attribute, which still works if you prefer it. Return Candidate(value, description) to show context in zsh, or a bare string when the value speaks for itself. Scope to the line via ctx.args — a --to completer can narrow to branches that aren&#x27;t the --from already typed. A completer that raises degrades to no candidates rather than spilling a traceback into the shell.</p>
 </section>
 <section>
 <h2>File and directory completion</h2>
@@ -60,8 +59,7 @@ def add_args(parser):
     # open slot -&gt; shell completes paths here
     parser.add_argument(&quot;path&quot;, help=&quot;file to read&quot;)
     # free text, no file fallback -&gt; explicit opt-out
-    msg = parser.add_argument(&quot;--message&quot;, help=&quot;commit message&quot;)
-    msg.completer = lambda ctx: []</code></pre>
+    complete_via(parser.add_argument(&quot;--message&quot;, help=&quot;...&quot;), lambda ctx: [])</code></pre>
 </section>
 <section>
 <h2>Why this matters</h2>

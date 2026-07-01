@@ -1,7 +1,7 @@
 # Shell completion — the third reflection of the parser
 
 **Status: IMPLEMENTED 2026-06-30** (umbrella branch `autocomplete`, slices
-S1–S11 — S1–S7 the renderer/transport, S8–S11 docs + roadmap polish). Native,
+S1–S13 — S1–S7 the renderer/transport, S8–S13 docs + roadmap polish). Native,
 zero-dependency, *dynamic* shell completion delivered as a
 painted capability rather than a generated static script. This document is the
 design of record — the tying narrative the per-file docstrings
@@ -256,6 +256,8 @@ The arc, per-slice branches off umbrella `autocomplete`, merged `--no-ff`:
 | S9 | Mutex-exclusions: `ArgSpec.mutex_group` carried through the walk, sibling suppression (§6) |
 | S10 | Cache measured → deferred; the flag-context dissolution fix instead (§7) |
 | S11 | Install-polish: `completion [shell] [--install] [--dry-run]`, owned-file-not-dotfile (§8) |
+| S12 | Arc review remediation (6 adversarially-verified findings) |
+| S13 | `complete_via` — the typed front door for the `.completer` seam (§11) |
 
 ## 11. Roadmap
 
@@ -264,8 +266,13 @@ The arc, per-slice branches off umbrella `autocomplete`, merged `--no-ff`:
 - **install-polish** (S11, shipped) — see §8.
 - **fish / pwsh emitters** — deferred; `_EMITTERS` and the dialect-aware `_emit`
   make adding them cheap, but the shells aren't there yet.
-- **`complete_via` sugar** — a declarative shorthand for attaching a completer,
-  deferred until the `.completer` attribute proves ergonomically insufficient.
+- **`complete_via`** (shipped) — the typed front door for the `.completer` seam:
+  `complete_via(action, completer)` sets the attribute (via `setattr`, symmetric
+  with the producer's `getattr` read) and returns the action, so attachment is
+  one inline line with no reach past argparse's type at the call site. The raw
+  `action.completer =` attribute still works and is what argcomplete reads —
+  `complete_via` is a front door, not a replacement. Dogfooded: painted's own two
+  completer attachments (`__main__.py`) use it and shed their `# type: ignore`.
 - **`help_args` → `add_args` cross-repo sweep** — loops uses `help_args` heavily
   but depends on *published* painted with no editable pin, so the migration is a
   coordinated, version-gated, cross-repo change. Deferred.

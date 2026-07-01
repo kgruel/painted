@@ -216,11 +216,11 @@ def completion_doc() -> Doc:
                         "descriptions are painted's edge over a names-only completer.",
                     ),
                     Def(
-                        ".completer",
-                        "A callable you hang on an argument to complete values the "
-                        "parser can't enumerate.",
-                        "action.completer = fn — the argcomplete-compatible attribute; "
-                        "the producer invokes it with a CompletionContext.",
+                        "complete_via / .completer",
+                        "Attach a callable that completes values the parser can't enumerate.",
+                        "complete_via(action, fn) is the typed front door; it sets the "
+                        "argcomplete-compatible action.completer, which the producer "
+                        "invokes with a CompletionContext.",
                     ),
                     Def(
                         "CompletionContext",
@@ -304,18 +304,20 @@ def completion_doc() -> Doc:
                     ),
                     Code(
                         text=(
-                            "from painted.cli import Candidate, CompletionContext\n"
+                            "from painted.cli import Candidate, CompletionContext, complete_via\n"
                             "\n"
                             "def complete_branch(ctx: CompletionContext) -> list[Candidate]:\n"
                             "    # ctx.prefix is the partial token; ctx.args is what's already typed.\n"
                             "    return [Candidate(name, subject) for name, subject in recent_branches()]\n"
                             "\n"
                             "def add_args(parser):\n"
-                            '    arg = parser.add_argument("branch", help="branch to check out")\n'
-                            "    arg.completer = complete_branch   # the .completer seam"
+                            '    complete_via(parser.add_argument("branch", help="..."), complete_branch)'
                         ),
                     ),
                     Prose(
+                        "complete_via attaches the completer in one line and returns the "
+                        "argument; it's the typed front door for the argcomplete-style "
+                        "action.completer attribute, which still works if you prefer it. "
                         "Return Candidate(value, description) to show context in zsh, or "
                         "a bare string when the value speaks for itself. Scope to the "
                         "line via ctx.args — a --to completer can narrow to branches "
@@ -344,8 +346,7 @@ def completion_doc() -> Doc:
                             "    # open slot -> shell completes paths here\n"
                             '    parser.add_argument("path", help="file to read")\n'
                             "    # free text, no file fallback -> explicit opt-out\n"
-                            '    msg = parser.add_argument("--message", help="commit message")\n'
-                            "    msg.completer = lambda ctx: []"
+                            '    complete_via(parser.add_argument("--message", help="..."), lambda ctx: [])'
                         ),
                     ),
                 ),
