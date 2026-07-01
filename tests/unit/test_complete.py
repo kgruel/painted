@@ -118,6 +118,45 @@ class TestContractTypes:
         assert "painted.cli._argwalk" in sys.modules
 
 
+class TestCompleteVia:
+    """complete_via — the typed front door for the .completer seam."""
+
+    def _completer(self):
+        return lambda ctx: [Candidate("a"), Candidate("b")]
+
+    def test_attaches_and_returns_the_action(self):
+        from painted.cli.complete import complete_via
+
+        p = argparse.ArgumentParser(add_help=False)
+        fn = self._completer()
+        action = p.add_argument("name")
+        returned = complete_via(action, fn)
+        assert returned is action  # returns the action for inline composition
+        assert getattr(action, "completer", None) is fn  # sets what argcomplete reads
+
+    def test_flows_through_the_walk(self):
+        from painted.cli.complete import complete_via
+
+        p = argparse.ArgumentParser(add_help=False)
+        fn = self._completer()
+        complete_via(p.add_argument("name"), fn)
+        spec = next(s for s in walk_args(p) if s.dest == "name")
+        assert spec.completer is fn
+
+    def test_producer_invokes_it(self):
+        from painted.cli.complete import complete_args, complete_via
+
+        p = argparse.ArgumentParser(add_help=False)
+        complete_via(p.add_argument("name"), self._completer())
+        assert [c.value for c in complete_args(p, [], "")] == ["a", "b"]
+
+    def test_exported_from_cli(self):
+        from painted.cli import complete_via as exported
+        from painted.cli.complete import complete_via as direct
+
+        assert exported is direct
+
+
 class TestProducer:
     """complete_args — the single-parser producer engine."""
 

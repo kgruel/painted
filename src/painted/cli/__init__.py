@@ -41,6 +41,7 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "Candidate": (".complete", "Candidate"),
     "CompletionContext": (".complete", "CompletionContext"),
     "Completer": (".complete", "Completer"),
+    "complete_via": (".complete", "complete_via"),
     "complete_args": (".complete", "complete_args"),
     "complete_app": (".complete", "complete_app"),
     "complete_line": (".complete", "complete_line"),
