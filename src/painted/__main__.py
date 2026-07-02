@@ -55,7 +55,7 @@ def main(argv: list[str] | None = None) -> int:
         args,
         commands,
         prog="painted",
-        description="painted — Terminal UI framework",
+        description="painted — a semantic renderer for the terminal",
     )
 
 

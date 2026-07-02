@@ -564,7 +564,7 @@ def _logo_wordmark() -> Block:
     with use_palette(_SITE_PALETTE):
         p = current_palette()
         wordmark = render_big("painted", p.accent, size=2, format=BigTextFormat.FILLED)
-        tagline = Block.text("One library. Print to TUI. One dependency.", p.muted)
+        tagline = Block.text("A semantic renderer for the terminal.", p.muted)
         return join_vertical(wordmark, Block.empty(1, 1), tagline, gap=0)
 
 

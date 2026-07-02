@@ -18,20 +18,21 @@ One declaration. Every surface derives:
 myapp --thinking     # the flag exists — because it was declared
 myapp -h             # ...and documents itself
 myapp -vv            # ...and switches on at depth 3, as declared
-myapp <TAB>          # ...and completes — the same parser, walked live
 myapp --json         # same declaration, structured output
 myapp | grep mem     # pipes get plain text — no ANSI garbage
 ```
 
-Nothing above was written twice, and none of it can drift: the flag under
-`-h` is the flag that parses is the flag that completes. That's the
-library's governing rule — the **honesty rule**: a flag exists only because
-a capability was declared, and a declared capability must change output.
-Nothing invented, nothing dead.
+Nothing above was written twice, and none of it can drift: parsing, help,
+and TAB completion are three reflections of the one declared parser — the
+flag under `-h` is the flag that parses is the flag that completes
+(multi-command apps get the zsh/bash glue from `run_app`'s auto-injected
+`completion` command). That's the library's governing rule — the **honesty
+rule**: a flag exists only because a capability was declared, and a declared
+capability must change output. Nothing invented, nothing dead.
 
 Styling toolkits make output beautiful; app frameworks compose widgets.
-painted's job is the layer between: every rendering decision — lens, zoom,
-format, delivery — derives from what you declared the output to mean.
+painted's job is the layer between: zoom, format, delivery mode, and the
+flag surface itself all derive from what you declared the output to mean.
 
 <!-- TODO: tapes/hero.gif — one Tag declaration fanning out across -h/-vv/TAB/--json -->
 
@@ -46,9 +47,11 @@ from painted import paint
 paint({"cpu": 67, "mem": 82, "disk": 45})
 ```
 
-TTY gets a styled bar chart. Pipe gets plain text. `--json` gets JSON. The
-guess is a starting point for poking at data, not the API — when output
-matters, declare what it means and stop guessing.
+A TTY gets a styled sparkline summary; a pipe gets plain text;
+`show(data, format="json")` exports JSON. The guess is a starting point for
+poking at data, not the API — when output matters, you stop guessing:
+compose the Block yourself, or declare the CLI's capabilities and let the
+surfaces derive.
 
 ## Enter anywhere
 

@@ -1,6 +1,6 @@
 # painted Architecture
 
-Data-flow reference for the painted TUI framework.
+Data-flow reference for painted — a semantic renderer for the terminal, built on cell buffers.
 
 ## The Stack
 

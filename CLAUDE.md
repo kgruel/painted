@@ -165,7 +165,7 @@ All state types are frozen; update with `dataclasses.replace()` (which returns n
 <!-- docgen:begin frag:stability-tiers#summary -->
 `painted.core` + `painted.views` + `painted.display` are the **semver-stable** library surface (removing or renaming an `__all__` name is semver-MAJOR, guarded by `tests/unit/test_public_api.py`); `painted.cli` + `painted.tui` are the **evolving** framework surface that may change across minor versions.
 <!-- docgen:end -->
-- **Semantic renderer**: every rendering decision (lens, fidelity, delivery, format) derives from declared meaning. The honesty rule is its enforcement: a surface element (flag, candidate, mode) exists only because a capability was declared, and a declared capability must change output. Inference (`show()`/`shape_lens`) is the exploration fallback, never the spine.
+- **Semantic renderer**: rendering decisions (fidelity, delivery, format, the flag surface) derive from declared meaning. The honesty rule is its enforcement: a surface element (flag, candidate, mode) exists only because a capability was declared, and a declared capability must change output. Inference (`show()`/`shape_lens`) is the exploration fallback, never the spine. (Lens choice from declared meaning is the show-reframe design lane, not yet shipped — don't state it as present tense.)
 - Surface diff-renders: only changed cells written to terminal.
 - `shape_lens` auto-dispatches by data shape: numeric → chart, hierarchical → tree, else built-in rendering — exploration mode only.
 <!-- docgen:begin frag:width-contract#summary -->
