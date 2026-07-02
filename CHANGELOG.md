@@ -4,6 +4,17 @@ All notable changes to painted are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/); pre-1.0, minor versions may carry
 breaking changes.
 
+## [0.5.1] — 2026-07-01
+
+A patch release fixing four defects in 0.5.0's shell completion, found in a post-release review and its field verification. All fixes are in the completion machinery (`painted.cli`); no API surface changes. **If you installed completion from 0.5.0, regenerate the glue** (`<prog> completion zsh --install`, or re-run your `> _<prog>` redirect) — two of the fixes live in the generated script.
+
+### Fixed
+
+- **zsh candidates no longer duplicate.** The generated zsh function ended with `(( files )) && _files`, which returns exit status 1 whenever no file directive was sent; compsys reads a nonzero return as "found nothing" and retries the function once per `matcher-list` entry, re-adding every candidate each round — with the common three-entry matcher-list (case-insensitive + partial-word), every candidate appeared three times. The function now returns an explicit status.
+- **zsh completion works on compound command lines.** The generated zsh function passed `$BUFFER`/`$CURSOR` — the *entire* edit buffer — so on a compound line (`git pull && <prog> dem<TAB>`) the transport stripped the wrong program word and completed nothing. The function now reconstructs the buffer from `${words[1,$CURRENT]}`, zsh's completion array already scoped to the current command. bash was unaffected (readline provides per-command `COMP_LINE`/`COMP_POINT`).
+- **One shared token walk in the producer.** `_count_consumed_positionals` and `_present_option_strings` walked the preceding tokens with independent, subtly different models (inline short values like `-n5` were classified differently), so positional tracking and mutex suppression could disagree about the same line. Both are now reductions over a single shared walk (`_walk_preceding`) and cannot diverge. Multi-token positionals (`nargs=2+`) remain unmodelled — a pre-existing, documented completeness gap, not a regression.
+- **One tolerant line splitter.** `complete_line` used a weaker duplicate of the transport's quote-tolerant splitter (naive whitespace fallback without closing a dangling quote); the tolerant version is now the single implementation, shared by both paths.
+
 ## [0.5.0] — 2026-07-01
 
 A minor release adding **native shell completion** — the parser's third reflection. A painted CLI already reads its argparse parser two ways (parse → run the command, and `-h` → render help); 0.5.0 adds the third (TAB → candidates) from the *same* single walk, so the flag you see under `-h` is exactly the flag that completes. Completion is native and zero-dependency (no `argcomplete`/`shtab` at runtime) and *dynamic* (a `.completer` callback answers TAB from live data, not a frozen generated script), and its **machinery is render-free by construction** — pressing TAB imports none of the rendering core, so completion is instant no matter how expensive the program is to run, and typing TAB never triggers the work the command would do. `run_app` auto-injects a `completion` command into every roster; zsh and bash ship. All additions are additive and confined to the evolving `painted.cli` surface — the semver-stable `painted.core`/`painted.views` are untouched (no name added or removed).
