@@ -1,40 +1,133 @@
 # painted
 
-A semantic renderer for the terminal. Declare what your output *means* —
-painted derives how to show it. One dependency.
+A semantic renderer for the terminal. You declare what your output *means* —
+which fields matter at a glance, which are detail, which facets a reader
+would ask for by name — and painted derives how to show it: how much detail,
+what format, styled or plain, and which CLI flags exist at all. One dependency.
+
+## What "semantic" means, concretely
+
+Here's a deploy-status tool. The render function declares meaning in three
+places: each service's *state* maps to a severity style, per-service latency
+is a named facet called `timings`, and error detail belongs to zoom level 2.
+It never mentions flags, pipes, JSON, or help text.
 
 ```python
-from painted import run_cli, Tag
+import sys
+from painted import Block, Style, Tag, join_vertical, run_cli
+from painted.cli import CliContext
+
+STATE_STYLE = {
+    "ok": Style(fg="green"),
+    "degraded": Style(fg="yellow"),
+    "down": Style(fg="red", bold=True),
+}
+
+def fetch() -> dict:
+    return {"services": [
+        {"name": "api-gateway", "state": "ok", "replicas": "3/3", "ms": 12},
+        {"name": "billing", "state": "degraded", "replicas": "2/3", "ms": 340},
+        {"name": "search", "state": "ok", "replicas": "2/2", "ms": 28},
+    ]}
+
+def render(ctx: CliContext, data: dict) -> Block:
+    rows = []
+    for svc in data["services"]:
+        line = f"{svc['state']:<9} {svc['name']:<14} {svc['replicas']}"
+        if ctx.fidelity.shows("timings"):                # a named facet
+            line += f"  {svc['ms']:>4}ms"
+        rows.append(Block.text(line, STATE_STYLE[svc["state"]]))
+        if ctx.zoom >= 2 and svc["state"] != "ok":       # detail level
+            rows.append(Block.text("          last error: upstream timeout (2m ago)", Style(dim=True)))
+    return join_vertical(*rows)
 
 run_cli(
     sys.argv[1:], render=render, fetch=fetch,
-    tags=[Tag("thinking", "Show reasoning", implied_at=3)],
+    prog="deploys", description="Deployment status",
+    tags=[Tag("timings", "Show per-service latency", implied_at=2)],
 )
 ```
 
-One declaration. Every surface derives:
+That's the whole program. Now watch the rendering decisions derive — every
+output below is real captured output of the code above.
 
-```bash
-myapp --thinking     # the flag exists — because it was declared
-myapp -h             # ...and documents itself
-myapp -vv            # ...and switches on at depth 3, as declared
-myapp --json         # same declaration, structured output
-myapp | grep mem     # pipes get plain text — no ANSI garbage
+The default view shows what you declared to matter at a glance (on a TTY,
+`ok` is green and `degraded` is yellow — the severity styles):
+
+```console
+$ deploys
+ok        api-gateway    3/3
+degraded  billing        2/3
+ok        search         2/2
 ```
 
-Nothing above was written twice, and none of it can drift: parsing, help,
-and TAB completion are three reflections of the one declared parser — the
-flag under `-h` is the flag that parses is the flag that completes
-(multi-command apps get the zsh/bash glue from `run_app`'s auto-injected
-`completion` command). That's the library's governing rule — the **honesty
-rule**: a flag exists only because a capability was declared, and a declared
-capability must change output. Nothing invented, nothing dead.
+`-v` means zoom 2 — so the error detail you gated appears, and `timings`
+switches on because you declared it implied at that depth:
+
+```console
+$ deploys -v
+ok        api-gateway    3/3    12ms
+degraded  billing        2/3   340ms
+          last error: upstream timeout (2m ago)
+ok        search         2/2    28ms
+```
+
+`--timings` exists as a flag *because* the Tag was declared — a reader can
+ask for that one facet by name without the rest of the verbosity:
+
+```console
+$ deploys --timings
+ok        api-gateway    3/3    12ms
+degraded  billing        2/3   340ms
+ok        search         2/2    28ms
+```
+
+The same declaration serializes — `render` isn't even called for this:
+
+```console
+$ deploys --json
+{"services": [{"name": "api-gateway", "state": "ok", "replicas": "3/3", "ms": 12}, ...]}
+```
+
+A pipe gets plain text automatically — no ANSI garbage in `grep`:
+
+```console
+$ deploys | grep degraded
+degraded  billing        2/3
+```
+
+And the help documents the surface you declared — nothing more:
+
+```console
+$ deploys -h
+deploys
+
+Deployment status
+
+Layers (named facets)
+  --timings  Show per-service latency
+
+Zoom (what to show)
+  -q, --quiet    Minimal output
+  -v, --verbose  Detailed (-v) or full (-vv)
+
+Format (serialization)
+  --json   JSON output
+  --plain  Plain text, no ANSI codes
+...
+```
+
+Nothing was written twice, and none of it can drift: parsing, help, and TAB
+completion are three reflections of the one declared parser — the flag under
+`-h` is the flag that parses is the flag that completes (multi-command apps
+get the zsh/bash glue from `run_app`'s auto-injected `completion` command).
+That's the library's governing rule — the **honesty rule**: a flag exists
+only because a capability was declared, and a declared capability must
+change output. Nothing invented, nothing dead.
 
 Styling toolkits make output beautiful; app frameworks compose widgets.
 painted's job is the layer between: zoom, format, delivery mode, and the
 flag surface itself all derive from what you declared the output to mean.
-
-<!-- TODO: tapes/hero.gif — one Tag declaration fanning out across -h/-vv/TAB/--json -->
 
 ## Explore first
 
@@ -47,11 +140,11 @@ from painted import paint
 paint({"cpu": 67, "mem": 82, "disk": 45})
 ```
 
-A TTY gets a styled sparkline summary; a pipe gets plain text;
-`show(data, format="json")` exports JSON. The guess is a starting point for
-poking at data, not the API — when output matters, you stop guessing:
-compose the Block yourself, or declare the CLI's capabilities and let the
-surfaces derive.
+A TTY gets a styled sparkline summary; a pipe gets a plain one-liner
+(`[3 values, 45–82]`); `show(data, format="json")` exports JSON. The guess
+is a starting point for poking at data, not the API — when output matters,
+you stop guessing: compose the Block yourself, or declare the CLI's
+capabilities and let the surfaces derive.
 
 ## Enter anywhere
 
