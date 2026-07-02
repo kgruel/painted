@@ -28,7 +28,7 @@ Design re-iterates, re-vendor `colors_and_type.css` and `hero/PaintedSurface.jsx
 
 ## Built
 
-- **`/walkthrough`** — the "no cliffs" continuum, 7 real `monitor_*` panels.
+- **`/walkthrough`** — the monotonic-enhancement continuum, 7 real `monitor_*` panels.
 - **`/reference`** — the catalog: 21 real specimens (one per Design preview card the
   renderer can produce) from `tools/reference_specimens.py`, via the `outputgen`
   cells→HTML path; 2 cards marked cosmetic (CSS surfaces / web font).

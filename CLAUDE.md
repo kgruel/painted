@@ -1,6 +1,6 @@
-# painted — terminal rendering library
+# painted — a semantic renderer for the terminal
 
-Terminal UI framework built on cell buffers. Start at Level 0. Only escalate when you hit a trigger.
+A semantic renderer built on cell buffers: rendering decisions derive from declared meaning. Start at Level 0. Only escalate when you hit a trigger.
 
 **You are here** in the abstraction chain:
 
@@ -10,7 +10,7 @@ atoms (data)  →  engine (runtime)  →  painted (surface)  →  apps (CLI)
 Fact, Spec        Tick, Vertex         Block, Lens          loops/hlab/strange-loops
 ```
 
-Below painted in the monorepo: `libs/atoms/` defines Facts and Specs; `libs/engine/` produces Ticks and stores. Above: `apps/loops/`, `apps/hlab/`, and `apps/strange-loops/` use painted's entry points and lenses for all display. painted renders whatever comes out — it doesn't know about loops concepts, just data shapes, zoom levels, and terminal cells.
+Below painted in the monorepo: `libs/atoms/` defines Facts and Specs; `libs/engine/` produces Ticks and stores. Above: `apps/loops/`, `apps/hlab/`, and `apps/strange-loops/` use painted's entry points and lenses for all display. painted renders whatever comes out — it doesn't know about loops concepts, just declared meaning (roles, tags, severities), zoom levels, and terminal cells.
 <!-- docgen:end -->
 
 **Two audiences**: If you're *using* painted in an app, see `src/painted/CLAUDE.md` for the consumer API guide. This file is for *contributing to* painted itself.
@@ -165,8 +165,9 @@ All state types are frozen; update with `dataclasses.replace()` (which returns n
 <!-- docgen:begin frag:stability-tiers#summary -->
 `painted.core` + `painted.views` + `painted.display` are the **semver-stable** library surface (removing or renaming an `__all__` name is semver-MAJOR, guarded by `tests/unit/test_public_api.py`); `painted.cli` + `painted.tui` are the **evolving** framework surface that may change across minor versions.
 <!-- docgen:end -->
+- **Semantic renderer**: every rendering decision (lens, fidelity, delivery, format) derives from declared meaning. The honesty rule is its enforcement: a surface element (flag, candidate, mode) exists only because a capability was declared, and a declared capability must change output. Inference (`show()`/`shape_lens`) is the exploration fallback, never the spine.
 - Surface diff-renders: only changed cells written to terminal.
-- `shape_lens` auto-dispatches by data shape: numeric → chart, hierarchical → tree, else built-in rendering.
+- `shape_lens` auto-dispatches by data shape: numeric → chart, hierarchical → tree, else built-in rendering — exploration mode only.
 <!-- docgen:begin frag:width-contract#summary -->
 width is a two-part contract: *width-aware* — wcwidth counts display columns, so a block's display width is not `len()`; and *honors-width* — a passed `width` is *exact*, clipping or padding by default (pass `wrap=Wrap.CHAR`/`Wrap.WORD` to reflow), omitted for natural sizing.
 <!-- docgen:end -->

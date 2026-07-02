@@ -9,7 +9,7 @@ align: center
 
 [spacer:2]
 
-a cell-buffer terminal UI framework
+a semantic renderer for the terminal
 
 [spacer:2]
 

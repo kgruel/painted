@@ -87,7 +87,7 @@ MANIFEST: dict[str, OutputSpec] = {
 # the gated MANIFEST/docs `--check` lets the site pull real painted output
 # without coupling the site to the docs-injection pipeline.
 #
-# The "no cliffs" walkthrough: ONE monitor dataset walked across the continuum.
+# The monotonic-enhancement walkthrough: ONE monitor dataset walked across the continuum.
 # The site is always truecolor, so panels render under PAINTED_PALETTE by default
 # (legible, on-brand, token-matched); `monitor_default_honest` is the DEFAULT
 # (normal-ANSI) variant the walkthrough offers as a toggle — "what a 16-color

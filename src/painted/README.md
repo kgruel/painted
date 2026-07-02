@@ -1,6 +1,6 @@
 # painted — API Guide
 
-Terminal UI framework built on cell buffers. Start at Level 0. Only escalate when you hit a trigger.
+A semantic renderer for the terminal, built on cell buffers: declare what your output means, and rendering decisions derive from it. Start at Level 0. Only escalate when you hit a trigger.
 
 **You are here** in the abstraction chain:
 
@@ -10,16 +10,16 @@ atoms (data)  →  engine (runtime)  →  painted (surface)  →  apps (CLI)
 Fact, Spec        Tick, Vertex         Block, Lens          loops/hlab/strange-loops
 ```
 
-Below painted in the monorepo: `libs/atoms/` defines Facts and Specs; `libs/engine/` produces Ticks and stores. Above: `apps/loops/`, `apps/hlab/`, and `apps/strange-loops/` use painted's entry points and lenses for all display. painted renders whatever comes out — it doesn't know about loops concepts, just data shapes, zoom levels, and terminal cells.
+Below painted in the monorepo: `libs/atoms/` defines Facts and Specs; `libs/engine/` produces Ticks and stores. Above: `apps/loops/`, `apps/hlab/`, and `apps/strange-loops/` use painted's entry points and lenses for all display. painted renders whatever comes out — it doesn't know about loops concepts, just declared meaning (roles, tags, severities), zoom levels, and terminal cells.
 <!-- docgen:end -->
 
 **Two concerns, one contract.** painted has a rendering library (Block, Style, compose, lenses, writer) and a CLI framework (run_cli, CliRunner, context detection, mode dispatch). The contract between them is `Block` — your lens produces Blocks, the framework delivers them. Levels 0-1 below are pure renderer. Level 2 is the CLI framework. Levels 3-4 are specialized delivery mechanisms.
 
 ---
 
-## Level 0 — Display data (Renderer)
+## Level 0 — Explore data (Renderer)
 
-**Trigger**: I have data and want it to look decent in a terminal.
+**Trigger**: I have unfamiliar data and want a quick first look.
 
 ```python
 from painted import paint

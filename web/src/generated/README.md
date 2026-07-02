@@ -7,7 +7,7 @@ markup. This is the load-bearing dogfood: the site shows what painted actually
 produces, not a recreation of it. Two sets live here:
 
 - **32 panels = 7 monitor + 21 reference + 4 landing.** The `monitor_*` panels are
-  the "no cliffs" walkthrough (`/walkthrough`), one dataset across the continuum.
+  the monotonic-enhancement walkthrough (`/walkthrough`), one dataset across the continuum.
   The reference catalog (`/reference`) is one real specimen per Design preview card,
   from `tools/reference_specimens.py`. The 4 landing panels (`hero`, `door_*`) are
   the front door (`/`), from `tools/landing_specimens.py`.

@@ -26,7 +26,7 @@ const DOORS = [
   {
     href: "/walkthrough",
     hue: "var(--cyan)",
-    label: "Walkthrough — one dataset across every surface, print to TUI, no cliffs",
+    label: "Walkthrough — one dataset across every surface, print to TUI, never a rewrite",
     html: doorWalkthrough,
   },
   {
@@ -45,15 +45,16 @@ const DOORS = [
 ];
 ---
 
-<Base title="painted — terminal rendering library">
+<Base title="painted — a semantic renderer for the terminal">
   <main>
     <section class="hero">
       <h1 class="sr-only">painted</h1>
       <div class="hero-mark" aria-hidden="true" set:html={heroHtml} />
       <p class="hero-sub">
-        A terminal rendering library. Compose <strong>Blocks</strong> of styled
-        cells — ANSI color, box-drawing, lenses — from a one-line print to a
-        full-screen TUI, with <em>no cliffs</em> in between.
+        A semantic renderer for the terminal. Declare what your output
+        <strong>means</strong> — painted <em>derives</em> the rest: styling,
+        zoom, format, help, completion. From a one-line print to a full-screen
+        TUI, every rung additive.
       </p>
       <div class="hero-cta">
         <a class="btn" href={REPO}>GitHub&nbsp;↗</a>

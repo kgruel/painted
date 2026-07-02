@@ -1,6 +1,44 @@
 # painted
 
-One library. Print to TUI. One dependency.
+A semantic renderer for the terminal. Declare what your output *means* —
+painted derives how to show it. One dependency.
+
+```python
+from painted import run_cli, Tag
+
+run_cli(
+    sys.argv[1:], render=render, fetch=fetch,
+    tags=[Tag("thinking", "Show reasoning", implied_at=3)],
+)
+```
+
+One declaration. Every surface derives:
+
+```bash
+myapp --thinking     # the flag exists — because it was declared
+myapp -h             # ...and documents itself
+myapp -vv            # ...and switches on at depth 3, as declared
+myapp <TAB>          # ...and completes — the same parser, walked live
+myapp --json         # same declaration, structured output
+myapp | grep mem     # pipes get plain text — no ANSI garbage
+```
+
+Nothing above was written twice, and none of it can drift: the flag under
+`-h` is the flag that parses is the flag that completes. That's the
+library's governing rule — the **honesty rule**: a flag exists only because
+a capability was declared, and a declared capability must change output.
+Nothing invented, nothing dead.
+
+Styling toolkits make output beautiful; app frameworks compose widgets.
+painted's job is the layer between: every rendering decision — lens, zoom,
+format, delivery — derives from what you declared the output to mean.
+
+<!-- TODO: tapes/hero.gif — one Tag declaration fanning out across -h/-vv/TAB/--json -->
+
+## Explore first
+
+Zero declarations also works. `show()` is **exploration mode** — it guesses
+a lens from the data's shape and adapts to context:
 
 ```python
 from painted import paint
@@ -8,16 +46,16 @@ from painted import paint
 paint({"cpu": 67, "mem": 82, "disk": 45})
 ```
 
-TTY gets styled output. Pipe gets plain text. Same data, same function —
-`paint()` transcribes what the value declares, and it's the same verb every
-layer up the stack renders through.
-
-<!-- TODO: tapes/hero.gif — paint() in TTY and pipe contexts -->
+TTY gets a styled bar chart. Pipe gets plain text. `--json` gets JSON. The
+guess is a starting point for poking at data, not the API — when output
+matters, declare what it means and stop guessing.
 
 ## Enter anywhere
 
-Every entry point uses the same building blocks. Pick the one that fits your problem —
-you never hand over control, and there's no cliff between them.
+Every entry point uses the same building blocks. Pick the rung that fits
+your problem — each rung is additive, and climbing never rewrites the rung
+below. (The invariant is *monotonic enhancement*: day-one code stays
+load-bearing forever.)
 
 ### Print styled output
 
@@ -78,8 +116,7 @@ myapp | grep ok    # plain text, no ANSI
 
 <!-- TODO: tapes/zoom.gif — quiet/default/verbose spectrum -->
 
-The flag surface grows only as you declare capabilities — a flag exists only
-because the app declared it, and a declared capability must change output:
+The flag surface grows only as you declare — the honesty rule again:
 
 ```python
 run_cli(
@@ -95,7 +132,8 @@ for budgets. Add `fetch_stream=` for live updates (`--live` appears), and
 `live_delivery="surface"` to upgrade sustained streams to an alt-screen
 render loop (`-i` appears, converging with `--live`). Each rung is additive —
 climbing never rewrites the rung below. For multi-command apps, `run_app`
-routes subcommands through the same harness. The full consumer guide lives in
+routes subcommands through the same harness and injects a `completion`
+command that emits the zsh/bash glue. The full consumer guide lives in
 [`src/painted/README.md`](src/painted/README.md).
 
 ### Full TUI

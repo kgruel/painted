@@ -1,7 +1,7 @@
 [project]
 name = "painted"
 version = "0.9.0"
-description = "A cell-buffer terminal UI framework"
+description = "A semantic renderer for the terminal — declare what output means; flags, help, completion, zoom, and format derive"
 readme = "README.md"
 license = "MIT"
 authors = [{ name = "Kyle Gruel", email = "kylegruel@gmail.com" }]
