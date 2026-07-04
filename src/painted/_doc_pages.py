@@ -415,6 +415,177 @@ def completion_doc() -> Doc:
     )
 
 
+def _traceback_gallery() -> Block:
+    """A genuine Figure: a real exception rendered by render_traceback.
+
+    The exception is raised and captured inside this function, so every frame is
+    in this module — the basenames and line numbers render deterministically,
+    and the figure is a real projection of the same renderer install() and
+    PaintedHandler mount. SUMMARY zoom shows the frame stack and the chain
+    connective without pulling machine-specific source context. Imports are local
+    to keep this module off the traceback renderer at import time."""
+    from painted import Zoom
+    from painted.views import render_traceback
+
+    try:
+        try:
+            config = {"port": "eight"}
+            int(config["port"])
+        except ValueError as cause:
+            raise RuntimeError("could not start server") from cause
+    except RuntimeError as exc:
+        return render_traceback(exc, Zoom.SUMMARY, 64)
+
+
+def diagnostics_doc() -> Doc:
+    return Doc(
+        title="Diagnostics",
+        body=(
+            Prose(
+                "painted renders the two diagnostic surfaces every program already "
+                "produces — log records and uncaught tracebacks — as structured "
+                "Blocks disclosed by zoom, not format strings. A log level is a "
+                "declared severity; a traceback is a record tree, and capturing it "
+                "is the declaration. Both render through the same core the rest of "
+                "painted uses, so a diagnostic looks like the rest of your output."
+            ),
+            Defs(
+                (
+                    Def(
+                        "painted.install()",
+                        "Route uncaught exceptions through render_traceback instead of "
+                        "the default text hook.",
+                        "Sets sys.excepthook; threads=True also sets "
+                        "threading.excepthook. KeyboardInterrupt passes through "
+                        "untouched.",
+                    ),
+                    Def(
+                        "PaintedHandler(stream=sys.stderr, *, zoom=…)",
+                        "A logging.Handler that renders each record to a Block — "
+                        "timestamp, severity-styled level, logger, message, extra "
+                        "fields, and any exc_info traceback.",
+                        "A renderer, not a formatter: setFormatter still shapes the "
+                        "message STRING, but the structure stays painted's. Palette and "
+                        "color depth are snapshotted at construction so worker-thread "
+                        "logs render identically.",
+                    ),
+                    Def(
+                        "render_traceback(exc, zoom, width, *, suppress=(), redact=…)",
+                        "An exception (live or a captured TracebackException) as a Block: "
+                        "frames on a gutter rail, chains and groups as a tree.",
+                        "The gutter encodes one dimension — frame origin (app vs "
+                        "suppressed/library). suppress folds matching frames; redact "
+                        "masks sensitive local names at FULL zoom.",
+                    ),
+                )
+            ),
+            Section(
+                "Install",
+                body=(
+                    Prose(
+                        "Two independent opt-ins. Add PaintedHandler to a logger to "
+                        "render its records; call install() to catch what escapes. "
+                        "Neither is on by default — painted renders diagnostics only "
+                        "when you declare it should."
+                    ),
+                    Code(
+                        text=(
+                            "import logging, painted\n"
+                            "\n"
+                            "logging.getLogger().addHandler(painted.PaintedHandler())\n"
+                            "painted.install()          # uncaught tracebacks render too"
+                        ),
+                    ),
+                ),
+            ),
+            Section(
+                "Log levels are declared severities",
+                body=(
+                    Prose(
+                        "A record's levelno resolves to the Severity of the greatest "
+                        "threshold floor it clears, and Severity drives the palette role "
+                        "the row is styled in. The default mapping mutes DEBUG onto INFO "
+                        "(the journalctl principle — routine noise stays quiet) and folds "
+                        "CRITICAL onto ERROR (the palette's loudest role). Pass your own "
+                        "thresholds to change where the lines fall — a custom mapping "
+                        "changes the output, or it wouldn't be worth declaring."
+                    ),
+                    Code(
+                        text=(
+                            "from painted import PaintedHandler\n"
+                            "from painted.views import Severity\n"
+                            "\n"
+                            "handler = PaintedHandler(thresholds={\n"
+                            "    logging.INFO: Severity.INFO,\n"
+                            "    logging.WARNING: Severity.WARNING,\n"
+                            "    logging.ERROR: Severity.ERROR,\n"
+                            "})"
+                        ),
+                    ),
+                ),
+            ),
+            Section(
+                "Tracebacks are record trees",
+                body=(
+                    Prose(
+                        "render_traceback captures a live exception (or renders a "
+                        "TracebackException you already captured) and projects it at a "
+                        "zoom level: MINIMAL is type + message + the innermost frame on "
+                        "one line; SUMMARY adds the frame stack with chains summarized; "
+                        "DETAILED adds source with a caret; FULL adds wider source, "
+                        "redacted locals, and fully expanded groups. suppress folds the "
+                        "frames you didn't write to a single muted line."
+                    ),
+                    Figure(
+                        _traceback_gallery(),
+                        caption=(
+                            "Live render_traceback output at SUMMARY: a RuntimeError "
+                            "caused by a ValueError, the chain connective between them."
+                        ),
+                    ),
+                ),
+            ),
+            Section(
+                "Why this matters",
+                min_depth=2,
+                body=(
+                    Prose(
+                        "The default traceback is a wall of text you scan by eye; a log "
+                        "line is a format string you re-invent per project. painted "
+                        "renders both from the structure already in the data — the "
+                        "frame tree, the level, the extra fields — so severity reads at "
+                        "a glance, the failing line carries a caret, and a worker "
+                        "thread's log looks like the main thread's. Nothing is invented; "
+                        "the rendering derives from what was declared."
+                    ),
+                ),
+            ),
+            Section(
+                "Design note",
+                tag="rationale",
+                body=(
+                    Prose(
+                        "The delivery glue lives at the package root, not in painted.cli. "
+                        "A log handler and an excepthook are not argv-driven, and the CLI "
+                        "layer holds a frozen tripwire — nothing in cli/ may import the "
+                        "renderer. Root modules may (the precedent is inplace.py), so "
+                        "diagnostics mounts render_traceback there without touching the "
+                        "CLI seam. Full design: docs/DIAGNOSTICS_DESIGN.md."
+                    ),
+                    Prose(
+                        "The three surfaces share one substrate. render_traceback's "
+                        "locals route through the same shape_lens show() uses — hardened "
+                        "here to be cycle-safe and schema-aware, so a cyclic local can't "
+                        "crash the error renderer. PaintedHandler composes "
+                        "render_traceback for exc_info rather than re-deriving frame "
+                        "structure. One hardening, two deliverers."
+                    ),
+                ),
+            ),
+        ),
+    )
+
+
 DOCS: dict[str, DocEntry] = {
     "primitives": DocEntry(
         "primitives",
@@ -425,5 +596,10 @@ DOCS: dict[str, DocEntry] = {
         "completion",
         "Shell completion: TAB completes commands, flags, choices, and dynamic values",
         completion_doc,
+    ),
+    "diagnostics": DocEntry(
+        "diagnostics",
+        "Diagnostics: log records and tracebacks rendered as structured Blocks",
+        diagnostics_doc,
     ),
 }

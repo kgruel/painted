@@ -6,5 +6,9 @@
   {
     "name": "completion",
     "description": "Shell completion: TAB completes commands, flags, choices, and dynamic values"
+  },
+  {
+    "name": "diagnostics",
+    "description": "Diagnostics: log records and tracebacks rendered as structured Blocks"
   }
 ]

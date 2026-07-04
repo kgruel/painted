@@ -47,7 +47,7 @@ def _load(rel: str):
 
 # --- Primitives: build a Block and print it to stdout ---
 
-PRIMITIVES = ["cell", "compose", "show", "span_line"]
+PRIMITIVES = ["cell", "compose", "diagnostics", "show", "span_line"]
 
 
 @pytest.mark.parametrize("name", PRIMITIVES)

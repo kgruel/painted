@@ -86,10 +86,12 @@ Surface + Layer             # alt-screen TUI with keyboard + diff rendering
 | Renderer | `core/compose.py` | join, pad, border, truncate, Align |
 | Renderer | `core/writer.py` | Writer, ColorDepth, print_block |
 | Renderer | `inplace.py` | InPlaceRenderer |
+| Diagnostics | `diagnostics.py` | PaintedHandler, install, DEFAULT_THRESHOLDS (logging + excepthook glue; root, imports views) |
 | Renderer | `palette.py` | Palette (5 semantic Style roles + `series` categorical ramp), presets |
 | Renderer | `icon_set.py` | IconSet (glyph vocabulary), ASCII fallback |
 | Renderer | `views/record.py` | record_line, PayloadLens, GutterFn |
 | Renderer | `views/lens/` | shape_lens, tree_lens, chart_lens, flame_lens |
+| Renderer | `views/_traceback.py` | render_traceback (an exception as a record tree) |
 | Renderer | `views/components/` | Stateful view components (spinner, progress, list, table, etc.) |
 | Renderer | `views/` | Public view-layer namespace (re-exports lenses + components) |
 | Framework | `core/fidelity.py` | Fidelity (the compiled disclosure spec) |
@@ -179,4 +181,5 @@ docs/
   LIVE_DELIVERY_DESIGN.md  # Two-tier live contract; alt-screen LIVE path (implemented)
   FIDELITY_DESIGN.md  # Disclosure grammar: Tag declarations, consumption ladder (ratified, implemented)
   COMPLETION_DESIGN.md  # Shell completion: the parser's third reflection, honesty rule, render-free guarantee (implemented)
+  DIAGNOSTICS_DESIGN.md  # Logging + tracebacks as renders: declared severity, the record tree, root-seam resolution (implemented)
 ```

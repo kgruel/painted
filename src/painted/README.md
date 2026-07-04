@@ -145,6 +145,35 @@ width is a two-part contract: *width-aware* — wcwidth counts display columns, 
 - **Zoom propagates**: render functions receive zoom level, bifurcate detail.
 - **Format auto-detects**: TTY → ANSI, pipe → PLAIN.
 
+## Diagnostics
+
+Render the two surfaces every program already emits — log records and uncaught
+tracebacks — instead of printing format strings. Both are opt-in and live at the
+package root (not the CLI framework — a log handler and an excepthook aren't
+argv-driven). See `docs/DIAGNOSTICS_DESIGN.md`.
+
+```python
+import logging, painted
+
+logging.getLogger().addHandler(painted.PaintedHandler())  # records → styled Blocks
+painted.install()                                          # uncaught tracebacks render too
+```
+
+- **`PaintedHandler`** — a `logging.Handler` that renders each record (timestamp,
+  severity-styled level, logger, message, `extra` fields, `exc_info` traceback)
+  disclosed by `zoom`. A renderer, not a formatter: `setFormatter` shapes the
+  message string only; the structure stays painted's. Palette + color depth are
+  snapshotted at construction, so worker-thread logs render identically. A log
+  level is a *declared severity* — `DEFAULT_THRESHOLDS` maps `levelno` floors onto
+  the closed `Severity` vocabulary; pass your own to change where lines fall.
+- **`install()`** — routes `sys.excepthook` through `render_traceback`;
+  `threads=True` also sets `threading.excepthook`. `KeyboardInterrupt` passes
+  through untouched.
+- **`render_traceback(exc, zoom, width, *, suppress=…)`** (from `painted.views`) —
+  the underlying renderer, usable directly. An exception as a record tree: frames
+  on a gutter rail, cause/context chains and groups as the tree. See the views
+  guide.
+
 ## Data rendering
 
 For lenses (auto-dispatch, tree, chart, flame) and components (spinner, progress, list, table, text input, data explorer):
