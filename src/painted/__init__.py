@@ -93,6 +93,10 @@ __all__ = [
     "detect_context",
     # In-place rendering
     "InPlaceRenderer",
+    # Diagnostics
+    "PaintedHandler",
+    "install",
+    "DEFAULT_THRESHOLDS",
     # Aesthetic
     "Palette",
     "DEFAULT_PALETTE",
@@ -175,6 +179,9 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "reset_icons": (".icon_set", "reset_icons"),
     "use_icons": (".icon_set", "use_icons"),
     "InPlaceRenderer": (".inplace", "InPlaceRenderer"),
+    "PaintedHandler": (".diagnostics", "PaintedHandler"),
+    "install": (".diagnostics", "install"),
+    "DEFAULT_THRESHOLDS": (".diagnostics", "DEFAULT_THRESHOLDS"),
     "DEFAULT_PALETTE": (".palette", "DEFAULT_PALETTE"),
     "MONO_PALETTE": (".palette", "MONO_PALETTE"),
     "NORD_PALETTE": (".palette", "NORD_PALETTE"),
