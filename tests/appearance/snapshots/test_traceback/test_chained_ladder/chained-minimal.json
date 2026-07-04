@@ -1,0 +1,22 @@
+{
+  "width": 68,
+  "height": 1,
+  "rows": [
+    [
+      {
+        "text": "ValueError: ",
+        "fg": "red"
+      },
+      {
+        "text": "could not divide"
+      },
+      {
+        "text": " at _tb_fixture.py:25",
+        "dim": true
+      },
+      {
+        "text": "                   "
+      }
+    ]
+  ]
+}

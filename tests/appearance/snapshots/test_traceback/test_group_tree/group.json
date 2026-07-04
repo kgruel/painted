@@ -1,0 +1,80 @@
+{
+  "width": 68,
+  "height": 8,
+  "rows": [
+    [
+      {
+        "text": "ExceptionGroup: ",
+        "fg": "red"
+      },
+      {
+        "text": "multiple failures (2 sub-exceptions)                "
+      }
+    ],
+    [
+      {
+        "text": "│ _tb_fixture.py:52 in make_group                                   "
+      }
+    ],
+    [
+      {
+        "text": "│ "
+      },
+      {
+        "text": "      try:                                                        ",
+        "dim": true
+      }
+    ],
+    [
+      {
+        "text": "│ "
+      },
+      {
+        "text": "          raise ExceptionGroup(\"multiple failures\", [ValueError(\"…",
+        "fg": "cyan"
+      }
+    ],
+    [
+      {
+        "text": "│ "
+      },
+      {
+        "text": "          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^…",
+        "fg": "red"
+      }
+    ],
+    [
+      {
+        "text": "│ "
+      },
+      {
+        "text": "      except ExceptionGroup as exc:                               ",
+        "dim": true
+      }
+    ],
+    [
+      {
+        "text": "├─ "
+      },
+      {
+        "text": "ValueError: ",
+        "fg": "red"
+      },
+      {
+        "text": "first                                                "
+      }
+    ],
+    [
+      {
+        "text": "└─ "
+      },
+      {
+        "text": "TypeError: ",
+        "fg": "red"
+      },
+      {
+        "text": "second                                                "
+      }
+    ]
+  ]
+}

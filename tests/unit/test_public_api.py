@@ -137,6 +137,7 @@ STABLE_VIEWS_SURFACE = frozenset(
         "tree_lens",
         "chart_lens",
         "flame_lens",
+        "render_traceback",
         "sparkline",
         "sparkline_with_range",
         "cost_meter",

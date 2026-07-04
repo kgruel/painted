@@ -1,0 +1,53 @@
+{
+  "width": 68,
+  "height": 6,
+  "rows": [
+    [
+      {
+        "text": "ZeroDivisionError: ",
+        "fg": "red"
+      },
+      {
+        "text": "division by zero"
+      },
+      {
+        "text": " at _tb_fixture.py:18",
+        "dim": true
+      },
+      {
+        "text": "            "
+      }
+    ],
+    [
+      {
+        "text": "                                                                    "
+      }
+    ],
+    [
+      {
+        "text": "The above exception was the direct cause of the following exception:",
+        "fg": "red"
+      }
+    ],
+    [
+      {
+        "text": "                                                                    "
+      }
+    ],
+    [
+      {
+        "text": "ValueError: ",
+        "fg": "red"
+      },
+      {
+        "text": "could not divide                                        "
+      }
+    ],
+    [
+      {
+        "text": "│ … 2 frames in _tb_fixture …                                       ",
+        "dim": true
+      }
+    ]
+  ]
+}

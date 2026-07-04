@@ -1,0 +1,205 @@
+{
+  "width": 68,
+  "height": 22,
+  "rows": [
+    [
+      {
+        "text": "KeyError: ",
+        "fg": "red"
+      },
+      {
+        "text": "'missing'                                                 "
+      }
+    ],
+    [
+      {
+        "text": "│ _tb_fixture.py:72 in make_simple                                  "
+      }
+    ],
+    [
+      {
+        "text": "│ "
+      },
+      {
+        "text": "  def make_simple() -> BaseException:                             ",
+        "dim": true
+      }
+    ],
+    [
+      {
+        "text": "│ "
+      },
+      {
+        "text": "      \"\"\"A single-frame error carrying redactable + plain locals …",
+        "dim": true
+      }
+    ],
+    [
+      {
+        "text": "│ "
+      },
+      {
+        "text": "      try:                                                        ",
+        "dim": true
+      }
+    ],
+    [
+      {
+        "text": "│ "
+      },
+      {
+        "text": "          _raise_simple()                                         ",
+        "fg": "cyan"
+      }
+    ],
+    [
+      {
+        "text": "│ "
+      },
+      {
+        "text": "          ^^^^^^^^^^^^^^^                                         ",
+        "fg": "red"
+      }
+    ],
+    [
+      {
+        "text": "│ "
+      },
+      {
+        "text": "      except KeyError as exc:                                     ",
+        "dim": true
+      }
+    ],
+    [
+      {
+        "text": "│ "
+      },
+      {
+        "text": "          return exc                                              ",
+        "dim": true
+      }
+    ],
+    [
+      {
+        "text": "│ "
+      },
+      {
+        "text": "      raise AssertionError(\"unreachable\")                         ",
+        "dim": true
+      }
+    ],
+    [
+      {
+        "text": "│ _tb_fixture.py:66 in _raise_simple                                "
+      }
+    ],
+    [
+      {
+        "text": "│ "
+      },
+      {
+        "text": "      password = _SECRET  # noqa: F841 — redaction target         ",
+        "dim": true
+      }
+    ],
+    [
+      {
+        "text": "│ "
+      },
+      {
+        "text": "      count = 3  # noqa: F841 — plain local, rendered at FULL     ",
+        "dim": true
+      }
+    ],
+    [
+      {
+        "text": "│ "
+      },
+      {
+        "text": "      note = \"deterministic\"  # noqa: F841                        ",
+        "dim": true
+      }
+    ],
+    [
+      {
+        "text": "│ "
+      },
+      {
+        "text": "      raise KeyError(\"missing\")                                   ",
+        "fg": "cyan"
+      }
+    ],
+    [
+      {
+        "text": "│ "
+      },
+      {
+        "text": "      ^^^^^^^^^^^^^^^^^^^^^^^^^                                   ",
+        "fg": "red"
+      }
+    ],
+    [
+      {
+        "text": "│ "
+      },
+      {
+        "text": "                                                                  ",
+        "dim": true
+      }
+    ],
+    [
+      {
+        "text": "│ "
+      },
+      {
+        "text": "                                                                  ",
+        "dim": true
+      }
+    ],
+    [
+      {
+        "text": "│ "
+      },
+      {
+        "text": "  def make_simple() -> BaseException:                             ",
+        "dim": true
+      }
+    ],
+    [
+      {
+        "text": "│ "
+      },
+      {
+        "text": "  count = ",
+        "dim": true
+      },
+      {
+        "text": "3                                                       "
+      }
+    ],
+    [
+      {
+        "text": "│ "
+      },
+      {
+        "text": "  note = ",
+        "dim": true
+      },
+      {
+        "text": "deterministic                                            "
+      }
+    ],
+    [
+      {
+        "text": "│ "
+      },
+      {
+        "text": "  password = ∙∙∙ redacted",
+        "dim": true
+      },
+      {
+        "text": "                                         "
+      }
+    ]
+  ]
+}

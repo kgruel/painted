@@ -1,0 +1,204 @@
+{
+  "width": 68,
+  "height": 25,
+  "rows": [
+    [
+      {
+        "text": "ZeroDivisionError: ",
+        "fg": "red"
+      },
+      {
+        "text": "division by zero                                 "
+      }
+    ],
+    [
+      {
+        "text": "│ _tb_fixture.py:23 in _wrap                                        "
+      }
+    ],
+    [
+      {
+        "text": "│ "
+      },
+      {
+        "text": "      try:                                                        ",
+        "dim": true
+      }
+    ],
+    [
+      {
+        "text": "│ "
+      },
+      {
+        "text": "          divide(10, 0)                                           ",
+        "fg": "cyan"
+      }
+    ],
+    [
+      {
+        "text": "│ "
+      },
+      {
+        "text": "          ^^^^^^^^^^^^^                                           ",
+        "fg": "red"
+      }
+    ],
+    [
+      {
+        "text": "│ "
+      },
+      {
+        "text": "      except ZeroDivisionError as err:                            ",
+        "dim": true
+      }
+    ],
+    [
+      {
+        "text": "│ _tb_fixture.py:18 in divide                                       "
+      }
+    ],
+    [
+      {
+        "text": "│ "
+      },
+      {
+        "text": "      numerator = a                                               ",
+        "dim": true
+      }
+    ],
+    [
+      {
+        "text": "│ "
+      },
+      {
+        "text": "      return numerator / b  # ZeroDivisionError raises here       ",
+        "fg": "cyan"
+      }
+    ],
+    [
+      {
+        "text": "│ "
+      },
+      {
+        "text": "             ^^^^^^^^^^^^^                                        ",
+        "fg": "red"
+      }
+    ],
+    [
+      {
+        "text": "│ "
+      },
+      {
+        "text": "                                                                  ",
+        "dim": true
+      }
+    ],
+    [
+      {
+        "text": "                                                                    "
+      }
+    ],
+    [
+      {
+        "text": "The above exception was the direct cause of the following exception:",
+        "fg": "red"
+      }
+    ],
+    [
+      {
+        "text": "                                                                    "
+      }
+    ],
+    [
+      {
+        "text": "ValueError: ",
+        "fg": "red"
+      },
+      {
+        "text": "could not divide                                        "
+      }
+    ],
+    [
+      {
+        "text": "│ _tb_fixture.py:31 in make_chained                                 "
+      }
+    ],
+    [
+      {
+        "text": "│ "
+      },
+      {
+        "text": "      try:                                                        ",
+        "dim": true
+      }
+    ],
+    [
+      {
+        "text": "│ "
+      },
+      {
+        "text": "          _wrap()                                                 ",
+        "fg": "cyan"
+      }
+    ],
+    [
+      {
+        "text": "│ "
+      },
+      {
+        "text": "          ^^^^^^^                                                 ",
+        "fg": "red"
+      }
+    ],
+    [
+      {
+        "text": "│ "
+      },
+      {
+        "text": "      except ValueError as exc:                                   ",
+        "dim": true
+      }
+    ],
+    [
+      {
+        "text": "│ _tb_fixture.py:25 in _wrap                                        "
+      }
+    ],
+    [
+      {
+        "text": "│ "
+      },
+      {
+        "text": "      except ZeroDivisionError as err:                            ",
+        "dim": true
+      }
+    ],
+    [
+      {
+        "text": "│ "
+      },
+      {
+        "text": "          raise ValueError(\"could not divide\") from err           ",
+        "fg": "cyan"
+      }
+    ],
+    [
+      {
+        "text": "│ "
+      },
+      {
+        "text": "          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^           ",
+        "fg": "red"
+      }
+    ],
+    [
+      {
+        "text": "│ "
+      },
+      {
+        "text": "                                                                  ",
+        "dim": true
+      }
+    ]
+  ]
+}

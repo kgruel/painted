@@ -1,0 +1,163 @@
+{
+  "width": 68,
+  "height": 20,
+  "rows": [
+    [
+      {
+        "text": "ZeroDivisionError: ",
+        "fg": "red"
+      },
+      {
+        "text": "division by zero                                 "
+      }
+    ],
+    [
+      {
+        "text": "│ _tb_fixture.py:40 in make_context                                 "
+      }
+    ],
+    [
+      {
+        "text": "│ "
+      },
+      {
+        "text": "      try:                                                        ",
+        "dim": true
+      }
+    ],
+    [
+      {
+        "text": "│ "
+      },
+      {
+        "text": "          divide(1, 0)                                            ",
+        "fg": "cyan"
+      }
+    ],
+    [
+      {
+        "text": "│ "
+      },
+      {
+        "text": "          ^^^^^^^^^^^^                                            ",
+        "fg": "red"
+      }
+    ],
+    [
+      {
+        "text": "│ "
+      },
+      {
+        "text": "      except ZeroDivisionError:                                   ",
+        "dim": true
+      }
+    ],
+    [
+      {
+        "text": "│ _tb_fixture.py:18 in divide                                       "
+      }
+    ],
+    [
+      {
+        "text": "│ "
+      },
+      {
+        "text": "      numerator = a                                               ",
+        "dim": true
+      }
+    ],
+    [
+      {
+        "text": "│ "
+      },
+      {
+        "text": "      return numerator / b  # ZeroDivisionError raises here       ",
+        "fg": "cyan"
+      }
+    ],
+    [
+      {
+        "text": "│ "
+      },
+      {
+        "text": "             ^^^^^^^^^^^^^                                        ",
+        "fg": "red"
+      }
+    ],
+    [
+      {
+        "text": "│ "
+      },
+      {
+        "text": "                                                                  ",
+        "dim": true
+      }
+    ],
+    [
+      {
+        "text": "                                                                    "
+      }
+    ],
+    [
+      {
+        "text": "During handling of the above exception, another exception occurred: ",
+        "fg": "yellow"
+      }
+    ],
+    [
+      {
+        "text": "                                                                    "
+      }
+    ],
+    [
+      {
+        "text": "RuntimeError: ",
+        "fg": "red"
+      },
+      {
+        "text": "cleanup failed                                        "
+      }
+    ],
+    [
+      {
+        "text": "│ _tb_fixture.py:43 in make_context                                 "
+      }
+    ],
+    [
+      {
+        "text": "│ "
+      },
+      {
+        "text": "          try:                                                    ",
+        "dim": true
+      }
+    ],
+    [
+      {
+        "text": "│ "
+      },
+      {
+        "text": "              raise RuntimeError(\"cleanup failed\")                ",
+        "fg": "cyan"
+      }
+    ],
+    [
+      {
+        "text": "│ "
+      },
+      {
+        "text": "              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^                ",
+        "fg": "red"
+      }
+    ],
+    [
+      {
+        "text": "│ "
+      },
+      {
+        "text": "          except RuntimeError as exc:                             ",
+        "dim": true
+      }
+    ]
+  ]
+}
