@@ -1,0 +1,86 @@
+{
+  "width": 32,
+  "height": 9,
+  "rows": [
+    [
+      {
+        "text": "dict[3]                         "
+      }
+    ],
+    [
+      {
+        "text": "user: alice, roles: ['admin', '…"
+      }
+    ],
+    [
+      {
+        "text": "user:   ",
+        "bold": true
+      },
+      {
+        "text": "alice                   "
+      }
+    ],
+    [
+      {
+        "text": "roles:  ",
+        "bold": true
+      },
+      {
+        "text": "admin, ops              "
+      }
+    ],
+    [
+      {
+        "text": "active: ",
+        "bold": true
+      },
+      {
+        "text": "True                    "
+      }
+    ],
+    [
+      {
+        "text": "user:   ",
+        "bold": true
+      },
+      {
+        "text": "alice                   "
+      }
+    ],
+    [
+      {
+        "text": "roles:  ",
+        "bold": true
+      },
+      {
+        "text": "- ",
+        "dim": true
+      },
+      {
+        "text": "admin                 "
+      }
+    ],
+    [
+      {
+        "text": "        "
+      },
+      {
+        "text": "- ",
+        "dim": true
+      },
+      {
+        "text": "ops                   "
+      }
+    ],
+    [
+      {
+        "text": "active: ",
+        "bold": true
+      },
+      {
+        "text": "True                    "
+      }
+    ]
+  ]
+}

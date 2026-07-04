@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import fields, is_dataclass
+from enum import Enum
 from typing import TYPE_CHECKING, Any
 
 from ...core._text_width import display_width, truncate, truncate_ellipsis
@@ -16,6 +18,31 @@ from ...core.compose import fit_to_width, join_horizontal, join_vertical
 _MAX_DICT_ITEMS = 20
 _MAX_LIST_ITEMS = 20
 _MAX_STR_DISPLAY = 200
+
+# Absolute recursion floor for the built-in path. Zoom-decrement already bounds
+# recursion for well-behaved data, but a high zoom on a deep (or cyclic) structure
+# defeats it — this is the hard stop. At the floor we emit a muted `…` instead of
+# descending.
+_MAX_DEPTH = 6
+
+# Container markers, rendered in the palette's muted role.
+_CYCLE_MARKER = "↻ <cycle>"
+_DEPTH_MARKER = "…"
+
+
+def _is_namedtuple(x: Any) -> bool:
+    """A tuple carrying the NamedTuple protocol (declared field schema)."""
+    return isinstance(x, tuple) and hasattr(x, "_fields") and hasattr(x, "_asdict")
+
+
+def _muted_marker(text: str, width: int) -> Block:
+    """A width-exact marker in the palette's muted role (cycle/depth sentinels)."""
+    from ...palette import current_palette
+
+    style = current_palette().muted
+    if display_width(text) > width:
+        text = truncate_ellipsis(text, width) if width > 1 else truncate(text, width)
+    return Block.text(text, style, width=width)
 
 
 def _is_numeric_sequence(data: Any) -> bool:
@@ -55,11 +82,31 @@ def shape_lens(content: Any, zoom: int, width: int, *, fidelity: Fidelity | None
 
     For nested structures, each nesting level reduces effective zoom by 1.
     """
+    return _shape_lens(content, zoom, width, fidelity, frozenset(), 0)
+
+
+def _shape_lens(
+    content: Any,
+    zoom: int,
+    width: int,
+    fidelity: Fidelity | None,
+    seen: frozenset[int],
+    depth: int,
+) -> Block:
+    """The recursive worker. Threads cycle state (`seen` = container ids on the
+    current path) and an absolute `depth` counter through the built-in path; the
+    public `shape_lens` seeds both. Scalars are leaves and skip the guards; every
+    container is guarded before it descends."""
     if width <= 0:
         return Block.empty(0, 1)
 
     if content is None:
         return _render_scalar(content, zoom, width, fidelity)
+
+    # Declared schema: an Enum renders as the scalar `TypeName.MEMBER` (checked
+    # before the numeric/str scalar branch so IntEnum/StrEnum honor the name).
+    if isinstance(content, Enum):
+        return _render_enum(content, width)
 
     if isinstance(content, bool):
         # Check bool before int since bool is subclass of int
@@ -67,6 +114,16 @@ def shape_lens(content: Any, zoom: int, width: int, *, fidelity: Fidelity | None
 
     if isinstance(content, (str, int, float)):
         return _render_scalar(content, zoom, width, fidelity)
+
+    # From here down every branch recurses into children. A self-referential or
+    # pathologically deep structure would otherwise blow the stack — guard both
+    # before descending: cycle first (tighter), then the absolute floor.
+    if id(content) in seen:
+        return _muted_marker(_CYCLE_MARKER, width)
+    if depth >= _MAX_DEPTH:
+        return _muted_marker(_DEPTH_MARKER, width)
+    seen = seen | {id(content)}
+    depth += 1
 
     # Auto-dispatch for dicts in one pass over values
     if isinstance(content, dict):
@@ -93,7 +150,18 @@ def shape_lens(content: Any, zoom: int, width: int, *, fidelity: Fidelity | None
 
                 return tree_lens(content, zoom, width, fidelity=fidelity)
 
-        return _render_dict(content, zoom, width, fidelity)
+        return _render_dict(content, zoom, width, fidelity, seen, depth)
+
+    # Declared schema: a dataclass instance renders its fields through the dict
+    # machinery. `repr=False` is declared suppression — honor it by dropping the
+    # field. Every value routes back through the budgeted recursive path.
+    if is_dataclass(content) and not isinstance(content, type):
+        rendered = {f.name: getattr(content, f.name) for f in fields(content) if f.repr}
+        return _render_dict(rendered, zoom, width, fidelity, seen, depth)
+
+    # Declared schema: a NamedTuple renders its `_asdict()` through the dict path.
+    if _is_namedtuple(content):
+        return _render_dict(dict(content._asdict()), zoom, width, fidelity, seen, depth)
 
     # Auto-dispatch: numeric sequences -> chart
     if _is_numeric_sequence(content):
@@ -102,13 +170,22 @@ def shape_lens(content: Any, zoom: int, width: int, *, fidelity: Fidelity | None
         return chart_lens(content, zoom, width, fidelity=fidelity)
 
     if isinstance(content, list):
-        return _render_list(content, zoom, width, fidelity)
+        return _render_list(content, zoom, width, fidelity, seen, depth)
 
     if isinstance(content, set):
         return _render_set(content, zoom, width)
 
     # Fallback: treat as string representation
     return _render_scalar(str(content), zoom, width, fidelity)
+
+
+def _render_enum(value: Enum, width: int) -> Block:
+    """Render an Enum member as the scalar `TypeName.MEMBER`, width-exact."""
+    label = f"{type(value).__name__}.{value.name}"
+    style = Style()
+    if display_width(label) > width:
+        label = truncate_ellipsis(label, width) if width > 1 else truncate(label, width)
+    return Block.text(label, style, width=width)
 
 
 def _render_scalar(value: Any, zoom: int, width: int, fidelity: Fidelity | None = None) -> Block:
@@ -149,7 +226,14 @@ def _format_value(value: Any) -> str:
     return str(value)
 
 
-def _render_dict(d: dict, zoom: int, width: int, fidelity: Fidelity | None = None) -> Block:
+def _render_dict(
+    d: dict,
+    zoom: int,
+    width: int,
+    fidelity: Fidelity | None,
+    seen: frozenset[int],
+    depth: int,
+) -> Block:
     """Render dict at zoom levels."""
     style = Style()
 
@@ -186,7 +270,7 @@ def _render_dict(d: dict, zoom: int, width: int, fidelity: Fidelity | None = Non
             )
         val_col_width = max(1, width - key_col_width)
         key_block = Block.text(key_text, key_style, width=key_col_width)
-        val_block = shape_lens(value, max(0, zoom - 1), val_col_width, fidelity=fidelity)
+        val_block = _shape_lens(value, max(0, zoom - 1), val_col_width, fidelity, seen, depth)
         return join_horizontal(key_block, val_block)
 
     rows: list[Block] = []
@@ -216,7 +300,7 @@ def _render_dict(d: dict, zoom: int, width: int, fidelity: Fidelity | None = Non
 
         # Render value recursively with reduced zoom
         nested_zoom = max(0, zoom - 1)
-        val_block = shape_lens(value, nested_zoom, val_col_width, fidelity=fidelity)
+        val_block = _shape_lens(value, nested_zoom, val_col_width, fidelity, seen, depth)
 
         row = join_horizontal(key_block, val_block)
         rows.append(row)
@@ -231,7 +315,14 @@ def _render_dict(d: dict, zoom: int, width: int, fidelity: Fidelity | None = Non
     return join_vertical(*rows)
 
 
-def _render_list(lst: list, zoom: int, width: int, fidelity: Fidelity | None = None) -> Block:
+def _render_list(
+    lst: list,
+    zoom: int,
+    width: int,
+    fidelity: Fidelity | None,
+    seen: frozenset[int],
+    depth: int,
+) -> Block:
     """Render list at zoom levels."""
     style = Style()
 
@@ -276,7 +367,7 @@ def _render_list(lst: list, zoom: int, width: int, fidelity: Fidelity | None = N
     for item in visible:
         # Render item recursively with reduced zoom
         nested_zoom = max(0, zoom - 1)
-        item_block = shape_lens(item, nested_zoom, item_width, fidelity=fidelity)
+        item_block = _shape_lens(item, nested_zoom, item_width, fidelity, seen, depth)
 
         # Prefix with "- "
         prefix_block = Block.text("- ", Style(dim=True))
