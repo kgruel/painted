@@ -1,8 +1,10 @@
 # Declared vocabularies — the mark channel and the color contract
 
-**Status: DRAFT 2026-07-05** (ratified in design discussion 2026-07-04; store:
+**Status: RATIFIED** (design discussion 2026-07-04; store:
 `sl read project decision/design/declared-vocabularies` and
-`roadmap/vocabularies-doc`). This is the design of record for the fourth
+`roadmap/vocabularies-doc`). **Build sequence items 1–3 implemented 2026-07-05**
+(the 0.6 arc, branch `declared-vocabularies`); items 4–5 ride the 0.8 paint()
+release and the consumers' own schedules. This is the design of record for the fourth
 meaning channel (**mark**) and for the rule that every color in a painted
 program traces to a declaration. Companion to `docs/FIDELITY_DESIGN.md` —
 that document gave *disclosure* its declaration grammar; this one does the
@@ -263,16 +265,27 @@ keymaps the fourth.
 - `Severity` (the enum) survives unchanged as the typed spelling of the
   built-in vocabulary — semver-stable, still closed, still raising on
   unmapped members. Internally, `_callout.py`'s `_SEVERITY` role-half and
-  `diagnostics.py`'s `_SEVERITY_ROLE` (today: independent duplicates)
-  collapse into the one built-in `Vocabulary("severity", ...)` declaration.
+  `diagnostics.py`'s `_SEVERITY_ROLE` (formerly independent duplicates)
+  collapsed into the one built-in `Vocabulary("severity", ...)` declaration.
   `DEFAULT_THRESHOLDS` is re-expressed as a `Thresholds` onto it — public
-  shape unchanged.
+  shape unchanged. (One deliberate delta: a record below every declared
+  floor now resolves to the smallest floor's value, not a hardcoded INFO —
+  identical under `DEFAULT_THRESHOLDS`; diagnostics had not shipped.)
 - `views/record.py`'s `gutter_lifecycle` / `gutter_freshness` /
-  `gutter_pass_fail` are the internal remediation targets: each becomes a
-  built-in example vocabulary + a gutter factory call, and their status
-  sets stop being three private dialects. They are also the acceptance
-  test: if the mechanism can't express painted's own gutters more simply
-  than the if-chains, the mechanism is wrong.
+  `gutter_pass_fail` were the internal remediation targets: each is now an
+  ordered example vocabulary + a `record_gutter` factory call, and their
+  status sets stopped being three private dialects (raw payload spellings
+  became explicit aliases). They were also the acceptance test: if the
+  mechanism couldn't express painted's own gutters more simply than the
+  if-chains, the mechanism was wrong. It passed — glyph weight derives from
+  distance-to-the-attention-end against a ramp, so the fade rail (freshness)
+  and the escalation rails (lifecycle, pass-fail) are one rule with two
+  ramps, not two code paths. The example vocabularies are deliberately NOT
+  registered as built-ins: a consumer's own `freshness`/`lifecycle`
+  declaration must never collide with a painted example. One boundary drawn
+  in the build: honesty rules govern *declarations*; a gutter renders
+  *data*, so out-of-vocabulary payload values route to a declared `unknown`
+  fallback rather than raising — a rail never raises on data.
 - Downstream (consumer guidance, their schedule): `LoopsPalette` dissolves
   into declarations — kind taxonomy → `Vocabulary` with `overflow="series"`,
   freshness → ordered vocabulary + `Thresholds`, tier → one vocabulary
@@ -310,14 +323,18 @@ keymaps the fourth.
 
 ## 10. Build sequence
 
-1. `Role`, `Vocabulary`, `Thresholds`, `use_vocabularies`, `mark_style`,
-   `Palette.series_for` (+ md5 digest helper). Unit + property tests pin
-   the honesty rules (§1) and determinism (§5).
-2. Severity reframe: single built-in declaration; `_callout` +
-   `diagnostics` consume it; `DEFAULT_THRESHOLDS` re-expressed. No public
-   surface change.
-3. Internal remediation: `record.py` gutter functions re-expressed via the
-   mechanism (the acceptance test).
+1. **DONE (89fcddc)** — `Role`, `Vocabulary`, `Thresholds`,
+   `use_vocabularies`, `mark_style`, `Palette.series_for` (+ md5 digest
+   helper). Unit + property tests pin the honesty rules (§1) and
+   determinism (§5). The registry grew two layers in the build (built-in +
+   app) so the severity declaration of item 2 cannot be wiped by an app's
+   `use_vocabularies`; `Theme` grew `roles=` as the override path.
+2. **DONE (7b3b919)** — Severity reframe: single built-in declaration;
+   `_callout` + `diagnostics` consume it; `DEFAULT_THRESHOLDS`
+   re-expressed. No public surface change.
+3. **DONE (c1e40ab)** — Internal remediation: `record.py` gutter functions
+   re-expressed via the mechanism (the acceptance test — passed; see §7).
+   `record_gutter` joined the stable views surface.
 4. `paint(mark=)` lands with the paint() entry-point work (separate
    release; this mechanism ships first and `show()` can consume
    `mark_style` immediately).
