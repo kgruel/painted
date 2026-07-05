@@ -15,9 +15,18 @@ import sys
 
 import pytest
 
-from painted import DEFAULT_THRESHOLDS, PaintedHandler, Zoom, install, print_block
+from painted import (
+    DEFAULT_THRESHOLDS,
+    PaintedHandler,
+    Style,
+    Theme,
+    Zoom,
+    install,
+    print_block,
+    reset_theme,
+    use_theme,
+)
 from painted.core.writer import ColorDepth
-from painted.diagnostics import _resolve_severity
 from painted.views import Severity, render_traceback
 
 
@@ -50,16 +59,38 @@ def _handler(**kw) -> PaintedHandler:
 # --- Thresholds -------------------------------------------------------------
 
 
-def test_resolve_severity_picks_greatest_floor_cleared() -> None:
-    assert _resolve_severity(logging.DEBUG, DEFAULT_THRESHOLDS) is Severity.INFO
-    assert _resolve_severity(logging.INFO, DEFAULT_THRESHOLDS) is Severity.INFO
-    assert _resolve_severity(logging.WARNING, DEFAULT_THRESHOLDS) is Severity.WARNING
-    assert _resolve_severity(logging.ERROR, DEFAULT_THRESHOLDS) is Severity.ERROR
-    assert _resolve_severity(logging.CRITICAL, DEFAULT_THRESHOLDS) is Severity.ERROR
-    # Between floors resolves to the lower floor's severity.
-    assert _resolve_severity(45, DEFAULT_THRESHOLDS) is Severity.ERROR
-    # Below every floor degrades to INFO.
-    assert _resolve_severity(1, DEFAULT_THRESHOLDS) is Severity.INFO
+def test_default_thresholds_parity_with_legacy_resolution() -> None:
+    # §10.2 parity: the compiled-Thresholds path the handler now uses reproduces
+    # the deleted _resolve_severity for every level under DEFAULT_THRESHOLDS. The
+    # expected outputs are the OLD algorithm's, hardcoded (greatest floor cleared;
+    # below all floors → INFO). Parity holds because DEFAULT_THRESHOLDS's smallest
+    # floor is DEBUG→INFO, so Thresholds D3 (below-all → smallest-floor value)
+    # lands on the same INFO the old hardcoded fall-through returned.
+    expected = {
+        0: Severity.INFO,
+        5: Severity.INFO,
+        10: Severity.INFO,
+        15: Severity.INFO,
+        20: Severity.INFO,
+        25: Severity.INFO,
+        30: Severity.WARNING,
+        35: Severity.WARNING,
+        40: Severity.ERROR,
+        45: Severity.ERROR,
+        50: Severity.ERROR,
+        55: Severity.ERROR,
+    }
+    handler = _handler()
+    for levelno in range(0, 60, 5):
+        got = Severity(handler._compiled_thresholds.resolve(levelno))
+        assert got is expected[levelno], f"levelno {levelno}: {got} != {expected[levelno]}"
+
+
+def test_empty_thresholds_raise_at_construction() -> None:
+    # A declaration with no floors declares nothing — loud at the handler
+    # boundary, in the handler's own words (not Thresholds' internal message).
+    with pytest.raises(ValueError, match="thresholds="):
+        _handler(thresholds={})
 
 
 def test_custom_thresholds_change_output_honesty() -> None:
@@ -75,6 +106,32 @@ def test_custom_thresholds_change_output_honesty() -> None:
         rec,
     )
     assert default != custom
+
+
+# --- Severity-style snapshot (theme captured at construction) ---------------
+
+_MAGENTA_SGR = "\x1b[35m"  # Style(fg="magenta") → basic SGR, any color depth
+
+
+def test_handler_snapshots_theme_role_override_at_construction() -> None:
+    # The construction snapshot now captures Theme role-overrides too: a handler
+    # built while a Theme re-tints the "error" role renders that override even
+    # after the theme is reset — the same snapshot discipline as the palette.
+    with use_theme(Theme(roles={"error": Style(fg="magenta")})):
+        handler = _handler(color_depth=ColorDepth.TRUECOLOR, zoom=Zoom.SUMMARY)
+    reset_theme()
+    out = _emit(handler, _record(level=logging.ERROR, msg="boom"))
+    assert _MAGENTA_SGR in out
+
+
+def test_handler_ignores_theme_applied_after_construction() -> None:
+    # The inverse: a handler built under defaults must ignore a theme applied
+    # later — the snapshot is frozen at construction, so the level styling stays
+    # the default error color, never the magenta declared afterward.
+    handler = _handler(color_depth=ColorDepth.TRUECOLOR, zoom=Zoom.SUMMARY)
+    use_theme(Theme(roles={"error": Style(fg="magenta")}))
+    out = _emit(handler, _record(level=logging.ERROR, msg="boom"))
+    assert _MAGENTA_SGR not in out
 
 
 # --- Extra → payload / message ---------------------------------------------

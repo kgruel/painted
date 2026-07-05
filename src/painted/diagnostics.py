@@ -32,6 +32,7 @@ from .core.writer import ColorDepth, Writer, print_block, render_block_ansi
 from .core.zoom import Zoom
 from .palette import current_palette, use_palette
 from .views.components._callout import Severity
+from .vocabulary import SEVERITY_VOCABULARY, Thresholds, mark_style
 
 if TYPE_CHECKING:
     from .core.block import Block
@@ -53,28 +54,6 @@ DEFAULT_THRESHOLDS: Mapping[int, Severity] = MappingProxyType(
         logging.CRITICAL: Severity.ERROR,
     }
 )
-
-# Severity → Palette role attribute. INFO has no dedicated role (neutral notices
-# stay muted); the other three map to their like-named role. Mirrors the closed
-# vocabulary the callout component already declares.
-_SEVERITY_ROLE: dict[Severity, str] = {
-    Severity.SUCCESS: "success",
-    Severity.INFO: "muted",
-    Severity.WARNING: "warning",
-    Severity.ERROR: "error",
-}
-
-
-def _resolve_severity(levelno: int, thresholds: Mapping[int, Severity]) -> Severity:
-    """The Severity of the greatest floor ``levelno`` clears (INFO if below all)."""
-    best_floor = None
-    best = Severity.INFO
-    for floor, severity in thresholds.items():
-        if levelno >= floor and (best_floor is None or floor > best_floor):
-            best_floor = floor
-            best = severity
-    return best
-
 
 # Standard LogRecord attributes — everything NOT here is a caller-supplied
 # `extra` field, rendered as payload continuation at DETAILED+.
@@ -113,7 +92,7 @@ _STD_ATTRS = frozenset(
 class PaintedHandler(logging.Handler):
     """A ``logging.Handler`` that renders records to Blocks, not format strings.
 
-    The severity role, color depth, and palette are snapshotted at CONSTRUCTION:
+    The severity styles, color depth, and palette are snapshotted at CONSTRUCTION:
     a ContextVar palette does not cross threads, so a worker-thread log must
     render with the same aesthetic the main thread declared. ``emit`` builds a
     Block (timestamp + severity-styled level + logger + message + ``extra``
@@ -137,11 +116,26 @@ class PaintedHandler(logging.Handler):
         self._stream = stream
         self._zoom = zoom
         self._width = width
-        self._thresholds = thresholds
         self._traceback_zoom = traceback_zoom
         # Snapshot the aesthetic at construction — ContextVar state does not cross
-        # threads, so this is what every emit (any thread) renders with.
+        # threads, so this is what every emit (any thread) renders with. The
+        # severity styles resolve through the built-in "severity" vocabulary under
+        # the ambient state HERE, so a Theme(roles=...) active at construction is
+        # captured too (same snapshot discipline as the palette).
         self._palette: Palette = current_palette()
+        self._severity_styles: dict[Severity, Style] = {
+            s: mark_style("severity", s.value) for s in Severity
+        }
+        # Compile the levelno→Severity floors once onto the ordered vocabulary; a
+        # record's level resolves per-emit via `Thresholds.resolve`.
+        if not thresholds:
+            raise ValueError(
+                "PaintedHandler thresholds= must declare at least one levelno "
+                "floor (see DEFAULT_THRESHOLDS)"
+            )
+        self._compiled_thresholds = Thresholds(
+            SEVERITY_VOCABULARY, {float(k): v.value for k, v in thresholds.items()}
+        )
         self._color_depth = (
             color_depth if color_depth is not None else Writer(stream).detect_color_depth()
         )
@@ -183,8 +177,8 @@ class PaintedHandler(logging.Handler):
         from .core.compose import join_vertical
 
         p = current_palette()
-        severity = _resolve_severity(record.levelno, self._thresholds)
-        role: Style = getattr(p, _SEVERITY_ROLE[severity])
+        severity = Severity(self._compiled_thresholds.resolve(record.levelno))
+        role = self._severity_styles[severity]
 
         message = self._message(record)
         msg_lines = message.split("\n")

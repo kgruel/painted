@@ -22,6 +22,7 @@ from ...core.compose import border, fit_to_width, join_vertical, pad
 from ...core.span import Line, Span
 from ...icon_set import current_icons
 from ...palette import current_palette
+from ...vocabulary import mark_style
 
 
 class Severity(Enum):
@@ -44,13 +45,15 @@ class Severity(Enum):
     ERROR = "error"
 
 
-# Severity -> (IconSet glyph attribute, Palette role attribute). Keyed by the
+# Severity -> IconSet glyph attribute. The glyph is its own treatment dimension
+# (IconSet vocabulary); the COLOR half resolves through the built-in "severity"
+# vocabulary (mark_style), so callouts also honor Theme(roles=...). Keyed by the
 # enum so an unknown value is a KeyError at the boundary, never a silent default.
-_SEVERITY: dict[Severity, tuple[str, str]] = {
-    Severity.SUCCESS: ("ok", "success"),
-    Severity.INFO: ("info", "muted"),
-    Severity.WARNING: ("warn", "warning"),
-    Severity.ERROR: ("error", "error"),
+_SEVERITY_ICON: dict[Severity, str] = {
+    Severity.SUCCESS: "ok",
+    Severity.INFO: "info",
+    Severity.WARNING: "warn",
+    Severity.ERROR: "error",
 }
 
 # LIGHT border (1 col each side) + horizontal pad (1 col each side) when boxed.
@@ -87,16 +90,15 @@ def callout(
     Raises ``ValueError`` if ``severity`` is not a :class:`Severity` member (no
     silent fall-through to ``INFO`` — that was the pre-hardening defect).
     """
-    spec = _SEVERITY.get(severity)
-    if spec is None:
+    icon_attr = _SEVERITY_ICON.get(severity)
+    if icon_attr is None:
         raise ValueError(
             f"Unknown severity: {severity!r} (pass a Severity member, e.g. Severity.ERROR)"
         )
-    icon_attr, role_attr = spec
     icons = current_icons()
     palette = current_palette()
     glyph = getattr(icons, icon_attr)
-    role = getattr(palette, role_attr)
+    role = mark_style("severity", severity.value)
     muted = palette.muted
 
     lines: list[Line] = [Line((Span(f"{glyph} ", role), Span(subject)))]

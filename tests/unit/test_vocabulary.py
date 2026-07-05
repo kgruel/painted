@@ -283,8 +283,8 @@ class TestThresholds:
 
     def test_reproduces_resolve_severity_default_shape(self) -> None:
         # The DEFAULT_THRESHOLDS shape: DEBUG/INFO floors both onto the lowest
-        # value; below-all falls to it too (parity with diagnostics._resolve_severity,
-        # whose full parity test lands in slice 2).
+        # value; below-all falls to it too. The handler-side parity test lives in
+        # test_diagnostics (test_default_thresholds_parity_with_legacy_resolution).
         t = Thresholds(
             _severity_vocab(),
             {
@@ -355,8 +355,9 @@ class TestDualModeSeam:
 
 
 class TestBuiltinLayer:
-    """The built-in layer is empty in slice 1, so these tests monkeypatch it to
-    exercise the fall-through and collision behavior slice 2 relies on."""
+    """The two-layer fall-through and collision behavior, exercised against a
+    controlled built-in monkeypatched in — kept independent of the real
+    ``severity`` built-in (:class:`TestSeverityBuiltin` covers that one)."""
 
     @pytest.fixture
     def builtin_severity(self, monkeypatch: pytest.MonkeyPatch) -> Vocabulary:
@@ -391,3 +392,32 @@ class TestBuiltinLayer:
     def test_app_layer_shadows_nothing_but_extends(self, builtin_severity: Vocabulary) -> None:
         use_vocabularies(Vocabulary("kind", values=("x",), roles={"x": "accent"}))
         assert set(current_vocabularies()) == {"severity", "kind"}
+
+
+# --- The real built-in severity vocabulary (slice 2) -------------------------
+
+
+class TestSeverityBuiltin:
+    """The shipped ``severity`` built-in: reachable by name with NO app
+    declaration, closed (no overflow), collision-guarded, and ordered."""
+
+    def test_marks_like_the_core_role_with_no_app_declaration(self) -> None:
+        reset_vocabularies()
+        assert mark_style("severity", "error") == Palette().error
+        assert mark_style("severity", "info") == Palette().muted  # the journalctl principle
+
+    def test_unknown_value_raises_no_overflow(self) -> None:
+        reset_vocabularies()
+        with pytest.raises(ValueError, match="not a member of vocabulary 'severity'"):
+            mark_style("severity", "nope")
+
+    def test_app_redeclaration_collides(self) -> None:
+        clash = Vocabulary("severity", values=("a",), roles={"a": "accent"})
+        with pytest.raises(ValueError, match="collides with a built-in vocabulary"):
+            use_vocabularies(clash)
+
+    def test_is_ordered(self) -> None:
+        reset_vocabularies()
+        severity = current_vocabularies()["severity"]
+        assert severity.at_least("warning") == ("warning", "error")
+        assert severity.cmp("info", "error") == -1

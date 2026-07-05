@@ -298,11 +298,30 @@ _EMPTY: Mapping[str, Any] = MappingProxyType({})
 
 # --- Two-layer registry: built-in (immutable) + app (replaceable) ------------
 # Severity is the built-in mark vocabulary and declared vocabularies EXTEND it —
-# the depth-vs-Tag pattern repeating. The built-in layer is empty until slice 2
-# fills it with Vocabulary("severity", ...); it exists from day one so an app's
-# use_vocabularies REPLACES the app layer WITHOUT wiping the built-ins.
+# the depth-vs-Tag pattern repeating. The built-in layer holds severity from day
+# one so an app's use_vocabularies REPLACES the app layer WITHOUT wiping the
+# built-ins.
 
-_BUILTIN_VOCABULARIES: Mapping[str, Vocabulary] = MappingProxyType({})
+# The one built-in vocabulary. Its values ARE the Severity enum's `.value`
+# strings (Severity.ERROR.value == "error"), so the enum↔vocabulary bridge is
+# `severity.value` — no mapping table. INFO binds "muted": info has no dedicated
+# role, neutral notices stay quiet (the journalctl principle). Ordered, so
+# Thresholds maps levelno floors onto it; attention="last" (the default) puts the
+# eye on the error end. NOT exported — reachable by name through
+# mark_style("severity", ...) and current_vocabularies(); apps re-tint it via
+# Theme(roles=...), never by redeclaration (a redeclaration collides — see
+# _build_registry). This name is for painted's own modules (_callout,
+# diagnostics).
+SEVERITY_VOCABULARY = Vocabulary(
+    "severity",
+    values=("success", "info", "warning", "error"),
+    ordered=True,
+    roles={"success": "success", "info": "muted", "warning": "warning", "error": "error"},
+)
+
+_BUILTIN_VOCABULARIES: Mapping[str, Vocabulary] = MappingProxyType(
+    {"severity": SEVERITY_VOCABULARY}
+)
 
 _vocabularies: ContextVar[Mapping[str, Vocabulary]] = ContextVar("vocabularies", default=_EMPTY)
 
