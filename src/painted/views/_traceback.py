@@ -92,6 +92,20 @@ class _Node:
     context: _Node | None  # __context__ (unsuppressed) — "during handling of"
     children: tuple[_Node, ...]  # ExceptionGroup members
     is_group: bool
+    is_cycle: bool = False  # a revisited exception — a muted ↻ marker, not a re-walk
+
+
+# A chain/group link back to an already-normalized exception. Cause/context are
+# assignable (`a.__cause__ = b; b.__cause__ = a`) and `raise e from e` is legal, so
+# the exception graph can be cyclic; a marker node stops the walk the way stdlib's
+# `TracebackException` threads a `_seen` id-set. Without it a cycle recurses until
+# RecursionError — which would defeat the whole point of an error renderer.
+_CYCLE = "↻ <cycle>"
+
+
+def _cycle_node() -> _Node:
+    """A sentinel for a revisited exception in a cyclic chain (rendered muted)."""
+    return _Node(_CYCLE, "", (), None, None, (), False, is_cycle=True)
 
 
 def _safe_str(exc: BaseException) -> str:
@@ -102,13 +116,19 @@ def _safe_str(exc: BaseException) -> str:
         return f"<unprintable {type(exc).__name__}>"
 
 
-def _from_exception(exc: BaseException, capture: bool) -> _Node:
+def _from_exception(exc: BaseException, capture: bool, seen: frozenset[int] = frozenset()) -> _Node:
     """Normalize a live exception. ``capture`` grabs live frame locals (FULL).
 
     Colno and the frame list come from a capture-free ``TracebackException`` (no
     eager repr, so nothing in it can raise); live locals are read separately from
     the traceback frames, which walk in the same order — so the two align by index.
+
+    ``seen`` carries the ids of exceptions already on the current walk so a cyclic
+    cause/context/group chain stops at a muted marker instead of recursing forever.
     """
+    if id(exc) in seen:
+        return _cycle_node()
+    seen = seen | {id(exc)}
     te = TracebackException.from_exception(exc, capture_locals=False)
     walked = list(traceback.walk_tb(exc.__traceback__)) if capture else []
     frames: list[_Frame] = []
@@ -127,17 +147,17 @@ def _from_exception(exc: BaseException, capture: bool) -> _Node:
             )
         )
 
-    cause = _from_exception(exc.__cause__, capture) if exc.__cause__ is not None else None
+    cause = _from_exception(exc.__cause__, capture, seen) if exc.__cause__ is not None else None
     # __context__ is shown only when not suppressed; `raise X from Y` (and
     # `from None`) both set __suppress_context__, so a set __cause__ naturally
     # wins here without a separate precedence check.
     context = (
-        _from_exception(exc.__context__, capture)
+        _from_exception(exc.__context__, capture, seen)
         if exc.__context__ is not None and not exc.__suppress_context__
         else None
     )
     is_group = isinstance(exc, BaseExceptionGroup)
-    children = tuple(_from_exception(e, capture) for e in exc.exceptions) if is_group else ()
+    children = tuple(_from_exception(e, capture, seen) for e in exc.exceptions) if is_group else ()
 
     return _Node(
         type(exc).__name__,
@@ -150,8 +170,16 @@ def _from_exception(exc: BaseException, capture: bool) -> _Node:
     )
 
 
-def _from_te(te: TracebackException) -> _Node:
-    """Normalize a captured TracebackException (locals are frozen repr strings)."""
+def _from_te(te: TracebackException, seen: frozenset[int] = frozenset()) -> _Node:
+    """Normalize a captured TracebackException (locals are frozen repr strings).
+
+    stdlib collapses live cycles when it builds the tree, so a captured chain is
+    normally acyclic; the ``seen`` guard still holds against a hand-assembled
+    cyclic ``TracebackException`` — the never-raise law applies to both inputs.
+    """
+    if id(te) in seen:
+        return _cycle_node()
+    seen = seen | {id(te)}
     frames = tuple(
         _Frame(
             fs.filename,
@@ -166,15 +194,15 @@ def _from_te(te: TracebackException) -> _Node:
         )
         for fs in te.stack
     )
-    cause = _from_te(te.__cause__) if te.__cause__ is not None else None
+    cause = _from_te(te.__cause__, seen) if te.__cause__ is not None else None
     context = (
-        _from_te(te.__context__)
+        _from_te(te.__context__, seen)
         if te.__context__ is not None and not te.__suppress_context__
         else None
     )
     sub = getattr(te, "exceptions", None)
     is_group = sub is not None
-    children = tuple(_from_te(t) for t in sub) if sub is not None else ()
+    children = tuple(_from_te(t, seen) for t in sub) if sub is not None else ()
 
     type_name, message = _split_head(te)
     return _Node(type_name, message, frames, cause, context, children, is_group)
@@ -392,6 +420,8 @@ def _connective(text: str, style: Style, width: int | None) -> Block:
 
 def _minimal_line(node: _Node, width: int | None, suppress) -> Block:
     """MINIMAL: ``Type: message at file.py:42`` — innermost app frame, one line."""
+    if node.is_cycle:
+        return _fit(_text(_CYCLE, current_palette().muted, width), width)
     p = current_palette()
     frame = _innermost_app_frame(node, suppress)
     at = ""
@@ -465,6 +495,8 @@ def _render_body(node: _Node, zoom: Zoom, width: int | None, suppress, redact) -
 
 def _render_node(node: _Node, zoom: Zoom, width: int | None, suppress, redact) -> Block:
     """A full exception including its chain (the earlier exception renders first)."""
+    if node.is_cycle:
+        return _fit(_text(_CYCLE, current_palette().muted, width), width)
     if zoom <= Zoom.MINIMAL:
         return _minimal_line(node, width, suppress)
 

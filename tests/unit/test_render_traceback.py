@@ -101,6 +101,26 @@ def test_exception_group_tree() -> None:
     assert "├─" in text or "└─" in text
 
 
+# --- Cyclic chains -----------------------------------------------------------
+
+
+def test_cyclic_cause_renders_marker() -> None:
+    # A cyclic __cause__ chain (`a from b`, `b from a`) must stop at a muted marker
+    # rather than recurse forever — the never-raise law under an adversarial chain.
+    a, b = ValueError("a"), TypeError("b")
+    a.__cause__, b.__cause__ = b, a
+    text = block_to_text(render_traceback(b, Zoom.DETAILED, 80))
+    assert "↻ <cycle>" in text
+
+
+def test_cyclic_context_renders_marker() -> None:
+    a, b = ValueError("a"), TypeError("b")
+    a.__context__, b.__context__ = b, a
+    a.__suppress_context__ = b.__suppress_context__ = False
+    text = block_to_text(render_traceback(a, Zoom.DETAILED, 80))
+    assert "↻ <cycle>" in text
+
+
 # --- Suppress fold + honesty -------------------------------------------------
 
 

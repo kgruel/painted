@@ -48,3 +48,28 @@ def test_tracebackexception_path_is_safe(message: str, z: Zoom, w: int) -> None:
     # safely (width-exact, never raises).
     te = traceback.TracebackException.from_exception(_raise(message), capture_locals=True)
     assert render_traceback(te, z, w).width == w
+
+
+@given(z=_zoom, w=st.integers(min_value=1, max_value=100))
+def test_cause_cycle_never_raises(z: Zoom, w: int) -> None:
+    # A cyclic __cause__ chain (legal via explicit assignment) must not recurse
+    # forever — the walk stops at a muted cycle marker.
+    a, b = _raise("a"), _raise("b")
+    a.__cause__, b.__cause__ = b, a
+    assert render_traceback(b, z, w).width == w
+
+
+@given(z=_zoom, w=st.integers(min_value=1, max_value=100))
+def test_context_cycle_never_raises(z: Zoom, w: int) -> None:
+    # The same guard holds for a cyclic __context__ chain (re-raise/retry code).
+    a, b = _raise("a"), _raise("b")
+    a.__context__, b.__context__ = b, a
+    a.__suppress_context__ = b.__suppress_context__ = False
+    assert render_traceback(a, z, w).width == w
+
+
+def test_self_cause_cycle_never_raises() -> None:
+    # `raise e from e` is a one-node cycle — the tightest case.
+    e = _raise("self")
+    e.__cause__ = e
+    render_traceback(e, Zoom.DETAILED, 80)
