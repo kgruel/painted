@@ -28,6 +28,7 @@ from painted import (
 )
 from painted.core.writer import ColorDepth
 from painted.views import Severity, render_traceback
+from painted.core.errors import DeclarationError
 
 
 def _record(
@@ -89,7 +90,7 @@ def test_default_thresholds_parity_with_legacy_resolution() -> None:
 def test_empty_thresholds_raise_at_construction() -> None:
     # A declaration with no floors declares nothing — loud at the handler
     # boundary, in the handler's own words (not Thresholds' internal message).
-    with pytest.raises(ValueError, match="thresholds="):
+    with pytest.raises(DeclarationError, match="thresholds="):
         _handler(thresholds={})
 
 

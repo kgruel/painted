@@ -23,6 +23,7 @@ from typing import Protocol
 
 from ..core.block import Block, Wrap
 from ..core.cell import Style
+from ..core.errors import DeclarationError
 from ..core.compose import fit_to_width, join_horizontal, join_vertical, pad, truncate
 from ..core.zoom import Zoom
 from ..icon_set import current_icons
@@ -773,40 +774,40 @@ def record_gutter(
       validated as names).
     """
     if not vocabulary.ordered:
-        raise ValueError(
+        raise DeclarationError(
             "record_gutter needs an ordered vocabulary (the glyph ramp is "
             f"distance from the attention end); {vocabulary.name!r} is unordered"
         )
     if aliases is not None and thresholds is not None:
-        raise ValueError(
+        raise DeclarationError(
             "record_gutter takes aliases OR thresholds, not both: aliases "
             "normalize categorical strings, thresholds bucket a numeric field"
         )
     if thresholds is not None and thresholds.vocabulary is not vocabulary:
-        raise ValueError(
+        raise DeclarationError(
             "record_gutter thresholds must resolve onto the same vocabulary "
             f"({vocabulary.name!r}), not {thresholds.vocabulary.name!r}"
         )
     if not glyphs:
-        raise ValueError("record_gutter needs at least one ramp glyph")
+        raise DeclarationError("record_gutter needs at least one ramp glyph")
     unknown_glyph, unknown_role = unknown
     # The rail budget is exactly one display column per glyph — apply_gutter
     # reserves 2 (glyph + space), so a wide glyph would silently clip content
     # at the final fit. A declaration fault, caught here (width-is-exact).
     for ch in (*glyphs, unknown_glyph):
         if display_width(ch) != 1:
-            raise ValueError(
+            raise DeclarationError(
                 f"record_gutter glyph {ch!r} is {display_width(ch)} display "
                 "columns wide; a rail glyph must be exactly 1"
             )
     if unknown_role not in CORE_ROLE_NAMES:
-        raise ValueError(
+        raise DeclarationError(
             f"record_gutter unknown role {unknown_role!r} is not a core role "
             f"({sorted(CORE_ROLE_NAMES)!r})"
         )
     for alias, target in (aliases or {}).items():
         if target not in vocabulary.values:
-            raise ValueError(
+            raise DeclarationError(
                 f"record_gutter alias {alias!r} -> {target!r} is not a member "
                 f"of vocabulary {vocabulary.name!r}"
             )

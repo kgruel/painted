@@ -154,12 +154,16 @@ its context manager.
   sites), this doc, changelog, and the demo
   (`demos/primitives/errors.py` — the introspected hierarchy tree, each
   contract broken for real and rendered through `PaintedHandler`).
-- **0.6 fast-follow** (branch `declared-vocabularies`, before it merges):
-  migrate its new raise sites — `vocabulary.py` validation (~20 sites,
-  all `DeclarationError` except the two call-time ordered-op/membership
-  checks, which are `ContractError`), `record_gutter` construction
-  (`DeclarationError`), `PaintedHandler` empty-thresholds
-  (`DeclarationError`).
+- **0.6 fast-follow** (branch `declared-vocabularies`, before it merges) —
+  **done**: `vocabulary.py` (25 sites: 20 `DeclarationError`, 5
+  `ContractError`), `record_gutter` construction (7 `DeclarationError`),
+  `PaintedHandler` empty-thresholds (`DeclarationError`). The §4 rule found
+  three call-time sites beyond the two this doc predicted —
+  `Thresholds.resolve(NaN)`, unknown-value style resolution, and
+  undeclared-vocabulary lookup all fire *during rendering*, so
+  `DeclarationError`'s starts-clean-never-fires contract forces them to
+  `ContractError`. The bare-raise architecture invariant enumerated the
+  backlog and gated the migration.
 - **Future arcs**: new raise sites must name a class from this doc. This is
   enforced, not prose: `test_raise_sites_use_painted_exception_classes`
   (architecture invariants) rejects a bare `raise ValueError`/`RuntimeError`

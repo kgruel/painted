@@ -26,6 +26,7 @@ from painted.vocabulary import (
     use_vocabularies,
 )
 import painted.vocabulary as vocabulary
+from painted.core.errors import ContractError, DeclarationError
 
 
 def _freshness() -> Vocabulary:
@@ -50,12 +51,12 @@ def _freshness() -> Vocabulary:
 class TestUndeclaredRaises:
     def test_mark_with_no_vocabulary_active_raises(self) -> None:
         reset_vocabularies()
-        with pytest.raises(ValueError, match="No vocabulary named 'freshness'"):
+        with pytest.raises(ContractError, match="No vocabulary named 'freshness'"):
             mark_style("freshness", "stale")
 
     def test_mark_with_a_different_vocabulary_active_still_raises(self) -> None:
         use_vocabularies(_freshness())
-        with pytest.raises(ValueError, match="No vocabulary named 'kind'"):
+        with pytest.raises(ContractError, match="No vocabulary named 'kind'"):
             mark_style("kind", "task")
 
 
@@ -69,7 +70,7 @@ class TestOutOfVocabulary:
 
     def test_non_member_raises_without_overflow(self) -> None:
         use_vocabularies(_freshness())
-        with pytest.raises(ValueError, match="not a member of vocabulary 'freshness'"):
+        with pytest.raises(ContractError, match="not a member of vocabulary 'freshness'"):
             mark_style("freshness", "ancient")
 
     def test_non_member_with_overflow_series_falls_to_ramp(self) -> None:
@@ -90,52 +91,52 @@ class TestOutOfVocabulary:
 
 class TestConstructionValidation:
     def test_non_kebab_name(self) -> None:
-        with pytest.raises(ValueError, match="must be lowercase kebab-case"):
+        with pytest.raises(DeclarationError, match="must be lowercase kebab-case"):
             Vocabulary("Bad_Name", values=("a",), roles={"a": "accent"})
 
     def test_empty_values(self) -> None:
-        with pytest.raises(ValueError, match="declares no values"):
+        with pytest.raises(DeclarationError, match="declares no values"):
             Vocabulary("v", values=(), roles={})
 
     def test_non_string_value(self) -> None:
-        with pytest.raises(ValueError, match="must be non-empty strings"):
+        with pytest.raises(DeclarationError, match="must be non-empty strings"):
             Vocabulary("v", values=("a", ""), roles={"a": "accent", "": "muted"})
 
     def test_duplicate_values(self) -> None:
-        with pytest.raises(ValueError, match="duplicate values"):
+        with pytest.raises(DeclarationError, match="duplicate values"):
             Vocabulary("v", values=("a", "a"), roles={"a": "accent"})
 
     def test_unbound_value(self) -> None:
-        with pytest.raises(ValueError, match="unbound"):
+        with pytest.raises(DeclarationError, match="unbound"):
             Vocabulary("v", values=("a", "b"), roles={"a": "accent"})
 
     def test_dangling_binding(self) -> None:
-        with pytest.raises(ValueError, match="binds roles for non-values"):
+        with pytest.raises(DeclarationError, match="binds roles for non-values"):
             Vocabulary("v", values=("a",), roles={"a": "accent", "z": "muted"})
 
     def test_unresolvable_role_reference(self) -> None:
-        with pytest.raises(ValueError, match="not a core role"):
+        with pytest.raises(DeclarationError, match="not a core role"):
             Vocabulary("v", values=("a",), roles={"a": "nonrole"})
 
     def test_bad_overflow(self) -> None:
-        with pytest.raises(ValueError, match="overflow must be"):
+        with pytest.raises(DeclarationError, match="overflow must be"):
             Vocabulary("v", values=("a",), roles={"a": "accent"}, overflow="bad")
 
     def test_bad_attention(self) -> None:
-        with pytest.raises(ValueError, match="attention must be"):
+        with pytest.raises(DeclarationError, match="attention must be"):
             Vocabulary("v", values=("a",), roles={"a": "accent"}, attention="middle")
 
     def test_attention_validated_even_when_unordered(self) -> None:
         # D1: attention is validated regardless of ordered.
-        with pytest.raises(ValueError, match="attention must be"):
+        with pytest.raises(DeclarationError, match="attention must be"):
             Vocabulary("v", values=("a",), roles={"a": "accent"}, ordered=False, attention="x")
 
     def test_role_reusing_core_name_raises(self) -> None:
-        with pytest.raises(ValueError, match="reuses a core role"):
+        with pytest.raises(DeclarationError, match="reuses a core role"):
             Role("accent", Style(fg="red"))
 
     def test_role_non_kebab_name_raises(self) -> None:
-        with pytest.raises(ValueError, match="must be lowercase kebab-case"):
+        with pytest.raises(DeclarationError, match="must be lowercase kebab-case"):
             Role("Stale", Style(fg="red"))
 
     def test_positional_beyond_values_raises(self) -> None:
@@ -151,7 +152,7 @@ class TestConstructionValidation:
 
 class TestRoleRedeclaration:
     def test_conflicting_roles_within_one_vocabulary_raise(self) -> None:
-        with pytest.raises(ValueError, match="redeclared with a different style"):
+        with pytest.raises(DeclarationError, match="redeclared with a different style"):
             Vocabulary(
                 "v",
                 values=("a", "b"),
@@ -176,7 +177,7 @@ class TestRoleRedeclaration:
     def test_conflicting_role_across_active_vocabularies_raises(self) -> None:
         v1 = Vocabulary("v1", values=("a",), roles={"a": Role("r", Style(fg="red"))})
         v2 = Vocabulary("v2", values=("b",), roles={"b": Role("r", Style(fg="blue"))})
-        with pytest.raises(ValueError, match="redeclared with a different style"):
+        with pytest.raises(DeclarationError, match="redeclared with a different style"):
             use_vocabularies(v1, v2)
 
 
@@ -237,16 +238,16 @@ class TestOrderedBehaviors:
             ("at_least", lambda: v.at_least("a")),
             ("cmp", lambda: v.cmp("a", "b")),
         ):
-            with pytest.raises(ValueError, match=f"{op} requires an ordered vocabulary"):
+            with pytest.raises(ContractError, match=f"{op} requires an ordered vocabulary"):
                 call()
 
     def test_ordered_ops_raise_on_non_members(self) -> None:
         v = _freshness()
-        with pytest.raises(ValueError, match="not a member"):
+        with pytest.raises(ContractError, match="not a member"):
             v.index("ancient")
-        with pytest.raises(ValueError, match="not a member"):
+        with pytest.raises(ContractError, match="not a member"):
             v.at_least("ancient")
-        with pytest.raises(ValueError, match="not a member"):
+        with pytest.raises(ContractError, match="not a member"):
             v.cmp("fresh", "ancient")
 
 
@@ -300,15 +301,15 @@ class TestThresholds:
 
     def test_unordered_vocabulary_raises(self) -> None:
         un = Vocabulary("u", values=("a", "b"), roles={"a": "accent", "b": "muted"})
-        with pytest.raises(ValueError, match="Thresholds requires an ordered vocabulary"):
+        with pytest.raises(DeclarationError, match="Thresholds requires an ordered vocabulary"):
             Thresholds(un, {1: "a"})
 
     def test_empty_floors_raise(self) -> None:
-        with pytest.raises(ValueError, match="no floors"):
+        with pytest.raises(DeclarationError, match="no floors"):
             Thresholds(_severity_vocab(), {})
 
     def test_non_member_mapped_value_raises(self) -> None:
-        with pytest.raises(ValueError, match="not a member of vocabulary 'sev'"):
+        with pytest.raises(DeclarationError, match="not a member of vocabulary 'sev'"):
             Thresholds(_severity_vocab(), {1: "nope"})
 
     # External-review round (gpt-5.5): floor KEYS are declarations too — a
@@ -316,15 +317,15 @@ class TestThresholds:
     # silently misroute) at resolve time.
 
     def test_non_numeric_floor_raises(self) -> None:
-        with pytest.raises(ValueError, match="not a number"):
+        with pytest.raises(DeclarationError, match="not a number"):
             Thresholds(_severity_vocab(), {"zero": "info"})
 
     def test_bool_floor_raises(self) -> None:
-        with pytest.raises(ValueError, match="not a number"):
+        with pytest.raises(DeclarationError, match="not a number"):
             Thresholds(_severity_vocab(), {True: "info"})
 
     def test_nan_floor_raises(self) -> None:
-        with pytest.raises(ValueError, match="NaN"):
+        with pytest.raises(DeclarationError, match="NaN"):
             Thresholds(_severity_vocab(), {float("nan"): "info", 0: "info"})
 
 
@@ -363,7 +364,7 @@ class TestDualModeSeam:
     def test_name_collision_across_passed_vocabs_raises(self) -> None:
         a = Vocabulary("dup", values=("x",), roles={"x": "accent"})
         b = Vocabulary("dup", values=("y",), roles={"y": "muted"})
-        with pytest.raises(ValueError, match="declared twice"):
+        with pytest.raises(DeclarationError, match="declared twice"):
             use_vocabularies(a, b)
 
 
@@ -402,7 +403,7 @@ class TestBuiltinLayer:
         self, builtin_severity: Vocabulary
     ) -> None:
         clash = Vocabulary("severity", values=("a",), roles={"a": "accent"})
-        with pytest.raises(ValueError, match="collides with a built-in vocabulary"):
+        with pytest.raises(DeclarationError, match="collides with a built-in vocabulary"):
             use_vocabularies(clash)
 
     def test_app_layer_shadows_nothing_but_extends(self, builtin_severity: Vocabulary) -> None:
@@ -424,12 +425,12 @@ class TestSeverityBuiltin:
 
     def test_unknown_value_raises_no_overflow(self) -> None:
         reset_vocabularies()
-        with pytest.raises(ValueError, match="not a member of vocabulary 'severity'"):
+        with pytest.raises(ContractError, match="not a member of vocabulary 'severity'"):
             mark_style("severity", "nope")
 
     def test_app_redeclaration_collides(self) -> None:
         clash = Vocabulary("severity", values=("a",), roles={"a": "accent"})
-        with pytest.raises(ValueError, match="collides with a built-in vocabulary"):
+        with pytest.raises(DeclarationError, match="collides with a built-in vocabulary"):
             use_vocabularies(clash)
 
     def test_is_ordered(self) -> None:

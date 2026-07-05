@@ -16,6 +16,7 @@ from painted import (
     current_palette,
     use_palette,
 )
+from painted.core.errors import ContractError, DeclarationError
 from painted.views import (
     AttentionFn,
     GutterFn,
@@ -629,12 +630,12 @@ class TestRecordGutterValidation:
             values=("a", "b"),
             roles={"a": "success", "b": "error"},
         )
-        with pytest.raises(ValueError, match="ordered"):
+        with pytest.raises(DeclarationError, match="ordered"):
             record_gutter(unordered, "status")
 
     def test_aliases_and_thresholds_are_mutually_exclusive(self):
         thr = Thresholds(self._ORDERED, {0: "lo", 5: "hi"})
-        with pytest.raises(ValueError, match="aliases OR thresholds"):
+        with pytest.raises(DeclarationError, match="aliases OR thresholds"):
             record_gutter(self._ORDERED, "n", aliases={"x": "lo"}, thresholds=thr)
 
     def test_thresholds_vocabulary_must_match(self):
@@ -645,15 +646,15 @@ class TestRecordGutterValidation:
             roles={"p": "success", "q": "error"},
         )
         thr = Thresholds(other, {0: "p", 5: "q"})
-        with pytest.raises(ValueError, match="same vocabulary"):
+        with pytest.raises(DeclarationError, match="same vocabulary"):
             record_gutter(self._ORDERED, "n", thresholds=thr)
 
     def test_alias_value_must_be_a_member(self):
-        with pytest.raises(ValueError, match="not a member"):
+        with pytest.raises(DeclarationError, match="not a member"):
             record_gutter(self._ORDERED, "status", aliases={"x": "nonmember"})
 
     def test_empty_glyphs_raise(self):
-        with pytest.raises(ValueError, match="ramp glyph"):
+        with pytest.raises(DeclarationError, match="ramp glyph"):
             record_gutter(self._ORDERED, "status", glyphs=())
 
     def test_custom_ramp_is_respected(self):
@@ -692,15 +693,15 @@ class TestRecordGutterGlyphAndFallbackDeclarations:
     def test_wide_ramp_glyph_raises_at_construction(self):
         # apply_gutter reserves exactly 2 columns; a 2-column glyph would
         # silently clip content at the final fit (width-is-exact).
-        with pytest.raises(ValueError, match="display"):
+        with pytest.raises(DeclarationError, match="display"):
             record_gutter(self._ORDERED, "status", glyphs=("🟥",))
 
     def test_wide_unknown_glyph_raises_at_construction(self):
-        with pytest.raises(ValueError, match="display"):
+        with pytest.raises(DeclarationError, match="display"):
             record_gutter(self._ORDERED, "status", unknown=("🟥", "muted"))
 
     def test_unknown_role_must_be_core(self):
-        with pytest.raises(ValueError, match="core role"):
+        with pytest.raises(DeclarationError, match="core role"):
             record_gutter(self._ORDERED, "status", unknown=("│", "typo-role"))
 
     def test_unknown_text_role_resolves_to_bare_style(self):
@@ -751,7 +752,7 @@ class TestRecordGutterToleratesData:
             ),
             {0: "lo", 5: "hi"},
         )
-        with pytest.raises(ValueError, match="NaN"):
+        with pytest.raises(ContractError, match="NaN"):
             thr.resolve(float("nan"))
 
 

@@ -48,6 +48,7 @@ from types import MappingProxyType
 from typing import Any
 
 from .core.cell import Style
+from .core.errors import ContractError, DeclarationError
 from .palette import CORE_ROLE_NAMES, current_palette, series_index
 
 # Deliberate local duplicate of ``cli.types._DECLARED_NAME_RE``. The kebab
@@ -78,12 +79,12 @@ class Role:
 
     def __post_init__(self) -> None:
         if not _NAME_RE.match(self.name):
-            raise ValueError(
+            raise DeclarationError(
                 f"Role name {self.name!r} must be lowercase kebab-case "
                 "(it names a themeable target, like a core role)"
             )
         if self.name in CORE_ROLE_NAMES:
-            raise ValueError(
+            raise DeclarationError(
                 f"Role name {self.name!r} reuses a core role: reference the core "
                 f'role by string instead (e.g. "{self.name}"), or pick a distinct '
                 "app-role name"
@@ -132,23 +133,23 @@ class Vocabulary:
 
     def __post_init__(self) -> None:
         if not _NAME_RE.match(self.name):
-            raise ValueError(f"Vocabulary name {self.name!r} must be lowercase kebab-case")
+            raise DeclarationError(f"Vocabulary name {self.name!r} must be lowercase kebab-case")
 
         values = tuple(self.values)
         object.__setattr__(self, "values", values)
         if not values:
-            raise ValueError(f"Vocabulary {self.name!r} declares no values")
+            raise DeclarationError(f"Vocabulary {self.name!r} declares no values")
         if any(not isinstance(v, str) or not v for v in values):
-            raise ValueError(f"Vocabulary {self.name!r} values must be non-empty strings")
+            raise DeclarationError(f"Vocabulary {self.name!r} values must be non-empty strings")
         if len(set(values)) != len(values):
-            raise ValueError(f"Vocabulary {self.name!r} has duplicate values")
+            raise DeclarationError(f"Vocabulary {self.name!r} has duplicate values")
 
         if self.overflow not in (None, "series"):
-            raise ValueError(
+            raise DeclarationError(
                 f'Vocabulary {self.name!r} overflow must be None or "series", not {self.overflow!r}'
             )
         if self.attention not in ("first", "last"):
-            raise ValueError(
+            raise DeclarationError(
                 f'Vocabulary {self.name!r} attention must be "first" or '
                 f'"last", not {self.attention!r}'
             )
@@ -156,13 +157,13 @@ class Vocabulary:
         value_set = set(values)
         dangling = [k for k in self.roles if k not in value_set]
         if dangling:
-            raise ValueError(
+            raise DeclarationError(
                 f"Vocabulary {self.name!r} binds roles for non-values "
                 f"{sorted(dangling)!r} (a role key must be one of the values)"
             )
         unbound = [v for v in values if v not in self.roles]
         if unbound:
-            raise ValueError(
+            raise DeclarationError(
                 f"Vocabulary {self.name!r} leaves values {sorted(unbound)!r} "
                 "unbound (every value needs a role)"
             )
@@ -178,14 +179,14 @@ class Vocabulary:
                 app_roles.append(ref)
             elif isinstance(ref, str):
                 if ref not in CORE_ROLE_NAMES:
-                    raise ValueError(
+                    raise DeclarationError(
                         f"Vocabulary {self.name!r} value {value!r} references "
                         f"role {ref!r}, which is not a core role "
                         f"({sorted(CORE_ROLE_NAMES)!r}); pass a Role to declare it"
                     )
                 binding[value] = (ref, None)
             else:
-                raise ValueError(
+                raise DeclarationError(
                     f"Vocabulary {self.name!r} value {value!r} binds to {ref!r}: "
                     "expected a core-role name (str) or a Role"
                 )
@@ -221,13 +222,13 @@ class Vocabulary:
 
     def _require_ordered(self, op: str) -> None:
         if not self.ordered:
-            raise ValueError(f"{op} requires an ordered vocabulary; {self.name!r} is unordered")
+            raise ContractError(f"{op} requires an ordered vocabulary; {self.name!r} is unordered")
 
     def _checked_index(self, value: str) -> int:
         try:
             return self.values.index(value)
         except ValueError:
-            raise ValueError(f"{value!r} is not a member of vocabulary {self.name!r}") from None
+            raise ContractError(f"{value!r} is not a member of vocabulary {self.name!r}") from None
 
 
 @dataclass(frozen=True)
@@ -246,24 +247,24 @@ class Thresholds:
 
     def __post_init__(self) -> None:
         if not self.vocabulary.ordered:
-            raise ValueError(
+            raise DeclarationError(
                 f"Thresholds requires an ordered vocabulary; {self.vocabulary.name!r} is unordered"
             )
         if not self.floors:
-            raise ValueError("Thresholds declares no floors")
+            raise DeclarationError("Thresholds declares no floors")
         for floor, value in self.floors.items():
             # A floor is a point on the numeric domain: a real, comparable
             # number. Anything else is a declaration fault — caught here, not
             # as a TypeError (or a silent NaN misroute) at resolve time.
             if isinstance(floor, bool) or not isinstance(floor, (int, float)):
-                raise ValueError(
+                raise DeclarationError(
                     f"Threshold floor {floor!r} is not a number; floors are "
                     "points on the numeric domain being bucketed"
                 )
             if floor != floor:  # NaN: incomparable, can never be "cleared".
-                raise ValueError("Threshold floor NaN has no place in an ordered domain")
+                raise DeclarationError("Threshold floor NaN has no place in an ordered domain")
             if value not in self.vocabulary.values:
-                raise ValueError(
+                raise DeclarationError(
                     f"Threshold floor {floor!r} maps to {value!r}, not a member "
                     f"of vocabulary {self.vocabulary.name!r}"
                 )
@@ -277,7 +278,7 @@ class Thresholds:
         misclassify corrupt data as maximally quiet (or loud).
         """
         if value != value:  # NaN: the only float that breaks the total order.
-            raise ValueError(
+            raise ContractError(
                 f"Cannot resolve NaN through Thresholds onto "
                 f"{self.vocabulary.name!r}; NaN has no place in an ordered domain"
             )
@@ -304,7 +305,7 @@ def _merge_roles(roles: Iterable[Role]) -> dict[str, Role]:
     for role in roles:
         existing = merged.get(role.name)
         if existing is not None and existing != role:
-            raise ValueError(
+            raise DeclarationError(
                 f"Role {role.name!r} is redeclared with a different style; a role "
                 "is declared once and referenced by name after"
             )
@@ -376,9 +377,9 @@ def _build_registry(vocabs: tuple[Vocabulary, ...]) -> Mapping[str, Vocabulary]:
     app_roles: list[Role] = []
     for vocab in vocabs:
         if vocab.name in registry:
-            raise ValueError(f"Vocabulary {vocab.name!r} is declared twice")
+            raise DeclarationError(f"Vocabulary {vocab.name!r} is declared twice")
         if vocab.name in _BUILTIN_VOCABULARIES:
-            raise ValueError(
+            raise DeclarationError(
                 f"Vocabulary {vocab.name!r} collides with a built-in vocabulary; "
                 "re-tint a built-in via Theme(roles=...), do not redeclare it"
             )
@@ -498,7 +499,7 @@ def vocab_style(vocab: Vocabulary, value: str) -> Style:
     if value not in vocab.values:
         if vocab.overflow == "series":
             return current_palette().series_for(value)
-        raise ValueError(
+        raise ContractError(
             f"{value!r} is not a member of vocabulary {vocab.name!r} "
             f'({list(vocab.values)!r}); declare overflow="series" to admit '
             "unknown values"
@@ -513,7 +514,7 @@ def _lookup_vocabulary(name: str) -> Vocabulary:
         return app[name]
     if name in _BUILTIN_VOCABULARIES:
         return _BUILTIN_VOCABULARIES[name]
-    raise ValueError(
+    raise ContractError(
         f"No vocabulary named {name!r} is declared; declare it with "
         "use_vocabularies(Vocabulary(...)) before marking with it"
     )

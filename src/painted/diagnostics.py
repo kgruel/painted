@@ -27,6 +27,7 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING, TextIO
 
 from .core._row_ops import row_visible_text
+from .core.errors import DeclarationError
 from .core.span import Line, Span
 from .core.writer import ColorDepth, Writer, print_block, render_block_ansi
 from .core.zoom import Zoom
@@ -129,7 +130,7 @@ class PaintedHandler(logging.Handler):
         # Compile the levelno→Severity floors once onto the ordered vocabulary; a
         # record's level resolves per-emit via `Thresholds.resolve`.
         if not thresholds:
-            raise ValueError(
+            raise DeclarationError(
                 "PaintedHandler thresholds= must declare at least one levelno "
                 "floor (see DEFAULT_THRESHOLDS)"
             )
