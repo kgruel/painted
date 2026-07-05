@@ -94,7 +94,7 @@ class TestRecordLineZoom:
         assert "message:" in text
         assert "author:" in text
 
-    def test_full_shows_all_fields(self):
+    def test_full_shows_all_task_fields(self):
         """FULL zoom shows all fields (all lines, constrained to width)."""
         payload = {"output": "some output", "status": "failed", "extra": "data"}
         block = record_line(_ts(), "task", payload, Zoom.FULL, 80)
