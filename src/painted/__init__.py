@@ -23,6 +23,11 @@ For CLI harness and in-place rendering:
 # of renderer/framework modules until symbols are actually accessed.
 
 __all__ = [
+    # Errors
+    "PaintedError",
+    "DeclarationError",
+    "ContractError",
+    "LifecycleError",
     # Primitives
     "Style",
     "Cell",
@@ -116,6 +121,11 @@ __all__ = [
 from importlib import import_module as _import_module
 
 _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
+    # Errors
+    "PaintedError": (".core.errors", "PaintedError"),
+    "DeclarationError": (".core.errors", "DeclarationError"),
+    "ContractError": (".core.errors", "ContractError"),
+    "LifecycleError": (".core.errors", "LifecycleError"),
     # Core
     "Cell": (".core.cell", "Cell"),
     "EMPTY_CELL": (".core.cell", "EMPTY_CELL"),

@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Generic, TypeVar
 
 from contextlib import nullcontext
 
+from ..core.errors import DeclarationError
 from .types import (
     ArgsView,
     CliContext,
@@ -114,7 +115,7 @@ class CliRunner(Generic[T]):
         # Same promise as the declaration collision checks: misconfiguration
         # raises at construction, never degrades silently at dispatch.
         if self.live_delivery not in ("inplace", "surface"):
-            raise ValueError(
+            raise DeclarationError(
                 f"live_delivery must be 'inplace' or 'surface', got {self.live_delivery!r}"
             )
 

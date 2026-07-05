@@ -182,4 +182,5 @@ docs/
   FIDELITY_DESIGN.md  # Disclosure grammar: Tag declarations, consumption ladder (ratified, implemented)
   COMPLETION_DESIGN.md  # Shell completion: the parser's third reflection, honesty rule, render-free guarantee (implemented)
   DIAGNOSTICS_DESIGN.md  # Logging + tracebacks as renders: declared severity, the record tree, root-seam resolution (implemented)
+  ERRORS_DESIGN.md    # Exception hierarchy: PaintedError/DeclarationError/ContractError/LifecycleError, site table (ratified, implementation in flight)
 ```

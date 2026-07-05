@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from .errors import ContractError
+
 # Color can be:
 #   - Named string: "red", "green", "blue", etc.
 #   - 256-color int: 0-255
@@ -66,7 +68,7 @@ class Cell:
 
     def __post_init__(self):
         if len(self.char) != 1:
-            raise ValueError(f"Cell char must be a single character, got {self.char!r}")
+            raise ContractError(f"Cell char must be a single character, got {self.char!r}")
         # Neutralize C0/C1 control characters to a space. A control char in a
         # display cell is emitted verbatim by the writer and corrupts the grid:
         # a TAB expands at the terminal (breaking the width contract), and a raw

@@ -9,6 +9,7 @@ from painted.core._text_width import display_width
 from painted.core.block import _char_wrap, _word_wrap, _take_word_prefix, _cells_from_text
 from painted.core.buffer import Buffer
 from painted.core.cell import Cell
+from painted.core.errors import ContractError
 
 
 S = Style()
@@ -26,21 +27,21 @@ class TestBlockInitValidation:
     def test_row_width_mismatch_raises(self):
         from painted.core.cell import Cell
 
-        with pytest.raises(ValueError, match="row 0 width 2 != block width 3"):
+        with pytest.raises(ContractError, match="row 0 width 2 != block width 3"):
             Block([[Cell("a", S), Cell("b", S)]], 3)
 
     def test_ids_height_mismatch_raises(self):
         from painted.core.cell import Cell
 
         row = [Cell("a", S)]
-        with pytest.raises(ValueError, match="ids height 2 != block height 1"):
+        with pytest.raises(ContractError, match="ids height 2 != block height 1"):
             Block([row], 1, ids=[[None], [None]])
 
     def test_ids_row_width_mismatch_raises(self):
         from painted.core.cell import Cell
 
         row = [Cell("a", S), Cell("b", S)]
-        with pytest.raises(ValueError, match="ids row 0 width 1 != block width 2"):
+        with pytest.raises(ContractError, match="ids row 0 width 1 != block width 2"):
             Block([row], 2, ids=[[None]])
 
 

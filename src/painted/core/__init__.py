@@ -9,6 +9,11 @@ beyond wcwidth. Import from here when you just want the renderer.
 from importlib import import_module as _import_module
 
 __all__ = [
+    # Errors
+    "PaintedError",
+    "DeclarationError",
+    "ContractError",
+    "LifecycleError",
     # Primitives
     "Style",
     "Cell",
@@ -58,6 +63,10 @@ __all__ = [
 ]
 
 _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
+    "PaintedError": (".errors", "PaintedError"),
+    "DeclarationError": (".errors", "DeclarationError"),
+    "ContractError": (".errors", "ContractError"),
+    "LifecycleError": (".errors", "LifecycleError"),
     "Style": (".cell", "Style"),
     "Cell": (".cell", "Cell"),
     "EMPTY_CELL": (".cell", "EMPTY_CELL"),

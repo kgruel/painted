@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import pytest
 
+from painted.core.errors import ContractError
 from painted.icon_set import ASCII_ICONS, use_icons
 from painted.palette import DEFAULT_PALETTE, use_palette
 from painted.views import Severity, callout
@@ -102,10 +103,10 @@ def test_severity_is_a_closed_four_level_enum() -> None:
 def test_invalid_severity_is_rejected_with_a_clear_error() -> None:
     # The pre-hardening defect was a stringly-typed param with a silent fall-back
     # to "info" on a typo. A non-Severity value must now raise a clear, typed
-    # error (painted's "Unknown ..." ValueError idiom — not a silent default, and
-    # not a bare KeyError leaking the internal lookup). The most natural mistake
-    # is the old string spelling, whose .value equals a Severity member's.
-    with pytest.raises(ValueError, match="severity"):
+    # error (ContractError — not a silent default, and not a bare KeyError
+    # leaking the internal lookup). The most natural mistake is the old string
+    # spelling, whose .value equals a Severity member's.
+    with pytest.raises(ContractError, match="severity"):
         callout("oops", severity="error")  # type: ignore[arg-type]
 
 

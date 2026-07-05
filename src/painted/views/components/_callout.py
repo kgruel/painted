@@ -18,6 +18,7 @@ from enum import Enum
 from ...core.block import Block
 from ...core.borders import LIGHT
 from ...core.cell import Style
+from ...core.errors import ContractError
 from ...core.compose import border, fit_to_width, join_vertical, pad
 from ...core.span import Line, Span
 from ...icon_set import current_icons
@@ -84,12 +85,13 @@ def callout(
     level (see :class:`~painted.core.cell.Cell`), so no input can split or
     corrupt the block.
 
-    Raises ``ValueError`` if ``severity`` is not a :class:`Severity` member (no
-    silent fall-through to ``INFO`` — that was the pre-hardening defect).
+    Raises :class:`~painted.core.errors.ContractError` if ``severity`` is not a
+    :class:`Severity` member (no silent fall-through to ``INFO`` — that was the
+    pre-hardening defect).
     """
     spec = _SEVERITY.get(severity)
     if spec is None:
-        raise ValueError(
+        raise ContractError(
             f"Unknown severity: {severity!r} (pass a Severity member, e.g. Severity.ERROR)"
         )
     icon_attr, role_attr = spec

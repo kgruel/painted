@@ -25,6 +25,7 @@ from painted.cli import (
     Zoom,
     run_cli,
 )
+from painted.core.errors import DeclarationError
 
 
 # =============================================================================
@@ -37,7 +38,7 @@ class TestCliRunner:
 
     def test_invalid_live_delivery_raises_at_construction(self):
         """Misconfiguration raises immediately, never degrades at dispatch."""
-        with pytest.raises(ValueError, match="live_delivery"):
+        with pytest.raises(DeclarationError, match="live_delivery"):
             CliRunner(
                 render=lambda ctx, data: Block.text("x", Style()),
                 fetch=lambda: "x",
@@ -750,7 +751,7 @@ class TestBuildParser:
             # the dest-collision check must.
             p.add_argument("--think", dest="thinking")
 
-        with pytest.raises(ValueError, match="collides"):
+        with pytest.raises(DeclarationError, match="collides"):
             build_parser(add_args=add_args, tags=[Tag("thinking", "reasoning")])
 
     def test_mode_flags_follow_modes(self):

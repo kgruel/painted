@@ -17,10 +17,11 @@ from __future__ import annotations
 import pytest
 
 from painted.core.cell import Cell, Style
+from painted.core.errors import ContractError
 
 
 def test_char_must_be_a_single_character() -> None:
-    with pytest.raises(ValueError, match="single character"):
+    with pytest.raises(ContractError, match="single character"):
         Cell("ab", Style())
 
 

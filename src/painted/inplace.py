@@ -36,6 +36,7 @@ from __future__ import annotations
 import sys
 from typing import TYPE_CHECKING, TextIO
 
+from .core.errors import LifecycleError
 from .core.writer import Writer, render_block_ansi, render_row_ansi
 
 if TYPE_CHECKING:
@@ -84,7 +85,7 @@ class InPlaceRenderer:
         line-buffered TTY can't expose a partially drawn state.
         """
         if not self._active:
-            raise RuntimeError("InPlaceRenderer.render() called outside of a context manager")
+            raise LifecycleError("InPlaceRenderer.render() called outside of a context manager")
         parts: list[str] = [_SYNC_BEGIN]
         if self._prev is not None and self._prev.height == block.height:
             parts.append(f"\x1b[{self._height}A")
@@ -118,7 +119,7 @@ class InPlaceRenderer:
     def clear(self) -> None:
         """Clear the last rendered content."""
         if not self._active:
-            raise RuntimeError("InPlaceRenderer.clear() called outside of a context manager")
+            raise LifecycleError("InPlaceRenderer.clear() called outside of a context manager")
         if self._height > 0:
             h = self._height
             self._stream.write(f"\x1b[{h}A" + ("\x1b[2K\n" * h) + f"\x1b[{h}A")

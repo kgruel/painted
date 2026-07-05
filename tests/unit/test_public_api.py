@@ -49,6 +49,11 @@ import painted.views
 
 STABLE_CORE_SURFACE = frozenset(
     {
+        # Errors
+        "PaintedError",
+        "DeclarationError",
+        "ContractError",
+        "LifecycleError",
         # Primitives
         "Style",
         "Cell",
