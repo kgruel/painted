@@ -102,6 +102,42 @@ class TestInPlaceRenderer:
         # Just the sync wrap and cursor motion — up over the frame, hop back down.
         assert frame2 == "\x1b[?2026h\x1b[2A\x1b[2B\x1b[?2026l"
 
+    def test_ref_only_row_change_redraws_the_row(self):
+        """Row equality includes the ref row: same glyphs + style, changed
+        denotation still redraws (else a stale hyperlink lingers). Redraw happens
+        even with no scheme declared — the comparison is resolver-agnostic."""
+        stream = io.StringIO()
+        s = Style()
+        rows = [[Cell("q", s)], [Cell("w", s)], [Cell("z", s)]]
+        block1 = Block(rows, 1, refs=[["fact:a"], ["fact:b"], ["fact:c"]])
+        block2 = Block(rows, 1, refs=[["fact:a"], ["fact:X"], ["fact:c"]])  # row 1 ref changed
+
+        with InPlaceRenderer(stream) as renderer:
+            renderer.render(block1)
+            mark = stream.tell()
+            renderer.render(block2)
+            frame2 = stream.getvalue()[mark:]
+            renderer.finalize()
+
+        assert "w" in frame2  # the ref-changed row is rewritten
+        assert "q" not in frame2 and "z" not in frame2  # unchanged rows hopped
+        assert "\x1b[1B" in frame2
+
+    def test_identical_rows_including_refs_are_not_redrawn(self):
+        stream = io.StringIO()
+        s = Style()
+        rows = [[Cell("A", s)], [Cell("B", s)]]
+        block = Block(rows, 1, refs=[["fact:a"], ["fact:b"]])
+
+        with InPlaceRenderer(stream) as renderer:
+            renderer.render(block)
+            mark = stream.tell()
+            renderer.render(block)
+            frame2 = stream.getvalue()[mark:]
+            renderer.finalize()
+
+        assert frame2 == "\x1b[?2026h\x1b[2A\x1b[2B\x1b[?2026l"
+
     def test_clear_forgets_the_previous_frame(self):
         """After clear() the screen is blank; the next render must not diff
         against a frame that is no longer on screen."""

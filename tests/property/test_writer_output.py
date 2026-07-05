@@ -26,9 +26,10 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 from painted import Block, Style
-from painted.core.cell import NAMED_COLORS
+from painted.core.cell import NAMED_COLORS, Cell
 from painted.core.html import render_html
-from painted.core.writer import ColorDepth, Writer, print_block
+from painted.core.writer import ColorDepth, Writer, print_block, render_block_ansi
+from painted.refs import RefScheme, use_refs
 
 _DEPTHS = list(ColorDepth)
 _NAMED = sorted(NAMED_COLORS)
@@ -91,6 +92,53 @@ def test_plain_mode_emits_no_escape_sequences(text: str, style: Style) -> None:
     block = Block.text(text, style)
     buf = io.StringIO()
     print_block(block, buf, use_ansi=False)
+    assert "\x1b" not in buf.getvalue()
+
+
+# A ref is one of: None, a resolvable ``fact:`` ref, an undeclared-scheme ref
+# (inert), or a scheme-less ref (inert). Mixing all four exercises the OSC 8
+# state machine's open/close transitions alongside its honesty gates.
+_ref = st.one_of(
+    st.none(),
+    st.from_regex(r"fact:[a-z0-9]{1,6}", fullmatch=True),
+    st.from_regex(r"other:[a-z0-9]{1,6}", fullmatch=True),
+    st.from_regex(r"[a-z0-9]{1,6}", fullmatch=True),
+)
+# Non-greedy capture of an OSC 8 sequence's params, up to its ST terminator.
+_OSC8 = re.compile(r"\x1b\]8;;(.*?)\x1b\\")
+
+
+@st.composite
+def _ref_block(draw: st.DrawFn) -> Block:
+    n = draw(st.integers(min_value=1, max_value=8))
+    chars = draw(st.lists(st.sampled_from(list("ab12")), min_size=n, max_size=n))
+    refs = draw(st.lists(_ref, min_size=n, max_size=n))
+    row = [Cell(c, Style()) for c in chars]
+    return Block([row], n, refs=[refs])
+
+
+@given(block=_ref_block())
+def test_render_block_ansi_osc8_is_balanced_and_terminated(block: Block) -> None:
+    """No unterminated OSC 8 in any ANSI output: every introducer is ST-terminated
+    and opens (non-empty URI) exactly balance closes (empty)."""
+    w = Writer(io.StringIO(), color_depth=ColorDepth.TRUECOLOR)
+    with use_refs(RefScheme("fact", lambda v: f"https://x/{v}")):
+        out = render_block_ansi(block, w)
+
+    introducers = out.count("\x1b]8;;")
+    matches = _OSC8.findall(out)
+    assert len(matches) == introducers, "an OSC 8 introducer was left unterminated"
+    opens = sum(1 for m in matches if m)
+    closes = sum(1 for m in matches if not m)
+    assert opens == closes, f"unbalanced OSC 8: {opens} opens vs {closes} closes"
+
+
+@given(block=_ref_block())
+def test_plain_mode_emits_no_escape_sequences_even_with_refs(block: Block) -> None:
+    """Refs never leak into the pipe: PLAIN mode stays escape-free, scheme or not."""
+    buf = io.StringIO()
+    with use_refs(RefScheme("fact", lambda v: f"https://x/{v}")):
+        print_block(block, buf, use_ansi=False)
     assert "\x1b" not in buf.getvalue()
 
 

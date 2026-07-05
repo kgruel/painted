@@ -12,12 +12,15 @@ from typing import TYPE_CHECKING, TextIO
 from wcwidth import wcwidth
 
 from ..palette import current_palette
+from ..refs import resolve_ref
 from .buffer import CellWrite
 from .cell import NAMED_COLORS, Style
 from ._color import _nearest_basic, _rgb_to_256, _rgb_to_basic
 from ._row_ops import iter_trimmed_row_spans, row_visible_text
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from .block import Block
 
 
@@ -36,11 +39,21 @@ class Writer:
     Writer resolves against detected terminal capability.
     """
 
-    def __init__(self, stream: TextIO = sys.stdout, *, color_depth: ColorDepth | None = None):
+    def __init__(
+        self,
+        stream: TextIO = sys.stdout,
+        *,
+        color_depth: ColorDepth | None = None,
+        hyperlinks: bool = True,
+    ):
         self._stream = stream
         # When provided, forces color capability resolution (useful for tests and
         # non-interactive environments where isatty() is false).
         self._color_depth: ColorDepth | None = color_depth
+        # OSC 8 is progressive enhancement (design §5): a plain opt-out switch,
+        # not a detection — unsupporting terminals ignore the wrapper. Mirrors
+        # the color_depth override, without a detect_ counterpart.
+        self._hyperlinks: bool = hyperlinks
 
     def size(self) -> tuple[int, int]:
         """Terminal dimensions (columns, rows)."""
@@ -148,6 +161,36 @@ class Writer:
         """SGR reset sequence."""
         return "\x1b[0m"
 
+    def open_hyperlink(self, uri: str) -> str:
+        """OSC 8 open sequence for a hyperlink target (ST terminator)."""
+        return f"\x1b]8;;{uri}\x1b\\"
+
+    def close_hyperlink(self) -> str:
+        """OSC 8 close sequence (ST terminator)."""
+        return "\x1b]8;;\x1b\\"
+
+    def _link_target(
+        self, ref: str | None, resolved: dict[str, str | None]
+    ) -> tuple[str | None, str | None]:
+        """Resolve a cell's ref to ``(open-link key, uri)``, honoring the gate.
+
+        Returns ``(None, None)`` when no link should wrap the cell — hyperlinks
+        off, no ref, or the ref resolves to no URI (inert, design §5). Otherwise
+        ``(ref, uri)``: the ref keys the open link, so a ref change re-anchors
+        even when two refs resolve to the same URI. ``resolved`` memoizes so each
+        distinct ref hits the (app-owned) resolver once per emission call.
+        """
+        if not self._hyperlinks or ref is None:
+            return (None, None)
+        try:
+            uri = resolved[ref]
+        except KeyError:
+            uri = resolve_ref(ref)
+            resolved[ref] = uri
+        if uri is None:
+            return (None, None)
+        return (ref, uri)
+
     def move_cursor(self, x: int, y: int) -> str:
         """CSI escape for cursor positioning (1-based)."""
         return f"\x1b[{y + 1};{x + 1}H"
@@ -179,6 +222,11 @@ class Writer:
             parts.append("\x1b[2J")  # erase display
 
         last_style: Style | None = None
+        # OSC 8 link state, an independent state machine from last_style: a
+        # ref-only transition must emit even when style is unchanged. last_ref
+        # is the ref of the currently open link (None ⇒ no link open).
+        last_ref: str | None = None
+        resolved: dict[str, str | None] = {}  # memo: resolve each distinct ref once
         covered: set[tuple[int, int]] = set()  # trailing cells of wide chars written this frame
         cursor_x: int = -1
         cursor_y: int = -1
@@ -192,6 +240,9 @@ class Writer:
                 bottom = max(top, op.bottom)
                 n = op.n
 
+                if last_ref is not None:
+                    parts.append(self.close_hyperlink())
+                    last_ref = None
                 parts.append(self.reset_style())
                 last_style = None
 
@@ -214,6 +265,11 @@ class Writer:
                 continue
 
             if w.x != cursor_x or w.y != cursor_y:
+                # A cursor jump breaks link adjacency: an open link must not
+                # bleed across cells the frame didn't write.
+                if last_ref is not None:
+                    parts.append(self.close_hyperlink())
+                    last_ref = None
                 parts.append(self.move_cursor(w.x, w.y))
 
             if w.cell.style != last_style:
@@ -222,6 +278,14 @@ class Writer:
                 if sgr:
                     parts.append(sgr)
                 last_style = w.cell.style
+
+            target_ref, uri = self._link_target(w.ref, resolved)
+            if target_ref != last_ref:
+                if last_ref is not None:
+                    parts.append(self.close_hyperlink())
+                if uri is not None:  # uri and target_ref are set together
+                    parts.append(self.open_hyperlink(uri))
+                last_ref = target_ref
 
             parts.append(w.cell.char)
 
@@ -234,6 +298,8 @@ class Writer:
                 cursor_x = w.x + 1
             cursor_y = w.y
 
+        if last_ref is not None:
+            parts.append(self.close_hyperlink())
         parts.append(self.reset_style())
         parts.append("\x1b[?2026l")  # synchronized output end
 
@@ -323,6 +389,23 @@ def print_block(
     stream.flush()
 
 
+def _block_ref_row(block: Block, row_idx: int) -> Sequence[str | None] | None:
+    """The ref row for a block row: per-cell grid, uniform block ref, or None.
+
+    Mirrors compose.py's ref-row idiom — a per-cell ``_refs`` override wins, else
+    the uniform whole-block ``ref``, else no refs — so the ANSI reader threads
+    denotation through ``iter_trimmed_row_spans`` without reaching into Block for
+    a bespoke accessor. Returns None on the common (ref-less) path so the span
+    walk stays on its fast branch.
+    """
+    refs = block._refs
+    if refs is not None:
+        return refs[row_idx]
+    if block.ref is not None:
+        return (block.ref,) * block.width
+    return None
+
+
 def render_row_ansi(block: Block, row_idx: int, writer: Writer, *, clear_eol: bool = False) -> str:
     """Render one row of a Block to an ANSI string (no trailing newline).
 
@@ -332,8 +415,10 @@ def render_row_ansi(block: Block, row_idx: int, writer: Writer, *, clear_eol: bo
     """
     out: list[str] = []
     last_style: Style | None = None
+    last_ref: str | None = None  # ref of the open OSC 8 link (None ⇒ none open)
+    resolved: dict[str, str | None] = {}  # memo: resolve each distinct ref once
 
-    for span in iter_trimmed_row_spans(block.row(row_idx)):
+    for span in iter_trimmed_row_spans(block.row(row_idx), _block_ref_row(block, row_idx)):
         cell = span.cells[0]
         if cell.style != last_style:
             out.append(writer.reset_style())
@@ -341,8 +426,22 @@ def render_row_ansi(block: Block, row_idx: int, writer: Writer, *, clear_eol: bo
             if sgr:
                 out.append(sgr)
             last_style = cell.style
+
+        ref = span.refs[0] if span.refs is not None else None
+        target_ref, uri = writer._link_target(ref, resolved)
+        if target_ref != last_ref:
+            if last_ref is not None:
+                out.append(writer.close_hyperlink())
+            if uri is not None:  # uri and target_ref are set together
+                out.append(writer.open_hyperlink(uri))
+            last_ref = target_ref
+
         out.append(cell.char)
 
+    # Close any open link BEFORE reset_style — an OSC 8 must never leak across
+    # the newline the caller appends after this row.
+    if last_ref is not None:
+        out.append(writer.close_hyperlink())
     out.append(writer.reset_style())
     if clear_eol:
         out.append("\x1b[0K")

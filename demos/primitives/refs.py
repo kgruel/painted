@@ -1,0 +1,63 @@
+#!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.11"
+# dependencies = ["painted"]
+# ///
+"""Refs — the denotation channel becomes a link.
+
+A ref is an opaque per-cell annotation: "what does this cell refer to?" A
+``RefScheme`` declared through ``use_refs`` turns a ref's ``scheme:value`` into a
+URI, and link deliveries read it — HTML wraps the cells in an ``<a href>``, a
+terminal emits an OSC 8 hyperlink. A scheme-less or undeclared ref stays inert:
+the text still renders, painted just never invents a URI.
+
+Run: uv run demos/primitives/refs.py
+"""
+
+from painted import Block, RefScheme, Style, join_horizontal, join_vertical, print_block, use_refs
+
+# Declared at module scope (setter form, not a scoped `with`): the resolver seam
+# is ambient state, so it must be live when a delivery renders — and for the
+# docs-site capture that render happens after this module is imported. This is
+# the same ambient-pickup the design relies on (REFS_DESIGN §6).
+use_refs(RefScheme("fact", lambda value: f"https://loops.dev/f/{value}"))
+
+
+def spacer() -> Block:
+    return Block.text("", Style())
+
+
+def link(label: str, ref: str) -> Block:
+    """A labelled, refed row — the ref carries the denotation, the style the look."""
+    return join_horizontal(
+        Block.text("  ", Style()),
+        Block.text(f"{label:<18}", Style(fg="cyan"), ref=ref),
+        Block.text(ref, Style(dim=True)),
+    )
+
+
+def build_output() -> Block:
+    return join_vertical(
+        spacer(),
+        Block.text("  denotation → link", Style(dim=True)),
+        spacer(),
+        link("deploy succeeded", "fact:01JQ8F"),
+        link("cache warmed", "fact:01JQ8G"),
+        link("healthcheck ok", "fact:01JQ8H"),
+        spacer(),
+        Block.text("  inert (no declared scheme)", Style(dim=True)),
+        spacer(),
+        link("local target", "sidebar"),
+        spacer(),
+    )
+
+
+OUTPUT = build_output()
+
+
+def demo() -> None:
+    print_block(OUTPUT)
+
+
+if __name__ == "__main__":
+    demo()

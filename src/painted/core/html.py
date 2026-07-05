@@ -13,6 +13,7 @@ from .block import Block
 from .cell import NAMED_COLORS, Style
 from ._color import _idx_to_rgb
 from ._row_ops import iter_row_spans
+from ..refs import resolve_ref
 
 _BASE_FG = "var(--painted-fg, var(--text))"
 _BASE_BG = "var(--painted-bg, var(--code-bg))"
@@ -63,20 +64,68 @@ def _style_to_css(style: Style) -> str:
     return "; ".join(parts)
 
 
+def _refs_row(block: Block, row_idx: int) -> tuple[str | None, ...] | None:
+    """The ref annotations for one row, or None when the row carries no refs.
+
+    Mirrors ``Block.cell_ref``: a per-cell grid takes precedence; absent it, a
+    uniform whole-block ref applies to every cell; absent both, the row is
+    ref-less and the anchor state machine never fires.
+    """
+    if block._refs is not None:
+        return block._refs[row_idx]
+    if block.ref is not None:
+        return (block.ref,) * block.width
+    return None
+
+
 def render_html(block: Block) -> str:
     """Render a Block into HTML.
 
     Returns a <pre class="painted-output"> wrapper containing optional
-    <span style="..."> runs for styled cells.
+    <span style="..."> runs for styled cells. Cells whose ref resolves to a URI
+    through an ambient ``RefScheme`` (``use_refs``) are wrapped in an ``<a href>``
+    anchor; the resolver seam is read ambiently, so there is no signature change.
     """
     out: list[str] = ['<pre class="painted-output">']
+
+    # Resolve each distinct ref once per call — the choke point may run app code.
+    resolved: dict[str, str | None] = {}
+
+    def _href(ref: str | None) -> str | None:
+        if ref is None:
+            return None
+        if ref not in resolved:
+            resolved[ref] = resolve_ref(ref)
+        return resolved[ref]
 
     for row_idx in range(block.height):
         last_css: str | None = None
         span_open = False
+        # Anchor state runs alongside the span state: <a> wraps <span>, and the
+        # two are independent state machines — a ref-only transition must fire
+        # even when style is unchanged. open_href is the currently-open anchor's
+        # href, or None when no anchor is open. Adjacent cells with the same
+        # resolved href share one anchor; an anchor never crosses a row boundary.
+        open_href: str | None = None
+        refs_row = _refs_row(block, row_idx)
 
-        for row_span in iter_row_spans(block.row(row_idx)):
+        for row_span in iter_row_spans(block.row(row_idx), refs_row):
             cell = row_span.cells[0]
+            ref = row_span.refs[0] if row_span.refs is not None else None
+            href = _href(ref)
+
+            if href != open_href:
+                # Close inner-then-outer, in reverse-open order, before switching.
+                if span_open:
+                    out.append("</span>")
+                    span_open = False
+                    last_css = None
+                if open_href is not None:
+                    out.append("</a>")
+                if href is not None:
+                    out.append(f'<a href="{_html.escape(href, quote=True)}">')
+                open_href = href
+
             css = _style_to_css(cell.style)
             if not css:
                 if span_open:
@@ -97,6 +146,8 @@ def render_html(block: Block) -> str:
 
         if span_open:
             out.append("</span>")
+        if open_href is not None:
+            out.append("</a>")
         out.append("\n")
 
     out.append("</pre>\n")

@@ -48,6 +48,19 @@ _SYNC_BEGIN = "\x1b[?2026h"
 _SYNC_END = "\x1b[?2026l"
 
 
+def _ref_row(block: Block, y: int):
+    """The ref row for a block row: per-cell grid, uniform block ref, or None.
+
+    Local to keep the arch invariant (a public module must not import a private
+    sibling symbol) — the same 3-branch idiom compose.py inlines throughout.
+    """
+    if block._refs is not None:
+        return block._refs[y]
+    if block.ref is not None:
+        return (block.ref,) * block.width
+    return None
+
+
 class InPlaceRenderer:
     """Animate Block output in-place without alt screen.
 
@@ -91,7 +104,12 @@ class InPlaceRenderer:
             parts.append(f"\x1b[{self._height}A")
             skip = 0  # unchanged rows pending a cursor hop
             for row_idx in range(block.height):
-                if block.row(row_idx) == self._prev.row(row_idx):
+                # Row equality includes the ref row: a ref-only change (same
+                # glyphs + style, different denotation) must still redraw, or a
+                # stale hyperlink lingers on screen (design §5).
+                if block.row(row_idx) == self._prev.row(row_idx) and _ref_row(
+                    block, row_idx
+                ) == _ref_row(self._prev, row_idx):
                     skip += 1
                     continue
                 if skip:

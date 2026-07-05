@@ -14,11 +14,12 @@ from .cell import EMPTY_CELL, Cell, Style
 
 @dataclass(frozen=True, slots=True)
 class CellWrite:
-    """A single cell change: position + new cell value."""
+    """A single cell change: position + new cell value (+ optional denotation ref)."""
 
     x: int
     y: int
     cell: Cell
+    ref: str | None = None
 
 
 class Buffer:
@@ -151,26 +152,52 @@ class Buffer:
         return self._refs[idx]
 
     def diff(self, other: Buffer) -> list[CellWrite]:
-        """Compare with another buffer, return list of cells that differ."""
+        """Compare with another buffer, return list of cells that differ.
+
+        ``self`` is the new buffer; every emitted write carries ``self``'s ref
+        for its cell. Ref slots are compared whenever *either* buffer has a ref
+        grid allocated, so a same-glyph/same-style cell whose only change is its
+        ref still emits a write — the stale-hyperlink blind spot (design §5).
+        When neither side has a ref grid — the common case — the fast
+        list-equality short-circuit stays.
+        """
         width = self.width
         cells = self._cells
+        self_refs = self._refs
 
         if width != other.width or self.height != other.height:
             # Dimension mismatch: treat every cell as changed. This avoids IndexError
-            # and ensures coordinates are computed against `self`'s stride.
-            return [CellWrite(i % width, i // width, cell) for i, cell in enumerate(cells)]
+            # and ensures coordinates are computed against `self`'s stride. Refs come
+            # from the new buffer (self).
+            return [
+                CellWrite(
+                    i % width,
+                    i // width,
+                    cell,
+                    self_refs[i] if self_refs is not None else None,
+                )
+                for i, cell in enumerate(cells)
+            ]
 
         other_cells = other._cells
-        if cells == other_cells:
+        other_refs = other._refs
+        has_refs = self_refs is not None or other_refs is not None
+        if not has_refs and cells == other_cells:
             return []
 
         writes: list[CellWrite] = []
         append = writes.append
         for i, cell in enumerate(cells):
             other_cell = other_cells[i]
-            if cell is other_cell or cell == other_cell:
-                continue
-            append(CellWrite(i % width, i // width, cell))
+            cell_same = cell is other_cell or cell == other_cell
+            if has_refs:
+                self_ref = self_refs[i] if self_refs is not None else None
+                other_ref = other_refs[i] if other_refs is not None else None
+                if cell_same and self_ref == other_ref:
+                    continue
+                append(CellWrite(i % width, i // width, cell, self_ref))
+            elif not cell_same:
+                append(CellWrite(i % width, i // width, cell))
         return writes
 
     def line_hashes(self, *, include_style: bool = True) -> list[int]:

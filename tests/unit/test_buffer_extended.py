@@ -184,6 +184,64 @@ class TestBufferDiff:
         writes = a.diff(b)
         assert len(writes) == 2
 
+    def test_cellwrite_ref_defaults_none(self):
+        # The new field is additive: a plain write carries no ref.
+        assert CellWrite(0, 0, Cell("a", S)).ref is None
+
+    def test_diff_same_glyph_different_ref_emits_write_with_new_ref(self):
+        # Same char + style, only the ref changed: the stale-hyperlink blind spot.
+        # The write must be emitted, carrying the NEW buffer's ref.
+        new = Buffer(1, 1)
+        new.put_ref(0, 0, "a", S, "fact:x")
+        old = Buffer(1, 1)
+        old.put_ref(0, 0, "a", S, "fact:y")
+        writes = new.diff(old)
+        assert len(writes) == 1
+        assert writes[0].cell == Cell("a", S)
+        assert writes[0].ref == "fact:x"
+
+    def test_diff_ref_only_change_repaints_without_any_resolver(self):
+        # diff is resolver-agnostic — it is a buffer-layer concern. A ref-only
+        # change repaints even though no RefScheme is declared anywhere.
+        new = Buffer(1, 1)
+        new.put_ref(0, 0, "a", S, "fact:x")
+        old = Buffer(1, 1)
+        old.put(0, 0, "a", S)  # no ref grid on the old side
+        writes = new.diff(old)
+        assert len(writes) == 1
+        assert writes[0].ref == "fact:x"
+
+    def test_diff_ref_cleared_emits_write_with_none(self):
+        new = Buffer(1, 1)
+        new.put(0, 0, "a", S)  # ref cleared
+        old = Buffer(1, 1)
+        old.put_ref(0, 0, "a", S, "fact:x")
+        writes = new.diff(old)
+        assert len(writes) == 1
+        assert writes[0].ref is None
+
+    def test_diff_identical_cells_and_refs_is_empty(self):
+        new = Buffer(1, 1)
+        new.put_ref(0, 0, "a", S, "fact:x")
+        old = Buffer(1, 1)
+        old.put_ref(0, 0, "a", S, "fact:x")
+        assert new.diff(old) == []
+
+    def test_diff_ref_less_common_case_stays_empty(self):
+        # Neither side allocated a ref grid: the fast list-equality short-circuit.
+        a = Buffer(3, 2)
+        a.put(0, 0, "A", S)
+        b = a.clone()
+        assert a.diff(b) == []
+
+    def test_diff_dimension_mismatch_carries_new_refs(self):
+        new = Buffer(1, 1)
+        new.put_ref(0, 0, "a", S, "fact:x")
+        old = Buffer(2, 1)  # full-repaint path
+        writes = new.diff(old)
+        assert len(writes) == 1
+        assert writes[0].ref == "fact:x"
+
 
 # -- Buffer: line_hashes ---------------------------------------------------
 

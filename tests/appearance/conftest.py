@@ -54,40 +54,58 @@ def _style_fields(style: Style) -> dict:
     return out
 
 
-def _row_runs(row_cells) -> list[dict]:
-    """Coalesce a row into runs of identical style.
+def _row_runs(row_cells, row_refs=None) -> list[dict]:
+    """Coalesce a row into runs of identical style *and* ref.
 
     `iter_row_spans` yields one span per visible glyph (wide chars as a lead +
-    placeholder pair); we merge consecutive spans that share a style. A run's
-    text is the visible glyphs (placeholders dropped), matching `row_visible_text`.
+    placeholder pair); we merge consecutive spans that share a style and a ref. A
+    run's text is the visible glyphs (placeholders dropped), matching
+    `row_visible_text`. A run carries a `ref` key only when its denotation is
+    non-None — so a ref-less block serializes byte-identically to before the ref
+    dimension existed, and refs surface as a precise diff exactly as Style does.
     """
     runs: list[dict] = []
     cur_text: list[str] = []
     cur_style: Style | None = None
+    cur_ref: str | None = None
 
     def flush() -> None:
         if cur_style is not None:
-            runs.append({"text": "".join(cur_text), **_style_fields(cur_style)})
+            run = {"text": "".join(cur_text), **_style_fields(cur_style)}
+            if cur_ref is not None:
+                run["ref"] = cur_ref
+            runs.append(run)
 
-    for span in iter_row_spans(row_cells):
+    for span in iter_row_spans(row_cells, row_refs):
         glyph = span.cells[0].char
         style = span.cells[0].style
-        if cur_style is not None and style == cur_style:
+        ref = span.refs[0] if span.refs is not None else None
+        if cur_style is not None and style == cur_style and ref == cur_ref:
             cur_text.append(glyph)
         else:
             flush()
             cur_text = [glyph]
             cur_style = style
+            cur_ref = ref
     flush()
     return runs
 
 
+def _ref_row(block: Block, y: int):
+    """The ref row for a block row: per-cell grid, uniform block ref, or None."""
+    if block._refs is not None:
+        return block._refs[y]
+    if block.ref is not None:
+        return (block.ref,) * block.width
+    return None
+
+
 def serialize_block(block: Block) -> dict:
-    """Serialize a Block to a structured char+style map (rows of styled runs)."""
+    """Serialize a Block to a structured char+style+ref map (rows of runs)."""
     return {
         "width": block.width,
         "height": block.height,
-        "rows": [_row_runs(block.row(y)) for y in range(block.height)],
+        "rows": [_row_runs(block.row(y), _ref_row(block, y)) for y in range(block.height)],
     }
 
 

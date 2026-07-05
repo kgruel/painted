@@ -165,6 +165,18 @@ PANELS: dict[str, OutputSpec] = {
         data_attr="SAMPLE",
         render_as="json",
     ),
+    # Refs: the denotation channel as HTML anchors. The demo declares a `fact`
+    # RefScheme at module scope (setter form), so render_html picks it up
+    # ambiently and wraps the refed cells in <a href> — the site's live proof
+    # that a declared scheme turns denotation into links (REFS_DESIGN §6).
+    "refs_anchors": OutputSpec(
+        name="refs_anchors",
+        demo_path="demos/primitives/refs.py",
+        function_or_zoom="<module>",
+        format="html",
+        width=64,
+        data_attr="OUTPUT",
+    ),
     # --- Reference catalog ----------------------------------------------------
     # One real specimen per Design preview card. These are uniform (each captures a
     # module-level Block from tools/reference_specimens.py via the "<module>" shape),
