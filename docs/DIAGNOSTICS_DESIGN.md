@@ -172,4 +172,4 @@ params — the hook is glue, not a second renderer.
 | S1 | `shape_lens` hardened: cycle detection (real `RecursionError` fix), depth cap, declared-schema branch (dataclass / NamedTuple / Enum, `repr=False` honored) — the substrate |
 | S2 | `render_traceback` (`views/_traceback.py`, stable export): the record tree, zoom ladder, suppress fold, display-correct carets, chains + groups, redacted + budgeted locals |
 | S3 | Delivery glue (`painted/diagnostics.py`, root): `PaintedHandler` (severity thresholds, construction snapshot, `exc_info` composition, reentrancy guard), `install` (byte-identical excepthook, opt-in `threads`) |
-| S4 | This design-of-record + the doc-IR `diagnostics` page + the primitive demo + CHANGELOG |
+| S4 | This design-of-record + the doc-IR `diagnostics` page + the primitive demos (`diagnostics` for render_traceback, `logging_handler` for the delivery glue) + CHANGELOG |

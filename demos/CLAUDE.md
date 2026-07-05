@@ -75,7 +75,8 @@ primitives/
   cell.py           Style + print_block                        ✓
   span_line.py      Span, Line, to_block()                     ✓
   compose.py        join, border, pad, truncate, Wrap, Align   ✓
-  diagnostics.py    render_traceback: an exception as a record tree, disclosed by zoom ✓
+  diagnostics.py    render_traceback: stdlib-vs-painted delta, zoom ladder, redacted locals, ExceptionGroup tree ✓
+  logging_handler.py PaintedHandler: declared severities, extra= payload, exc_info composition ✓
   show.py           show() auto-dispatch                       ✓
 
 patterns/
