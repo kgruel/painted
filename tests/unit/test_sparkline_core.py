@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from painted._sparkline_core import _map_to_chars, _sample, sparkline_text
+from painted.core.errors import ContractError
 
 BLOCK_CHARS = ("\u2581", "\u2582", "\u2583", "\u2584", "\u2585", "\u2586", "\u2587", "\u2588")
 
@@ -108,7 +109,7 @@ class TestSample:
         assert result[0] == 0.0
 
     def test_unknown_strategy_raises(self):
-        with pytest.raises(ValueError, match="Unknown sampling strategy"):
+        with pytest.raises(ContractError, match="Unknown sampling strategy"):
             _sample([1, 2, 3], 2, "bogus")  # type: ignore[arg-type]
 
 

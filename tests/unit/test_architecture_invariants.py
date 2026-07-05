@@ -669,3 +669,43 @@ def test_frozen_collection_fields_defensively_copied() -> None:
     assert isinstance(icons.spinner, tuple)
     frames.append("d")
     assert len(icons.spinner) == 3
+
+
+# --- Raise sites name a painted exception class (docs/ERRORS_DESIGN.md §6) ----
+#
+# The hierarchy is only load-bearing if new code keeps using it: a bare
+# `raise ValueError`/`raise RuntimeError` in src/painted is a classification
+# the design doc says must be made explicitly (DeclarationError / ContractError
+# / LifecycleError). Only deliberately-exempt modules are named.
+_BARE_RAISE_EXEMPT_FILES = {
+    "_doc_pages.py",  # dev-only docs server — environmental failure, not a painted contract
+}
+_BARE_RAISE_CLASSES = {"ValueError", "RuntimeError"}
+
+
+def test_raise_sites_use_painted_exception_classes() -> None:
+    painted_root = _painted_root()
+    violations: list[str] = []
+    for py_file in sorted(painted_root.rglob("*.py")):
+        if py_file.name in _BARE_RAISE_EXEMPT_FILES:
+            continue
+        tree = ast.parse(py_file.read_text(encoding="utf-8"), filename=str(py_file))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Raise) or node.exc is None:
+                continue
+            exc = node.exc
+            name = None
+            if isinstance(exc, ast.Call) and isinstance(exc.func, ast.Name):
+                name = exc.func.id
+            elif isinstance(exc, ast.Name):
+                name = exc.id
+            if name in _BARE_RAISE_CLASSES:
+                violations.append(
+                    f"{py_file.relative_to(painted_root.parent)}:{node.lineno} "
+                    f"raises bare {name} (classify it per docs/ERRORS_DESIGN.md §4, "
+                    "or exempt the module with rationale)"
+                )
+
+    assert not violations, "Bare stdlib raises outside the exemption list:\n" + "\n".join(
+        violations
+    )

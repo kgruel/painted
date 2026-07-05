@@ -23,6 +23,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from ..core.errors import DeclarationError
 from .types import Format, Tag, Zoom, check_declarations
 
 if TYPE_CHECKING:
@@ -151,26 +152,32 @@ class AppRunner:
         names: set[str] = set()
         for cmd in self.commands:
             if cmd.name in names:
-                raise ValueError(f"Command name {cmd.name!r} is declared by more than one command")
+                raise DeclarationError(
+                    f"Command name {cmd.name!r} is declared by more than one command"
+                )
             names.add(cmd.name)
         seen_aliases: dict[str, str] = {}  # alias → owning command name
         for cmd in self.commands:
             own_aliases: set[str] = set()  # this command's aliases, for intra-command dups
             for alias in cmd.aliases:
                 if alias == cmd.name:
-                    raise ValueError(f"Command {cmd.name!r} lists {alias!r} as an alias of itself")
+                    raise DeclarationError(
+                        f"Command {cmd.name!r} lists {alias!r} as an alias of itself"
+                    )
                 if alias in own_aliases:
                     # A single command listing the same alias twice is its own
                     # error class — reporting it through the alias↔alias branch
                     # below would name this very command as the "other" owner,
                     # which reads as self-referential nonsense.
-                    raise ValueError(f"Command {cmd.name!r} lists alias {alias!r} more than once")
+                    raise DeclarationError(
+                        f"Command {cmd.name!r} lists alias {alias!r} more than once"
+                    )
                 if alias in names:
-                    raise ValueError(
+                    raise DeclarationError(
                         f"Alias {alias!r} of command {cmd.name!r} collides with command {alias!r}"
                     )
                 if alias in seen_aliases:
-                    raise ValueError(
+                    raise DeclarationError(
                         f"Alias {alias!r} of command {cmd.name!r} collides with "
                         f"the same alias of command {seen_aliases[alias]!r}"
                     )

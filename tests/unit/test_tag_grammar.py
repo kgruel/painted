@@ -28,6 +28,7 @@ from painted.cli import (
 )
 from painted.cli.help import framework_sections
 from painted.core.doc import Defs, Section
+from painted.core.errors import DeclarationError
 
 
 def _parse(argv, *, tags=None, depth_aliases=None, budgets=True, add_args=None):
@@ -79,31 +80,31 @@ class TestCollisionChecks:
         add_cli_args(parser, tags=tags, depth_aliases=depth_aliases)
 
     def test_tag_vs_framework_flag(self):
-        with pytest.raises(ValueError, match="framework flag"):
+        with pytest.raises(DeclarationError, match="framework flag"):
             self._build(tags=[Tag("json", "x")])
 
     def test_alias_vs_framework_flag(self):
-        with pytest.raises(ValueError, match="framework flag"):
+        with pytest.raises(DeclarationError, match="framework flag"):
             self._build(depth_aliases={"quiet": 0})
 
     def test_budget_names_reserved_even_without_budgets(self):
         """max-chars is reserved regardless of the budgets= setting, so a
         declaration that works in one configuration cannot break in another."""
         parser = argparse.ArgumentParser()
-        with pytest.raises(ValueError, match="framework flag"):
+        with pytest.raises(DeclarationError, match="framework flag"):
             add_cli_args(parser, tags=[Tag("max-chars", "x")], budgets=False)
 
     def test_tag_vs_tag(self):
-        with pytest.raises(ValueError, match="another declaration"):
+        with pytest.raises(DeclarationError, match="another declaration"):
             self._build(tags=[Tag("refs", "x"), Tag("refs", "y")])
 
     def test_tag_vs_alias(self):
-        with pytest.raises(ValueError, match="another declaration"):
+        with pytest.raises(DeclarationError, match="another declaration"):
             self._build(tags=[Tag("brief", "x")], depth_aliases={"brief": 0})
 
     @pytest.mark.parametrize("bad", ["Thinking", "show_refs", "-refs", "refs-", "a b"])
     def test_malformed_names_rejected(self, bad):
-        with pytest.raises(ValueError, match="kebab-case"):
+        with pytest.raises(DeclarationError, match="kebab-case"):
             self._build(tags=[Tag(bad, "x")])
 
     def test_kebab_case_accepted(self):
@@ -261,7 +262,7 @@ class TestRunnerIntegration:
 
     def test_collision_raises_before_dispatch(self, monkeypatch):
         monkeypatch.setattr("sys.stdout.isatty", lambda: False)
-        with pytest.raises(ValueError, match="framework flag"):
+        with pytest.raises(DeclarationError, match="framework flag"):
             run_cli(
                 [],
                 render=lambda _ctx, _data: Block.text("x", Style()),
@@ -472,7 +473,7 @@ class TestLoopsAcceptance:
 
 class TestDepthAliasValues:
     def test_negative_alias_rejected_at_construction(self):
-        with pytest.raises(ValueError, match="non-negative"):
+        with pytest.raises(DeclarationError, match="non-negative"):
             _parse([], depth_aliases={"silent": -1})
 
     def test_alias_above_enum_compiles_open_and_clamps_at_porthole(self):
@@ -516,7 +517,7 @@ class TestAddArgsDestCollision:
 
     def test_positional_on_tag_dest_raises(self, monkeypatch):
         monkeypatch.setattr("sys.stdout.isatty", lambda: False)
-        with pytest.raises(ValueError, match="collides with a declared tag"):
+        with pytest.raises(DeclarationError, match="collides with a declared tag"):
             self._run(
                 ["data.csv"],
                 tags=[Tag("stats", "x")],
@@ -525,7 +526,7 @@ class TestAddArgsDestCollision:
 
     def test_custom_dest_on_alias_raises(self, monkeypatch):
         monkeypatch.setattr("sys.stdout.isatty", lambda: False)
-        with pytest.raises(ValueError, match="collides with a declared tag"):
+        with pytest.raises(DeclarationError, match="collides with a declared tag"):
             self._run(
                 [],
                 depth_aliases={"brief": 0},
@@ -543,7 +544,7 @@ class TestHelpPathLaws:
         """A broken declaration must raise on -h too, not render the
         contradiction it would refuse to parse."""
         monkeypatch.setattr("sys.stdout.isatty", lambda: False)
-        with pytest.raises(ValueError, match="framework flag"):
+        with pytest.raises(DeclarationError, match="framework flag"):
             run_cli(
                 ["-h"],
                 render=lambda _ctx, _data: Block.text("x", Style()),
@@ -901,5 +902,5 @@ class TestAppCommandTags:
     def test_declarations_validated_at_construction(self):
         from painted.cli import AppCommand
 
-        with pytest.raises(ValueError, match="framework flag"):
+        with pytest.raises(DeclarationError, match="framework flag"):
             AppCommand("x", "y", handler=lambda argv: 0, tags=[Tag("json", "z")])

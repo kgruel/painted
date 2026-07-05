@@ -5,6 +5,8 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Literal
 
+from .core.errors import ContractError
+
 SamplingStrategy = Literal["tail", "uniform"]
 RangeSource = Literal["all", "sampled"]
 
@@ -60,7 +62,7 @@ def _sample(values: Sequence[float], width: int, sampling: SamplingStrategy) -> 
         step = len(values) / width
         return [float(values[int(i * step)]) for i in range(width)]
 
-    raise ValueError(f"Unknown sampling strategy: {sampling}")
+    raise ContractError(f"Unknown sampling strategy: {sampling}")
 
 
 def _map_to_chars(

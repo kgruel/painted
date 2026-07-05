@@ -6,6 +6,7 @@ import pytest
 
 from painted.cli import AppCommand, AppRunner, run_app
 from painted.cli import HelpArg, Zoom
+from painted.core.errors import DeclarationError
 from painted.core.doc import Defs, Section
 
 
@@ -332,7 +333,7 @@ class TestAliases:
         # Names share the dispatch namespace with aliases; a repeated name would
         # silently shadow (first handler wins) without this guard. Symmetric with
         # the alias↔name check below — both spellings are validated, not just one.
-        with pytest.raises(ValueError, match="declared by more than one command"):
+        with pytest.raises(DeclarationError, match="declared by more than one command"):
             AppRunner(
                 commands=(
                     AppCommand("demos", "List demos", lambda argv: 0),
@@ -341,7 +342,7 @@ class TestAliases:
             )
 
     def test_alias_collides_with_command_name_raises(self):
-        with pytest.raises(ValueError, match="collides with command"):
+        with pytest.raises(DeclarationError, match="collides with command"):
             AppRunner(
                 commands=(
                     AppCommand("demos", "List demos", lambda argv: 0, aliases=("docs",)),
@@ -350,7 +351,7 @@ class TestAliases:
             )
 
     def test_alias_collides_with_other_alias_raises(self):
-        with pytest.raises(ValueError, match="collides with the same alias"):
+        with pytest.raises(DeclarationError, match="collides with the same alias"):
             AppRunner(
                 commands=(
                     AppCommand("demos", "List demos", lambda argv: 0, aliases=("x",)),
@@ -359,7 +360,7 @@ class TestAliases:
             )
 
     def test_alias_duplicates_own_name_raises(self):
-        with pytest.raises(ValueError, match="alias of itself"):
+        with pytest.raises(DeclarationError, match="alias of itself"):
             AppRunner(
                 commands=(AppCommand("demos", "List demos", lambda argv: 0, aliases=("demos",)),)
             )
@@ -367,7 +368,7 @@ class TestAliases:
     def test_command_lists_same_alias_twice_raises(self):
         # A single command repeating an alias is its own error class — the
         # message names the command, not a self-referential "other" owner.
-        with pytest.raises(ValueError, match="lists alias 'x' more than once"):
+        with pytest.raises(DeclarationError, match="lists alias 'x' more than once"):
             AppRunner(
                 commands=(AppCommand("demos", "List demos", lambda argv: 0, aliases=("x", "x")),)
             )

@@ -25,6 +25,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from types import MappingProxyType
 
+from ..core.errors import DeclarationError
 from ..core.fidelity import Fidelity
 from ..core.zoom import Zoom
 
@@ -323,18 +324,18 @@ def check_declarations(
     declared = [t.name for t in tags or ()] + list(depth_aliases or ())
     for name in declared:
         if not _DECLARED_NAME_RE.match(name):
-            raise ValueError(
+            raise DeclarationError(
                 f"Declared flag name {name!r} must be lowercase kebab-case "
                 "(it becomes both the --flag and the visible-set key)"
             )
         if name in _FRAMEWORK_FLAG_NAMES:
-            raise ValueError(f"Declared flag name {name!r} collides with a framework flag")
+            raise DeclarationError(f"Declared flag name {name!r} collides with a framework flag")
         if name in seen:
-            raise ValueError(f"Declared flag name {name!r} collides with another declaration")
+            raise DeclarationError(f"Declared flag name {name!r} collides with another declaration")
         seen.add(name)
     for alias_name, alias_depth in (depth_aliases or {}).items():
         if alias_depth < 0:
-            raise ValueError(
+            raise DeclarationError(
                 f"Depth alias {alias_name!r} maps to {alias_depth}: depth is a "
                 "non-negative int (0=minimal; open above 3)"
             )
@@ -412,7 +413,7 @@ def _check_add_args_dests(
         return
     for action in added:
         if action.dest in declared:
-            raise ValueError(
+            raise DeclarationError(
                 f"add_args registers dest {action.dest!r}, which collides "
                 "with a declared tag or depth alias"
             )

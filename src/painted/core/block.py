@@ -10,6 +10,7 @@ from ._row_ops import blank_cell, iter_row_spans
 from ._text_width import char_width, display_width
 from .buffer import Buffer, BufferView
 from .cell import Cell, Style
+from .errors import ContractError
 
 
 # Internal cell cache: maps Style → dict of char → Cell for ASCII characters.
@@ -111,15 +112,15 @@ class Block:
         frozen_ids = _freeze_id_rows(ids) if ids is not None else None
         for row_idx, row in enumerate(frozen_rows):
             if len(row) != width:
-                raise ValueError(f"Block row {row_idx} width {len(row)} != block width {width}")
+                raise ContractError(f"Block row {row_idx} width {len(row)} != block width {width}")
         if frozen_ids is not None:
             if len(frozen_ids) != len(frozen_rows):
-                raise ValueError(
+                raise ContractError(
                     f"Block ids height {len(frozen_ids)} != block height {len(frozen_rows)}"
                 )
             for row_idx, row in enumerate(frozen_ids):
                 if len(row) != width:
-                    raise ValueError(
+                    raise ContractError(
                         f"Block ids row {row_idx} width {len(row)} != block width {width}"
                     )
         object.__setattr__(self, "width", width)
@@ -215,7 +216,7 @@ class Block:
             ]
             return Block(rows, width, id=id)
 
-        raise ValueError(f"Unknown wrap mode: {wrap}")
+        raise ContractError(f"Unknown wrap mode: {wrap}")
 
     @staticmethod
     def column(
@@ -694,4 +695,4 @@ def _wrap_styled(
         cells = _pad_row(cells, width, pad_style)
         return Block([cells], width)
 
-    raise ValueError(f"Unknown wrap mode: {wrap}")
+    raise ContractError(f"Unknown wrap mode: {wrap}")

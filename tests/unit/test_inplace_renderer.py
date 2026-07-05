@@ -3,6 +3,7 @@ import io
 import pytest
 
 from painted import Block, Cell, Style
+from painted.core.errors import LifecycleError
 from painted.inplace import InPlaceRenderer
 
 
@@ -142,7 +143,7 @@ class TestInPlaceRenderer:
         block = Block.text("hi", Style())
         renderer = InPlaceRenderer(stream)
 
-        with pytest.raises(RuntimeError, match="outside of a context manager"):
+        with pytest.raises(LifecycleError, match="outside of a context manager"):
             renderer.render(block)
 
     def test_finalize_shows_cursor_and_deactivates(self):
@@ -205,5 +206,5 @@ class TestInPlaceRenderer:
         stream = io.StringIO()
         renderer = InPlaceRenderer(stream)
 
-        with pytest.raises(RuntimeError, match="outside of a context manager"):
+        with pytest.raises(LifecycleError, match="outside of a context manager"):
             renderer.clear()
