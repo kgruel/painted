@@ -164,3 +164,19 @@ class TestFlameLensPalette:
         }
         assert fgs, "NORD flame produced no colored segments"
         assert fgs <= {174, 179, 108, 110}
+
+
+class TestFlameEmptySeriesRamp:
+    """External-review round (gpt-5.5): an empty `series` ramp must degrade to
+    the bare Style — the same §5 contract as Palette.series_for — not raise."""
+
+    def test_empty_series_palette_renders(self):
+        from painted import Palette, use_palette
+
+        with use_palette(Palette(series=())):
+            block = flame_lens({"a": 1, "b": {"c": 2}}, 2, 20)
+        assert "a" in block_to_text(block)
+
+    def test_empty_colors_argument_renders(self):
+        block = flame_lens({"a": 1}, 1, 20, colors=[])
+        assert "a" in block_to_text(block)

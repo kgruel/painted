@@ -311,6 +311,22 @@ class TestThresholds:
         with pytest.raises(ValueError, match="not a member of vocabulary 'sev'"):
             Thresholds(_severity_vocab(), {1: "nope"})
 
+    # External-review round (gpt-5.5): floor KEYS are declarations too — a
+    # non-numeric or NaN floor must fail at construction, not TypeError (or
+    # silently misroute) at resolve time.
+
+    def test_non_numeric_floor_raises(self) -> None:
+        with pytest.raises(ValueError, match="not a number"):
+            Thresholds(_severity_vocab(), {"zero": "info"})
+
+    def test_bool_floor_raises(self) -> None:
+        with pytest.raises(ValueError, match="not a number"):
+            Thresholds(_severity_vocab(), {True: "info"})
+
+    def test_nan_floor_raises(self) -> None:
+        with pytest.raises(ValueError, match="NaN"):
+            Thresholds(_severity_vocab(), {float("nan"): "info", 0: "info"})
+
 
 # --- Dual-mode ambient seam --------------------------------------------------
 

@@ -26,7 +26,7 @@ from ..core.cell import Style
 from ..core.compose import fit_to_width, join_horizontal, join_vertical, pad, truncate
 from ..core.zoom import Zoom
 from ..icon_set import current_icons
-from ..palette import current_palette
+from ..palette import CORE_ROLE_NAMES, current_palette
 from ..core._text_width import display_width, truncate_ellipsis
 from ..vocabulary import Thresholds, Vocabulary, vocab_style
 
@@ -789,6 +789,21 @@ def record_gutter(
         )
     if not glyphs:
         raise ValueError("record_gutter needs at least one ramp glyph")
+    unknown_glyph, unknown_role = unknown
+    # The rail budget is exactly one display column per glyph — apply_gutter
+    # reserves 2 (glyph + space), so a wide glyph would silently clip content
+    # at the final fit. A declaration fault, caught here (width-is-exact).
+    for ch in (*glyphs, unknown_glyph):
+        if display_width(ch) != 1:
+            raise ValueError(
+                f"record_gutter glyph {ch!r} is {display_width(ch)} display "
+                "columns wide; a rail glyph must be exactly 1"
+            )
+    if unknown_role not in CORE_ROLE_NAMES:
+        raise ValueError(
+            f"record_gutter unknown role {unknown_role!r} is not a core role "
+            f"({sorted(CORE_ROLE_NAMES)!r})"
+        )
     for alias, target in (aliases or {}).items():
         if target not in vocabulary.values:
             raise ValueError(
@@ -797,7 +812,13 @@ def record_gutter(
             )
 
     alias_map = dict(aliases) if aliases else {}
-    unknown_glyph, unknown_role = unknown
+
+    def _unknown_style() -> Style:
+        # The same D5 rule mark_style honors: `text` may be None (no substrate
+        # declared) and then means "unstyled" — never a bare None escaping the
+        # GutterFn -> (str, Style) contract.
+        style = getattr(current_palette(), unknown_role)
+        return style if style is not None else Style()
 
     def gutter(kind: str, payload: dict) -> tuple[str, Style]:
         if thresholds is not None:
@@ -807,7 +828,7 @@ def record_gutter(
             try:
                 value = thresholds.resolve(float(payload.get(field, default)))
             except (TypeError, ValueError):
-                return unknown_glyph, getattr(current_palette(), unknown_role)
+                return unknown_glyph, _unknown_style()
         else:
             raw = payload.get(field)
             # Only strings can name a member; anything else (None, numbers,
@@ -815,7 +836,7 @@ def record_gutter(
             value = alias_map.get(raw, raw) if isinstance(raw, str) else None
             if value is None or value not in vocabulary.values:
                 # Missing field or out-of-vocabulary data: the declared fallback.
-                return unknown_glyph, getattr(current_palette(), unknown_role)
+                return unknown_glyph, _unknown_style()
         return _glyph(vocabulary, value, glyphs), vocab_style(vocabulary, value)
 
     return gutter

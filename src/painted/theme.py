@@ -51,6 +51,14 @@ class Theme:
     themes exactly like a core role. An override beats the role's declared style
     at ``mark_style`` time.
 
+    Role overrides are **forward-tolerant by design**: an override for a role
+    nothing currently binds is inert, not an error. A theme applies independent
+    of declaration order (``use_theme`` before ``use_vocabularies`` must work)
+    and may carry overrides for vocabularies an app declares later — the
+    override activates the moment the role is bound. The cost of that tolerance
+    is that a misspelled override name is silently inert; role *names* are
+    still validated where roles are declared (``Role``/``Vocabulary``).
+
     The ``roles`` mapping makes ``Theme`` **un-hashable** by design (it is stored
     as a ``MappingProxyType``, which is not hashable). ``Theme`` value-equality
     still holds; hashability was incidental and no consumer relied on it.

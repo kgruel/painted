@@ -678,6 +678,40 @@ class TestRecordGutterValidation:
         assert g("k", {"status": "hi"})[0] == "Z"
 
 
+class TestRecordGutterGlyphAndFallbackDeclarations:
+    """External-review round (gpt-5.5): the two declarations the first cut
+    accepted unvalidated — glyph width and the unknown-fallback role."""
+
+    _ORDERED = Vocabulary(
+        "demo-glyphs",
+        values=("lo", "hi"),
+        ordered=True,
+        roles={"lo": "success", "hi": "error"},
+    )
+
+    def test_wide_ramp_glyph_raises_at_construction(self):
+        # apply_gutter reserves exactly 2 columns; a 2-column glyph would
+        # silently clip content at the final fit (width-is-exact).
+        with pytest.raises(ValueError, match="display"):
+            record_gutter(self._ORDERED, "status", glyphs=("🟥",))
+
+    def test_wide_unknown_glyph_raises_at_construction(self):
+        with pytest.raises(ValueError, match="display"):
+            record_gutter(self._ORDERED, "status", unknown=("🟥", "muted"))
+
+    def test_unknown_role_must_be_core(self):
+        with pytest.raises(ValueError, match="core role"):
+            record_gutter(self._ORDERED, "status", unknown=("│", "typo-role"))
+
+    def test_unknown_text_role_resolves_to_bare_style(self):
+        # `text` may be None on the palette (D5): the fallback must still
+        # honor the GutterFn -> (str, Style) contract — never a bare None.
+        g = record_gutter(self._ORDERED, "status", unknown=("│", "text"))
+        glyph, style = g("k", {"status": "not-a-member"})
+        assert glyph == "│"
+        assert style == Style()
+
+
 class TestRecordGutterToleratesData:
     """A rail never raises on data — wrong-TYPE payloads route to the declared
     fallback (review round: the crash paths the first cut missed)."""

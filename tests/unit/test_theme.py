@@ -132,3 +132,15 @@ def test_themes_reference_palette_presets_not_inline_copies() -> None:
     assert NORD_THEME.palette is NORD_PALETTE
     assert MONO_THEME.palette is MONO_PALETTE
     assert PAINTED_THEME.palette is PAINTED_PALETTE
+
+
+def test_role_overrides_are_forward_tolerant() -> None:
+    """An override for a role nothing binds is inert BY DESIGN — a theme
+    applies independent of declaration order and may carry overrides for
+    vocabularies declared later. (Documented in the Theme docstring; the
+    trade-off is that a misspelled override name is silently inert.)"""
+    from painted import Style, Theme, use_theme
+
+    with use_theme(Theme(roles={"never-bound-anywhere": Style(fg="red")})):
+        # No raise, and the override sits in the channel awaiting a binding.
+        assert current_role_overrides()["never-bound-anywhere"] == Style(fg="red")

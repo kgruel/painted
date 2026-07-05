@@ -252,6 +252,16 @@ class Thresholds:
         if not self.floors:
             raise ValueError("Thresholds declares no floors")
         for floor, value in self.floors.items():
+            # A floor is a point on the numeric domain: a real, comparable
+            # number. Anything else is a declaration fault — caught here, not
+            # as a TypeError (or a silent NaN misroute) at resolve time.
+            if isinstance(floor, bool) or not isinstance(floor, (int, float)):
+                raise ValueError(
+                    f"Threshold floor {floor!r} is not a number; floors are "
+                    "points on the numeric domain being bucketed"
+                )
+            if floor != floor:  # NaN: incomparable, can never be "cleared".
+                raise ValueError("Threshold floor NaN has no place in an ordered domain")
             if value not in self.vocabulary.values:
                 raise ValueError(
                     f"Threshold floor {floor!r} maps to {value!r}, not a member "

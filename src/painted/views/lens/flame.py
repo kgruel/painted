@@ -73,6 +73,10 @@ def flame_lens(
         from ...palette import current_palette
 
         palette = current_palette().series
+    # An empty ramp degrades to the bare Style — the same §5 contract as
+    # Palette.series_for, never an IndexError from indexing into ().
+    if not palette:
+        palette = (Style(),)
     if width <= 0:
         return Block.empty(0, 1)
 
