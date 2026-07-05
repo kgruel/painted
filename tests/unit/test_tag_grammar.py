@@ -262,7 +262,7 @@ class TestRunnerIntegration:
 
     def test_collision_raises_before_dispatch(self, monkeypatch):
         monkeypatch.setattr("sys.stdout.isatty", lambda: False)
-        with pytest.raises(ValueError, match="framework flag"):
+        with pytest.raises(DeclarationError, match="framework flag"):
             run_cli(
                 [],
                 render=lambda _ctx, _data: Block.text("x", Style()),
@@ -544,7 +544,7 @@ class TestHelpPathLaws:
         """A broken declaration must raise on -h too, not render the
         contradiction it would refuse to parse."""
         monkeypatch.setattr("sys.stdout.isatty", lambda: False)
-        with pytest.raises(ValueError, match="framework flag"):
+        with pytest.raises(DeclarationError, match="framework flag"):
             run_cli(
                 ["-h"],
                 render=lambda _ctx, _data: Block.text("x", Style()),
@@ -902,5 +902,5 @@ class TestAppCommandTags:
     def test_declarations_validated_at_construction(self):
         from painted.cli import AppCommand
 
-        with pytest.raises(ValueError, match="framework flag"):
+        with pytest.raises(DeclarationError, match="framework flag"):
             AppCommand("x", "y", handler=lambda argv: 0, tags=[Tag("json", "z")])

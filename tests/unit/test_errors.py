@@ -190,3 +190,24 @@ class TestLifecycleErrorSite:
 
         with pytest.raises(LifecycleError, match="outside of a context manager"):
             renderer.render(block)
+
+
+# =============================================================================
+# Displayed name — the visible half of the catch-compatibility claim
+# =============================================================================
+
+
+class TestDisplayedClassName:
+    """Dual inheritance preserves catching, not display: the CLI error block
+    names the painted class, and that is the accepted, intended behavior
+    (docs/ERRORS_DESIGN.md §3) — the displayed name tells the reader which
+    contract was broken."""
+
+    def test_cli_error_block_names_the_painted_class(self):
+        from painted.cli.runner import CliRunner
+        from painted.core.errors import ContractError
+
+        ctx = argparse.Namespace(width=80)
+        block = CliRunner._render_error_block(ctx, ContractError("bad"))
+        text = "".join(cell.char for cell in block.row(0)).strip()
+        assert text == "ContractError: bad"

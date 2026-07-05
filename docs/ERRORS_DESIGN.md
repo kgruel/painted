@@ -75,7 +75,13 @@ Each subclass also inherits the stdlib type it replaces
 - Every existing `except ValueError` and `pytest.raises(ValueError)` —
   ours and consumers' — keeps working unchanged. siftd and loops pin
   *published* painted; this ships without a coordinated floor-bump.
-- The change is **semver-MINOR**: additive names, no behavioral break.
+- The compatibility claim is **catch-compatibility**, precisely: `except`
+  clauses and `str(exc)` are unchanged. The *type name* is visible wherever
+  the class is displayed — `repr()`, interpreter traceback headers, and
+  painted's own CLI error blocks now read `ContractError: …` instead of
+  `ValueError: …`. That visible change is the feature, not a leak: the
+  displayed name now tells the reader which behavioral contract was broken.
+- The change is **semver-MINOR**: additive names, catch behavior preserved.
   Dropping the stdlib parents later would be semver-MAJOR; there is no
   plan to.
 
@@ -152,8 +158,10 @@ its context manager.
   checks, which are `ContractError`), `record_gutter` construction
   (`DeclarationError`), `PaintedHandler` empty-thresholds
   (`DeclarationError`).
-- **Future arcs**: new raise sites must name a class from this doc; a new
-  bare `ValueError`/`RuntimeError` in `src/painted` is a review flag.
+- **Future arcs**: new raise sites must name a class from this doc. This is
+  enforced, not prose: `test_raise_sites_use_painted_exception_classes`
+  (architecture invariants) rejects a bare `raise ValueError`/`RuntimeError`
+  in `src/painted` outside a rationale-carrying exemption list.
 
 ## 7. Non-goals and deferrals
 
