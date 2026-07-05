@@ -32,6 +32,16 @@ class Buffer:
         self._cells: list[Cell] = [EMPTY_CELL] * (width * height)
         self._refs: list[str | None] | None = None
 
+    def __setstate__(self, state: tuple[object, dict[str, object]]) -> None:
+        # Pickles written by painted <= 0.6 carry the pre-rename slot name
+        # (_ids); remap so they restore into the renamed slot. Removed at 1.0
+        # with the rest of the id= alias surface.
+        _, slots = state
+        if "_ids" in slots:
+            slots["_refs"] = slots.pop("_ids")
+        for name, value in slots.items():
+            object.__setattr__(self, name, value)
+
     def _ensure_refs(self) -> list[str | None]:
         if self._refs is None:
             self._refs = cast(list[str | None], [None] * (self.width * self.height))

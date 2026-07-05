@@ -151,6 +151,84 @@ class TestBufferViewPutIdAlias:
         _warns_at_caller(rec.list)
 
 
+# --- Conflicting spellings: both new and deprecated in one call -----------------
+
+
+class TestBothSpellingsConflict:
+    def test_text_ref_and_id_together_raises(self) -> None:
+        from painted.core.errors import ContractError
+
+        with pytest.raises(ContractError, match="not both"):
+            Block.text("hi", S, ref="new", id="old")
+
+    def test_init_ref_and_id_together_raises(self) -> None:
+        from painted.core.errors import ContractError
+
+        with pytest.raises(ContractError, match="not both"):
+            Block([[]], 0, ref="new", id="old")
+
+    def test_border_ref_and_id_together_raises(self) -> None:
+        from painted.core.errors import ContractError
+
+        with pytest.raises(ContractError, match="not both"):
+            border(Block.text("X", S), ref="new", id="old")
+
+
+# --- Legacy pickles: pre-rename slot names restore into renamed slots -----------
+
+
+class TestLegacyPickleState:
+    """painted <= 0.6 pickles carry the old slot names (``id``/``_ids``); the
+    ``__setstate__`` remap keeps them loadable through the deprecation window.
+    The legacy state dicts below are byte-for-byte what 0.6's default slot
+    pickling produced (verified against v0.6.0 during review)."""
+
+    def test_block_legacy_state_restores(self) -> None:
+        modern = Block.text("hi", S, ref="greet")
+        legacy_slots = {
+            "width": modern.width,
+            "height": modern.height,
+            "id": "greet",
+            "_rows": modern._rows,
+            "_ids": None,
+            "_frozen": True,
+        }
+        revived = Block.__new__(Block)
+        revived.__setstate__((None, legacy_slots))
+        assert revived.ref == "greet"
+        assert revived._refs is None
+        assert revived.row(0) == modern.row(0)
+
+    def test_block_roundtrip_current_version(self) -> None:
+        import pickle
+
+        b = Block.text("hi", S, ref="greet")
+        revived = pickle.loads(pickle.dumps(b))
+        assert revived.ref == "greet"
+        assert revived.row(0) == b.row(0)
+
+    def test_buffer_legacy_state_restores(self) -> None:
+        modern = Buffer(2, 1)
+        modern.put_ref(0, 0, "x", S, "tag")
+        legacy_slots = {
+            "width": 2,
+            "height": 1,
+            "_cells": list(modern._cells),
+            "_ids": list(modern._refs or []),
+        }
+        revived = Buffer.__new__(Buffer)
+        revived.__setstate__((None, legacy_slots))
+        assert revived.hit(0, 0) == "tag"
+
+    def test_buffer_roundtrip_current_version(self) -> None:
+        import pickle
+
+        buf = Buffer(2, 1)
+        buf.put_ref(0, 0, "x", S, "tag")
+        revived = pickle.loads(pickle.dumps(buf))
+        assert revived.hit(0, 0) == "tag"
+
+
 # --- D2: Code(ref=) -> Code(src=) -----------------------------------------------
 
 

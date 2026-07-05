@@ -210,7 +210,7 @@ See [VIEWPORT_DESIGN.md](VIEWPORT_DESIGN.md) for `Viewport` API.
 ## Remaining Open Questions
 
 1. **Coordinate translation for layers** — Mouse events are screen-absolute.
-   `Surface.hit_test(x, y)` returns a semantic id at a coordinate, but per-layer
+   `Surface.hit(x, y)` returns a semantic ref at a coordinate, but per-layer
    local coordinate translation is not automatic.
 
 2. **Click chain detection** — Double-click requires state and timing logic.

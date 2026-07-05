@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-import warnings
 from collections.abc import Sequence
 from enum import Enum
-from typing import NamedTuple, cast
+from typing import NamedTuple
 
 from ._text_width import char_width, display_width, truncate_ellipsis
-from .block import Block, _ALIAS_UNSET, _cells_from_text
+from .block import Block, _ALIAS_UNSET, _cells_from_text, _resolve_ref_alias
 from .borders import ROUNDED, BorderChars
 from .cell import Cell, Style
 from ._row_ops import blank_cell, take_row_prefix
@@ -247,13 +246,7 @@ def border(
     id: object = _ALIAS_UNSET,
 ) -> Block:
     """Wrap a block with a 1-cell border, optionally with a title in the top row."""
-    if id is not _ALIAS_UNSET:
-        warnings.warn(
-            "border(id=) is deprecated; use ref= (removed at 1.0)",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        ref = cast("str | None", id)
+    ref = _resolve_ref_alias(ref, id, spelling="border(id=)")
     new_width = block.width + 2
     rows: list[list[Cell] | tuple[Cell, ...]] = []
     has_refs = (ref is not None) or (block._refs is not None)

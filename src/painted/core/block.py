@@ -105,6 +105,8 @@ def _resolve_ref_alias(ref: str | None, id: object, *, spelling: str) -> str | N
     """Fold the deprecated ``id=`` kwarg into ``ref``, warning at the caller."""
     if id is _ALIAS_UNSET:
         return ref
+    if ref is not None:
+        raise ContractError(f"pass ref=, not both ref= and the deprecated id= ({spelling})")
     warnings.warn(
         f"{spelling} is deprecated; use ref= (removed at 1.0)",
         DeprecationWarning,
@@ -129,6 +131,12 @@ class Block:
         ids: object = _ALIAS_UNSET,
     ):
         if id is not _ALIAS_UNSET or ids is not _ALIAS_UNSET:
+            if (id is not _ALIAS_UNSET and ref is not None) or (
+                ids is not _ALIAS_UNSET and refs is not None
+            ):
+                raise ContractError(
+                    "pass ref=/refs=, not both the new and the deprecated id=/ids= spellings"
+                )
             warnings.warn(
                 "Block(id=, ids=) is deprecated; use ref=, refs= (removed at 1.0)",
                 DeprecationWarning,
@@ -420,6 +428,19 @@ class Block:
             stacklevel=2,
         )
         return self.cell_ref(x, y)
+
+    def __setstate__(self, state: tuple[object, dict[str, object]]) -> None:
+        # Pickles written by painted <= 0.6 carry the pre-rename slot names
+        # (id, _ids); remap so they restore into the renamed slots. The default
+        # slot restore would also trip the read-only ``id`` property, so slots
+        # are assigned directly. Removed at 1.0 with the rest of the id= alias
+        # surface.
+        _, slots = state
+        for old, new in (("id", "ref"), ("_ids", "_refs")):
+            if old in slots:
+                slots[new] = slots.pop(old)
+        for name, value in slots.items():
+            object.__setattr__(self, name, value)
 
 
 _space_cells: dict[Style, Cell] = {}
