@@ -23,6 +23,7 @@ import sys
 import threading
 import time
 from collections.abc import Mapping, Sequence
+from types import MappingProxyType
 from typing import TYPE_CHECKING, TextIO
 
 from .core._row_ops import row_visible_text
@@ -43,13 +44,15 @@ if TYPE_CHECKING:
 # INFO (the journalctl principle — routine noise stays muted), CRITICAL onto
 # ERROR (the palette has no louder role; Severity stays the closed 4-level set).
 
-DEFAULT_THRESHOLDS: Mapping[int, Severity] = {
-    logging.DEBUG: Severity.INFO,
-    logging.INFO: Severity.INFO,
-    logging.WARNING: Severity.WARNING,
-    logging.ERROR: Severity.ERROR,
-    logging.CRITICAL: Severity.ERROR,
-}
+DEFAULT_THRESHOLDS: Mapping[int, Severity] = MappingProxyType(
+    {
+        logging.DEBUG: Severity.INFO,
+        logging.INFO: Severity.INFO,
+        logging.WARNING: Severity.WARNING,
+        logging.ERROR: Severity.ERROR,
+        logging.CRITICAL: Severity.ERROR,
+    }
+)
 
 # Severity → Palette role attribute. INFO has no dedicated role (neutral notices
 # stay muted); the other three map to their like-named role. Mirrors the closed
@@ -184,7 +187,7 @@ class PaintedHandler(logging.Handler):
         role: Style = getattr(p, _SEVERITY_ROLE[severity])
 
         message = self._message(record)
-        msg_lines = message.split("\n") or [""]
+        msg_lines = message.split("\n")
 
         head_spans: list[Span] = []
         if self._zoom >= Zoom.SUMMARY:
@@ -261,11 +264,16 @@ def install(
     """Route uncaught exceptions through ``render_traceback`` + ``print_block``.
 
     Sets ``sys.excepthook``; ``threads=True`` additionally sets
-    ``threading.excepthook`` (opt-in — a declared capability). A
-    ``KeyboardInterrupt`` passes through to the default hook untouched. The
-    installed hook's output is byte-identical to the explicit
+    ``threading.excepthook`` (opt-in — a declared capability; ``threads=False``
+    restores the stdlib thread hook, so a repeat ``install`` fully replaces the
+    prior declaration — the two hooks can never disagree). A
+    ``KeyboardInterrupt`` passes through to the default hook untouched, and the
+    thread hook ignores ``SystemExit`` exactly as stdlib's does. The installed
+    hook's output is byte-identical to the explicit
     ``print_block(render_traceback(exc, zoom, width, suppress=suppress),
-    sys.stderr)`` path for the same exception and params.
+    sys.stderr)`` path for the same exception and params. Should rendering
+    itself ever raise, the hook falls back to the default hook with the
+    ORIGINAL exception — the never-raise law holds at the delivery boundary.
     """
     from .views import render_traceback
 
@@ -273,17 +281,27 @@ def install(
         if issubclass(exc_type, KeyboardInterrupt):
             sys.__excepthook__(exc_type, exc, tb)
             return
-        print_block(render_traceback(exc, zoom, width, suppress=suppress), sys.stderr)
+        try:
+            print_block(render_traceback(exc, zoom, width, suppress=suppress), sys.stderr)
+        except Exception:
+            sys.__excepthook__(exc_type, exc, tb)
 
     sys.excepthook = hook
 
     if threads:
 
         def thread_hook(args):
-            if args.exc_value is None or issubclass(args.exc_type, KeyboardInterrupt):
+            # stdlib threading.excepthook silently ignores SystemExit — mirror it,
+            # this is delivery glue, not a policy change.
+            if args.exc_value is None or issubclass(args.exc_type, (KeyboardInterrupt, SystemExit)):
                 return
-            print_block(
-                render_traceback(args.exc_value, zoom, width, suppress=suppress), sys.stderr
-            )
+            try:
+                print_block(
+                    render_traceback(args.exc_value, zoom, width, suppress=suppress), sys.stderr
+                )
+            except Exception:
+                threading.__excepthook__(args)
 
         threading.excepthook = thread_hook
+    else:
+        threading.excepthook = threading.__excepthook__

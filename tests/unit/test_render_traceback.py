@@ -184,6 +184,40 @@ def test_minimal_is_one_line() -> None:
 # --- TracebackException input path -------------------------------------------
 
 
+def test_syntaxerror_head_parses_in_captured_path() -> None:
+    # SyntaxError's exception-only rendering puts the source echo BEFORE the
+    # head line — the captured path must still find `Type: message`, and both
+    # input paths must agree (they collapse to the same tree).
+    try:
+        compile("def broken(:", "<fixture>", "exec")
+    except SyntaxError as e:
+        exc = e
+    live = block_to_text(render_traceback(exc, Zoom.MINIMAL, None))
+    te = traceback.TracebackException.from_exception(exc)
+    captured = block_to_text(render_traceback(te, Zoom.MINIMAL, None))
+    assert "SyntaxError" in captured
+    assert "File" not in captured.split("\n")[0]  # the source echo is not the head
+    assert captured.split("\n")[0] == live.split("\n")[0]
+
+
+def test_captured_path_strips_module_qualified_type() -> None:
+    # stdlib qualifies non-builtin exceptions as `module.Type`; the captured
+    # path strips to the bare name the live path's type(exc).__name__ uses.
+    class CustomBoom(Exception):
+        pass
+
+    try:
+        raise CustomBoom("qualified")
+    except CustomBoom as e:
+        exc = e
+    live = block_to_text(render_traceback(exc, Zoom.MINIMAL, None))
+    te = traceback.TracebackException.from_exception(exc)
+    captured = block_to_text(render_traceback(te, Zoom.MINIMAL, None))
+    assert captured.split("\n")[0] == live.split("\n")[0]
+    # Bare name, not the module-qualified `...<locals>.CustomBoom` stdlib prints.
+    assert captured.startswith("CustomBoom: qualified")
+
+
 def test_tracebackexception_input_renders() -> None:
     exc = _chained()
     te = traceback.TracebackException.from_exception(exc, capture_locals=True)

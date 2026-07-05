@@ -47,6 +47,12 @@ from ..palette import current_palette
 # a `db_password` or `API_KEY` is masked, the value never reaching a repr.
 _REDACT_PAT = re.compile(r"password|secret|token|key|api", re.IGNORECASE)
 
+# The exception-only head line: identifier-led, optionally qualified — dots
+# and the `<locals>` marker a nested class's qualname carries — ending at `:`
+# or end-of-line. Source echoes never match (indented); notes come after the
+# head, so first-match wins.
+_HEAD_RE = re.compile(r"^[A-Za-z_][\w.<>]*(?::|$)")
+
 _REDACTED = "∙∙∙ redacted"
 _UNREPRESENTABLE = "<unrepresentable>"
 
@@ -108,14 +114,6 @@ def _cycle_node() -> _Node:
     return _Node(_CYCLE, "", (), None, None, (), False, is_cycle=True)
 
 
-def _safe_str(exc: BaseException) -> str:
-    """``str(exc)`` that cannot itself raise — a broken ``__str__`` degrades."""
-    try:
-        return str(exc)
-    except Exception:
-        return f"<unprintable {type(exc).__name__}>"
-
-
 def _from_exception(exc: BaseException, capture: bool, seen: frozenset[int] = frozenset()) -> _Node:
     """Normalize a live exception. ``capture`` grabs live frame locals (FULL).
 
@@ -159,9 +157,14 @@ def _from_exception(exc: BaseException, capture: bool, seen: frozenset[int] = fr
     is_group = isinstance(exc, BaseExceptionGroup)
     children = tuple(_from_exception(e, capture, seen) for e in exc.exceptions) if is_group else ()
 
+    # The head comes from the SAME derivation as the captured path (_split_head
+    # over the capture-free te) so the two input paths agree byte-for-byte —
+    # notably SyntaxError, whose str() duplicates the location the source echo
+    # already carries. Raise-safe: stdlib captures str(exc) defensively.
+    type_name, message = _split_head(te)
     return _Node(
-        type(exc).__name__,
-        _safe_str(exc),
+        type_name,
+        message,
         tuple(frames),
         cause,
         context,
@@ -209,18 +212,37 @@ def _from_te(te: TracebackException, seen: frozenset[int] = frozenset()) -> _Nod
 
 
 def _split_head(te: TracebackException) -> tuple[str, str]:
-    """`(type, message)` from a TracebackException's exception-only header line."""
-    lines = list(te.format_exception_only())
-    head = lines[0].rstrip("\n") if lines else ""
+    """`(type, message)` from a TracebackException's exception-only rendering.
+
+    The head is not always the first line: ``SyntaxError`` prints its source
+    echo (``File``/line/caret, all indented) *before* the head, and
+    ``__notes__`` print after it. The head is the first line shaped like
+    ``Type[: message]`` — unindented, identifier-led. The type is stripped to
+    its bare name (stdlib qualifies non-builtin exceptions as ``module.Type``)
+    so both input paths name the type the way the live path's
+    ``type(exc).__name__`` does.
+    """
+    head = ""
+    for raw in te.format_exception_only():
+        line = raw.rstrip("\n")
+        if _HEAD_RE.match(line):
+            head = line
+            break
     type_name, sep, message = head.partition(": ")
-    return (type_name, message) if sep else (head, "")
+    type_name = type_name.rpartition(".")[2]
+    return (type_name, message) if sep else (type_name, "")
 
 
 # --- Caret geometry ----------------------------------------------------------
 
 
 def _byte_to_char(line: str, byte_off: int) -> int:
-    """A UTF-8 byte offset (as ``colno`` reports) → a character index into ``line``."""
+    """A UTF-8 byte offset (as ``colno`` reports) → a character index into ``line``.
+
+    An offset landing mid-character (possible on hand-built or stale captures)
+    decodes the truncated tail as one replacement char via ``errors="replace"``,
+    which can shift the caret a cell — accepted: never raise over a caret.
+    """
     if byte_off <= 0:
         return 0
     return len(line.encode("utf-8")[:byte_off].decode("utf-8", "replace"))

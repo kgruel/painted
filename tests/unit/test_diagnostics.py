@@ -213,12 +213,16 @@ def test_install_passes_through_keyboard_interrupt(_restore_hooks, capsys) -> No
 def test_install_threads_opt_in(_restore_hooks) -> None:
     import threading
 
-    before = threading.excepthook
     install(threads=False)
-    assert threading.excepthook is before  # untouched without opt-in
+    assert threading.excepthook is threading.__excepthook__  # stdlib without opt-in
 
     install(threads=True)
-    assert threading.excepthook is not before
+    assert threading.excepthook is not threading.__excepthook__
+
+    # A repeat install fully replaces the prior declaration: threads=False
+    # restores the stdlib thread hook — the two hooks can never disagree.
+    install(threads=False)
+    assert threading.excepthook is threading.__excepthook__
 
 
 def test_install_thread_hook_renders(_restore_hooks, capsys) -> None:
@@ -234,3 +238,41 @@ def test_install_thread_hook_renders(_restore_hooks, capsys) -> None:
     t.join()
     err = capsys.readouterr().err
     assert "ValueError: in a thread" in err
+
+
+def test_install_thread_hook_ignores_system_exit(_restore_hooks, capsys) -> None:
+    # stdlib threading.excepthook silently ignores SystemExit; the installed
+    # hook is glue, not a policy change — sys.exit() in a thread stays silent.
+    import threading
+
+    install(threads=True)
+
+    t = threading.Thread(target=sys.exit)
+    t.start()
+    t.join()
+    assert capsys.readouterr().err == ""
+
+
+def test_install_hook_falls_back_when_render_raises(_restore_hooks, capsys, monkeypatch) -> None:
+    # The never-raise law at the delivery boundary: if rendering itself dies,
+    # the hook falls back to the default hook with the ORIGINAL exception —
+    # never "Error in sys.excepthook" noise over the user's error.
+    import painted.views
+
+    monkeypatch.setattr(
+        painted.views, "render_traceback", lambda *a, **k: (_ for _ in ()).throw(RuntimeError)
+    )
+    install()
+    try:
+        raise ValueError("original")
+    except ValueError as e:
+        sys.excepthook(type(e), e, e.__traceback__)
+    err = capsys.readouterr().err
+    assert "ValueError: original" in err  # stdlib rendering of the original
+
+
+def test_default_thresholds_is_frozen() -> None:
+    # The declaration is immutable — mutating the shared default is a bug, not
+    # a customization path (pass a custom mapping instead).
+    with pytest.raises(TypeError):
+        DEFAULT_THRESHOLDS[logging.DEBUG] = Severity.ERROR  # type: ignore[index]
