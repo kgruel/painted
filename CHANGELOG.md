@@ -4,16 +4,16 @@ All notable changes to painted are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/); pre-1.0, minor versions may carry
 breaking changes.
 
-## [Unreleased]
+## [0.6.0] — 2026-07-05
 
 This release adds **declared vocabularies** — the mark channel's mechanism, and the rule that every color a renderer applies for *meaning* traces to a declaration (`docs/VOCABULARIES_DESIGN.md`). A vocabulary is a closed set of named values bound to roles, validated at construction; `mark_style(vocab, value)` is the single point meaning becomes color. Severity is reframed as the *built-in* ordered vocabulary (the depth-vs-Tag pattern repeating: painted ships the anonymous axis, apps extend it), and painted takes its own medicine — the three hardcoded `record.py` gutter if-chains are now ordered vocabulary declarations over one `record_gutter` factory.
 
 ### Added (vocabularies)
 
 - **`Vocabulary`, `Role`, `Thresholds`, `use_vocabularies`, `mark_style`, `current_vocabularies`, `reset_vocabularies`** — the declaration mechanism, on the semver-stable views surface. Construction validates everything (the `check_declarations` discipline): unique bound values, resolvable role references, no conflicting role redeclarations. Ordered vocabularies unlock `index`/`at_least`/`cmp` and `Thresholds` (numeric floors → values, greatest-floor-cleared). The honesty rules are pinned by tests: an undeclared lookup raises; an out-of-vocabulary value raises unless `overflow="series"`; vocabularies generate no CLI flags (enforced structurally).
-- **`Palette.series_for(key)`** — deterministic categorical color for open sets: md5 of the key into the `series` ramp, never builtin `hash()` (PYTHONHASHSEED). The digest is golden-pinned; `flame_lens` rebased onto it, shedding its per-process color instability.
+- **`Palette.series_for(key)`** — deterministic categorical color for open sets: md5 of the key into the `series` ramp, never builtin `hash()` (PYTHONHASHSEED). The digest is golden-pinned; `flame_lens` rebased onto it, shedding its per-process color instability. An empty `series` ramp degrades to a bare `Style()` (unstyled, never an `IndexError`) in both `series_for` and `flame_lens`.
 - **`Theme(roles={...})`** — the public path to re-tinting any declared role by name (core or app); a fourth composed ambient channel that `use_theme`/`reset_theme` set and restore atomically. The roles mapping makes `Theme` un-hashable by reviewed decision (value-equality holds; nothing hashed a Theme).
-- **`record_gutter(vocabulary, field, *, aliases=, thresholds=, glyphs=, unknown=)`** — gutters consume vocabularies instead of owning them. Glyph weight derives from a value's distance to the vocabulary's `attention` end against a ramp; color resolves through the same seam as `mark_style`, so a palette swap re-tints rails live. The three shipped gutters are now declarations over it, byte-identical for every known status; a rail never raises on data — out-of-vocabulary or wrong-type payload values route to the declared `unknown` fallback.
+- **`record_gutter(vocabulary, field, *, aliases=, thresholds=, glyphs=, unknown=, default=)`** — gutters consume vocabularies instead of owning them. On the `thresholds` path, a payload missing the field resolves `default=` (0 unless declared) through the same floors — absent data is classified, not special-cased. Glyph weight derives from a value's distance to the vocabulary's `attention` end against a ramp; color resolves through the same seam as `mark_style`, so a palette swap re-tints rails live. The three shipped gutters are now declarations over it, byte-identical for every known status; a rail never raises on data — out-of-vocabulary or wrong-type payload values route to the declared `unknown` fallback.
 
 ### Changed (vocabularies)
 

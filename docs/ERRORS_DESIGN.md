@@ -1,9 +1,10 @@
 # Errors — the exception hierarchy
 
-**Status: RATIFIED 2026-07-05, implementation in flight** (branch
-`exception-hierarchy`, PR off `main`). painted has raised bare stdlib
-exceptions since its first commit — 19 `ValueError` and 3 `RuntimeError`
-sites on `main` today, zero classes of its own. This document declares the
+**Status: IMPLEMENTED 2026-07-05, ships in 0.6.0** (built on branch
+`exception-hierarchy`, adopted across the vocabularies arc the same day).
+painted raised bare stdlib exceptions since its first commit — 19
+`ValueError` and 3 `RuntimeError` sites at design time, zero classes of its
+own. This document declares the
 hierarchy, the classification rule that assigns every raise site to a class,
 and the compatibility argument that makes the change semver-MINOR. Companion
 to the vocabularies work (branch `declared-vocabularies`): the principle
