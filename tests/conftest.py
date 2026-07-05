@@ -2,6 +2,7 @@
 
 import pytest
 
+from painted.refs import reset_refs
 from painted.theme import reset_theme
 from painted.vocabulary import reset_vocabularies
 
@@ -31,12 +32,16 @@ def _reset_ambient_state():
     this fixture automatically tracks any future ambient concern wired into a
     Theme. `reset_vocabularies()` clears the declared-vocabulary app layer, which
     is ambient ContextVar state but not part of a Theme (a mark classifies data;
-    it is not aesthetic). Both are promoted here from the per-directory fixtures
-    they replace so isolation is a property of the whole suite, not something
-    each test directory remembers.
+    it is not aesthetic). `reset_refs()` clears the declared ref-scheme registry —
+    the same shape of leak vector, single-layer like `palette` rather than
+    two-layer like `vocabularies` (there is no built-in ref scheme). All three are
+    promoted here from the per-directory fixtures they replace so isolation is a
+    property of the whole suite, not something each test directory remembers.
     """
     reset_theme()
     reset_vocabularies()
+    reset_refs()
     yield
     reset_theme()
     reset_vocabularies()
+    reset_refs()

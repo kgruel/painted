@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import warnings
 from collections.abc import Sequence
 from enum import Enum
 from typing import cast
@@ -86,7 +87,7 @@ def _freeze_cell_rows(rows: Sequence[Sequence[Cell]]) -> tuple[tuple[Cell, ...],
     return tuple(frozen)
 
 
-def _freeze_id_rows(
+def _freeze_ref_rows(
     rows: Sequence[Sequence[str | None]],
 ) -> tuple[tuple[str | None, ...], ...]:
     frozen: list[tuple[str | None, ...]] = []
@@ -95,55 +96,85 @@ def _freeze_id_rows(
     return tuple(frozen)
 
 
+# Sentinel for the deprecated ``id=``/``ids=`` alias kwargs: distinguishes "not
+# passed" from an explicit ``None`` so the alias only warns when actually used.
+_ALIAS_UNSET: object = object()
+
+
+def _resolve_ref_alias(ref: str | None, id: object, *, spelling: str) -> str | None:
+    """Fold the deprecated ``id=`` kwarg into ``ref``, warning at the caller."""
+    if id is _ALIAS_UNSET:
+        return ref
+    warnings.warn(
+        f"{spelling} is deprecated; use ref= (removed at 1.0)",
+        DeprecationWarning,
+        stacklevel=3,
+    )
+    return cast("str | None", id)
+
+
 class Block:
     """Immutable rectangle of styled cells with known dimensions."""
 
-    __slots__ = ("width", "height", "id", "_rows", "_ids", "_frozen")
+    __slots__ = ("width", "height", "ref", "_rows", "_refs", "_frozen")
 
     def __init__(
         self,
         rows: Sequence[Sequence[Cell]],
         width: int,
         *,
-        id: str | None = None,
-        ids: Sequence[Sequence[str | None]] | None = None,
+        ref: str | None = None,
+        refs: Sequence[Sequence[str | None]] | None = None,
+        id: object = _ALIAS_UNSET,
+        ids: object = _ALIAS_UNSET,
     ):
+        if id is not _ALIAS_UNSET or ids is not _ALIAS_UNSET:
+            warnings.warn(
+                "Block(id=, ids=) is deprecated; use ref=, refs= (removed at 1.0)",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            if id is not _ALIAS_UNSET:
+                ref = cast("str | None", id)
+            if ids is not _ALIAS_UNSET:
+                refs = cast("Sequence[Sequence[str | None]] | None", ids)
+
         frozen_rows = _freeze_cell_rows(rows)
-        frozen_ids = _freeze_id_rows(ids) if ids is not None else None
+        frozen_refs = _freeze_ref_rows(refs) if refs is not None else None
         for row_idx, row in enumerate(frozen_rows):
             if len(row) != width:
                 raise ContractError(f"Block row {row_idx} width {len(row)} != block width {width}")
-        if frozen_ids is not None:
-            if len(frozen_ids) != len(frozen_rows):
+        if frozen_refs is not None:
+            if len(frozen_refs) != len(frozen_rows):
                 raise ContractError(
-                    f"Block ids height {len(frozen_ids)} != block height {len(frozen_rows)}"
+                    f"Block refs height {len(frozen_refs)} != block height {len(frozen_rows)}"
                 )
-            for row_idx, row in enumerate(frozen_ids):
+            for row_idx, row in enumerate(frozen_refs):
                 if len(row) != width:
                     raise ContractError(
-                        f"Block ids row {row_idx} width {len(row)} != block width {width}"
+                        f"Block refs row {row_idx} width {len(row)} != block width {width}"
                     )
         object.__setattr__(self, "width", width)
         object.__setattr__(self, "height", len(frozen_rows))
-        object.__setattr__(self, "id", id)
+        object.__setattr__(self, "ref", ref)
         object.__setattr__(self, "_rows", frozen_rows)
-        object.__setattr__(self, "_ids", frozen_ids)
+        object.__setattr__(self, "_refs", frozen_refs)
         object.__setattr__(self, "_frozen", True)
 
     @staticmethod
     def _create(
         rows: tuple[tuple[Cell, ...] | Sequence[Cell], ...],
         width: int,
-        id: str | None = None,
-        ids: tuple[tuple[str | None, ...], ...] | None = None,
+        ref: str | None = None,
+        refs: tuple[tuple[str | None, ...], ...] | None = None,
     ) -> Block:
         """Internal fast constructor — rows must be frozen tuples of correct width."""
         b = object.__new__(Block)
         object.__setattr__(b, "width", width)
         object.__setattr__(b, "height", len(rows))
-        object.__setattr__(b, "id", id)
+        object.__setattr__(b, "ref", ref)
         object.__setattr__(b, "_rows", rows)
-        object.__setattr__(b, "_ids", ids)
+        object.__setattr__(b, "_refs", refs)
         object.__setattr__(b, "_frozen", True)
         return b
 
@@ -159,23 +190,25 @@ class Block:
         *,
         width: int | None = None,
         wrap: Wrap = Wrap.NONE,
-        id: str | None = None,
+        ref: str | None = None,
+        id: object = _ALIAS_UNSET,
     ) -> Block:
         """Create a block from text content with optional wrapping."""
+        ref = _resolve_ref_alias(ref, id, spelling="Block.text(id=)")
         if width is not None and width <= 0:
-            return Block([[]], 0, id=id)
+            return Block([[]], 0, ref=ref)
 
         if width is None:
             cells = _cells_from_text(content, style)
-            return Block._create((tuple(cells),), len(cells), id=id)
+            return Block._create((tuple(cells),), len(cells), ref=ref)
 
         if wrap == Wrap.NONE:
             # Truncate at width, single line
             if content.isascii():
-                return Block._create((_ascii_row_tuple(content, width, style),), width, id=id)
+                return Block._create((_ascii_row_tuple(content, width, style),), width, ref=ref)
             cells = _cells_from_text(content, style, max_width=width)
             cells = _pad_row(cells, width, style)
-            return Block._create((tuple(cells),), width, id=id)
+            return Block._create((tuple(cells),), width, ref=ref)
 
         if wrap == Wrap.ELLIPSIS:
             # Truncate with the ambient marker if needed. The marker is read from
@@ -187,7 +220,7 @@ class Block:
 
             if display_width(content) <= width:
                 if content.isascii():
-                    return Block._create((_ascii_row_tuple(content, width, style),), width, id=id)
+                    return Block._create((_ascii_row_tuple(content, width, style),), width, ref=ref)
                 cells = _cells_from_text(content, style, max_width=width)
             else:
                 ellipsis = current_icons().ellipsis
@@ -200,12 +233,12 @@ class Block:
                     cells = _cells_from_text(content, style, max_width=width - ell_w)
                     cells.extend(_cells_from_text(ellipsis, style))
             cells = _pad_row(cells, width, style)
-            return Block._create((tuple(cells),), width, id=id)
+            return Block._create((tuple(cells),), width, ref=ref)
 
         if wrap == Wrap.CHAR:
             # Break at any character boundary
             rows = _char_wrap(content, width, style)
-            return Block(rows, width, id=id)
+            return Block(rows, width, ref=ref)
 
         if wrap == Wrap.WORD:
             # Break at word boundaries
@@ -214,7 +247,7 @@ class Block:
                 _pad_row(_cells_from_text(line, style, max_width=width), width, style)
                 for line in lines
             ]
-            return Block(rows, width, id=id)
+            return Block(rows, width, ref=ref)
 
         raise ContractError(f"Unknown wrap mode: {wrap}")
 
@@ -223,7 +256,8 @@ class Block:
         rows: Sequence[tuple[str, Style]],
         *,
         width: int | None = None,
-        id: str | None = None,
+        ref: str | None = None,
+        id: object = _ALIAS_UNSET,
     ) -> Block:
         """Create a block from per-row (text, style) pairs.
 
@@ -231,8 +265,9 @@ class Block:
         display width if not given explicitly; all rows are padded/truncated
         to match.
         """
+        ref = _resolve_ref_alias(ref, id, spelling="Block.column(id=)")
         if not rows:
-            return Block([], 0, id=id)
+            return Block([], 0, ref=ref)
 
         if width is None:
             width = max(display_width(text) for text, _style in rows)
@@ -243,14 +278,22 @@ class Block:
             cells = _pad_row(cells, width, style)
             cell_rows.append(cells)
 
-        return Block(cell_rows, width, id=id)
+        return Block(cell_rows, width, ref=ref)
 
     @staticmethod
-    def empty(width: int, height: int, style: Style = Style(), *, id: str | None = None) -> Block:
+    def empty(
+        width: int,
+        height: int,
+        style: Style = Style(),
+        *,
+        ref: str | None = None,
+        id: object = _ALIAS_UNSET,
+    ) -> Block:
         """Create a block filled with space cells."""
+        ref = _resolve_ref_alias(ref, id, spelling="Block.empty(id=)")
         space = Cell(" ", style)
         rows = [[space] * width for _ in range(height)]
-        return Block(rows, width, id=id)
+        return Block(rows, width, ref=ref)
 
     def paint(self, buffer: Buffer | BufferView, x: int = 0, y: int = 0) -> None:
         """Transfer cells into a buffer region. Clips to buffer bounds."""
@@ -267,46 +310,46 @@ class Block:
                 src_end = src_x + (right - left)
                 span = src_end - src_x
                 dst_cells = buffer._cells
-                dst_ids = buffer._ids
+                dst_refs = buffer._refs
                 buffer_width = buffer.width
                 rows = self._rows
 
-                if self._ids is None:
-                    if self.id is None:
-                        clear_ids = [None] * span if dst_ids is not None else None
+                if self._refs is None:
+                    if self.ref is None:
+                        clear_refs = [None] * span if dst_refs is not None else None
                         start = top * buffer_width + left
                         for by in range(top, bottom):
                             src_row = rows[by - y]
                             dst_cells[start : start + span] = src_row[src_x:src_end]
-                            if dst_ids is not None and clear_ids is not None:
-                                dst_ids[start : start + span] = clear_ids
+                            if dst_refs is not None and clear_refs is not None:
+                                dst_refs[start : start + span] = clear_refs
                             start += buffer_width
                         return
 
-                    ids = buffer._ensure_ids()
-                    row_ids = [self.id] * span
+                    refs = buffer._ensure_refs()
+                    row_refs = [self.ref] * span
                     start = top * buffer_width + left
                     for by in range(top, bottom):
                         src_row = rows[by - y]
                         dst_cells[start : start + span] = src_row[src_x:src_end]
-                        ids[start : start + span] = row_ids
+                        refs[start : start + span] = row_refs
                         start += buffer_width
                     return
 
-                ids = buffer._ensure_ids()
-                src_ids = self._ids
-                assert src_ids is not None
+                refs = buffer._ensure_refs()
+                src_refs = self._refs
+                assert src_refs is not None
                 start = top * buffer_width + left
                 for by in range(top, bottom):
                     src_idx = by - y
                     src_row = rows[src_idx]
                     dst_cells[start : start + span] = src_row[src_x:src_end]
-                    ids[start : start + span] = src_ids[src_idx][src_x : src_x + span]
+                    refs[start : start + span] = src_refs[src_idx][src_x : src_x + span]
                     start += buffer_width
                 return
 
         target = buffer
-        uniform_id = self.id if self._ids is None else None
+        uniform_ref = self.ref if self._refs is None else None
 
         for row_idx in range(self.height):
             by = y + row_idx
@@ -314,50 +357,69 @@ class Block:
                 continue
 
             src_row = self._rows[row_idx]
-            src_ids = self._ids[row_idx] if self._ids is not None else None
+            src_refs = self._refs[row_idx] if self._refs is not None else None
 
-            for span in iter_row_spans(src_row, src_ids):
+            for span in iter_row_spans(src_row, src_refs):
                 bx = x + span.start
 
                 if span.width == 1:
                     if 0 <= bx < target.width:
                         cell = span.cells[0]
-                        cid = span.ids[0] if span.ids is not None else uniform_id
-                        if cid is None:
+                        cref = span.refs[0] if span.refs is not None else uniform_ref
+                        if cref is None:
                             target.put(bx, by, cell.char, cell.style)
                         else:
-                            target.put_id(bx, by, cell.char, cell.style, cid)
+                            target.put_ref(bx, by, cell.char, cell.style, cref)
                     continue
 
                 if 0 <= bx and bx + span.width <= target.width:
                     for offset, cell in enumerate(span.cells):
-                        cid = span.ids[offset] if span.ids is not None else uniform_id
+                        cref = span.refs[offset] if span.refs is not None else uniform_ref
                         px = bx + offset
-                        if cid is None:
+                        if cref is None:
                             target.put(px, by, cell.char, cell.style)
                         else:
-                            target.put_id(px, by, cell.char, cell.style, cid)
+                            target.put_ref(px, by, cell.char, cell.style, cref)
                     continue
 
                 for offset, cell in enumerate(span.cells):
                     px = bx + offset
                     if 0 <= px < target.width:
                         blank = blank_cell(cell.style)
-                        cid = span.ids[offset] if span.ids is not None else uniform_id
-                        if cid is None:
+                        cref = span.refs[offset] if span.refs is not None else uniform_ref
+                        if cref is None:
                             target.put(px, by, blank.char, blank.style)
                         else:
-                            target.put_id(px, by, blank.char, blank.style, cid)
+                            target.put_ref(px, by, blank.char, blank.style, cref)
 
     def row(self, y: int) -> tuple[Cell, ...]:
         """Access a row by index."""
         return self._rows[y]
 
+    @property
+    def id(self) -> str | None:
+        """Deprecated alias for :attr:`ref` (removed at 1.0)."""
+        warnings.warn(
+            "Block.id is deprecated; use Block.ref",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.ref
+
+    def cell_ref(self, x: int, y: int) -> str | None:
+        """Return the semantic ref at a local coordinate (or None)."""
+        if self._refs is not None:
+            return self._refs[y][x]
+        return self.ref
+
     def cell_id(self, x: int, y: int) -> str | None:
-        """Return the semantic id at a local coordinate (or None)."""
-        if self._ids is not None:
-            return self._ids[y][x]
-        return self.id
+        """Deprecated alias for :meth:`cell_ref` (removed at 1.0)."""
+        warnings.warn(
+            "Block.cell_id is deprecated; use Block.cell_ref",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.cell_ref(x, y)
 
 
 _space_cells: dict[Style, Cell] = {}

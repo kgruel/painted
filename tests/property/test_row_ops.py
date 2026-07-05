@@ -49,7 +49,7 @@ def test_iter_row_spans_covers_row_exactly_once(row) -> None:
 @given(row=any_rows(), mw=st.integers(min_value=0, max_value=20))
 def test_take_row_prefix_no_split_within_budget(row, mw: int) -> None:
     """A row prefix stays within budget, is a real prefix, and keeps spans whole."""
-    cells, _ids, used = take_row_prefix(row, mw)
+    cells, _refs, used = take_row_prefix(row, mw)
     assert used <= mw
     assert tuple(cells) == tuple(row[: len(cells)])
     assert sum(s.width for s in iter_row_spans(tuple(cells))) == used

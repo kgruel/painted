@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass
 from typing import cast
 
@@ -23,18 +24,18 @@ class CellWrite:
 class Buffer:
     """2D grid of Cells, row-major flat list for cache efficiency."""
 
-    __slots__ = ("width", "height", "_cells", "_ids")
+    __slots__ = ("width", "height", "_cells", "_refs")
 
     def __init__(self, width: int, height: int):
         self.width = width
         self.height = height
         self._cells: list[Cell] = [EMPTY_CELL] * (width * height)
-        self._ids: list[str | None] | None = None
+        self._refs: list[str | None] | None = None
 
-    def _ensure_ids(self) -> list[str | None]:
-        if self._ids is None:
-            self._ids = cast(list[str | None], [None] * (self.width * self.height))
-        return self._ids
+    def _ensure_refs(self) -> list[str | None]:
+        if self._refs is None:
+            self._refs = cast(list[str | None], [None] * (self.width * self.height))
+        return self._refs
 
     def _index(self, x: int, y: int) -> int | None:
         if 0 <= x < self.width and 0 <= y < self.height:
@@ -53,16 +54,25 @@ class Buffer:
         if idx is None:
             return
         self._cells[idx] = Cell(char, style)
-        if self._ids is not None:
-            self._ids[idx] = None
+        if self._refs is not None:
+            self._refs[idx] = None
 
-    def put_id(self, x: int, y: int, char: str, style: Style, id: str) -> None:
-        """Set a single cell and record a semantic id for hit-testing."""
+    def put_ref(self, x: int, y: int, char: str, style: Style, ref: str) -> None:
+        """Set a single cell and record a semantic ref for hit-testing."""
         idx = self._index(x, y)
         if idx is None:
             return
         self._cells[idx] = Cell(char, style)
-        self._ensure_ids()[idx] = id
+        self._ensure_refs()[idx] = ref
+
+    def put_id(self, x: int, y: int, char: str, style: Style, id: str) -> None:
+        """Deprecated alias for :meth:`put_ref` (removed at 1.0)."""
+        warnings.warn(
+            "Buffer.put_id is deprecated; use Buffer.put_ref",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        self.put_ref(x, y, char, style, id)
 
     def put_text(self, x: int, y: int, text: str, style: Style) -> None:
         """Write a string horizontally, respecting wide characters."""
@@ -80,8 +90,8 @@ class Buffer:
                 idx = self._index(col, y)
                 if idx is not None:
                     self._cells[idx] = Cell(ch, style)
-                    if self._ids is not None:
-                        self._ids[idx] = None
+                    if self._refs is not None:
+                        self._refs[idx] = None
                 col += w
                 continue
 
@@ -91,21 +101,21 @@ class Buffer:
                 idx = self._index(col, y)
                 if idx is not None:
                     self._cells[idx] = Cell(ch, style)
-                    if self._ids is not None:
-                        self._ids[idx] = None
+                    if self._refs is not None:
+                        self._refs[idx] = None
                 for dx in range(1, w):
                     next_idx = self._index(col + dx, y)
                     if next_idx is not None:
                         self._cells[next_idx] = blank
-                        if self._ids is not None:
-                            self._ids[next_idx] = None
+                        if self._refs is not None:
+                            self._refs[next_idx] = None
             else:
                 for dx in range(w):
                     idx = self._index(col + dx, y)
                     if idx is not None:
                         self._cells[idx] = blank
-                        if self._ids is not None:
-                            self._ids[idx] = None
+                        if self._refs is not None:
+                            self._refs[idx] = None
             col += w
 
     def fill(self, x: int, y: int, w: int, h: int, char: str, style: Style) -> None:
@@ -116,19 +126,19 @@ class Buffer:
                 idx = self._index(col, row)
                 if idx is not None:
                     self._cells[idx] = cell
-                    if self._ids is not None:
-                        self._ids[idx] = None
+                    if self._refs is not None:
+                        self._refs[idx] = None
 
     def region(self, x: int, y: int, w: int, h: int) -> BufferView:
         """Return a view that translates coordinates to a sub-region."""
         return BufferView(self, x, y, w, h)
 
     def hit(self, x: int, y: int) -> str | None:
-        """Return the semantic id at (x, y), if any."""
+        """Return the semantic ref at (x, y), if any."""
         idx = self._index(x, y)
-        if idx is None or self._ids is None:
+        if idx is None or self._refs is None:
             return None
-        return self._ids[idx]
+        return self._refs[idx]
 
     def diff(self, other: Buffer) -> list[CellWrite]:
         """Compare with another buffer, return list of cells that differ."""
@@ -203,8 +213,8 @@ class Buffer:
             for y in range(top, bottom + 1):
                 start = y * self.width
                 self._cells[start : start + self.width] = [fill] * self.width
-                if self._ids is not None:
-                    self._ids[start : start + self.width] = [None] * self.width
+                if self._refs is not None:
+                    self._refs[start : start + self.width] = [None] * self.width
             return
 
         w = self.width
@@ -215,13 +225,13 @@ class Buffer:
                 dst = y * w
                 src = (y + n) * w
                 self._cells[dst : dst + w] = self._cells[src : src + w]
-                if self._ids is not None:
-                    self._ids[dst : dst + w] = self._ids[src : src + w]
+                if self._refs is not None:
+                    self._refs[dst : dst + w] = self._refs[src : src + w]
             for y in range(bottom - n + 1, bottom + 1):
                 start = y * w
                 self._cells[start : start + w] = [fill] * w
-                if self._ids is not None:
-                    self._ids[start : start + w] = [None] * w
+                if self._refs is not None:
+                    self._refs[start : start + w] = [None] * w
         else:
             m = -n
             # Scroll down: copy rows upwards in index space (descending y).
@@ -229,13 +239,13 @@ class Buffer:
                 dst = y * w
                 src = (y - m) * w
                 self._cells[dst : dst + w] = self._cells[src : src + w]
-                if self._ids is not None:
-                    self._ids[dst : dst + w] = self._ids[src : src + w]
+                if self._refs is not None:
+                    self._refs[dst : dst + w] = self._refs[src : src + w]
             for y in range(top, top + m):
                 start = y * w
                 self._cells[start : start + w] = [fill] * w
-                if self._ids is not None:
-                    self._ids[start : start + w] = [None] * w
+                if self._refs is not None:
+                    self._refs[start : start + w] = [None] * w
 
     def clone(self) -> Buffer:
         """Deep copy for diff comparison."""
@@ -243,7 +253,7 @@ class Buffer:
         buf.width = self.width
         buf.height = self.height
         buf._cells = self._cells.copy()  # Cells are frozen, shallow copy is fine
-        buf._ids = self._ids.copy() if self._ids is not None else None
+        buf._refs = self._refs.copy() if self._refs is not None else None
         return buf
 
 
@@ -278,10 +288,19 @@ class BufferView:
         if pos:
             self._buffer.put(pos[0], pos[1], char, style)
 
-    def put_id(self, x: int, y: int, char: str, style: Style, id: str) -> None:
+    def put_ref(self, x: int, y: int, char: str, style: Style, ref: str) -> None:
         pos = self._clip(x, y)
         if pos:
-            self._buffer.put_id(pos[0], pos[1], char, style, id)
+            self._buffer.put_ref(pos[0], pos[1], char, style, ref)
+
+    def put_id(self, x: int, y: int, char: str, style: Style, id: str) -> None:
+        """Deprecated alias for :meth:`put_ref` (removed at 1.0)."""
+        warnings.warn(
+            "BufferView.put_id is deprecated; use BufferView.put_ref",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        self.put_ref(x, y, char, style, id)
 
     def put_text(self, x: int, y: int, text: str, style: Style) -> None:
         """Write text, clipping characters that fall outside the view."""
@@ -318,7 +337,7 @@ class BufferView:
                     self._buffer.put(pos[0], pos[1], char, style)
 
     def hit(self, x: int, y: int) -> str | None:
-        """Return the semantic id at a local coordinate (or None)."""
+        """Return the semantic ref at a local coordinate (or None)."""
         pos = self._clip(x, y)
         if not pos:
             return None

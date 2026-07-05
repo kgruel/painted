@@ -124,6 +124,12 @@ __all__ = [
     "current_vocabularies",
     "reset_vocabularies",
     "mark_style",
+    # Refs
+    "RefScheme",
+    "use_refs",
+    "current_ref_schemes",
+    "reset_refs",
+    "resolve_ref",
 ]
 
 from importlib import import_module as _import_module
@@ -222,6 +228,11 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "current_vocabularies": (".vocabulary", "current_vocabularies"),
     "reset_vocabularies": (".vocabulary", "reset_vocabularies"),
     "mark_style": (".vocabulary", "mark_style"),
+    "RefScheme": (".refs", "RefScheme"),
+    "use_refs": (".refs", "use_refs"),
+    "current_ref_schemes": (".refs", "current_ref_schemes"),
+    "reset_refs": (".refs", "reset_refs"),
+    "resolve_ref": (".refs", "resolve_ref"),
     "show": (".display", "show"),
 }
 

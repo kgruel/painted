@@ -46,7 +46,7 @@ def row_text(block: Block, row_idx: int) -> str:
     return "".join(c.char for c in block.row(row_idx))
 
 
-def text_block(lines: list[str], style: Style | None = None, *, id: str | None = None) -> Block:
+def text_block(lines: list[str], style: Style | None = None, *, ref: str | None = None) -> Block:
     """Build a Block from text lines, padding rows to uniform width."""
     style = style or Style()
     width = max((len(ln) for ln in lines), default=0)
@@ -55,4 +55,4 @@ def text_block(lines: list[str], style: Style | None = None, *, id: str | None =
         row = [Cell(ch, style) for ch in line]
         row += [Cell(" ", style)] * (width - len(line))
         rows.append(row)
-    return Block(rows, width, id=id)
+    return Block(rows, width, ref=ref)

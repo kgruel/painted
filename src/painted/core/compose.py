@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import warnings
 from collections.abc import Sequence
 from enum import Enum
-from typing import NamedTuple
+from typing import NamedTuple, cast
 
 from ._text_width import char_width, display_width, truncate_ellipsis
-from .block import Block, _cells_from_text
+from .block import Block, _ALIAS_UNSET, _cells_from_text
 from .borders import ROUNDED, BorderChars
 from .cell import Cell, Style
 from ._row_ops import blank_cell, take_row_prefix
@@ -44,9 +45,9 @@ def join_horizontal(*blocks: Block, gap: int = 0, align: Align = Align.START) ->
     max_height = max(b.height for b in blocks)
     total_width = sum(b.width for b in blocks) + gap * (len(blocks) - 1)
 
-    has_ids = any((b.id is not None) or (b._ids is not None) for b in blocks)
+    has_refs = any((b.ref is not None) or (b._refs is not None) for b in blocks)
     gap_cell = _SPACE_CELL
-    if not has_ids:
+    if not has_refs:
         if gap == 0 and align is Align.START and all(b.height == max_height for b in blocks):
             n = len(blocks)
             if n == 2:
@@ -90,7 +91,7 @@ def join_horizontal(*blocks: Block, gap: int = 0, align: Align = Align.START) ->
         return Block._create(tuple(rows), total_width)
 
     rows: list[list[Cell]] = [[] for _ in range(max_height)]
-    ids_rows: list[list[str | None]] = [[] for _ in range(max_height)]
+    refs_rows: list[list[str | None]] = [[] for _ in range(max_height)]
 
     for i, block in enumerate(blocks):
         # Calculate vertical offset for alignment
@@ -100,22 +101,22 @@ def join_horizontal(*blocks: Block, gap: int = 0, align: Align = Align.START) ->
             src_row = row_idx - offset
             if 0 <= src_row < block.height:
                 rows[row_idx].extend(block.row(src_row))
-                if block._ids is not None:
-                    ids_rows[row_idx].extend(block._ids[src_row])
-                elif block.id is not None:
-                    ids_rows[row_idx].extend([block.id] * block.width)
+                if block._refs is not None:
+                    refs_rows[row_idx].extend(block._refs[src_row])
+                elif block.ref is not None:
+                    refs_rows[row_idx].extend([block.ref] * block.width)
                 else:
-                    ids_rows[row_idx].extend([None] * block.width)
+                    refs_rows[row_idx].extend([None] * block.width)
             else:
                 rows[row_idx].extend([gap_cell] * block.width)
-                ids_rows[row_idx].extend([None] * block.width)
+                refs_rows[row_idx].extend([None] * block.width)
 
             # Add gap cells between blocks (not after the last)
             if i < len(blocks) - 1 and gap > 0:
                 rows[row_idx].extend([gap_cell] * gap)
-                ids_rows[row_idx].extend([None] * gap)
+                refs_rows[row_idx].extend([None] * gap)
 
-    return Block(rows, total_width, ids=ids_rows)
+    return Block(rows, total_width, refs=refs_rows)
 
 
 def join_vertical(*blocks: Block, gap: int = 0, align: Align = Align.START) -> Block:
@@ -127,10 +128,10 @@ def join_vertical(*blocks: Block, gap: int = 0, align: Align = Align.START) -> B
     pad_cell = _SPACE_CELL
 
     rows: list[list[Cell] | tuple[Cell, ...]] = []
-    has_ids = any((b.id is not None) or (b._ids is not None) for b in blocks)
-    ids_rows: list[list[str | None]] | None = [] if has_ids else None
+    has_refs = any((b.ref is not None) or (b._refs is not None) for b in blocks)
+    refs_rows: list[list[str | None]] | None = [] if has_refs else None
 
-    if ids_rows is None:
+    if refs_rows is None:
         gap_row = (pad_cell,) * max_width
         for i, block in enumerate(blocks):
             offset = _halign_offset(block.width, max_width, align)
@@ -148,36 +149,36 @@ def join_vertical(*blocks: Block, gap: int = 0, align: Align = Align.START) -> B
 
         for row_idx in range(block.height):
             row: list[Cell] = []
-            row_ids: list[str | None] = []
+            row_refs: list[str | None] = []
             # Left padding
             if offset > 0:
                 row.extend([pad_cell] * offset)
-                row_ids.extend([None] * offset)
+                row_refs.extend([None] * offset)
             # Block content
             row.extend(block.row(row_idx))
-            if block._ids is not None:
-                row_ids.extend(block._ids[row_idx])
-            elif block.id is not None:
-                row_ids.extend([block.id] * block.width)
+            if block._refs is not None:
+                row_refs.extend(block._refs[row_idx])
+            elif block.ref is not None:
+                row_refs.extend([block.ref] * block.width)
             else:
-                row_ids.extend([None] * block.width)
+                row_refs.extend([None] * block.width)
             # Right padding
             right_pad = max_width - offset - block.width
             if right_pad > 0:
                 row.extend([pad_cell] * right_pad)
-                row_ids.extend([None] * right_pad)
+                row_refs.extend([None] * right_pad)
             rows.append(row)
-            ids_rows.append(row_ids)
+            refs_rows.append(row_refs)
 
         # Insert gap rows between blocks (not after the last)
         if i < len(blocks) - 1 and gap > 0:
             for _ in range(gap):
                 rows.append([pad_cell] * max_width)
-                ids_rows.append([None] * max_width)
+                refs_rows.append([None] * max_width)
 
-    if ids_rows is None:
+    if refs_rows is None:
         return Block(rows, max_width)
-    return Block(rows, max_width, ids=ids_rows)
+    return Block(rows, max_width, refs=refs_rows)
 
 
 def pad(
@@ -194,9 +195,9 @@ def pad(
     space = _border_cell(" ", style)
 
     rows: list[list[Cell] | tuple[Cell, ...]] = []
-    ids_rows: list[list[str | None]] | None = [] if block._ids is not None else None
+    refs_rows: list[list[str | None]] | None = [] if block._refs is not None else None
 
-    if ids_rows is None:
+    if refs_rows is None:
         pad_left = (space,) * left
         pad_right = (space,) * right
         pad_row = (space,) * new_width
@@ -206,34 +207,34 @@ def pad(
             rows.append(pad_left + block.row(row_idx) + pad_right)
         for _ in range(bottom):
             rows.append(pad_row)
-        return Block._create(tuple(rows), new_width, id=block.id)
+        return Block._create(tuple(rows), new_width, ref=block.ref)
 
     # Top padding
     for _ in range(top):
         rows.append([space] * new_width)
-        ids_rows.append([None] * new_width)
+        refs_rows.append([None] * new_width)
 
     # Content rows with left/right padding
     for row_idx in range(block.height):
         row: list[Cell] = []
-        row_ids: list[str | None] = []
+        row_refs: list[str | None] = []
         if left > 0:
             row.extend([space] * left)
-            row_ids.extend([None] * left)
+            row_refs.extend([None] * left)
         row.extend(block.row(row_idx))
-        row_ids.extend(block._ids[row_idx])
+        row_refs.extend(block._refs[row_idx])
         if right > 0:
             row.extend([space] * right)
-            row_ids.extend([None] * right)
+            row_refs.extend([None] * right)
         rows.append(row)
-        ids_rows.append(row_ids)
+        refs_rows.append(row_refs)
 
     # Bottom padding
     for _ in range(bottom):
         rows.append([space] * new_width)
-        ids_rows.append([None] * new_width)
+        refs_rows.append([None] * new_width)
 
-    return Block(rows, new_width, ids=ids_rows)
+    return Block(rows, new_width, refs=refs_rows)
 
 
 def border(
@@ -242,21 +243,29 @@ def border(
     style: Style = Style(),
     title: str | None = None,
     title_style: Style | None = None,
-    id: str | None = None,
+    ref: str | None = None,
+    id: object = _ALIAS_UNSET,
 ) -> Block:
     """Wrap a block with a 1-cell border, optionally with a title in the top row."""
+    if id is not _ALIAS_UNSET:
+        warnings.warn(
+            "border(id=) is deprecated; use ref= (removed at 1.0)",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        ref = cast("str | None", id)
     new_width = block.width + 2
     rows: list[list[Cell] | tuple[Cell, ...]] = []
-    has_ids = (id is not None) or (block._ids is not None)
-    ids_rows: list[list[str | None]] | None = [] if has_ids else None
-    border_id: str | None = id
-    if border_id is None and block._ids is None:
-        border_id = block.id
+    has_refs = (ref is not None) or (block._refs is not None)
+    refs_rows: list[list[str | None]] | None = [] if has_refs else None
+    border_ref: str | None = ref
+    if border_ref is None and block._refs is None:
+        border_ref = block.ref
 
     # Top border
     horizontal_cell = _border_cell(chars.horizontal, style)
     top_row: list[Cell] | tuple[Cell, ...]
-    if ids_rows is None and title is None:
+    if refs_rows is None and title is None:
         top_row = (
             (_border_cell(chars.top_left, style),)
             + (horizontal_cell,) * block.width
@@ -296,31 +305,31 @@ def border(
         if pos <= block.width:
             top_row[pos] = space_cell
 
-    if ids_rows is None and isinstance(top_row, list):
+    if refs_rows is None and isinstance(top_row, list):
         top_row = tuple(top_row)
     rows.append(top_row)
-    if ids_rows is not None:
-        ids_rows.append([border_id] * new_width)
+    if refs_rows is not None:
+        refs_rows.append([border_ref] * new_width)
 
     # Content rows with vertical borders
     vertical_cell = _border_cell(chars.vertical, style)
-    if ids_rows is None:
+    if refs_rows is None:
         for row_idx in range(block.height):
             rows.append((vertical_cell, *block.row(row_idx), vertical_cell))
     else:
         for row_idx in range(block.height):
             rows.append([vertical_cell] + list(block.row(row_idx)) + [vertical_cell])
-            inner_ids: list[str | None]
-            if block._ids is not None:
-                inner_ids = list(block._ids[row_idx])
-            elif block.id is not None:
-                inner_ids = [block.id] * block.width
+            inner_refs: list[str | None]
+            if block._refs is not None:
+                inner_refs = list(block._refs[row_idx])
+            elif block.ref is not None:
+                inner_refs = [block.ref] * block.width
             else:
-                inner_ids = [None] * block.width
-            ids_rows.append([border_id] + inner_ids + [border_id])
+                inner_refs = [None] * block.width
+            refs_rows.append([border_ref] + inner_refs + [border_ref])
 
     # Bottom border
-    if ids_rows is None:
+    if refs_rows is None:
         bottom_row = (
             (_border_cell(chars.bottom_left, style),)
             + (horizontal_cell,) * block.width
@@ -333,12 +342,12 @@ def border(
             + [_border_cell(chars.bottom_right, style)]
         )
     rows.append(bottom_row)
-    if ids_rows is not None:
-        ids_rows.append([border_id] * new_width)
+    if refs_rows is not None:
+        refs_rows.append([border_ref] * new_width)
 
-    if ids_rows is None:
-        return Block._create(tuple(rows), new_width, id=block.id)
-    return Block(rows, new_width, ids=ids_rows)
+    if refs_rows is None:
+        return Block._create(tuple(rows), new_width, ref=block.ref)
+    return Block(rows, new_width, refs=refs_rows)
 
 
 def truncate(block: Block, width: int, ellipsis: str | None = None) -> Block:
@@ -357,14 +366,14 @@ def truncate(block: Block, width: int, ellipsis: str | None = None) -> Block:
         ellipsis = current_icons().ellipsis
     ellipsis_width = display_width(ellipsis)
     rows: list[list[Cell]] = []
-    ids_rows: list[list[str | None]] | None = [] if block._ids is not None else None
+    refs_rows: list[list[str | None]] | None = [] if block._refs is not None else None
     for row_idx in range(block.height):
         src_row = block.row(row_idx)
-        src_ids = block._ids[row_idx] if block._ids is not None else None
+        src_refs = block._refs[row_idx] if block._refs is not None else None
         if width <= 0:
             rows.append([])
-            if ids_rows is not None:
-                ids_rows.append([])
+            if refs_rows is not None:
+                refs_rows.append([])
         else:
             if ellipsis_width <= 0:
                 prefix_budget = width
@@ -373,13 +382,13 @@ def truncate(block: Block, width: int, ellipsis: str | None = None) -> Block:
             else:
                 prefix_budget = width - ellipsis_width
 
-            prefix_cells, prefix_ids, used = take_row_prefix(src_row, prefix_budget, src_ids)
+            prefix_cells, prefix_refs, used = take_row_prefix(src_row, prefix_budget, src_refs)
             style_idx = min(len(src_row) - 1, prefix_budget) if src_row else 0
             fill_style = src_row[style_idx].style if src_row else Style()
             while used < prefix_budget:
                 prefix_cells.append(blank_cell(fill_style))
-                if prefix_ids is not None and src_ids is not None:
-                    prefix_ids.append(src_ids[used])
+                if prefix_refs is not None and src_refs is not None:
+                    prefix_refs.append(src_refs[used])
                 used += 1
 
             ell_style = src_row[style_idx].style if src_row else Style()
@@ -391,18 +400,18 @@ def truncate(block: Block, width: int, ellipsis: str | None = None) -> Block:
             if len(new_row) < width:
                 new_row.extend([blank_cell(ell_style)] * (width - len(new_row)))
             rows.append(new_row)
-            if ids_rows is not None:
-                if prefix_ids is None:
-                    prefix_ids = []
-                ell_id_idx = min(len(src_ids) - 1, prefix_budget) if src_ids else 0
-                ell_id = src_ids[ell_id_idx] if src_ids else None
-                new_ids = list(prefix_ids)
-                new_ids.extend([ell_id] * (width - len(new_ids)))
-                ids_rows.append(new_ids)
+            if refs_rows is not None:
+                if prefix_refs is None:
+                    prefix_refs = []
+                ell_ref_idx = min(len(src_refs) - 1, prefix_budget) if src_refs else 0
+                ell_ref = src_refs[ell_ref_idx] if src_refs else None
+                new_refs = list(prefix_refs)
+                new_refs.extend([ell_ref] * (width - len(new_refs)))
+                refs_rows.append(new_refs)
 
-    if ids_rows is None:
-        return Block(rows, width, id=block.id)
-    return Block(rows, width, ids=ids_rows)
+    if refs_rows is None:
+        return Block(rows, width, ref=block.ref)
+    return Block(rows, width, refs=refs_rows)
 
 
 def rule(width: int, *, char: str | None = None, style: Style | None = None) -> Block:
@@ -536,13 +545,13 @@ def vslice(block: Block, offset: int, height: int) -> Block:
     end = min(offset + height, block.height)
 
     if offset >= end:
-        return Block.empty(block.width, 0, id=block.id)
+        return Block.empty(block.width, 0, ref=block.ref)
 
     rows = [list(block.row(r)) for r in range(offset, end)]
-    if block._ids is None:
-        return Block(rows, block.width, id=block.id)
-    ids_rows = [list(block._ids[r]) for r in range(offset, end)]
-    return Block(rows, block.width, ids=ids_rows)
+    if block._refs is None:
+        return Block(rows, block.width, ref=block.ref)
+    refs_rows = [list(block._refs[r]) for r in range(offset, end)]
+    return Block(rows, block.width, refs=refs_rows)
 
 
 def _valign_offset(block_height: int, container_height: int, align: Align) -> int:

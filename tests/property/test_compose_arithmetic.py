@@ -1,12 +1,12 @@
 """Property tier — composition arithmetic and fast-path rectangularity.
 
 This is the highest-value file. join_horizontal / join_vertical / pad / border
-take `Block._create` on their no-ids fast paths, BYPASSING the constructor's
+take `Block._create` on their no-refs fast paths, BYPASSING the constructor's
 row-width validation. A compose arithmetic bug (off-by-one gap, wrong align
 offset, title overrun) produces a ragged block the slow constructor would have
 rejected — so re-checking "every row has block.width cells" on the _create
-output catches exactly those bugs. The strategies generate NO-ID blocks to stay
-on that fast path (an id/ids on any input flips the op to the slow constructor).
+output catches exactly those bugs. The strategies generate NO-REF blocks to stay
+on that fast path (a ref/refs on any input flips the op to the slow constructor).
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ from painted.core.compose import (
 
 from tests.property.strategies import (
     has_orphan_wide,
-    no_id_blocks,
+    no_ref_blocks,
     styles,
     text_st,
 )
@@ -38,7 +38,7 @@ def _rectangular(block) -> bool:
 
 
 @given(
-    blocks=st.lists(no_id_blocks(), min_size=1, max_size=5),
+    blocks=st.lists(no_ref_blocks(), min_size=1, max_size=5),
     gap=st.integers(min_value=0, max_value=3),
     align=st.sampled_from(list(Align)),
 )
@@ -50,7 +50,7 @@ def test_join_horizontal_dimensions_and_rectangular(blocks, gap: int, align: Ali
 
 
 @given(
-    blocks=st.lists(no_id_blocks(), min_size=1, max_size=5),
+    blocks=st.lists(no_ref_blocks(), min_size=1, max_size=5),
     gap=st.integers(min_value=0, max_value=3),
     align=st.sampled_from(list(Align)),
 )
@@ -62,7 +62,7 @@ def test_join_vertical_dimensions_and_rectangular(blocks, gap: int, align: Align
 
 
 @given(
-    block=no_id_blocks(),
+    block=no_ref_blocks(),
     left=st.integers(min_value=0, max_value=5),
     right=st.integers(min_value=0, max_value=5),
     top=st.integers(min_value=0, max_value=5),
@@ -77,7 +77,7 @@ def test_pad_dimensions_and_rectangular(block, left, right, top, bottom, style) 
 
 
 @given(
-    block=no_id_blocks(min_w=1),
+    block=no_ref_blocks(min_w=1),
     title=st.one_of(st.none(), text_st(max_size=20)),
     use_title_style=st.booleans(),
 )
@@ -93,7 +93,7 @@ def test_border_dimensions_and_rectangular_with_titles(block, title, use_title_s
 
 
 @given(
-    block=no_id_blocks(min_w=2),
+    block=no_ref_blocks(min_w=2),
     w=st.integers(min_value=0, max_value=40),
     ell=st.sampled_from(["…", "..", "世"]),
 )
@@ -110,7 +110,7 @@ def test_truncate_rectangular_no_wide_split(block, w: int, ell: str) -> None:
 
 
 @given(
-    blocks=st.lists(no_id_blocks(), min_size=2, max_size=5),
+    blocks=st.lists(no_ref_blocks(), min_size=2, max_size=5),
     gap=st.integers(min_value=1, max_value=3),
 )
 def test_gap_inserted_between_not_after(blocks, gap: int) -> None:
@@ -120,7 +120,7 @@ def test_gap_inserted_between_not_after(blocks, gap: int) -> None:
 
 
 @given(
-    block=no_id_blocks(),
+    block=no_ref_blocks(),
     offset=st.integers(min_value=-5, max_value=30),
     height=st.integers(min_value=0, max_value=30),
 )
@@ -134,7 +134,7 @@ def test_vslice_dimensions_clamped(block, offset: int, height: int) -> None:
 
 
 @given(
-    blocks=st.lists(no_id_blocks(), min_size=1, max_size=4),
+    blocks=st.lists(no_ref_blocks(), min_size=1, max_size=4),
     aw=st.integers(min_value=1, max_value=80),
     gap=st.integers(min_value=0, max_value=2),
 )

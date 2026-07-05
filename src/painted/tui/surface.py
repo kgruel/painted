@@ -178,7 +178,7 @@ class Surface:
         """Called on mouse event. Override to handle clicks, drags, scrolls."""
 
     def hit(self, x: int, y: int) -> str | None:
-        """Return the semantic id at a screen coordinate, if any.
+        """Return the semantic ref at a screen coordinate, if any.
 
         Useful for mapping MouseEvent coordinates to rendered regions.
         """

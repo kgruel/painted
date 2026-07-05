@@ -158,8 +158,8 @@ class TestCode:
         doc = Doc(None, (Code(text="x = 1"),))
         assert "x = 1" in _render(doc)
 
-    def test_unresolved_ref_is_placeholder(self):
-        doc = Doc(None, (Code(ref="py:painted.cell:Style#definition"),))
+    def test_unresolved_src_is_placeholder(self):
+        doc = Doc(None, (Code(src="py:painted.cell:Style#definition"),))
         assert "py:painted.cell:Style#definition" in _render(doc)
 
 

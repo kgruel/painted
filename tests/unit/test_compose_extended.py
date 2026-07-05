@@ -1,4 +1,4 @@
-"""Extended tests for painted.compose — covering id propagation, alignment, edge cases."""
+"""Extended tests for painted.compose — covering ref propagation, alignment, edge cases."""
 
 from painted import (
     Align,
@@ -18,187 +18,187 @@ from painted.core.borders import HEAVY, ROUNDED
 from tests.helpers import row_text, text_block
 
 
-def _text_block_with_ids(
-    lines: list[str], ids: list[list[str | None]], style: Style = Style()
+def _text_block_with_refs(
+    lines: list[str], refs: list[list[str | None]], style: Style = Style()
 ) -> Block:
-    """Build a Block with per-cell id data (_ids)."""
+    """Build a Block with per-cell ref data (_refs)."""
     width = max(len(ln) for ln in lines) if lines else 0
     rows = []
     for line in lines:
         row = [Cell(ch, style) for ch in line]
         row += [Cell(" ", style)] * (width - len(line))
         rows.append(row)
-    return Block(rows, width, ids=ids)
+    return Block(rows, width, refs=refs)
 
 
-def _row_ids(block: Block, row_idx: int) -> list[str | None]:
-    if block._ids is not None:
-        return list(block._ids[row_idx])
+def _row_refs(block: Block, row_idx: int) -> list[str | None]:
+    if block._refs is not None:
+        return list(block._refs[row_idx])
     return []
 
 
 # ---------------------------------------------------------------------------
-# pad() with id propagation
+# pad() with ref propagation
 # ---------------------------------------------------------------------------
 
 
-class TestPadIdPropagation:
-    def test_pad_preserves_block_id_when_no_ids(self):
-        """pad() should forward block.id when _ids is None."""
-        b = text_block(["ab"], id="box")
+class TestPadRefPropagation:
+    def test_pad_preserves_block_ref_when_no_refs(self):
+        """pad() should forward block.ref when _refs is None."""
+        b = text_block(["ab"], ref="box")
         result = pad(b, left=1, right=1, top=1, bottom=1)
-        assert result.id == "box"
-        assert result._ids is None
+        assert result.ref == "box"
+        assert result._refs is None
 
-    def test_pad_propagates_ids_matrix(self):
-        """pad() should wrap _ids with None padding cells."""
-        b = _text_block_with_ids(["ab"], ids=[["x", "y"]])
+    def test_pad_propagates_refs_matrix(self):
+        """pad() should wrap _refs with None padding cells."""
+        b = _text_block_with_refs(["ab"], refs=[["x", "y"]])
         result = pad(b, left=1, right=1, top=1, bottom=1)
         assert result.width == 4
         assert result.height == 3
         # Top row: all None
-        assert _row_ids(result, 0) == [None, None, None, None]
+        assert _row_refs(result, 0) == [None, None, None, None]
         # Content row: None + x + y + None
-        assert _row_ids(result, 1) == [None, "x", "y", None]
+        assert _row_refs(result, 1) == [None, "x", "y", None]
         # Bottom row: all None
-        assert _row_ids(result, 2) == [None, None, None, None]
+        assert _row_refs(result, 2) == [None, None, None, None]
 
-    def test_pad_ids_left_right_only(self):
-        """pad() with only left/right preserves ids correctly."""
-        b = _text_block_with_ids(["ab", "cd"], ids=[["a", "b"], ["c", "d"]])
+    def test_pad_refs_left_right_only(self):
+        """pad() with only left/right preserves refs correctly."""
+        b = _text_block_with_refs(["ab", "cd"], refs=[["a", "b"], ["c", "d"]])
         result = pad(b, left=2, right=1)
         assert result.width == 5
         assert result.height == 2
-        assert _row_ids(result, 0) == [None, None, "a", "b", None]
-        assert _row_ids(result, 1) == [None, None, "c", "d", None]
+        assert _row_refs(result, 0) == [None, None, "a", "b", None]
+        assert _row_refs(result, 1) == [None, None, "c", "d", None]
 
-    def test_pad_ids_top_bottom_only(self):
-        """pad() with only top/bottom adds blank id rows."""
-        b = _text_block_with_ids(["ab"], ids=[["x", "y"]])
+    def test_pad_refs_top_bottom_only(self):
+        """pad() with only top/bottom adds blank ref rows."""
+        b = _text_block_with_refs(["ab"], refs=[["x", "y"]])
         result = pad(b, top=2, bottom=1)
         assert result.height == 4
-        assert _row_ids(result, 0) == [None, None]
-        assert _row_ids(result, 1) == [None, None]
-        assert _row_ids(result, 2) == ["x", "y"]
-        assert _row_ids(result, 3) == [None, None]
+        assert _row_refs(result, 0) == [None, None]
+        assert _row_refs(result, 1) == [None, None]
+        assert _row_refs(result, 2) == ["x", "y"]
+        assert _row_refs(result, 3) == [None, None]
 
 
 # ---------------------------------------------------------------------------
-# border() with id propagation
+# border() with ref propagation
 # ---------------------------------------------------------------------------
 
 
-class TestBorderIdPropagation:
-    def test_border_id_param_used(self):
-        """border(id=...) wraps entire border with that id."""
+class TestBorderRefPropagation:
+    def test_border_ref_param_used(self):
+        """border(ref=...) wraps entire border with that ref."""
         b = text_block(["ab"])
-        result = border(b, id="frame")
-        assert result._ids is not None
+        result = border(b, ref="frame")
+        assert result._refs is not None
         # Top border row: all "frame"
-        assert _row_ids(result, 0) == ["frame"] * result.width
+        assert _row_refs(result, 0) == ["frame"] * result.width
         # Content row: frame + inner + frame
-        ids_row1 = _row_ids(result, 1)
-        assert ids_row1[0] == "frame"
-        assert ids_row1[-1] == "frame"
+        refs_row1 = _row_refs(result, 1)
+        assert refs_row1[0] == "frame"
+        assert refs_row1[-1] == "frame"
         # Bottom border row
-        assert _row_ids(result, 2) == ["frame"] * result.width
+        assert _row_refs(result, 2) == ["frame"] * result.width
 
-    def test_border_inherits_block_id_when_no_ids(self):
-        """border() with no id param inherits block.id for the border cells."""
-        b = text_block(["ab"], id="inner")
+    def test_border_inherits_block_ref_when_no_refs(self):
+        """border() with no ref param inherits block.ref for the border cells."""
+        b = text_block(["ab"], ref="inner")
         result = border(b)
-        # When block has id but no _ids, border_id falls through to block.id
-        assert result._ids is None
-        assert result.id == "inner"
+        # When block has ref but no _refs, border_ref falls through to block.ref
+        assert result._refs is None
+        assert result.ref == "inner"
 
-    def test_border_with_block_ids_matrix(self):
-        """border() preserves inner _ids and uses border_id for frame."""
-        b = _text_block_with_ids(["ab"], ids=[["x", "y"]])
-        result = border(b, id="fr")
-        assert result._ids is not None
+    def test_border_with_block_refs_matrix(self):
+        """border() preserves inner _refs and uses border_ref for frame."""
+        b = _text_block_with_refs(["ab"], refs=[["x", "y"]])
+        result = border(b, ref="fr")
+        assert result._refs is not None
         # Top: fr fr fr fr
-        assert _row_ids(result, 0) == ["fr", "fr", "fr", "fr"]
+        assert _row_refs(result, 0) == ["fr", "fr", "fr", "fr"]
         # Content: fr x y fr
-        assert _row_ids(result, 1) == ["fr", "x", "y", "fr"]
+        assert _row_refs(result, 1) == ["fr", "x", "y", "fr"]
         # Bottom: fr fr fr fr
-        assert _row_ids(result, 2) == ["fr", "fr", "fr", "fr"]
+        assert _row_refs(result, 2) == ["fr", "fr", "fr", "fr"]
 
-    def test_border_block_ids_no_border_id(self):
-        """border() with block._ids but no id param uses None for border cells."""
-        b = _text_block_with_ids(["ab"], ids=[["x", "y"]])
+    def test_border_block_refs_no_border_ref(self):
+        """border() with block._refs but no ref param uses None for border cells."""
+        b = _text_block_with_refs(["ab"], refs=[["x", "y"]])
         result = border(b)
-        assert result._ids is not None
-        # border_id is None since no id param and block._ids is not None
-        assert _row_ids(result, 0) == [None, None, None, None]
-        assert _row_ids(result, 1) == [None, "x", "y", None]
-        assert _row_ids(result, 2) == [None, None, None, None]
+        assert result._refs is not None
+        # border_ref is None since no ref param and block._refs is not None
+        assert _row_refs(result, 0) == [None, None, None, None]
+        assert _row_refs(result, 1) == [None, "x", "y", None]
+        assert _row_refs(result, 2) == [None, None, None, None]
 
-    def test_border_block_has_id_and_ids(self):
-        """border() with block that has both .id and ._ids — _ids takes precedence for inner."""
+    def test_border_block_has_ref_and_refs(self):
+        """border() with block that has both .ref and ._refs — _refs takes precedence for inner."""
         b = Block(
             [[Cell("a", Style()), Cell("b", Style())]],
             2,
-            id="fallback",
-            ids=[["x", "y"]],
+            ref="fallback",
+            refs=[["x", "y"]],
         )
-        result = border(b, id="fr")
-        # Inner content uses _ids, not block.id
-        assert _row_ids(result, 1) == ["fr", "x", "y", "fr"]
+        result = border(b, ref="fr")
+        # Inner content uses _refs, not block.ref
+        assert _row_refs(result, 1) == ["fr", "x", "y", "fr"]
 
-    def test_border_block_with_id_no_ids_no_border_id(self):
-        """border() block.id used for content ids when _ids absent and has_ids true."""
-        # has_ids is true because block.id is set (via another block in join)
-        b = text_block(["ab"], id="inner")
-        # Give explicit border id to trigger has_ids
-        result = border(b, id="bdr")
-        assert result._ids is not None
+    def test_border_block_with_ref_no_refs_no_border_ref(self):
+        """border() block.ref used for content refs when _refs absent and has_refs true."""
+        # has_refs is true because block.ref is set (via another block in join)
+        b = text_block(["ab"], ref="inner")
+        # Give explicit border ref to trigger has_refs
+        result = border(b, ref="bdr")
+        assert result._refs is not None
         # Content row: border cells should be "bdr", inner should be "inner"
-        assert _row_ids(result, 1) == ["bdr", "inner", "inner", "bdr"]
+        assert _row_refs(result, 1) == ["bdr", "inner", "inner", "bdr"]
 
-    def test_border_no_ids_anywhere(self):
-        """border() with no ids at all returns block with no _ids."""
+    def test_border_no_refs_anywhere(self):
+        """border() with no refs at all returns block with no _refs."""
         b = text_block(["ab"])
         result = border(b)
-        assert result._ids is None
-        assert result.id == None
+        assert result._refs is None
+        assert result.ref is None
 
 
 # ---------------------------------------------------------------------------
-# truncate() with id propagation
+# truncate() with ref propagation
 # ---------------------------------------------------------------------------
 
 
-class TestTruncateIdPropagation:
+class TestTruncateRefPropagation:
     def test_truncate_no_truncation_returns_same(self):
         """If width >= block width, return same block."""
-        b = text_block(["abc"], id="t")
+        b = text_block(["abc"], ref="t")
         result = truncate(b, 5)
         assert result is b
 
-    def test_truncate_preserves_block_id(self):
-        """truncate() forwards block.id when no _ids."""
-        b = text_block(["abcde"], id="row")
+    def test_truncate_preserves_block_ref(self):
+        """truncate() forwards block.ref when no _ids."""
+        b = text_block(["abcde"], ref="row")
         result = truncate(b, 3)
-        assert result.id == "row"
-        assert result._ids is None
+        assert result.ref == "row"
+        assert result._refs is None
         assert result.width == 3
 
-    def test_truncate_with_ids(self):
-        """truncate() slices _ids and appends last id for ellipsis."""
-        b = _text_block_with_ids(["abcde"], ids=[["a", "b", "c", "d", "e"]])
+    def test_truncate_with_refs(self):
+        """truncate() slices _refs and appends last ref for ellipsis."""
+        b = _text_block_with_refs(["abcde"], refs=[["a", "b", "c", "d", "e"]])
         result = truncate(b, 3)
         assert result.width == 3
-        assert result._ids is not None
-        # width=3: first 2 cells + ellipsis cell, ids: first 2 + id at index 2
-        assert _row_ids(result, 0) == ["a", "b", "c"]
+        assert result._refs is not None
+        # width=3: first 2 cells + ellipsis cell, refs: first 2 + ref at index 2
+        assert _row_refs(result, 0) == ["a", "b", "c"]
 
     def test_truncate_width_zero(self):
         """truncate() to width 0 produces empty rows."""
-        b = _text_block_with_ids(["abc"], ids=[["x", "y", "z"]])
+        b = _text_block_with_refs(["abc"], refs=[["x", "y", "z"]])
         result = truncate(b, 0)
         assert result.width == 0
         assert result.height == 1
-        assert _row_ids(result, 0) == []
+        assert _row_refs(result, 0) == []
 
     def test_truncate_ellipsis_degrades_to_ascii(self):
         """truncate(ellipsis=None) reads the ambient marker; '...' under ASCII."""
@@ -212,22 +212,22 @@ class TestTruncateIdPropagation:
 
     def test_truncate_width_one(self):
         """truncate() to width 1 produces just the ellipsis."""
-        b = _text_block_with_ids(["abc"], ids=[["x", "y", "z"]])
+        b = _text_block_with_refs(["abc"], refs=[["x", "y", "z"]])
         result = truncate(b, 1)
         assert result.width == 1
         assert row_text(result, 0) == "\u2026"
-        assert _row_ids(result, 0) == ["x"]
+        assert _row_refs(result, 0) == ["x"]
 
-    def test_truncate_multirow_with_ids(self):
-        """truncate() handles multiple rows with _ids."""
-        b = _text_block_with_ids(
+    def test_truncate_multirow_with_refs(self):
+        """truncate() handles multiple rows with _refs."""
+        b = _text_block_with_refs(
             ["abcd", "efgh"],
-            ids=[["a", "b", "c", "d"], ["e", "f", "g", "h"]],
+            refs=[["a", "b", "c", "d"], ["e", "f", "g", "h"]],
         )
         result = truncate(b, 3)
         assert result.height == 2
-        assert _row_ids(result, 0) == ["a", "b", "c"]
-        assert _row_ids(result, 1) == ["e", "f", "g"]
+        assert _row_refs(result, 0) == ["a", "b", "c"]
+        assert _row_refs(result, 1) == ["e", "f", "g"]
 
     def test_truncate_preserves_wide_char_placeholder_pairs(self):
         """Truncation must not leave a wide-char lead cell without its placeholder."""
@@ -241,34 +241,34 @@ class TestTruncateIdPropagation:
 
 
 # ---------------------------------------------------------------------------
-# vslice() with id propagation
+# vslice() with ref propagation
 # ---------------------------------------------------------------------------
 
 
-class TestVsliceIdPropagation:
-    def test_vslice_preserves_block_id(self):
-        """vslice() forwards block.id."""
-        b = text_block(["aaa", "bbb", "ccc"], id="src")
+class TestVsliceRefPropagation:
+    def test_vslice_preserves_block_ref(self):
+        """vslice() forwards block.ref."""
+        b = text_block(["aaa", "bbb", "ccc"], ref="src")
         result = vslice(b, 1, 1)
-        assert result.id == "src"
+        assert result.ref == "src"
         assert row_text(result, 0) == "bbb"
 
-    def test_vslice_with_ids(self):
-        """vslice() slices _ids rows."""
-        b = _text_block_with_ids(
+    def test_vslice_with_refs(self):
+        """vslice() slices _refs rows."""
+        b = _text_block_with_refs(
             ["ab", "cd", "ef"],
-            ids=[["a1", "a2"], ["b1", "b2"], ["c1", "c2"]],
+            refs=[["a1", "a2"], ["b1", "b2"], ["c1", "c2"]],
         )
         result = vslice(b, 1, 2)
-        assert result._ids is not None
-        assert _row_ids(result, 0) == ["b1", "b2"]
-        assert _row_ids(result, 1) == ["c1", "c2"]
+        assert result._refs is not None
+        assert _row_refs(result, 0) == ["b1", "b2"]
+        assert _row_refs(result, 1) == ["c1", "c2"]
 
-    def test_vslice_empty_result_preserves_id(self):
-        """vslice() returning empty block keeps block.id."""
-        b = text_block(["aaa"], id="kept")
+    def test_vslice_empty_result_preserves_ref(self):
+        """vslice() returning empty block keeps block.ref."""
+        b = text_block(["aaa"], ref="kept")
         result = vslice(b, 5, 2)
-        assert result.id == "kept"
+        assert result.ref == "kept"
         assert result.height == 0
 
     def test_vslice_zero_height(self):
@@ -280,60 +280,60 @@ class TestVsliceIdPropagation:
 
 
 # ---------------------------------------------------------------------------
-# join_horizontal() with id propagation
+# join_horizontal() with ref propagation
 # ---------------------------------------------------------------------------
 
 
-class TestJoinHorizontalIds:
+class TestJoinHorizontalRefs:
     def test_join_horizontal_empty(self):
         """join_horizontal() with no blocks returns empty."""
         result = join_horizontal()
         assert result.width == 0
         assert result.height == 0
 
-    def test_join_horizontal_with_block_ids(self):
-        """join_horizontal() propagates block.id values."""
-        a = text_block(["ab"], id="left")
-        b = text_block(["cd"], id="right")
+    def test_join_horizontal_with_block_refs(self):
+        """join_horizontal() propagates block.ref values."""
+        a = text_block(["ab"], ref="left")
+        b = text_block(["cd"], ref="right")
         result = join_horizontal(a, b)
-        assert result._ids is not None
-        assert _row_ids(result, 0) == ["left", "left", "right", "right"]
+        assert result._refs is not None
+        assert _row_refs(result, 0) == ["left", "left", "right", "right"]
 
-    def test_join_horizontal_with_ids_matrix(self):
-        """join_horizontal() propagates _ids matrices."""
-        a = _text_block_with_ids(["ab"], ids=[["a1", "a2"]])
-        b = _text_block_with_ids(["cd"], ids=[["b1", "b2"]])
+    def test_join_horizontal_with_refs_matrix(self):
+        """join_horizontal() propagates _refs matrices."""
+        a = _text_block_with_refs(["ab"], refs=[["a1", "a2"]])
+        b = _text_block_with_refs(["cd"], refs=[["b1", "b2"]])
         result = join_horizontal(a, b)
-        assert result._ids is not None
-        assert _row_ids(result, 0) == ["a1", "a2", "b1", "b2"]
+        assert result._refs is not None
+        assert _row_refs(result, 0) == ["a1", "a2", "b1", "b2"]
 
-    def test_join_horizontal_mixed_id_and_no_id(self):
-        """When one block has id and another has neither, None fills in."""
-        a = text_block(["ab"], id="left")
-        b = text_block(["cd"])  # no id
+    def test_join_horizontal_mixed_ref_and_no_ref(self):
+        """When one block has ref and another has neither, None fills in."""
+        a = text_block(["ab"], ref="left")
+        b = text_block(["cd"])  # no ref
         result = join_horizontal(a, b)
-        assert result._ids is not None
-        assert _row_ids(result, 0) == ["left", "left", None, None]
+        assert result._refs is not None
+        assert _row_refs(result, 0) == ["left", "left", None, None]
 
-    def test_join_horizontal_gap_with_ids(self):
-        """Gap cells get None ids."""
-        a = text_block(["a"], id="L")
-        b = text_block(["b"], id="R")
+    def test_join_horizontal_gap_with_refs(self):
+        """Gap cells get None refs."""
+        a = text_block(["a"], ref="L")
+        b = text_block(["b"], ref="R")
         result = join_horizontal(a, b, gap=2)
         assert result.width == 4
-        assert _row_ids(result, 0) == ["L", None, None, "R"]
+        assert _row_refs(result, 0) == ["L", None, None, "R"]
 
-    def test_join_horizontal_different_heights_with_ids(self):
-        """Taller alignment produces None ids in padding rows."""
-        a = text_block(["a", "a"], id="tall")
-        b = text_block(["b"], id="short")
+    def test_join_horizontal_different_heights_with_refs(self):
+        """Taller alignment produces None refs in padding rows."""
+        a = text_block(["a", "a"], ref="tall")
+        b = text_block(["b"], ref="short")
         result = join_horizontal(a, b, align=Align.START)
         assert result.height == 2
-        assert result._ids is not None
+        assert result._refs is not None
         # Row 0: tall block + short block
-        assert _row_ids(result, 0) == ["tall", "short"]
+        assert _row_refs(result, 0) == ["tall", "short"]
         # Row 1: tall block + padding (None)
-        assert _row_ids(result, 1) == ["tall", None]
+        assert _row_refs(result, 1) == ["tall", None]
 
     def test_join_horizontal_align_end(self):
         """END alignment shifts shorter block to bottom."""
@@ -359,83 +359,83 @@ class TestJoinHorizontalIds:
 
 
 # ---------------------------------------------------------------------------
-# join_vertical() with id propagation
+# join_vertical() with ref propagation
 # ---------------------------------------------------------------------------
 
 
-class TestJoinVerticalIds:
+class TestJoinVerticalRefs:
     def test_join_vertical_empty(self):
         """join_vertical() with no blocks returns empty."""
         result = join_vertical()
         assert result.width == 0
         assert result.height == 0
 
-    def test_join_vertical_with_block_ids(self):
-        """join_vertical() propagates block.id values."""
-        a = text_block(["ab"], id="top")
-        b = text_block(["cd"], id="bot")
+    def test_join_vertical_with_block_refs(self):
+        """join_vertical() propagates block.ref values."""
+        a = text_block(["ab"], ref="top")
+        b = text_block(["cd"], ref="bot")
         result = join_vertical(a, b)
-        assert result._ids is not None
-        assert _row_ids(result, 0) == ["top", "top"]
-        assert _row_ids(result, 1) == ["bot", "bot"]
+        assert result._refs is not None
+        assert _row_refs(result, 0) == ["top", "top"]
+        assert _row_refs(result, 1) == ["bot", "bot"]
 
-    def test_join_vertical_with_ids_matrix(self):
-        """join_vertical() propagates _ids matrices."""
-        a = _text_block_with_ids(["ab"], ids=[["a1", "a2"]])
-        b = _text_block_with_ids(["cd"], ids=[["b1", "b2"]])
+    def test_join_vertical_with_refs_matrix(self):
+        """join_vertical() propagates _refs matrices."""
+        a = _text_block_with_refs(["ab"], refs=[["a1", "a2"]])
+        b = _text_block_with_refs(["cd"], refs=[["b1", "b2"]])
         result = join_vertical(a, b)
-        assert result._ids is not None
-        assert _row_ids(result, 0) == ["a1", "a2"]
-        assert _row_ids(result, 1) == ["b1", "b2"]
+        assert result._refs is not None
+        assert _row_refs(result, 0) == ["a1", "a2"]
+        assert _row_refs(result, 1) == ["b1", "b2"]
 
-    def test_join_vertical_mixed_id_and_no_id(self):
-        """When one block has id and another doesn't, None fills in."""
-        a = text_block(["ab"], id="top")
-        b = text_block(["cd"])  # no id
+    def test_join_vertical_mixed_ref_and_no_ref(self):
+        """When one block has ref and another doesn't, None fills in."""
+        a = text_block(["ab"], ref="top")
+        b = text_block(["cd"])  # no ref
         result = join_vertical(a, b)
-        assert result._ids is not None
-        assert _row_ids(result, 0) == ["top", "top"]
-        assert _row_ids(result, 1) == [None, None]
+        assert result._refs is not None
+        assert _row_refs(result, 0) == ["top", "top"]
+        assert _row_refs(result, 1) == [None, None]
 
-    def test_join_vertical_gap_with_ids(self):
-        """Gap rows get None ids."""
-        a = text_block(["a"], id="top")
-        b = text_block(["b"], id="bot")
+    def test_join_vertical_gap_with_refs(self):
+        """Gap rows get None refs."""
+        a = text_block(["a"], ref="top")
+        b = text_block(["b"], ref="bot")
         result = join_vertical(a, b, gap=1)
         assert result.height == 3
-        assert _row_ids(result, 0) == ["top"]
-        assert _row_ids(result, 1) == [None]
-        assert _row_ids(result, 2) == ["bot"]
+        assert _row_refs(result, 0) == ["top"]
+        assert _row_refs(result, 1) == [None]
+        assert _row_refs(result, 2) == ["bot"]
 
-    def test_join_vertical_different_widths_with_ids(self):
-        """Narrower blocks get None-padded ids."""
-        a = text_block(["ab"], id="narrow")
-        b = text_block(["cdef"], id="wide")
+    def test_join_vertical_different_widths_with_refs(self):
+        """Narrower blocks get None-padded refs."""
+        a = text_block(["ab"], ref="narrow")
+        b = text_block(["cdef"], ref="wide")
         result = join_vertical(a, b)
         assert result.width == 4
-        assert result._ids is not None
+        assert result._refs is not None
         # Row 0: narrow + right padding
-        assert _row_ids(result, 0) == ["narrow", "narrow", None, None]
-        assert _row_ids(result, 1) == ["wide", "wide", "wide", "wide"]
+        assert _row_refs(result, 0) == ["narrow", "narrow", None, None]
+        assert _row_refs(result, 1) == ["wide", "wide", "wide", "wide"]
 
-    def test_join_vertical_align_end_with_ids(self):
-        """END alignment right-aligns narrower blocks, ids padded left."""
-        a = text_block(["ab"], id="r")
-        b = text_block(["cdef"], id="w")
+    def test_join_vertical_align_end_with_refs(self):
+        """END alignment right-aligns narrower blocks, refs padded left."""
+        a = text_block(["ab"], ref="r")
+        b = text_block(["cdef"], ref="w")
         result = join_vertical(a, b, align=Align.END)
         assert result.width == 4
         # "ab" right-aligned: offset = 4 - 2 = 2
         assert row_text(result, 0) == "  ab"
-        assert _row_ids(result, 0) == [None, None, "r", "r"]
+        assert _row_refs(result, 0) == [None, None, "r", "r"]
 
-    def test_join_vertical_align_center_with_ids(self):
-        """CENTER alignment centers narrower blocks, ids padded."""
-        a = text_block(["ab"], id="c")
-        b = text_block(["cdef"], id="w")
+    def test_join_vertical_align_center_with_refs(self):
+        """CENTER alignment centers narrower blocks, refs padded."""
+        a = text_block(["ab"], ref="c")
+        b = text_block(["cdef"], ref="w")
         result = join_vertical(a, b, align=Align.CENTER)
         # offset = (4-2)//2 = 1
         assert row_text(result, 0) == " ab "
-        assert _row_ids(result, 0) == [None, "c", "c", None]
+        assert _row_refs(result, 0) == [None, "c", "c", None]
 
 
 # ---------------------------------------------------------------------------

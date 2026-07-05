@@ -38,13 +38,14 @@ density and the ``Section.hint`` subhead are tiered.
 
 Status: validated against both help and a real guide (the primitives page, in
 terminal and site form). The names stay out of ``painted.core.__all__`` until
-the remaining authoring seams settle — the Inline union and ``Code(ref)``
+the remaining authoring seams settle — the Inline union and ``Code(src)``
 docgen resolution — since export is a one-way door under the semver guard.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import warnings
+from dataclasses import InitVar, dataclass
 from typing import TypeVar
 
 from ._text_width import display_width
@@ -128,16 +129,33 @@ class Items:
     tag: str | None = None
 
 
+# Sentinel for the deprecated ``Code(ref=)`` alias: an InitVar so it is passed to
+# ``__post_init__`` and never stored, distinguishing "not passed" from ``None``.
+_CODE_REF_UNSET: object = object()
+
+
 @dataclass(frozen=True, slots=True)
 class Code:
-    """A code block. Either inline ``text`` or a docgen ``ref`` (resolution is a
-    deferred seam — for now an unresolved ref renders as a placeholder)."""
+    """A code block. Either inline ``text`` or a docgen ``src`` locator (resolution
+    is a deferred seam — for now an unresolved locator renders as a placeholder)."""
 
     text: str | None = None
-    ref: str | None = None  # e.g. "py:painted.cell:Style#definition"
+    src: str | None = None  # e.g. "py:painted.cell:Style#definition"
     lang: str = "python"
     min_depth: int = 0
     tag: str | None = None
+    # Deprecated alias for ``src`` (removed at 1.0). InitVar: accepted at
+    # construction, folded into ``src``, never stored as its own attribute.
+    ref: InitVar[object] = _CODE_REF_UNSET
+
+    def __post_init__(self, ref: object) -> None:
+        if ref is not _CODE_REF_UNSET:
+            warnings.warn(
+                "Code(ref=) is deprecated; use Code(src=) (removed at 1.0)",
+                DeprecationWarning,
+                stacklevel=3,
+            )
+            object.__setattr__(self, "src", ref)
 
 
 @dataclass(frozen=True, slots=True)
@@ -333,8 +351,8 @@ def _render_items(items: Items, fidelity: Fidelity, width: int | None) -> Block:
 
 def _render_code(code: Code, width: int | None) -> Block:
     if code.text is None:
-        # Deferred docgen resolution — placeholder until the ref seam lands.
-        label = f"[code: {code.ref}]" if code.ref else "[code]"
+        # Deferred docgen resolution — placeholder until the src seam lands.
+        label = f"[code: {code.src}]" if code.src else "[code]"
         return _line(label, Style(dim=True), width)
     lines = code.text.split("\n")
     return join_vertical(*(_line(ln, Style(), width) for ln in lines), gap=0)

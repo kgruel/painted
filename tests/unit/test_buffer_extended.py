@@ -29,11 +29,11 @@ class TestBufferBounds:
             for x in range(3):
                 assert buf.get(x, y) == EMPTY_CELL
 
-    def test_put_id_out_of_bounds_ignored(self):
+    def test_put_ref_out_of_bounds_ignored(self):
         buf = Buffer(3, 2)
-        buf.put_id(-1, 0, "x", S, "id1")  # should not raise
-        buf.put_id(3, 0, "x", S, "id1")
-        buf.put_id(0, 2, "x", S, "id1")
+        buf.put_ref(-1, 0, "x", S, "ref1")  # should not raise
+        buf.put_ref(3, 0, "x", S, "ref1")
+        buf.put_ref(0, 2, "x", S, "ref1")
         # no cells changed
         assert buf.get(0, 0) == EMPTY_CELL
 
@@ -77,41 +77,41 @@ class TestBufferPutText:
         assert buf.get(0, 0) == Cell("a", S)
         assert buf.get(1, 0) == Cell("b", S)
 
-    def test_put_text_clears_ids(self):
-        """put_text clears ids on cells it writes to when _ids is initialized."""
+    def test_put_text_clears_refs(self):
+        """put_text clears refs on cells it writes to when _refs is initialized."""
         buf = Buffer(5, 1)
-        buf.put_id(0, 0, "A", S, "tag")
+        buf.put_ref(0, 0, "A", S, "tag")
         assert buf.hit(0, 0) == "tag"
         buf.put_text(0, 0, "x", S)
         assert buf.hit(0, 0) is None
 
-    def test_put_text_wide_char_clears_ids_on_both_cells(self):
-        """Wide char placeholder also clears ids."""
+    def test_put_text_wide_char_clears_refs_on_both_cells(self):
+        """Wide char placeholder also clears refs."""
         buf = Buffer(5, 1)
-        buf.put_id(0, 0, "A", S, "t1")
-        buf.put_id(1, 0, "B", S, "t2")
+        buf.put_ref(0, 0, "A", S, "t1")
+        buf.put_ref(1, 0, "B", S, "t2")
         buf.put_text(0, 0, "\u4e16", S)  # width-2
         assert buf.hit(0, 0) is None
         assert buf.hit(1, 0) is None
 
 
-# -- Buffer: fill with ids tracking ----------------------------------------
+# -- Buffer: fill with refs tracking ----------------------------------------
 
 
 class TestBufferFill:
-    def test_fill_clears_ids(self):
+    def test_fill_clears_refs(self):
         buf = Buffer(4, 2)
-        buf.put_id(1, 0, "A", S, "tag")
+        buf.put_ref(1, 0, "A", S, "tag")
         assert buf.hit(1, 0) == "tag"
         buf.fill(0, 0, 4, 2, ".", S)
         assert buf.hit(1, 0) is None
 
 
-# -- Buffer: hit with no ids initialized -----------------------------------
+# -- Buffer: hit with no refs initialized -----------------------------------
 
 
 class TestBufferHit:
-    def test_hit_no_ids_returns_none(self):
+    def test_hit_no_refs_returns_none(self):
         buf = Buffer(3, 2)
         assert buf.hit(0, 0) is None
 
@@ -120,11 +120,11 @@ class TestBufferHit:
         assert buf.hit(-1, 0) is None
         assert buf.hit(3, 0) is None
 
-    def test_hit_with_ids(self):
+    def test_hit_with_refs(self):
         buf = Buffer(3, 2)
-        buf.put_id(1, 1, "X", S, "btn")
+        buf.put_ref(1, 1, "X", S, "btn")
         assert buf.hit(1, 1) == "btn"
-        assert buf.hit(0, 0) is None  # no id assigned
+        assert buf.hit(0, 0) is None  # no ref assigned
 
 
 # -- Buffer: clone ----------------------------------------------------------
@@ -147,13 +147,13 @@ class TestBufferClone:
         assert buf.get(0, 0) == Cell("A", S)
         assert cloned.get(0, 0) == Cell("B", S)
 
-    def test_clone_copies_ids(self):
+    def test_clone_copies_refs(self):
         buf = Buffer(3, 2)
-        buf.put_id(1, 0, "X", S, "tag")
+        buf.put_ref(1, 0, "X", S, "tag")
         cloned = buf.clone()
         assert cloned.hit(1, 0) == "tag"
-        # modifying clone ids doesn't affect original
-        cloned.put_id(1, 0, "Y", S, "other")
+        # modifying clone refs doesn't affect original
+        cloned.put_ref(1, 0, "Y", S, "other")
         assert buf.hit(1, 0) == "tag"
 
 
@@ -310,10 +310,10 @@ class TestBufferScroll:
         assert self._row_chars(buf, 0) == "bbb"
         assert self._row_chars(buf, 3) == "   "
 
-    def test_scroll_moves_hit_ids_with_cells(self):
+    def test_scroll_moves_hit_refs_with_cells(self):
         buf = Buffer(2, 3)
         for y, tag in enumerate(("a", "b", "c")):
-            buf.put_id(0, y, tag.upper(), S, tag)
+            buf.put_ref(0, y, tag.upper(), S, tag)
 
         buf.scroll_region_in_place(0, 2, 1)
 
@@ -344,18 +344,18 @@ class TestBufferView:
         # entire buffer at offset region should be empty
         assert buf.get(2, 3) == EMPTY_CELL
 
-    def test_view_put_id(self):
+    def test_view_put_ref(self):
         buf = Buffer(10, 10)
         view = buf.region(2, 3, 5, 4)
-        view.put_id(1, 1, "B", S, "btn")
+        view.put_ref(1, 1, "B", S, "btn")
         assert buf.get(3, 4) == Cell("B", S)
         assert buf.hit(3, 4) == "btn"
 
-    def test_view_put_id_clips_out_of_bounds(self):
+    def test_view_put_ref_clips_out_of_bounds(self):
         buf = Buffer(10, 10)
         view = buf.region(2, 3, 5, 4)
-        view.put_id(-1, 0, "X", S, "id")  # clipped
-        view.put_id(5, 0, "X", S, "id")  # clipped
+        view.put_ref(-1, 0, "X", S, "the-ref")  # clipped
+        view.put_ref(5, 0, "X", S, "the-ref")  # clipped
         assert buf.get(2, 3) == EMPTY_CELL
 
     def test_view_put_text(self):
@@ -429,7 +429,7 @@ class TestBufferView:
     def test_view_hit(self):
         buf = Buffer(10, 10)
         view = buf.region(2, 2, 5, 5)
-        buf.put_id(3, 3, "X", S, "item")
+        buf.put_ref(3, 3, "X", S, "item")
         assert view.hit(1, 1) == "item"
 
     def test_view_hit_out_of_bounds(self):

@@ -19,10 +19,10 @@ returns 1, while painted drops the ZWJ and keeps x and y as two cells. That make
 quirk, not a painted invariant. Excluding ZWJ keeps the alphabet in the regime
 where ``display_width(s) == sum(char_width(c) for c in s)``.
 
-`no_id_blocks()` — Blocks with NO ``id`` and NO ``ids``. This is what forces the
+`no_ref_blocks()` — Blocks with NO ``ref`` and NO ``refs``. This is what forces the
 compose ops (join/pad/border) onto their ``Block._create`` fast path, which SKIPS
 the constructor's row-width validation. A "every row has block.width cells"
-assertion only has teeth there; on the slow-constructor (ids-present) path a
+assertion only has teeth there; on the slow-constructor (refs-present) path a
 ragged-row bug raises ValueError inside the op instead.
 """
 
@@ -75,17 +75,17 @@ def styles() -> st.SearchStrategy[Style]:
 
 
 @st.composite
-def no_id_blocks(
+def no_ref_blocks(
     draw: st.DrawFn,
     *,
     min_w: int = 1,
     max_w: int = 20,
     max_h: int = 6,
 ) -> Block:
-    """A Block with no id/ids, built so compose ops take the _create fast path.
+    """A Block with no ref/refs, built so compose ops take the _create fast path.
 
-    Stacks single-row ``Block.text`` blocks (all the same width, no id) with
-    ``join_vertical`` — itself a no-id _create path — yielding a multi-row block
+    Stacks single-row ``Block.text`` blocks (all the same width, no ref) with
+    ``join_vertical`` — itself a no-ref _create path — yielding a multi-row block
     of known width whose rows carry real wide-char content.
     """
     from painted.core.compose import join_vertical
@@ -96,7 +96,7 @@ def no_id_blocks(
     lines = draw(st.lists(text_st(max_size=max_w + 4), min_size=n, max_size=n))
     parts = [Block.text(line, style, width=w, wrap=Wrap.NONE) for line in lines]
     block = join_vertical(*parts)
-    assert block.id is None and block._ids is None  # invariant of this strategy
+    assert block.ref is None and block._refs is None  # invariant of this strategy
     return block
 
 

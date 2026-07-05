@@ -30,19 +30,19 @@ class TestBlockInitValidation:
         with pytest.raises(ContractError, match="row 0 width 2 != block width 3"):
             Block([[Cell("a", S), Cell("b", S)]], 3)
 
-    def test_ids_height_mismatch_raises(self):
+    def test_refs_height_mismatch_raises(self):
         from painted.core.cell import Cell
 
         row = [Cell("a", S)]
-        with pytest.raises(ContractError, match="ids height 2 != block height 1"):
-            Block([row], 1, ids=[[None], [None]])
+        with pytest.raises(ContractError, match="refs height 2 != block height 1"):
+            Block([row], 1, refs=[[None], [None]])
 
-    def test_ids_row_width_mismatch_raises(self):
+    def test_refs_row_width_mismatch_raises(self):
         from painted.core.cell import Cell
 
         row = [Cell("a", S), Cell("b", S)]
-        with pytest.raises(ContractError, match="ids row 0 width 1 != block width 2"):
-            Block([row], 2, ids=[[None]])
+        with pytest.raises(ContractError, match="refs row 0 width 1 != block width 2"):
+            Block([row], 2, refs=[[None]])
 
 
 # --- Block immutability ---
@@ -57,7 +57,7 @@ class TestBlockImmutability:
     def test_setattr_raises_for_any_attribute(self):
         b = Block.empty(2, 2)
         with pytest.raises(AttributeError, match="immutable"):
-            b.id = "changed"
+            b.ref = "changed"
 
 
 # --- Block.text() edge cases ---
@@ -74,9 +74,9 @@ class TestBlockTextEdgeCases:
         assert b.width == 0
         assert b.height == 1
 
-    def test_text_with_id(self):
-        b = Block.text("hi", S, id="label")
-        assert b.id == "label"
+    def test_text_with_ref(self):
+        b = Block.text("hi", S, ref="label")
+        assert b.ref == "label"
 
 
 # --- Block.text() Wrap.ELLIPSIS ---
@@ -137,9 +137,9 @@ class TestBlockTextCharWrap:
         assert b.width == 5
         assert b.height == 1
 
-    def test_char_wrap_with_id(self):
-        b = Block.text("abcd", S, width=2, wrap=Wrap.CHAR, id="cw")
-        assert b.id == "cw"
+    def test_char_wrap_with_ref(self):
+        b = Block.text("abcd", S, width=2, wrap=Wrap.CHAR, ref="cw")
+        assert b.ref == "cw"
         assert b.height == 2
 
 
@@ -174,13 +174,13 @@ class TestBlockTextWordWrap:
         assert _chars(b, 0) == ["a"]
 
 
-# --- Block.empty() with id ---
+# --- Block.empty() with ref ---
 
 
-class TestBlockEmptyWithId:
-    def test_empty_with_id(self):
-        b = Block.empty(3, 2, id="bg")
-        assert b.id == "bg"
+class TestBlockEmptyWithRef:
+    def test_empty_with_ref(self):
+        b = Block.empty(3, 2, ref="bg")
+        assert b.ref == "bg"
         assert b.width == 3
         assert b.height == 2
 
@@ -189,7 +189,7 @@ class TestBlockEmptyWithId:
 
 
 class TestBlockPaint:
-    def test_paint_no_id_no_ids(self):
+    def test_paint_no_ref_no_refs(self):
         """Covers the basic paint path (lines 126-132)."""
         b = Block.text("AB", S)
         buf = Buffer(4, 1)
@@ -198,22 +198,22 @@ class TestBlockPaint:
         assert buf.get(1, 0).char == "B"
         assert buf.hit(0, 0) is None
 
-    def test_paint_with_block_id(self):
-        """Covers the paint path using block.id (lines 134-140)."""
-        b = Block.text("XY", S, id="btn")
+    def test_paint_with_block_ref(self):
+        """Covers the paint path using block.ref (lines 134-140)."""
+        b = Block.text("XY", S, ref="btn")
         buf = Buffer(4, 1)
         b.paint(buf, 0, 0)
         assert buf.get(0, 0).char == "X"
         assert buf.hit(0, 0) == "btn"
         assert buf.hit(1, 0) == "btn"
 
-    def test_paint_with_per_cell_ids(self):
-        """Covers the paint path using per-cell _ids (lines 142-151)."""
+    def test_paint_with_per_cell_refs(self):
+        """Covers the paint path using per-cell _refs (lines 142-151)."""
         from painted.core.cell import Cell
 
         row = [Cell("a", S), Cell("b", S)]
-        ids = [["left", None]]
-        b = Block([row], 2, ids=ids)
+        refs = [["left", None]]
+        b = Block([row], 2, refs=refs)
         buf = Buffer(4, 1)
         b.paint(buf, 0, 0)
         assert buf.hit(0, 0) == "left"
@@ -261,27 +261,27 @@ class TestBlockRow:
             b.row(5)
 
 
-# --- Block.cell_id() ---
+# --- Block.cell_ref() ---
 
 
-class TestBlockCellId:
-    def test_cell_id_with_block_id(self):
-        b = Block.text("ab", S, id="x")
-        assert b.cell_id(0, 0) == "x"
-        assert b.cell_id(1, 0) == "x"
+class TestBlockCellRef:
+    def test_cell_ref_with_block_ref(self):
+        b = Block.text("ab", S, ref="x")
+        assert b.cell_ref(0, 0) == "x"
+        assert b.cell_ref(1, 0) == "x"
 
-    def test_cell_id_no_id(self):
+    def test_cell_ref_no_ref(self):
         b = Block.text("ab", S)
-        assert b.cell_id(0, 0) is None
+        assert b.cell_ref(0, 0) is None
 
-    def test_cell_id_with_per_cell_ids(self):
+    def test_cell_ref_with_per_cell_refs(self):
         from painted.core.cell import Cell
 
         row = [Cell("a", S), Cell("b", S)]
-        ids = [["alpha", "beta"]]
-        b = Block([row], 2, ids=ids)
-        assert b.cell_id(0, 0) == "alpha"
-        assert b.cell_id(1, 0) == "beta"
+        refs = [["alpha", "beta"]]
+        b = Block([row], 2, refs=refs)
+        assert b.cell_ref(0, 0) == "alpha"
+        assert b.cell_ref(1, 0) == "beta"
 
 
 # --- _cells_from_text internals ---

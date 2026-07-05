@@ -30,7 +30,7 @@ from painted.views import (
 )
 
 from tests.helpers import block_to_text, row_text
-from tests.property.strategies import MIXED_ALPHABET, no_id_blocks, text_st
+from tests.property.strategies import MIXED_ALPHABET, no_ref_blocks, text_st
 
 _WELL_KNOWN = ["message", "summary", "output", "status", "detail", "description"]
 _KINDS = ["task", "error", "decision", "log", "tick"]
@@ -142,7 +142,7 @@ def test_record_line_full_wraps_wide_value_preserves_all_content(width, kind, ts
 
 
 @given(
-    block=no_id_blocks(min_w=1, max_h=10),
+    block=no_ref_blocks(min_w=1, max_h=10),
     kind=st.sampled_from(["task", "error"]),
     payload=_record_payloads(),
     gutter_fn=st.sampled_from([gutter_lifecycle, gutter_freshness, gutter_pass_fail]),
@@ -177,7 +177,7 @@ _hostile_values = st.one_of(
 
 
 @given(
-    block=no_id_blocks(min_w=1, max_h=8),
+    block=no_ref_blocks(min_w=1, max_h=8),
     status=_hostile_values,
     age=_hostile_values,
     gutter_fn=st.sampled_from([gutter_lifecycle, gutter_freshness, gutter_pass_fail]),

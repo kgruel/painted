@@ -3,15 +3,15 @@
 # requires-python = ">=3.11"
 # dependencies = ["painted"]
 # ///
-"""Hit testing — Block.id propagation through composition to Buffer.hit().
+"""Hit testing — Block.ref propagation through composition to Buffer.hit().
 
 Builds a service dashboard with four named panels, composes them into a 2x2
-grid, paints into a Buffer, then probes coordinates to show how ids survive
+grid, paints into a Buffer, then probes coordinates to show how refs survive
 composition and enable mouse picking.
 
-    uv run demos/patterns/hit_testing.py -q        # cell/id counts
+    uv run demos/patterns/hit_testing.py -q        # cell/ref counts
     uv run demos/patterns/hit_testing.py           # dashboard + hit probes
-    uv run demos/patterns/hit_testing.py -v        # + provenance map (id layer)
+    uv run demos/patterns/hit_testing.py -v        # + provenance map (ref layer)
     uv run demos/patterns/hit_testing.py -vv       # + composition trace (build steps)
 """
 
@@ -68,7 +68,7 @@ SERVICES: tuple[tuple[str, dict], ...] = (
 class ProbeResult:
     x: int
     y: int
-    hit_id: str | None
+    hit_ref: str | None
     label: str
 
 
@@ -82,11 +82,11 @@ class HitTestData:
     panel_height: int
     hgap: int
     vgap: int
-    ids_allocated_before_paint: bool
-    ids_allocated_after_paint: bool
+    refs_allocated_before_paint: bool
+    refs_allocated_after_paint: bool
     total_cells: int
-    cells_with_id: int
-    unique_ids: tuple[str, ...]
+    cells_with_ref: int
+    unique_refs: tuple[str, ...]
     probes: tuple[ProbeResult, ...]
 
 
@@ -115,7 +115,7 @@ def _service_panel(name: str, info: dict, *, width: int, inner_height: int) -> B
         Style(),
         width=inner_width,
         wrap=Wrap.WORD,
-        id=name,
+        ref=name,
     )
     if content.height < inner_height:
         content = pad(content, bottom=inner_height - content.height)
@@ -146,15 +146,15 @@ def _build_dashboard(
     grid = join_vertical(top_row, bottom_row, gap=vgap)
 
     buf = Buffer(grid.width, grid.height)
-    ids_before = buf._ids is not None
+    refs_before = buf._refs is not None
     grid.paint(buf, 0, 0)
-    ids_after = buf._ids is not None
+    refs_after = buf._refs is not None
 
     total_cells = grid.width * grid.height
-    cells_with_id = sum(
+    cells_with_ref = sum(
         1 for y in range(grid.height) for x in range(grid.width) if buf.hit(x, y) is not None
     )
-    unique_ids = tuple(
+    unique_refs = tuple(
         sorted(
             {
                 cid
@@ -198,11 +198,11 @@ def _build_dashboard(
         panel_height=panel_h,
         hgap=hgap,
         vgap=vgap,
-        ids_allocated_before_paint=ids_before,
-        ids_allocated_after_paint=ids_after,
+        refs_allocated_before_paint=refs_before,
+        refs_allocated_after_paint=refs_after,
         total_cells=total_cells,
-        cells_with_id=cells_with_id,
-        unique_ids=unique_ids,
+        cells_with_ref=cells_with_ref,
+        unique_refs=unique_refs,
         probes=tuple(probes),
     )
 
@@ -211,7 +211,7 @@ def _probes_block(probes: tuple[ProbeResult, ...]) -> Block:
     p = current_palette()
     rows: list[Block] = []
     for pr in probes:
-        cid = pr.hit_id
+        cid = pr.hit_ref
         id_text = cid if cid is not None else "∅"
         id_style = p.muted if cid is None else p.accent
         rows.append(
@@ -224,7 +224,7 @@ def _probes_block(probes: tuple[ProbeResult, ...]) -> Block:
     return join_vertical(*rows) if rows else Block.text("  (no probes)", Style(dim=True))
 
 
-def _id_styles() -> dict[str, Style]:
+def _ref_styles() -> dict[str, Style]:
     p = current_palette()
     return {
         "api-gateway": p.success,
@@ -235,9 +235,9 @@ def _id_styles() -> dict[str, Style]:
 
 
 def _provenance_map(block: Block) -> Block:
-    """Paint to Buffer then render the id layer as a colored grid."""
+    """Paint to Buffer then render the ref layer as a colored grid."""
     p = current_palette()
-    styles = _id_styles()
+    styles = _ref_styles()
 
     buf = Buffer(block.width, block.height)
     block.paint(buf, 0, 0)
@@ -258,7 +258,7 @@ def _provenance_map(block: Block) -> Block:
 
 def _legend() -> Block:
     p = current_palette()
-    styles = _id_styles()
+    styles = _ref_styles()
     rows: list[Block] = []
     for name, _info in SERVICES:
         rows.append(
@@ -312,11 +312,11 @@ def _composition_trace(data: HitTestData, *, width: int) -> Block:
 
     inner = join_vertical(
         Block.text(
-            f"ids allocated on paint: {data.ids_allocated_before_paint} -> {data.ids_allocated_after_paint}",
+            f"refs allocated on paint: {data.refs_allocated_before_paint} -> {data.refs_allocated_after_paint}",
             Style(dim=True),
         ),
         Block.text(
-            f"cells with id: {data.cells_with_id}/{data.total_cells}  unique: {', '.join(data.unique_ids)}",
+            f"cells with ref: {data.cells_with_ref}/{data.total_cells}  unique: {', '.join(data.unique_refs)}",
             Style(dim=True),
         ),
         _spacer(),
@@ -349,7 +349,7 @@ def _render_minimal(data: HitTestData, width: int) -> Block:
     p = current_palette()
     return truncate(
         Block.text(
-            f"grid {data.grid.width}x{data.grid.height}  cells {data.total_cells}  ids {data.cells_with_id}  unique {len(data.unique_ids)}",
+            f"grid {data.grid.width}x{data.grid.height}  cells {data.total_cells}  refs {data.cells_with_ref}  unique {len(data.unique_refs)}",
             p.accent,
         ),
         width,
@@ -378,7 +378,7 @@ def _render_detailed(data: HitTestData, width: int) -> Block:
         join_vertical(
             _render_summary(data, width),
             _spacer(),
-            _header("provenance map (id layer)"),
+            _header("provenance map (ref layer)"),
             _spacer(),
             border(_provenance_map(data.grid), chars=ROUNDED, style=p.muted),
             _spacer(),

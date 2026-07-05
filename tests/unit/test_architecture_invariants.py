@@ -165,6 +165,16 @@ def test_vocabulary_does_not_import_cli_or_argparse() -> None:
     _assert_no_imports(painted_root / "vocabulary.py", {"painted.cli", "argparse"})
 
 
+def test_refs_does_not_import_cli_or_argparse() -> None:
+    """Ref schemes generate no CLI flags (REFS_DESIGN §4, mirroring vocabularies
+    rule 4). ``refs.py`` classifies a denotation channel; it is not user grammar,
+    so it must never grow a ``cli``/``argparse`` dependency — pinned structurally
+    here, the same way ``vocabulary.py`` is pinned above.
+    """
+    painted_root = Path(__file__).resolve().parents[2] / "src" / "painted"
+    _assert_no_imports(painted_root / "refs.py", {"painted.cli", "argparse"})
+
+
 def test_public_names_do_not_shadow_submodules() -> None:
     """No package may re-export a public name that collides with one of its own
     submodule filenames (review #1 — closes the class, not just the instance).

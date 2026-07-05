@@ -143,7 +143,7 @@ def _emit_items(out: list[str], items: Items, fidelity: Fidelity) -> None:
 def _emit_code(out: list[str], code: Code) -> None:
     if code.text is None:
         # Deferred docgen resolution — the same placeholder the lens shows.
-        label = f"[code: {code.ref}]" if code.ref else "[code]"
+        label = f"[code: {code.src}]" if code.src else "[code]"
         out.append(f'<p class="code-placeholder">{_esc(label)}</p>\n')
         return
     out.append(f'<pre><code class="language-{_esc(code.lang)}">{_esc(code.text)}</code></pre>\n')

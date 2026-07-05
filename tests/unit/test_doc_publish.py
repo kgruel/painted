@@ -70,8 +70,8 @@ class TestSemanticChrome:
         html = _full(Doc(None, (Code(text="x = 1"),)))
         assert '<pre><code class="language-python">x = 1</code></pre>' in html
 
-    def test_unresolved_code_ref_is_placeholder(self):
-        html = _full(Doc(None, (Code(ref="py:painted.cell:Style#definition"),)))
+    def test_unresolved_code_src_is_placeholder(self):
+        html = _full(Doc(None, (Code(src="py:painted.cell:Style#definition"),)))
         assert "[code: py:painted.cell:Style#definition]" in html
 
     def test_text_is_escaped(self):
