@@ -151,7 +151,9 @@ its context manager.
 
 - **This PR**: the classes, the 21 reclassified sites above, targeted test
   tightening (`pytest.raises(DeclarationError)` etc. at representative
-  sites), this doc, changelog.
+  sites), this doc, changelog, and the demo
+  (`demos/primitives/errors.py` — the introspected hierarchy tree, each
+  contract broken for real and rendered through `PaintedHandler`).
 - **0.6 fast-follow** (branch `declared-vocabularies`, before it merges):
   migrate its new raise sites — `vocabulary.py` validation (~20 sites,
   all `DeclarationError` except the two call-time ordered-op/membership
