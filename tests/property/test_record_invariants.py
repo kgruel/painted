@@ -29,7 +29,7 @@ from painted.views import (
     record_timeline,
 )
 
-from tests.helpers import block_to_text
+from tests.helpers import block_to_text, row_text
 from tests.property.strategies import MIXED_ALPHABET, no_id_blocks, text_st
 
 _WELL_KNOWN = ["message", "summary", "output", "status", "detail", "description"]
@@ -153,6 +153,42 @@ def test_apply_gutter_adds_two_columns(block, kind, payload, gutter_fn) -> None:
     assert r.height == block.height
     for y in range(r.height):
         assert len(r.row(y)) == r.width
+
+
+# The three shipped gutters are now declared over ``record_gutter``. A gutter
+# renders arbitrary data: unknown categorical values route to the declared
+# `unknown` fallback and numeric fields bucket through thresholds, so *no* payload
+# value may raise or break the col-0 rail. Feed deliberately hostile status /
+# age data and assert the rail stays continuous (a glyph on every row, never a
+# space, never a shorter row).
+# "Arbitrary" means arbitrary: not just hostile strings and out-of-range ints but
+# the wrong TYPE entirely — None, NaN/±inf, nested structures (unhashable), bools.
+# The old if-chains tolerated all of these; the factory must too (they route to the
+# declared `unknown` fallback / the thresholds guard, never an exception).
+_hostile_values = st.one_of(
+    st.none(),
+    st.text(max_size=12),
+    st.integers(min_value=-(10**6), max_value=10**6),
+    st.floats(allow_nan=True, allow_infinity=True),
+    st.booleans(),
+    st.lists(st.integers(), max_size=3),
+    st.dictionaries(st.text(max_size=3), st.integers(), max_size=2),
+)
+
+
+@given(
+    block=no_id_blocks(min_w=1, max_h=8),
+    status=_hostile_values,
+    age=_hostile_values,
+    gutter_fn=st.sampled_from([gutter_lifecycle, gutter_freshness, gutter_pass_fail]),
+)
+def test_gutter_rail_continuous_across_arbitrary_payloads(block, status, age, gutter_fn) -> None:
+    payload = {"status": status, "_age_days": age}
+    r = apply_gutter(block, "task", payload, gutter_fn)  # must not raise
+    assert r.height == block.height
+    for y in range(r.height):
+        assert len(r.row(y)) == r.width
+        assert row_text(r, y)[0] != " "  # rail glyph present on every row
 
 
 # --- Composition-level width law ---------------------------------------------

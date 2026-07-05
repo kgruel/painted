@@ -193,6 +193,7 @@ STABLE_VIEWS_SURFACE = frozenset(
         "record_line_composed",
         "apply_gutter",
         "apply_attention",
+        "record_gutter",
         "gutter_lifecycle",
         "gutter_freshness",
         "gutter_pass_fail",

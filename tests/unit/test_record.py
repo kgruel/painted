@@ -4,7 +4,18 @@ from __future__ import annotations
 
 from datetime import datetime, timezone, timedelta
 
-from painted import Block, Style, Zoom
+import pytest
+
+from painted import (
+    Block,
+    MONO_PALETTE,
+    Style,
+    Thresholds,
+    Vocabulary,
+    Zoom,
+    current_palette,
+    use_palette,
+)
 from painted.views import (
     AttentionFn,
     GutterFn,
@@ -18,6 +29,7 @@ from painted.views import (
     gutter_freshness,
     gutter_lifecycle,
     gutter_pass_fail,
+    record_gutter,
     record_line,
     record_line_composed,
     record_map,
@@ -453,6 +465,260 @@ class TestGutterPassFail:
     def test_warning_is_warning(self):
         ch, _ = gutter_pass_fail("test", {"status": "warning"})
         assert ch == "▐"
+
+
+# ---------------------------------------------------------------------------
+# record_gutter — the factory the three shipped gutters are now declared over.
+# The parity contract (slice-3 blueprint §5): byte-identical glyph AND color for
+# every known status/alias and every unknown/missing fallback, under every
+# shipped palette. These tests walk that table.
+# ---------------------------------------------------------------------------
+
+
+class TestRecordGutterLifecycleParity:
+    """gutter_lifecycle: canonical values, aliases, and the unknown fallback."""
+
+    # (status spelling, expected glyph, core-role name) — canonical members then
+    # every alias row of the §5 parity table.
+    CASES = [
+        ("completed", "│", "success"),
+        ("running", "│", "success"),
+        ("stalled", "▐", "warning"),
+        ("blocked", "█", "error"),
+        # aliases fold onto the same member → same glyph + color
+        ("done", "│", "success"),
+        ("decided", "│", "success"),
+        ("healthy", "│", "success"),
+        ("in-progress", "│", "success"),
+        ("active", "│", "success"),
+        ("waiting", "▐", "warning"),
+        ("pending", "▐", "warning"),
+        ("errored", "█", "error"),
+        ("failed", "█", "error"),
+    ]
+
+    @pytest.mark.parametrize("status, glyph, role", CASES)
+    def test_glyph_and_color(self, status, glyph, role):
+        ch, style = gutter_lifecycle("task", {"status": status})
+        assert ch == glyph
+        assert style == getattr(current_palette(), role)
+
+    def test_unknown_status_falls_to_declared_muted(self):
+        ch, style = gutter_lifecycle("task", {"status": "sideways"})
+        assert ch == "│"
+        assert style == current_palette().muted
+
+    def test_missing_status_falls_to_declared_muted(self):
+        ch, style = gutter_lifecycle("task", {})
+        assert ch == "│"
+        assert style == current_palette().muted
+
+
+class TestRecordGutterPassFailParity:
+    CASES = [
+        ("passed", "│", "success"),
+        ("warning", "▐", "warning"),
+        ("failed", "█", "error"),
+        ("success", "│", "success"),
+        ("ok", "│", "success"),
+        ("warn", "▐", "warning"),
+        ("error", "█", "error"),
+    ]
+
+    @pytest.mark.parametrize("status, glyph, role", CASES)
+    def test_glyph_and_color(self, status, glyph, role):
+        ch, style = gutter_pass_fail("test", {"status": status})
+        assert ch == glyph
+        assert style == getattr(current_palette(), role)
+
+    def test_unknown_falls_to_declared_muted(self):
+        ch, style = gutter_pass_fail("test", {"status": "skipped"})
+        assert ch == "│"
+        assert style == current_palette().muted
+
+
+class TestRecordGutterFreshnessThresholds:
+    """gutter_freshness resolves ``_age_days`` through integer-day floors."""
+
+    # age → (glyph, resolved Style). "recent" binds the `text` substrate role,
+    # which is None under every shipped palette → a bare Style() (byte-identical
+    # to the old `return "│", Style()`).
+    CASES = [
+        (0, "│", "accent"),  # fresh
+        (1, "│", "accent"),  # fresh (floor 0)
+        (2, "│", "text"),  # recent (floor 2)
+        (7, "│", "text"),  # recent
+        (8, "│", "muted"),  # stale (floor 8)
+        (30, "│", "muted"),  # stale
+        (31, "·", "muted"),  # old (floor 31)
+    ]
+
+    @pytest.mark.parametrize("age, glyph, role", CASES)
+    def test_glyph_and_color(self, age, glyph, role):
+        ch, style = gutter_freshness("task", {"_age_days": age})
+        assert ch == glyph
+        if role == "text":
+            # `text` is None on shipped palettes → bare Style() (design D5).
+            assert style == Style()
+        else:
+            assert style == getattr(current_palette(), role)
+
+    def test_missing_age_defaults_to_fresh(self):
+        ch, style = gutter_freshness("task", {})
+        assert ch == "│"
+        assert style == current_palette().accent
+
+
+class TestRecordGutterUnderShippedPalettes:
+    """Color is resolved live, so every shipped palette re-tints the rail."""
+
+    @pytest.mark.parametrize("value, role", [("blocked", "error"), ("running", "success")])
+    def test_lifecycle_color_tracks_palette(self, value, role):
+        with use_palette(MONO_PALETTE):
+            _, style = gutter_lifecycle("task", {"status": value})
+            assert style == getattr(MONO_PALETTE, role)
+
+
+class TestRecordGutterHonestyRuleOne:
+    """Honesty rule 1's first end-to-end pin: a declared vocabulary changes
+    output, and the color flows through live resolution (not a frozen Style)."""
+
+    def test_glyph_and_color_change_with_value(self):
+        # Two records differing only in status → different rail glyph AND color.
+        glyph_blocked, style_blocked = gutter_lifecycle("task", {"status": "blocked"})
+        glyph_running, style_running = gutter_lifecycle("task", {"status": "running"})
+        assert glyph_blocked != glyph_running  # █ vs │
+        assert style_blocked != style_running  # error vs success
+
+    def test_palette_swap_retints_color_but_not_glyph(self):
+        glyph_default, style_default = gutter_lifecycle("task", {"status": "blocked"})
+        with use_palette(MONO_PALETTE):
+            glyph_mono, style_mono = gutter_lifecycle("task", {"status": "blocked"})
+        # Glyph is a function of the vocabulary (declaration), stable across palettes.
+        assert glyph_mono == glyph_default
+        # Color is resolved against the CURRENT palette at call time, so it moved —
+        # proof the rail carries no frozen Style.
+        assert style_mono != style_default
+        assert style_mono == MONO_PALETTE.error
+
+    def test_visible_in_composed_render(self):
+        block = record_line_composed(
+            _ts(),
+            "task",
+            {"status": "blocked", "name": "deploy"},
+            Zoom.SUMMARY,
+            60,
+            gutter_fn=gutter_lifecycle,
+        )
+        assert "█" in block_to_text(block)  # the blocked rail reaches the output
+
+
+class TestRecordGutterValidation:
+    """Construction-time honesty (the ``check_declarations`` discipline)."""
+
+    _ORDERED = Vocabulary(
+        "demo-order",
+        values=("lo", "mid", "hi"),
+        ordered=True,
+        roles={"lo": "success", "mid": "warning", "hi": "error"},
+    )
+
+    def test_unordered_vocabulary_raises(self):
+        unordered = Vocabulary(
+            "demo-unordered",
+            values=("a", "b"),
+            roles={"a": "success", "b": "error"},
+        )
+        with pytest.raises(ValueError, match="ordered"):
+            record_gutter(unordered, "status")
+
+    def test_aliases_and_thresholds_are_mutually_exclusive(self):
+        thr = Thresholds(self._ORDERED, {0: "lo", 5: "hi"})
+        with pytest.raises(ValueError, match="aliases OR thresholds"):
+            record_gutter(self._ORDERED, "n", aliases={"x": "lo"}, thresholds=thr)
+
+    def test_thresholds_vocabulary_must_match(self):
+        other = Vocabulary(
+            "other-order",
+            values=("p", "q"),
+            ordered=True,
+            roles={"p": "success", "q": "error"},
+        )
+        thr = Thresholds(other, {0: "p", 5: "q"})
+        with pytest.raises(ValueError, match="same vocabulary"):
+            record_gutter(self._ORDERED, "n", thresholds=thr)
+
+    def test_alias_value_must_be_a_member(self):
+        with pytest.raises(ValueError, match="not a member"):
+            record_gutter(self._ORDERED, "status", aliases={"x": "nonmember"})
+
+    def test_empty_glyphs_raise(self):
+        with pytest.raises(ValueError, match="ramp glyph"):
+            record_gutter(self._ORDERED, "status", glyphs=())
+
+    def test_custom_ramp_is_respected(self):
+        g = record_gutter(self._ORDERED, "status", glyphs=("X", "Y", "Z"))
+        # attention defaults to "last": `hi` sits at the attention end → glyphs[0].
+        ch, _ = g("k", {"status": "hi"})
+        assert ch == "X"
+        ch, _ = g("k", {"status": "lo"})  # far end → clamp/last position
+        assert ch == "Z"
+
+    def test_attention_first_flips_distance(self):
+        first = Vocabulary(
+            "demo-first",
+            values=("lo", "mid", "hi"),
+            ordered=True,
+            attention="first",
+            roles={"lo": "success", "mid": "warning", "hi": "error"},
+        )
+        g = record_gutter(first, "status", glyphs=("X", "Y", "Z"))
+        # attention="first": `lo` is the eye's end → glyphs[0]; `hi` is farthest.
+        assert g("k", {"status": "lo"})[0] == "X"
+        assert g("k", {"status": "hi"})[0] == "Z"
+
+
+class TestRecordGutterToleratesData:
+    """A rail never raises on data — wrong-TYPE payloads route to the declared
+    fallback (review round: the crash paths the first cut missed)."""
+
+    def test_thresholds_mode_tolerates_non_numeric(self):
+        p = current_palette()
+        for hostile in ("not-a-number", None, [3], {"d": 1}):
+            glyph, style = gutter_freshness("task", {"_age_days": hostile})
+            assert (glyph, style) == ("│", p.muted), hostile
+
+    def test_thresholds_mode_tolerates_nan(self):
+        # NaN is incomparable: it must not resolve (least of all to `fresh`) —
+        # it is corrupt data, routed to the declared fallback like any other.
+        glyph, style = gutter_freshness("task", {"_age_days": float("nan")})
+        assert (glyph, style) == ("│", current_palette().muted)
+
+    def test_thresholds_mode_infinities_keep_order_meaning(self):
+        # ±inf are comparable and keep their total-order placement.
+        assert gutter_freshness("task", {"_age_days": float("inf")})[0] == "·"  # old
+        assert gutter_freshness("task", {"_age_days": float("-inf")})[0] == "│"  # fresh
+
+    def test_categorical_mode_tolerates_non_string(self):
+        p = current_palette()
+        for hostile in (None, 3, 1.5, True, ["blocked"], {"status": "blocked"}):
+            glyph, style = gutter_lifecycle("task", {"status": hostile})
+            assert (glyph, style) == ("│", p.muted), hostile
+
+    def test_thresholds_resolve_raises_on_nan_directly(self):
+        # The declaration-level API is honest about the incomparable value; only
+        # the data-facing gutter closure catches and falls back.
+        thr = Thresholds(
+            Vocabulary(
+                "demo-nan",
+                values=("lo", "hi"),
+                ordered=True,
+                roles={"lo": "success", "hi": "error"},
+            ),
+            {0: "lo", 5: "hi"},
+        )
+        with pytest.raises(ValueError, match="NaN"):
+            thr.resolve(float("nan"))
 
 
 # ---------------------------------------------------------------------------

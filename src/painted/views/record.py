@@ -17,7 +17,7 @@ Promoted from experiments/record_line_demo.py.
 from __future__ import annotations
 
 from collections import Counter
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from datetime import datetime
 from typing import Protocol
 
@@ -28,6 +28,7 @@ from ..core.zoom import Zoom
 from ..icon_set import current_icons
 from ..palette import current_palette
 from ..core._text_width import display_width, truncate_ellipsis
+from ..vocabulary import Thresholds, Vocabulary, vocab_style
 
 
 # ---------------------------------------------------------------------------
@@ -715,48 +716,184 @@ def record_map(
 # ---------------------------------------------------------------------------
 
 
-def gutter_lifecycle(kind: str, payload: dict) -> tuple[str, Style]:
-    """Gutter by task lifecycle: green=moving, yellow=stalled, red=blocked."""
-    p = current_palette()
-    status = payload.get("status", "")
-    if status in ("blocked", "errored", "failed"):
-        return "█", p.error
-    if status in ("stalled", "waiting", "pending"):
-        return "▐", p.warning
-    if status in ("running", "in-progress", "active"):
-        return "│", p.success
-    if status in ("completed", "done", "decided", "healthy"):
-        return "│", p.success
-    return "│", p.muted
+def _glyph(vocabulary: Vocabulary, value: str, glyphs: tuple[str, ...]) -> str:
+    """The rail glyph for ``value``: heaviest at the attention end, clamped.
 
-
-def gutter_freshness(kind: str, payload: dict) -> tuple[str, Style]:
-    """Gutter by freshness: bright=recent, dim=stale.
-
-    Reads ``_age_days`` from payload (default 0).
+    Distance is measured from the end ``attention`` names — the eye's end. An
+    ``attention="last"`` vocabulary (severity, lifecycle) puts ``glyphs[0]`` on
+    its final value and fades toward the first; ``attention="first"`` flips the
+    direction. Past the ramp's length the last glyph repeats (a long vocabulary
+    with a short ramp settles onto its lightest weight). Direction of
+    distinction is the vocabulary's declared property, never a branch here.
     """
-    p = current_palette()
-    age_days = payload.get("_age_days", 0)
-    if age_days <= 1:
-        return "│", p.accent
-    if age_days <= 7:
-        return "│", Style()
-    if age_days <= 30:
-        return "│", p.muted
-    return "·", p.muted
+    index = vocabulary.index(value)
+    if vocabulary.attention == "last":
+        distance = (len(vocabulary.values) - 1) - index
+    else:
+        distance = index
+    return glyphs[min(distance, len(glyphs) - 1)]
 
 
-def gutter_pass_fail(kind: str, payload: dict) -> tuple[str, Style]:
-    """Gutter by pass/fail for test/check results."""
-    p = current_palette()
-    status = payload.get("status", "")
-    if status in ("passed", "success", "ok"):
-        return "│", p.success
-    if status in ("warning", "warn"):
-        return "▐", p.warning
-    if status in ("failed", "error"):
-        return "█", p.error
-    return "│", p.muted
+def record_gutter(
+    vocabulary: Vocabulary,
+    field: str,
+    *,
+    aliases: Mapping[str, str] | None = None,
+    thresholds: Thresholds | None = None,
+    glyphs: tuple[str, ...] = ("█", "▐", "│"),
+    unknown: tuple[str, str] = ("│", "muted"),
+    default: float = 0,
+) -> GutterFn:
+    """Build a :class:`GutterFn` from an ordered vocabulary.
+
+    A gutter encodes one dimension as a colored rail; this factory derives that
+    rail from a declaration instead of an ``if``-chain. It reads ``field`` from
+    each payload and resolves it to a vocabulary value — directly, through
+    ``aliases`` normalization (raw payload spellings → members), or through
+    ``thresholds`` for a numeric field. The value colors the rail via the same
+    value→role→palette resolution as ``mark_style`` (so a ``use_palette`` swap
+    re-tints the rail live), and its distance from the ``attention`` end against
+    ``glyphs`` picks the glyph weight.
+
+    A payload value outside the vocabulary renders the declared ``unknown``
+    fallback — ``(glyph, core-role name)``, resolved against the current palette
+    at call time. A gutter renders arbitrary data, so unknown data is *tolerated*
+    rather than raised; nothing is silent, because the fallback is itself
+    declared. The honesty rules (design doc §1) govern the *declaration* — an
+    unordered vocabulary, colliding ``aliases``/``thresholds``, an alias onto a
+    non-member — not the data a rail is later asked to paint. Those declaration
+    faults raise here, at construction:
+
+    - ``vocabulary`` must be ordered — the glyph ramp needs index + attention.
+    - ``aliases`` and ``thresholds`` are mutually exclusive (categorical vs
+      numeric resolution).
+    - a ``thresholds`` must resolve onto *this* vocabulary (same object).
+    - ``glyphs`` must be non-empty.
+    - every alias value must be a member (alias *keys* are raw data — not
+      validated as names).
+    """
+    if not vocabulary.ordered:
+        raise ValueError(
+            "record_gutter needs an ordered vocabulary (the glyph ramp is "
+            f"distance from the attention end); {vocabulary.name!r} is unordered"
+        )
+    if aliases is not None and thresholds is not None:
+        raise ValueError(
+            "record_gutter takes aliases OR thresholds, not both: aliases "
+            "normalize categorical strings, thresholds bucket a numeric field"
+        )
+    if thresholds is not None and thresholds.vocabulary is not vocabulary:
+        raise ValueError(
+            "record_gutter thresholds must resolve onto the same vocabulary "
+            f"({vocabulary.name!r}), not {thresholds.vocabulary.name!r}"
+        )
+    if not glyphs:
+        raise ValueError("record_gutter needs at least one ramp glyph")
+    for alias, target in (aliases or {}).items():
+        if target not in vocabulary.values:
+            raise ValueError(
+                f"record_gutter alias {alias!r} -> {target!r} is not a member "
+                f"of vocabulary {vocabulary.name!r}"
+            )
+
+    alias_map = dict(aliases) if aliases else {}
+    unknown_glyph, unknown_role = unknown
+
+    def gutter(kind: str, payload: dict) -> tuple[str, Style]:
+        if thresholds is not None:
+            # Numeric field: a resolvable number always yields a member, so the
+            # unknown fallback fires only for data the ladder can't place — a
+            # non-numeric value, None, or NaN (a rail never raises on data).
+            try:
+                value = thresholds.resolve(float(payload.get(field, default)))
+            except (TypeError, ValueError):
+                return unknown_glyph, getattr(current_palette(), unknown_role)
+        else:
+            raw = payload.get(field)
+            # Only strings can name a member; anything else (None, numbers,
+            # unhashable structures) is out-of-vocabulary data by definition.
+            value = alias_map.get(raw, raw) if isinstance(raw, str) else None
+            if value is None or value not in vocabulary.values:
+                # Missing field or out-of-vocabulary data: the declared fallback.
+                return unknown_glyph, getattr(current_palette(), unknown_role)
+        return _glyph(vocabulary, value, glyphs), vocab_style(vocabulary, value)
+
+    return gutter
+
+
+# The three shipped gutters, now thin declarations over ``record_gutter``. Each
+# is an ordered example vocabulary (module-level, deliberately NOT registered in
+# _BUILTIN_VOCABULARIES — an app declares its own `freshness`/`lifecycle`, and a
+# reserved painted name would collide) plus one factory call. The status dialects
+# that were three private if-chains are now the vocabularies' declared members,
+# with the raw payload spellings folded in as aliases.
+
+# Task lifecycle: attention on the `blocked` end (heaviest rail), fading to
+# `completed`. success/warning/error roles carry the color.
+LIFECYCLE_VOCABULARY = Vocabulary(
+    "lifecycle",
+    values=("completed", "running", "stalled", "blocked"),
+    ordered=True,
+    roles={
+        "completed": "success",
+        "running": "success",
+        "stalled": "warning",
+        "blocked": "error",
+    },
+)
+
+# Test/check outcome: `failed` pulls the eye, `passed` recedes.
+PASS_FAIL_VOCABULARY = Vocabulary(
+    "pass-fail",
+    values=("passed", "warning", "failed"),
+    ordered=True,
+    roles={"passed": "success", "warning": "warning", "failed": "error"},
+)
+
+# Freshness: `old` pulls the eye as a faded dot. `recent` binds the `text`
+# substrate role — a bare Style() under every shipped palette today (text=None),
+# themeable tomorrow without touching this declaration.
+FRESHNESS_VOCABULARY = Vocabulary(
+    "freshness",
+    values=("fresh", "recent", "stale", "old"),
+    ordered=True,
+    roles={"fresh": "accent", "recent": "text", "stale": "muted", "old": "muted"},
+)
+# Integer-day floors: `_age_days` is integer-day data, so a value resolves by the
+# greatest floor it clears — 0..1 fresh, 2..7 recent, 8..30 stale, 31+ old.
+FRESHNESS_AGE = Thresholds(FRESHNESS_VOCABULARY, {0: "fresh", 2: "recent", 8: "stale", 31: "old"})
+
+# Gutter by task lifecycle: green=moving, yellow=stalled, red=blocked.
+gutter_lifecycle = record_gutter(
+    LIFECYCLE_VOCABULARY,
+    "status",
+    aliases={
+        "errored": "blocked",
+        "failed": "blocked",
+        "waiting": "stalled",
+        "pending": "stalled",
+        "in-progress": "running",
+        "active": "running",
+        "done": "completed",
+        "decided": "completed",
+        "healthy": "completed",
+    },
+)
+
+# Gutter by pass/fail for test/check results.
+gutter_pass_fail = record_gutter(
+    PASS_FAIL_VOCABULARY,
+    "status",
+    aliases={"success": "passed", "ok": "passed", "warn": "warning", "error": "failed"},
+)
+
+# Gutter by freshness: bright=recent, dim=stale. Reads `_age_days` (default 0).
+gutter_freshness = record_gutter(
+    FRESHNESS_VOCABULARY,
+    "_age_days",
+    thresholds=FRESHNESS_AGE,
+    glyphs=("·", "│"),
+)
 
 
 # ---------------------------------------------------------------------------

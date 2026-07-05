@@ -24,9 +24,12 @@ The honesty rules (design doc §1): an undeclared lookup raises (rule 2); a valu
 outside the vocabulary raises unless ``overflow`` is declared (rule 3);
 vocabularies generate no CLI flags — this module imports neither ``painted.cli``
 nor ``argparse``, and that is pinned structurally (rule 4). Rule 1 ("a declared
-vocabulary must change output") is not end-to-end testable until a mark-consuming
-renderer exists — it lands with the gutter re-expression (slice 3) and
-``paint(mark=)``.
+vocabulary must change output") first lands end-to-end with the gutter
+re-expression (``record_gutter``, `views/record.py`): a rail's glyph and color
+both move with the marked value, and swapping the palette re-tints the rail live
+because color flows through this resolution at render time, not a frozen ``Style``
+(pinned by ``test_record.py``'s honesty-rule-1 test). ``paint(mark=)`` is the
+second consumer.
 
 Delivery mirrors ``use_palette``: ``use_vocabularies`` is both an immediate setter
 and a scoped context manager. Like all painted ambient state it is a ContextVar,
@@ -257,7 +260,17 @@ class Thresholds:
         object.__setattr__(self, "floors", MappingProxyType(dict(self.floors)))
 
     def resolve(self, value: float) -> str:
-        """The vocabulary value of the greatest floor ``value`` clears."""
+        """The vocabulary value of the greatest floor ``value`` clears.
+
+        ``±inf`` keep their total-order meaning (above/below every floor); NaN
+        raises — it is incomparable, and silently placing it at either end would
+        misclassify corrupt data as maximally quiet (or loud).
+        """
+        if value != value:  # NaN: the only float that breaks the total order.
+            raise ValueError(
+                f"Cannot resolve NaN through Thresholds onto "
+                f"{self.vocabulary.name!r}; NaN has no place in an ordered domain"
+            )
         best_floor: float | None = None
         best: str | None = None
         for floor, mapped in self.floors.items():
@@ -454,12 +467,29 @@ def mark_style(vocab_name: str, value: str) -> Style:
     resolves against the *current* palette and theme role-overrides, read at call
     time so ``use_theme`` re-tints marks without redeclaration.
     """
-    vocab = _lookup_vocabulary(vocab_name)
+    return vocab_style(_lookup_vocabulary(vocab_name), value)
+
+
+def vocab_style(vocab: Vocabulary, value: str) -> Style:
+    """Resolve a value against a *held* ``Vocabulary`` — ``mark_style``'s body.
+
+    One resolution, reached two ways. ``mark_style`` looks a vocabulary up by
+    name (the app path) and delegates here; a caller already holding the
+    ``Vocabulary`` object — a gutter factory, a lens — resolves through the same
+    body without a registry round trip. Membership check, ``overflow``
+    fall-through, and role resolution are one place, so the by-name and
+    by-reference paths cannot drift.
+
+    Public-named (like ``palette.series_index``) so a sibling module reaches it
+    by reference, but unexported: ``mark_style`` stays the semver-stable public
+    entry; this is the internal seam a renderer consuming an *unregistered*
+    vocabulary (the gutter factories) resolves through.
+    """
     if value not in vocab.values:
         if vocab.overflow == "series":
             return current_palette().series_for(value)
         raise ValueError(
-            f"{value!r} is not a member of vocabulary {vocab_name!r} "
+            f"{value!r} is not a member of vocabulary {vocab.name!r} "
             f'({list(vocab.values)!r}); declare overflow="series" to admit '
             "unknown values"
         )
