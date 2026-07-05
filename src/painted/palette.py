@@ -20,11 +20,39 @@ Usage:
 
 from __future__ import annotations
 
+import hashlib
 from contextvars import ContextVar, Token
 from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
 
 from .core.cell import Style
+
+# The five semantic role names an app may reference by string, plus ``text`` —
+# the substrate foreground a value can be bound to. ``surface`` is excluded: it
+# is a background substrate, not a meaning color, so no vocabulary value maps to
+# it. This is the closed set of core role names a declared vocabulary resolves a
+# string reference against (see ``painted.vocabulary``).
+CORE_ROLE_NAMES = frozenset({"success", "warning", "error", "accent", "muted", "text"})
+
+
+def series_index(key: str, count: int) -> int:
+    """Deterministic ramp position for ``key`` — ``digest(key) % count``.
+
+    A stable hash into a categorical ramp of ``count`` styles: the same key
+    lands on the same position in every process and every session. Uses an md5
+    digest, never the builtin ``hash()`` — ``PYTHONHASHSEED`` randomizes ``hash``
+    per process, so a builtin-``hash`` ramp gives the same key a different color
+    each run. ``usedforsecurity=False`` keeps it available on FIPS builds; the
+    digest is a spreading function here, not a security primitive.
+
+    The single source of ``series`` assignment: ``Palette.series_for`` and
+    ``flame_lens`` both route through it, so the mapping cannot drift between
+    consumers.
+    """
+    if count <= 0:
+        return 0
+    digest = hashlib.md5(key.encode("utf-8"), usedforsecurity=False).digest()
+    return int.from_bytes(digest[:8], "big") % count
 
 
 @dataclass(frozen=True)
@@ -90,6 +118,17 @@ class Palette:
         if base is None:
             return style
         return base.merge(style)
+
+    def series_for(self, key: str) -> Style:
+        """Deterministic ``series`` style for ``key`` — the open-set assignment.
+
+        For dynamic sets that can't be enumerated at declaration time (chart
+        lines, observers arriving at runtime, unknown vocabulary members under
+        ``overflow="series"``): the same key always maps to the same ramp style.
+        An empty ramp yields a bare ``Style()``. See ``series_index``.
+        """
+        ramp = self.series
+        return Style() if not ramp else ramp[series_index(key, len(ramp))]
 
 
 # --- Presets ---

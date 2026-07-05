@@ -3,6 +3,7 @@
 import pytest
 
 from painted.theme import reset_theme
+from painted.vocabulary import reset_vocabularies
 
 
 def pytest_addoption(parser):
@@ -26,11 +27,16 @@ def _reset_ambient_state():
     env-size cache — but they are self-invalidating, not order-leak vectors.)
 
     `reset_theme()` is the canonical "reset all ambient aesthetics" call — it
-    resets the three ContextVars as a unit, so this fixture automatically tracks
-    any future ambient concern wired into a Theme. Promoted here from the
-    per-directory fixtures it replaces (property + golden) so isolation is a
-    property of the whole suite, not something each test directory remembers.
+    resets the three ContextVars (plus the role-override channel) as a unit, so
+    this fixture automatically tracks any future ambient concern wired into a
+    Theme. `reset_vocabularies()` clears the declared-vocabulary app layer, which
+    is ambient ContextVar state but not part of a Theme (a mark classifies data;
+    it is not aesthetic). Both are promoted here from the per-directory fixtures
+    they replace so isolation is a property of the whole suite, not something
+    each test directory remembers.
     """
     reset_theme()
+    reset_vocabularies()
     yield
     reset_theme()
+    reset_vocabularies()

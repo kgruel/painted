@@ -36,6 +36,14 @@ __all__ = [
     "PAINTED_THEME",
     "use_theme",
     "reset_theme",
+    # Vocabularies
+    "Role",
+    "Vocabulary",
+    "Thresholds",
+    "use_vocabularies",
+    "current_vocabularies",
+    "reset_vocabularies",
+    "mark_style",
     # Stateless views
     "NodeRenderer",
     "shape_lens",
@@ -131,6 +139,14 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "PAINTED_THEME": ("..theme", "PAINTED_THEME"),
     "use_theme": ("..theme", "use_theme"),
     "reset_theme": ("..theme", "reset_theme"),
+    # Vocabularies
+    "Role": ("..vocabulary", "Role"),
+    "Vocabulary": ("..vocabulary", "Vocabulary"),
+    "Thresholds": ("..vocabulary", "Thresholds"),
+    "use_vocabularies": ("..vocabulary", "use_vocabularies"),
+    "current_vocabularies": ("..vocabulary", "current_vocabularies"),
+    "reset_vocabularies": ("..vocabulary", "reset_vocabularies"),
+    "mark_style": ("..vocabulary", "mark_style"),
     # Stateless views
     "NodeRenderer": (".lens", "NodeRenderer"),
     "shape_lens": (".lens", "shape_lens"),

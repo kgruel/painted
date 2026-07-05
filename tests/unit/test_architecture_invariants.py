@@ -153,6 +153,18 @@ def test_state_dataclasses_declared_frozen() -> None:
                 )
 
 
+def test_vocabulary_does_not_import_cli_or_argparse() -> None:
+    """Honesty rule 4 (structural): vocabularies generate no CLI flags.
+
+    A mark classifies data; it is not user grammar. The rule is pinned here so
+    ``vocabulary.py`` can never grow a ``cli``/``argparse`` dependency — the
+    kebab-name regex is a deliberate local duplicate of ``cli.types``' precisely
+    so the two stay decoupled (see docs/VOCABULARIES_DESIGN.md §1).
+    """
+    painted_root = Path(__file__).resolve().parents[2] / "src" / "painted"
+    _assert_no_imports(painted_root / "vocabulary.py", {"painted.cli", "argparse"})
+
+
 def test_public_names_do_not_shadow_submodules() -> None:
     """No package may re-export a public name that collides with one of its own
     submodule filenames (review #1 — closes the class, not just the instance).

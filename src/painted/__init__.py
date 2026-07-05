@@ -111,6 +111,14 @@ __all__ = [
     "current_icons",
     "use_icons",
     "reset_icons",
+    # Vocabularies
+    "Role",
+    "Vocabulary",
+    "Thresholds",
+    "use_vocabularies",
+    "current_vocabularies",
+    "reset_vocabularies",
+    "mark_style",
 ]
 
 from importlib import import_module as _import_module
@@ -197,6 +205,13 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "PAINTED_THEME": (".theme", "PAINTED_THEME"),
     "use_theme": (".theme", "use_theme"),
     "reset_theme": (".theme", "reset_theme"),
+    "Role": (".vocabulary", "Role"),
+    "Vocabulary": (".vocabulary", "Vocabulary"),
+    "Thresholds": (".vocabulary", "Thresholds"),
+    "use_vocabularies": (".vocabulary", "use_vocabularies"),
+    "current_vocabularies": (".vocabulary", "current_vocabularies"),
+    "reset_vocabularies": (".vocabulary", "reset_vocabularies"),
+    "mark_style": (".vocabulary", "mark_style"),
     "show": (".display", "show"),
 }
 

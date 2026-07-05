@@ -11,16 +11,19 @@ from ...core._text_width import display_width, truncate, truncate_ellipsis
 from ...core.block import Block
 from ...core.cell import Style
 from ...core.compose import fit_to_width, join_horizontal, join_vertical
+from ...palette import series_index
 
 
 def _flame_color_for_label(label: str, prev_idx: int, palette: tuple[Style, ...]) -> int:
     """Stable ramp index for a segment label, with adjacent-collision avoidance.
 
-    This is the categorical-ramp assignment that consumes ``Palette.series``
-    (position -> style). It is the general form a reusable ramp helper would
-    factor out, once a second lens needs categorical coloring.
+    Routes through the shared ``series_index`` digest (the categorical-ramp
+    assignment that consumes ``Palette.series``) so a label lands on the same
+    color in every process — builtin ``hash()`` was ``PYTHONHASHSEED``-randomized.
+    The adjacent-sibling avoidance stays local: it is a flame-shaped concern (two
+    touching segments shouldn't share a color), not part of the ramp mapping.
     """
-    idx = hash(label) % len(palette)
+    idx = series_index(label, len(palette))
     if idx == prev_idx:
         idx = (idx + 1) % len(palette)
     return idx

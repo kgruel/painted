@@ -131,6 +131,14 @@ STABLE_VIEWS_SURFACE = frozenset(
         "PAINTED_THEME",
         "use_theme",
         "reset_theme",
+        # Vocabularies (the mark channel)
+        "Role",
+        "Vocabulary",
+        "Thresholds",
+        "use_vocabularies",
+        "current_vocabularies",
+        "reset_vocabularies",
+        "mark_style",
         # Stateless views
         "NodeRenderer",
         "shape_lens",
