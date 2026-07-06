@@ -418,12 +418,24 @@ def _legend() -> Block:
     )
 
 
-def _window(sky: Sky, width: int, *, labels: bool, legend: bool) -> tuple[Block, list[Star]]:
+def _links_live(ctx: CliContext) -> bool:
+    """Honesty for the gesture hint: advertise ⌘-click only when this delivery
+    actually emits links — ANSI output AND a declared scheme that resolves."""
+    return ctx.use_ansi and resolve_ref("star:Sirius") is not None
+
+
+def _window(
+    sky: Sky, width: int, *, labels: bool, legend: bool, hint: bool
+) -> tuple[Block, list[Star]]:
     w, h = _grid_size(width)
     cells, visible = _plot(sky, w, h, labels)
     rows = [_chart(cells, w, h), truncate(_census(sky, visible), w)]
     if legend:
         rows.append(truncate(_legend(), w))
+    if hint:
+        tip = Block.text("⌘-click a star → wikipedia", Style(dim=True))
+        pad_w = max(0, w - tip.width)
+        rows.append(join_horizontal(Block.text(" " * pad_w, _PLAIN), tip))
     framed = border(join_vertical(*rows), title="the night sky", chars=ROUNDED)
     return framed, visible
 
@@ -460,18 +472,18 @@ def _render_minimal(sky: Sky, width: int) -> Block:
     return truncate(_census(sky, visible), width)
 
 
-def _render_summary(sky: Sky, width: int) -> Block:
-    framed, _visible = _window(sky, width, labels=False, legend=False)
+def _render_summary(sky: Sky, width: int, hint: bool) -> Block:
+    framed, _visible = _window(sky, width, labels=False, legend=False, hint=hint)
     return truncate(framed, width)
 
 
-def _render_detailed(sky: Sky, width: int) -> Block:
-    framed, _visible = _window(sky, width, labels=True, legend=True)
+def _render_detailed(sky: Sky, width: int, hint: bool) -> Block:
+    framed, _visible = _window(sky, width, labels=True, legend=True, hint=hint)
     return truncate(framed, width)
 
 
-def _render_full(sky: Sky, width: int) -> Block:
-    framed, visible = _window(sky, width, labels=True, legend=True)
+def _render_full(sky: Sky, width: int, hint: bool) -> Block:
+    framed, visible = _window(sky, width, labels=True, legend=True, hint=hint)
     return truncate(
         join_vertical(
             framed,
@@ -485,12 +497,13 @@ def _render_full(sky: Sky, width: int) -> Block:
 
 
 def _render(ctx: CliContext, sky: Sky) -> Block:
+    hint = _links_live(ctx)
     if ctx.zoom >= Zoom.FULL:
-        return _render_full(sky, ctx.width)
+        return _render_full(sky, ctx.width, hint)
     if ctx.zoom >= Zoom.DETAILED:
-        return _render_detailed(sky, ctx.width)
+        return _render_detailed(sky, ctx.width, hint)
     if ctx.zoom >= Zoom.SUMMARY:
-        return _render_summary(sky, ctx.width)
+        return _render_summary(sky, ctx.width, hint)
     return _render_minimal(sky, ctx.width)
 
 
