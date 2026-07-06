@@ -195,8 +195,14 @@ def _shape_lens(
 
 
 def _render_enum(value: Enum, width: int) -> Block:
-    """Render an Enum member as the scalar `TypeName.MEMBER`, width-exact."""
-    label = f"{type(value).__name__}.{value.name}"
+    """Render an Enum member as the scalar `TypeName.MEMBER`, width-exact.
+
+    A composite/zero Flag value has `.name is None` (no single declared member);
+    fall back to the enum's own str() — `Perm(0)`, `Perm.R|W`, `0` — never the
+    misleading `TypeName.None`.
+    """
+    name = value.name
+    label = f"{type(value).__name__}.{name}" if name is not None else str(value)
     style = Style()
     if display_width(label) > width:
         label = truncate_ellipsis(label, width) if width > 1 else truncate(label, width)

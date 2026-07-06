@@ -189,11 +189,20 @@ def test_numeric_list_transcribes_as_items_not_chart():
     assert "1" in out and "2" in out and "3" in out
 
 
-def test_nested_numeric_list_stays_items_recursive():
-    """The refusal is recursive — a numeric list nested in a dict is NOT charted."""
-    out = _paint({"xs": [1, 2, 3]})
-    assert not _is_chart(out)
-    assert "xs" in out
+def test_transcription_refuses_charts_recursively():
+    """RECURSIVE (§3): inference never re-enters at depth. At the nested zoom a
+    chart is a bare sparkline with no "[N values]" header, so digit-presence —
+    not _is_chart — is the mode- and zoom-safe discriminator: a sparkline has no
+    digits, transcribed items keep theirs. Each case exercises a distinct
+    recursion seam that must thread `infer`.
+    """
+    cases = {
+        "dict single-key fast path": _paint({"only": [11, 22, 33]}),
+        "dict multi-item loop": _paint({"xs": [11, 22, 33], "n": 5}),
+        "list item seam": _paint([[11, 22, 33]]),
+    }
+    for label, out in cases.items():
+        assert "11" in out and "22" in out and "33" in out, f"{label}: {out!r}"
 
 
 def test_nested_dict_transcribes_not_tree():
@@ -254,6 +263,46 @@ def test_int_enum_transcribes_as_member_not_value():
     assert _paint(Level.HIGH).strip() == "Level.HIGH"
 
 
+def test_str_enum_transcribes_as_member_not_value():
+    """StrEnum subclasses str — the same scalar-exclusion path as IntEnum (a
+    production StrEnum, cursor.CursorMode, ships today)."""
+    from enum import Enum
+
+    class Color(str, Enum):
+        RED = "red"
+
+    assert _paint(Color.RED).strip() == "Color.RED"
+
+
+def test_flag_zero_and_composite_are_not_type_dot_none():
+    """A zero/composite Flag has `.name is None` — must fall back to str(), never
+    the misleading 'Type.None'. Guards the _render_enum fix."""
+    from enum import Flag, auto
+
+    class Perm(Flag):
+        R = auto()
+        W = auto()
+
+    assert _paint(Perm(0)).strip() == "Perm(0)"  # str() fallback, not 'Perm.None'
+    assert _paint(Perm.R | Perm.W).strip() == "Perm.R|W"  # named composite
+
+
+def test_dataclass_container_field_recurses_as_transcription():
+    """WIDE + RECURSIVE intersection: a declared-schema field that is a container
+    transcribes — its numeric list is items, not a chart (exercises the
+    dataclass -> _render_dict -> value recursion seam)."""
+    from dataclasses import dataclass
+
+    @dataclass
+    class Metrics:
+        label: str
+        samples: list
+
+    out = _paint(Metrics("lat", [11, 22, 33]))
+    assert "label" in out and "lat" in out
+    assert "11" in out and "22" in out and "33" in out  # samples items, not charted
+
+
 def test_explicit_chart_lens_still_interprets():
     from painted.views import chart_lens
 
@@ -267,16 +316,18 @@ def test_explicit_shape_lens_still_infers():
     assert _is_chart(_paint([1, 2, 3], lens=shape_lens))
 
 
-def test_transcribe_recurses_as_transcription_directly():
-    """Unit-level: transcribe() never re-enters inference at depth."""
+def test_transcribe_direct_refuses_chart_at_depth():
+    """Unit-level: transcribe() never re-enters inference at depth. Distinct
+    two-digit values a sparkline can't coincidentally contain."""
     import io as _io
 
     from painted.core.writer import print_block
     from painted.views.lens.shape import transcribe
 
     buf = _io.StringIO()
-    print_block(transcribe({"series": [4, 8, 2]}, 2, 40), buf, use_ansi=False)
-    assert not _is_chart(buf.getvalue())
+    print_block(transcribe({"series": [11, 22, 33]}, 2, 60), buf, use_ansi=False)
+    out = buf.getvalue()
+    assert "11" in out and "22" in out and "33" in out, out
 
 
 def _sgr(writer: Writer, style: Style) -> str:
