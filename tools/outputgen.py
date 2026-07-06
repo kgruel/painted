@@ -10,7 +10,16 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from painted import PAINTED_PALETTE, Block, Palette, Zoom, render_html, use_palette
+from painted import (
+    PAINTED_PALETTE,
+    Block,
+    Palette,
+    RefScheme,
+    Zoom,
+    render_html,
+    use_palette,
+    use_refs,
+)
 
 if __package__ is None:  # invoked as a script: python tools/outputgen.py
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -34,6 +43,10 @@ class OutputSpec:
     data_attr: str | None = None
     # Ambient palette applied (in-process) during capture. None → DEFAULT.
     palette: Palette | None = None
+    # Ambient ref schemes, scoped around capture AND render_html — resolution
+    # happens at render time, and a demo module must not set ambient state at
+    # import (a module-scope use_refs would leak into every later panel).
+    refs: tuple[RefScheme, ...] | None = None
     # Light format axis: "block" renders the demo's Block via render_html; "json"
     # serializes its data_attr; "plain" emits the Block's chars with no color (the
     # piped, no-ANSI stop). All three are format-dial stops on the site.
@@ -176,6 +189,7 @@ PANELS: dict[str, OutputSpec] = {
         format="html",
         width=64,
         data_attr="OUTPUT",
+        refs=(RefScheme("fact", lambda value: f"https://loops.dev/f/{value}"),),
     ),
     # --- Reference catalog ----------------------------------------------------
     # One real specimen per Design preview card. These are uniform (each captures a
@@ -249,17 +263,21 @@ def _generate_output(*, repo_root: Path, spec: OutputSpec) -> str:
         return _render_text_as_html(text)
 
     palette_cm = use_palette(spec.palette) if spec.palette is not None else nullcontext()
-    with palette_cm:
-        result = capture_demo(
-            repo_root / spec.demo_path,
-            spec.function_or_zoom,
-            width=spec.width,
-            data_attr=spec.data_attr,
-        )
+    refs_cm = use_refs(*spec.refs) if spec.refs is not None else nullcontext()
+    with refs_cm:
+        with palette_cm:
+            result = capture_demo(
+                repo_root / spec.demo_path,
+                spec.function_or_zoom,
+                width=spec.width,
+                data_attr=spec.data_attr,
+            )
 
-    if isinstance(result, Block):
-        return render_html(result)
-    return _render_text_as_html(result)
+        # render_html stays inside the refs scope: anchors resolve at render
+        # time, not capture time.
+        if isinstance(result, Block):
+            return render_html(result)
+        return _render_text_as_html(result)
 
 
 def find_outputgen_names(html_doc: str) -> list[str]:

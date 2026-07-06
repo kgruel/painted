@@ -120,9 +120,12 @@ def _ref_block(draw: st.DrawFn) -> Block:
 @given(block=_ref_block())
 def test_render_block_ansi_osc8_is_balanced_and_terminated(block: Block) -> None:
     """No unterminated OSC 8 in any ANSI output: every introducer is ST-terminated
-    and opens (non-empty URI) exactly balance closes (empty)."""
+    and opens (non-empty URI) exactly balance closes (empty). The resolver
+    deviates from its contract for single-char values (empty string instead of
+    None) — the writer must fold that into the inert branch, not emit an
+    empty-target OSC 8 that desyncs the state machine."""
     w = Writer(io.StringIO(), color_depth=ColorDepth.TRUECOLOR)
-    with use_refs(RefScheme("fact", lambda v: f"https://x/{v}")):
+    with use_refs(RefScheme("fact", lambda v: "" if len(v) == 1 else f"https://x/{v}")):
         out = render_block_ansi(block, w)
 
     introducers = out.count("\x1b]8;;")

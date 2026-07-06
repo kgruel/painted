@@ -16,11 +16,12 @@ Run: uv run demos/primitives/refs.py
 
 from painted import Block, RefScheme, Style, join_horizontal, join_vertical, print_block, use_refs
 
-# Declared at module scope (setter form, not a scoped `with`): the resolver seam
-# is ambient state, so it must be live when a delivery renders — and for the
-# docs-site capture that render happens after this module is imported. This is
-# the same ambient-pickup the design relies on (REFS_DESIGN §6).
-use_refs(RefScheme("fact", lambda value: f"https://loops.dev/f/{value}"))
+# The resolver seam is ambient state, scoped with `with use_refs(...)` around
+# the render — never set at module scope, where importing the demo would leak
+# the scheme into every later render in the same process (the docs-site panel
+# run imports many demo modules). The refs_anchors panel spec declares the same
+# scheme for its own scoped capture.
+FACT_SCHEME = RefScheme("fact", lambda value: f"https://loops.dev/f/{value}")
 
 
 def spacer() -> Block:
@@ -56,7 +57,8 @@ OUTPUT = build_output()
 
 
 def demo() -> None:
-    print_block(OUTPUT)
+    with use_refs(FACT_SCHEME):
+        print_block(OUTPUT)
 
 
 if __name__ == "__main__":

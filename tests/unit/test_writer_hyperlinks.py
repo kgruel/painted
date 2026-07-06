@@ -167,3 +167,40 @@ class TestRenderRowAnsiHyperlinks:
             out = _render(Block.text("ab", PLAIN, ref="fact:9"))
         assert out.count(_open("https://loops.dev/f/9")) == 1
         assert out.count(CLOSE) == 1
+
+
+class TestResolverOutputTolerated:
+    """Resolver output is app data: the writer tolerates all of it (design §5)."""
+
+    def test_empty_string_uri_is_inert(self):
+        # OSC 8 with an empty target IS the close sequence — an empty URI must
+        # fold into the inert branch or the open/close state machine desyncs.
+        with use_refs(RefScheme("fact", lambda v: "")):
+            out = _capture([_cw(0, 0, "a", "fact:1")])
+        assert "\x1b]8" not in out
+
+    def test_empty_string_uri_between_links_keeps_balance(self):
+        with use_refs(RefScheme("fact", lambda v: "" if v == "empty" else f"https://x/{v}")):
+            out = _capture(
+                [_cw(0, 0, "a", "fact:1"), _cw(1, 0, "b", "fact:empty"), _cw(2, 0, "c", "fact:1")]
+            )
+        opens = [m for m in out.split("\x1b]8;;")[1:] if not m.startswith("\x1b\\")]
+        closes = [m for m in out.split("\x1b]8;;")[1:] if m.startswith("\x1b\\")]
+        assert len(opens) == len(closes) == 2
+
+    def test_control_bytes_in_uri_are_percent_encoded(self):
+        # A stray ESC/BEL would terminate the OSC 8 early and inject a second,
+        # resolver-controlled escape sequence into the terminal stream.
+        with use_refs(RefScheme("fact", lambda v: "https://evil/\x1b]0;PWNED\x07;\x1b\\")):
+            out = _capture([_cw(0, 0, "a", "fact:1")])
+        # The control bytes are percent-encoded ("]" and ";" are legal URI
+        # bytes and pass through); the payload carries no raw ESC/BEL, so the
+        # only escape bytes in the stream are painted's own sequence framing.
+        payload = out.split("\x1b]8;;", 1)[1].split("\x1b\\", 1)[0]
+        assert "%1B" in payload and "%07" in payload
+        assert "\x1b" not in payload and "\x07" not in payload
+
+    def test_already_encoded_uri_passes_through_unchanged(self):
+        with use_refs(RefScheme("fact", lambda v: "https://x/a%20b?q=1&r=2")):
+            out = _capture([_cw(0, 0, "a", "fact:1")])
+        assert _open("https://x/a%20b?q=1&r=2") in out

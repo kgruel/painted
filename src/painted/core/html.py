@@ -103,10 +103,13 @@ def render_html(block: Block) -> str:
         span_open = False
         # Anchor state runs alongside the span state: <a> wraps <span>, and the
         # two are independent state machines — a ref-only transition must fire
-        # even when style is unchanged. open_href is the currently-open anchor's
-        # href, or None when no anchor is open. Adjacent cells with the same
-        # resolved href share one anchor; an anchor never crosses a row boundary.
-        open_href: str | None = None
+        # even when style is unchanged. Transitions key on the REF, not the
+        # resolved href (mirroring the ANSI writer's last_ref), so a ref change
+        # re-anchors even when two refs resolve to the same URI. open_ref is
+        # non-None only while an anchor is actually open — a ref that resolves
+        # to no URI leaves it None, so a later return to a linked ref reopens.
+        # An anchor never crosses a row boundary.
+        open_ref: str | None = None
         refs_row = _refs_row(block, row_idx)
 
         for row_span in iter_row_spans(block.row(row_idx), refs_row):
@@ -114,17 +117,18 @@ def render_html(block: Block) -> str:
             ref = row_span.refs[0] if row_span.refs is not None else None
             href = _href(ref)
 
-            if href != open_href:
+            target_ref = ref if href is not None else None
+            if target_ref != open_ref:
                 # Close inner-then-outer, in reverse-open order, before switching.
                 if span_open:
                     out.append("</span>")
                     span_open = False
                     last_css = None
-                if open_href is not None:
+                if open_ref is not None:
                     out.append("</a>")
                 if href is not None:
                     out.append(f'<a href="{_html.escape(href, quote=True)}">')
-                open_href = href
+                open_ref = target_ref
 
             css = _style_to_css(cell.style)
             if not css:
@@ -146,7 +150,7 @@ def render_html(block: Block) -> str:
 
         if span_open:
             out.append("</span>")
-        if open_href is not None:
+        if open_ref is not None:
             out.append("</a>")
         out.append("\n")
 

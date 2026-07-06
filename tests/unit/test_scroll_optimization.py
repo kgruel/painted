@@ -147,3 +147,40 @@ class TestSurfaceScrollOptimization:
         # 8 changed lines = 8 CUPs (one per line with coalescing).
         cup_count = _count_cups(out)
         assert cup_count >= 8
+
+
+class TestScrollOptimizationRefs:
+    def test_scroll_repaint_lines_carry_refs(self):
+        """The scroll-optimized flush repaints changed lines with their refs —
+        a refed line scrolling in must hyperlink exactly like a full diff would
+        (design §5: no delivery path drops the channel)."""
+        from painted.refs import RefScheme, use_refs
+
+        width, height = 8, 10
+        stream = io.StringIO()
+
+        surface = Surface(scroll_optimization=True)
+        surface._writer = Writer(stream)
+
+        prev = Buffer(width, height)
+        cur = Buffer(width, height)
+        for y in range(height):
+            _fill_line(prev, y, chr(ord("A") + y))
+            if y < height - 1:
+                _fill_line(cur, y, chr(ord("A") + y + 1))
+        # The scrolled-in bottom line carries a resolvable ref.
+        for x in range(width):
+            cur.put_ref(x, height - 1, "Z", Style(), "fact:new")
+
+        surface._prev = prev
+        surface._buf = cur
+
+        with use_refs(RefScheme("fact", lambda v: f"https://x/{v}")):
+            surface._flush()
+
+        out = stream.getvalue()
+        if "\x1b[1S" not in out:  # the optimization must actually engage
+            import pytest
+
+            pytest.skip("scroll optimization did not engage for this frame shape")
+        assert "\x1b]8;;https://x/new\x1b\\" in out

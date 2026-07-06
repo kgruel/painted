@@ -8,6 +8,7 @@ import sys
 from dataclasses import dataclass
 from enum import Enum
 from typing import TYPE_CHECKING, TextIO
+from urllib.parse import quote
 
 from wcwidth import wcwidth
 
@@ -22,6 +23,11 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
     from .block import Block
+
+
+# Bytes left untouched when percent-encoding a resolver-returned URI for OSC 8:
+# RFC 3986 reserved + unreserved, plus "%" so already-encoded URIs pass through.
+_URI_SAFE = ":/?#[]@!$&'()*+,;=%~-._"
 
 
 class ColorDepth(Enum):
@@ -186,8 +192,18 @@ class Writer:
             uri = resolved[ref]
         except KeyError:
             uri = resolve_ref(ref)
+            if uri:
+                # Resolver output is app data entering a raw escape sequence:
+                # percent-encode anything outside printable ASCII so a stray
+                # control byte (ESC, BEL, ST) can't terminate the OSC 8 early or
+                # inject a second sequence into the terminal stream. Reserved
+                # URI characters and "%" stay untouched — already-encoded URIs
+                # pass through unchanged.
+                uri = quote(uri, safe=_URI_SAFE)
             resolved[ref] = uri
-        if uri is None:
+        # An empty-string URI is "no URI": OSC 8 with an empty target is the
+        # close sequence, which would desync the open/close state machine.
+        if not uri:
             return (None, None)
         return (ref, uri)
 

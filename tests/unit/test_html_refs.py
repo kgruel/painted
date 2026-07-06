@@ -167,3 +167,17 @@ def test_ref_resolved_once_per_render():
         render_html(block)
     reset_refs()
     assert calls == ["1"]
+
+
+class TestAnchorsKeyOnRef:
+    def test_same_uri_different_refs_reanchor(self) -> None:
+        # Transitions key on the REF (mirroring the ANSI last_ref), so two refs
+        # resolving to the same URI still produce two anchors.
+        from painted.core.cell import Cell
+
+        row = [Cell("a", Style()), Cell("b", Style())]
+        block = Block([row], 2, refs=[["fact:1", "fact:2"]])
+        with use_refs(RefScheme("fact", lambda v: "https://x/same")):
+            html = render_html(block)
+        assert html.count('<a href="https://x/same">') == 2
+        assert html.count("</a>") == 2

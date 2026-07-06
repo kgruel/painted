@@ -321,10 +321,14 @@ class Surface:
 
         cell_ops: list[ScrollOp | CellWrite] = [ScrollOp(top=top, bottom=bottom, n=n)]
         cells = cur._cells
+        refs = cur._refs
         for y in sorted(repaint_lines):
             row_start = y * width
             for x in range(width):
-                cell_ops.append(CellWrite(x, y, cells[row_start + x]))
+                idx = row_start + x
+                cell_ops.append(
+                    CellWrite(x, y, cells[idx], refs[idx] if refs is not None else None)
+                )
 
         self._writer.write_ops(cell_ops)
 

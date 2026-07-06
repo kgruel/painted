@@ -194,6 +194,15 @@ terminator, not BEL). Three gates, all must pass:
    so there is no detection, only an explicit off switch, mirroring the
    `color_depth=` constructor override rather than `detect_color_depth`.
 
+**Resolver output is data, and the writer tolerates all data**: the URI is
+percent-encoded before splicing (bytes outside printable ASCII; RFC 3986
+reserved/unreserved characters and `%` pass through), so a resolver cannot
+inject control bytes — a stray ESC or BEL would otherwise terminate the
+OSC 8 early and hand the terminal an attacker-shaped second sequence. An
+empty-string URI is treated as no URI (inert): OSC 8 with an empty target
+*is* the close sequence, and letting it through would desync the
+open/close state machine.
+
 **Both emission loops gain a `last_ref` tracker parallel to `last_style`**
 — they are independent state machines; a ref-only transition must emit
 even when style is unchanged (the `writer.py:219` gotcha):
@@ -242,8 +251,12 @@ one. Rules:
   `data-ref` attribute for unresolved refs is mark-persistence-shaped
   territory — annotation persisting into the artifact — and is explicitly
   deferred to that design rather than half-shipped here.)
-- The balanced-markup property test (`test_render_html_escapes_content_and
-  _balances_spans`) grows anchor balance and href-escaping laws; the
+- Anchor transitions key on the *ref*, not the resolved href — mirroring
+  the ANSI writer's `last_ref` — so a ref change re-anchors even when two
+  refs resolve to the same URI.
+- The anchor balance and href-escaping property laws live in
+  `tests/property/test_html_refs.py` (their own file, so the ANSI writer
+  laws and the HTML anchor laws evolve without collision); the
   appearance-tier serializer gains the ref dimension (see §8).
 
 ## 7. Design general, ship refs — the general annotation channel
