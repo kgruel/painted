@@ -83,6 +83,7 @@ primitives/
 
 patterns/
   rendering.py      Rendering patterns: --explicit, --custom, --palette   ✓
+  denotation.py     Refs in a lens: refed record lines, resolve_ref table, hit probes ✓
   palette_icons.py  Ambient config: Palette + IconSet switching           ✓
   hit_testing.py    Hit testing: Block.ref -> composition -> Buffer.hit()  ✓
   fidelity.py       CLI harness: -q → default → -v → -vv      ✓
@@ -113,6 +114,7 @@ showcase/           (pattern test shape; surface-delivered animated spectacle)
   lorenz.py         Lorenz: trails as frozen data, chaos law-tested       ✓
   wireworld.py      Wireworld: ASCII-art circuits, laws verify computing  ✓
   raymarch.py       SDF raymarcher: scene as expression tree, donut re-derived ✓
+  starmap.py        The night sky: real catalog, refs make every star a link ✓
 ```
 
 Old stepping stones (`block.py`, `buffer.py`, `buffer_view.py`) deleted —

@@ -47,7 +47,16 @@ def _load(rel: str):
 
 # --- Primitives: build a Block and print it to stdout ---
 
-PRIMITIVES = ["cell", "compose", "diagnostics", "errors", "logging_handler", "show", "span_line"]
+PRIMITIVES = [
+    "cell",
+    "compose",
+    "diagnostics",
+    "errors",
+    "logging_handler",
+    "refs",
+    "show",
+    "span_line",
+]
 
 
 @pytest.mark.parametrize("name", PRIMITIVES)
@@ -62,6 +71,7 @@ def test_primitive_demo_renders(name: str) -> None:
 # --- Patterns: _fetch() then _render(ctx, data) at every zoom ---
 
 PATTERNS = [
+    "denotation",
     "fidelity",
     "focus",
     "help",
@@ -97,6 +107,7 @@ SHOWCASE = [
     "lorenz",
     "plasma",
     "raymarch",
+    "starmap",
     "wireworld",
 ]
 
