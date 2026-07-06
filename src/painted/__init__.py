@@ -76,6 +76,7 @@ __all__ = [
     "print_block",
     "render_html",
     # Display
+    "paint",
     "show",
     # CLI framework
     "OutputMode",
@@ -233,6 +234,7 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "current_ref_schemes": (".refs", "current_ref_schemes"),
     "reset_refs": (".refs", "reset_refs"),
     "resolve_ref": (".refs", "resolve_ref"),
+    "paint": (".display", "paint"),
     "show": (".display", "show"),
 }
 

@@ -70,39 +70,9 @@ class TestShowBlock:
         assert "direct" in buf.getvalue()
 
 
-class TestShowJSON:
-    """show() with Format.JSON serializes data directly."""
-
-    def test_json_dict(self):
-        """show(dict, format=JSON) outputs valid JSON."""
-        from painted import Format
-
-        buf = io.StringIO()
-        show({"status": "ok", "count": 42}, format=Format.JSON, file=buf)
-        parsed = json.loads(buf.getvalue())
-        assert parsed["status"] == "ok"
-        assert parsed["count"] == 42
-
-    def test_json_list(self):
-        """show(list, format=JSON) outputs valid JSON."""
-        from painted import Format
-
-        buf = io.StringIO()
-        show([1, 2, 3], format=Format.JSON, file=buf)
-        parsed = json.loads(buf.getvalue())
-        assert parsed == [1, 2, 3]
-
-    def test_json_non_serializable_uses_str(self):
-        """show() with non-serializable data falls back to str()."""
-        from datetime import datetime
-
-        from painted import Format
-
-        buf = io.StringIO()
-        dt = datetime(2026, 2, 25, 12, 0, 0)
-        show({"when": dt}, format=Format.JSON, file=buf)
-        parsed = json.loads(buf.getvalue())
-        assert "2026" in parsed["when"]
+# show()'s Format.JSON path was removed in 0.8 (warn-and-narrow): show() no
+# longer honours format. The narrowing is guarded in test_paint.py; JSON is a
+# harness concern (run_cli --json). The former TestShowJSON class is dissolved.
 
 
 from painted import Zoom
@@ -209,15 +179,6 @@ class TestShowAutoDetect:
         output = buf.getvalue()
         # StringIO.isatty() returns False -> format resolves to PLAIN
         assert "\x1b[" not in output  # no ANSI escape codes
-
-    def test_format_json_override(self):
-        """format=JSON forces JSON output regardless of TTY."""
-        from painted import Format
-
-        buf = io.StringIO()
-        show({"key": "value"}, format=Format.JSON, file=buf)
-        parsed = json.loads(buf.getvalue())
-        assert parsed["key"] == "value"
 
     def test_format_plain_override(self):
         """format=PLAIN forces plain text (no ANSI)."""
