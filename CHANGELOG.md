@@ -4,7 +4,7 @@ All notable changes to painted are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/); pre-1.0, minor versions may carry
 breaking changes.
 
-## [Unreleased]
+## [0.7.0] — 2026-07-05
 
 This release ships **ref deliveries** — the denotation channel reaches every delivery that can express it (`docs/REFS_DESIGN.md`). The per-cell annotation has existed since 0.1.2 (`Block.text(id=)`, threaded through every compose op, read by TUI hit-testing); it now takes its ratified name — **ref** — and gains its two missing readers: OSC 8 hyperlinks in ANSI output and `<a href>` anchors in HTML. Resolution is a declaration: a `RefScheme` turns `scheme:value` refs into URIs, and without one, refs stay inert in every delivery — painted never invents URIs. Scheme-less refs (`ref="sidebar"`, the hit-testing idiom) stay inert in link deliveries by design.
 
