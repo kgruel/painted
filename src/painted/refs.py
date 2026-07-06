@@ -63,7 +63,7 @@ class RefScheme:
     resolve: Callable[[str], str | None]
 
     def __post_init__(self) -> None:
-        if not _NAME_RE.match(self.name):
+        if not isinstance(self.name, str) or not _NAME_RE.match(self.name):
             raise DeclarationError(
                 f"RefScheme name {self.name!r} must be lowercase kebab-case "
                 "(it names a denotation scheme, like a role)"

@@ -181,3 +181,12 @@ class TestAnchorsKeyOnRef:
             html = render_html(block)
         assert html.count('<a href="https://x/same">') == 2
         assert html.count("</a>") == 2
+
+
+class TestEmptyUriIsInert:
+    def test_empty_string_uri_emits_no_anchor(self) -> None:
+        # <a href=""> is a self-link to the current page, not a resolved
+        # denotation — the empty-URI fold matches the ANSI writer's.
+        with use_refs(RefScheme("fact", lambda v: "")):
+            html = render_html(Block.text("hi", Style(), ref="fact:x"))
+        assert "<a" not in html and "hi" in html

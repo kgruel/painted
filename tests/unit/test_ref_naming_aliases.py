@@ -242,3 +242,11 @@ class TestCodeRefAlias:
     def test_code_src_directly_does_not_warn(self) -> None:
         with _no_deprecation_warning():
             Code(src="py:painted.cell:Style#definition")
+
+
+class TestCodeBothSpellingsConflict:
+    def test_code_src_and_ref_together_raises(self) -> None:
+        from painted.core.errors import ContractError
+
+        with pytest.raises(ContractError, match="not both"):
+            Code(src="new", ref="old")

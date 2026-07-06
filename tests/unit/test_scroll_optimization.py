@@ -179,8 +179,45 @@ class TestScrollOptimizationRefs:
             surface._flush()
 
         out = stream.getvalue()
-        if "\x1b[1S" not in out:  # the optimization must actually engage
-            import pytest
-
-            pytest.skip("scroll optimization did not engage for this frame shape")
+        # The optimization must actually engage for this frame shape — a silent
+        # fall-back to full diff would pass the link assertion while leaving the
+        # optimized path untested (the path with the confirmed stale-ref bug).
+        assert "\x1b[1S" in out, "scroll optimization did not engage"
         assert "\x1b]8;;https://x/new\x1b\\" in out
+
+    def test_ref_only_change_on_overlap_row_repaints(self):
+        """A row whose glyphs and styles survive the scroll but whose ref
+        changed must be selected for repaint — the full line hash mixes in the
+        ref grid, else the terminal keeps a stale hyperlink (codex finding 1)."""
+        from painted.refs import RefScheme, use_refs
+
+        width, height = 8, 10
+        stream = io.StringIO()
+
+        surface = Surface(scroll_optimization=True)
+        surface._writer = Writer(stream)
+
+        prev = Buffer(width, height)
+        cur = Buffer(width, height)
+        for y in range(height):
+            _fill_line(prev, y, chr(ord("A") + y))
+            if y < height - 1:
+                _fill_line(cur, y, chr(ord("A") + y + 1))
+        _fill_line(cur, height - 1, "Z")
+
+        # Row with glyph "D": in prev it sits at y=3 carrying fact:old; after
+        # the one-line scroll the same glyphs land at y=2 in cur — but with a
+        # DIFFERENT ref. Content hash matches (scroll detected); the full hash
+        # must not, so the row repaints with the new link.
+        for x in range(width):
+            prev.put_ref(x, 3, "D", Style(), "fact:old")
+            cur.put_ref(x, 2, "D", Style(), "fact:new")
+
+        surface._prev = prev
+        surface._buf = cur
+
+        with use_refs(RefScheme("fact", lambda v: f"https://x/{v}")):
+            surface._flush()
+
+        out = stream.getvalue()
+        assert "\x1b]8;;https://x/new\x1b\\" in out, "stale hyperlink survived the scroll"

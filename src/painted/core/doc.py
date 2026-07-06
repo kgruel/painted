@@ -52,6 +52,7 @@ from ._text_width import display_width
 from .block import Block, Wrap
 from .cell import Cell, Style
 from .compose import join_vertical, pad
+from .errors import ContractError
 from .fidelity import Fidelity
 
 # Inline content. The first cut accepts only plain ``str``; the rich union
@@ -150,6 +151,8 @@ class Code:
 
     def __post_init__(self, ref: object) -> None:
         if ref is not _CODE_REF_UNSET:
+            if self.src is not None:
+                raise ContractError("pass src=, not both src= and the deprecated ref= (Code)")
             warnings.warn(
                 "Code(ref=) is deprecated; use Code(src=) (removed at 1.0)",
                 DeprecationWarning,

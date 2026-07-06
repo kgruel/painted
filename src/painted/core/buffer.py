@@ -206,19 +206,31 @@ class Buffer:
         This is used for fast line-level comparison (e.g. scroll detection).
         Hashes are only meaningful within the current process and should not be
         persisted.
+
+        The full hash (``include_style=True``) also mixes in the ref grid —
+        it feeds repaint selection, and a line whose only change is a ref must
+        not hash equal or the scroll-optimized flush leaves a stale hyperlink.
+        The content hash (``include_style=False``) stays cells-only: it feeds
+        scroll *detection*, and moved content is the same scroll regardless of
+        its refs. A row of all-``None`` refs hashes identically to no grid.
         """
         w, h = self.width, self.height
+        refs = self._refs if include_style else None
         out: list[int] = [0] * h
         idx = 0
         for y in range(h):
             v = 0x345678
             for _ in range(w):
                 c = self._cells[idx]
-                idx += 1
                 if include_style:
                     hv = hash(c)
+                    if refs is not None:
+                        r = refs[idx]
+                        if r is not None:
+                            hv ^= hash(r)
                 else:
                     hv = hash(c.char)
+                idx += 1
                 v = (v * 1000003) ^ hv
             out[y] = v
         return out

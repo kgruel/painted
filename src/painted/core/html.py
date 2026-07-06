@@ -95,7 +95,10 @@ def render_html(block: Block) -> str:
         if ref is None:
             return None
         if ref not in resolved:
-            resolved[ref] = resolve_ref(ref)
+            # An empty-string URI is "no URI" — <a href=""> is a self-link to
+            # the current page, not a resolved denotation. Same fold as the
+            # ANSI writer's inert branch, so the two deliveries agree.
+            resolved[ref] = resolve_ref(ref) or None
         return resolved[ref]
 
     for row_idx in range(block.height):

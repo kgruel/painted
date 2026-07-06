@@ -191,3 +191,12 @@ class TestResolverExceptionPropagatesUnwrapped:
         use_refs(RefScheme("fact", boom))
         with pytest.raises(KeyError):
             resolve_ref("fact:01JQ8F")
+
+
+class TestNonStringName:
+    def test_non_string_name_is_a_declaration_error(self) -> None:
+        # A None/int name must fault as a painted declaration, not leak the
+        # regex engine's TypeError.
+        for bad in (None, 3, b"fact"):
+            with pytest.raises(DeclarationError, match="kebab-case"):
+                RefScheme(bad, lambda v: v)  # type: ignore[arg-type]
