@@ -88,6 +88,7 @@ Surface + Layer             # alt-screen TUI with keyboard + diff rendering
 | Renderer | `inplace.py` | InPlaceRenderer |
 | Diagnostics | `diagnostics.py` | PaintedHandler, install, DEFAULT_THRESHOLDS (logging + excepthook glue; root, imports views) |
 | Renderer | `palette.py` | Palette (5 semantic Style roles + `series` categorical ramp), presets |
+| Renderer | `refs.py` | RefScheme, use_refs, resolve_ref (the denotation channel's resolver seam) |
 | Renderer | `icon_set.py` | IconSet (glyph vocabulary), ASCII fallback |
 | Renderer | `views/record.py` | record_line, PayloadLens, GutterFn |
 | Renderer | `views/lens/` | shape_lens, tree_lens, chart_lens, flame_lens |
@@ -183,4 +184,6 @@ docs/
   COMPLETION_DESIGN.md  # Shell completion: the parser's third reflection, honesty rule, render-free guarantee (implemented)
   DIAGNOSTICS_DESIGN.md  # Logging + tracebacks as renders: declared severity, the record tree, root-seam resolution (implemented)
   ERRORS_DESIGN.md    # Exception hierarchy: PaintedError/DeclarationError/ContractError/LifecycleError, site table (implemented)
+  VOCABULARIES_DESIGN.md  # Declared vocabularies: the mark channel, roles, thresholds, the color contract (implemented)
+  REFS_DESIGN.md      # Refs: the denotation channel's readers — id→ref naming, RefScheme resolver seam, OSC 8 + HTML anchors (implemented)
 ```

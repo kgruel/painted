@@ -235,6 +235,11 @@ current_palette().series_for(key)   # deterministic: digest(key) % len(series)
 
 ## 6. Ref schemes — the sibling declaration
 
+*(Implemented 2026-07-05 in the 0.7 ref-deliveries arc —
+`docs/REFS_DESIGN.md` is the design of record for the built form:
+`painted.refs`, the `resolve_ref` choke point, and the OSC 8 / HTML
+readers.)*
+
 The denotation channel's vocabulary is the **ref scheme**: how an opaque
 ref (`"fact:01JQ8F…"`) resolves for deliveries that can express it.
 

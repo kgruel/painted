@@ -4,6 +4,26 @@ All notable changes to painted are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/); pre-1.0, minor versions may carry
 breaking changes.
 
+## [Unreleased]
+
+This release ships **ref deliveries** — the denotation channel reaches every delivery that can express it (`docs/REFS_DESIGN.md`). The per-cell annotation has existed since 0.1.2 (`Block.text(id=)`, threaded through every compose op, read by TUI hit-testing); it now takes its ratified name — **ref** — and gains its two missing readers: OSC 8 hyperlinks in ANSI output and `<a href>` anchors in HTML. Resolution is a declaration: a `RefScheme` turns `scheme:value` refs into URIs, and without one, refs stay inert in every delivery — painted never invents URIs. Scheme-less refs (`ref="sidebar"`, the hit-testing idiom) stay inert in link deliveries by design.
+
+### Added
+
+- **`RefScheme`, `use_refs`, `current_ref_schemes`, `reset_refs`, `resolve_ref`** — the denotation channel's declaration, sibling to `Vocabulary` on the semver-stable views surface (home: `painted.refs`, re-exported from `painted.views` and `painted`). `RefScheme(name, resolve)` validates at construction (kebab-case name, callable resolver → `DeclarationError`); `use_refs(*schemes)` is the usual dual setter/context-manager with REPLACE semantics; `resolve_ref(ref)` is the single choke point every link delivery reads — inert (`None`) on scheme-less refs and undeclared schemes, and a resolver's own exceptions propagate unwrapped (a resolver fault is the app's, not painted's). Ref schemes generate no CLI flags, enforced structurally.
+- **OSC 8 hyperlinks in ANSI deliveries.** Both emission loops — `Writer.write_ops` (Surface/TUI diff path) and `render_row_ansi` (`print_block`/`InPlaceRenderer` path) — hold a `last_ref` state machine parallel to `last_style`: adjacent same-ref cells share one link, a ref-only change re-anchors even when style is unchanged, and an open link always closes at row end, on scroll, on a cursor jump, and before the final reset. Emission requires all three gates: a declared scheme that resolves the ref, ANSI format, and `Writer(hyperlinks=True)` (the explicit opt-out — OSC 8 is progressive enhancement, so there is no detection). Resolver output is tolerated as data: URIs are percent-encoded so a control byte can't inject a second escape sequence, and an empty-string URI is inert (an empty OSC 8 target *is* the close sequence).
+- **`<a href>` anchors in `render_html`.** Same ambient resolution, no signature change — the docs-site pipeline picks refs up without threading a parameter. Anchors wrap style spans and never interleave with them; transitions key on the ref (two refs resolving to one URI still re-anchor); hrefs are attribute-escaped. The `refs_anchors` panel pins the delivery in the docs site, and `demos/primitives/refs.py` is the runnable specimen.
+- **`CellWrite.ref`** — the change stream carries denotation. `Buffer.diff` compares ref slots whenever either buffer has a ref grid, closing the stale-hyperlink blind spot (same glyph, same style, different ref now redraws); the scroll-optimized Surface flush and `InPlaceRenderer`'s row comparison honor refs the same way. The no-refs fast path is unchanged.
+
+### Changed
+
+- **The per-cell channel's word is `ref`, everywhere.** `Block.text/column/empty(ref=)`, `Block(ref=, refs=)`, `Block.ref`, `Block.cell_ref`, `border(ref=)`, `Buffer.put_ref`/`BufferView.put_ref`; `Surface.hit` keeps its name and returns the ref. `Focus.id` is untouched — a different concept in a different subsystem; the law is one word for the per-cell channel, not a ban on `id`.
+- **`Code.ref` → `Code.src`** (doc-IR). The field is an authoring-time content locator, not a render-time denotation; with `ref` becoming the channel's word, the collision is cleared in the same change.
+
+### Deprecated
+
+- **Every old spelling keeps working behind a `DeprecationWarning` until 1.0**: `id=`/`ids=` kwargs, `Block.id`, `Block.cell_id`, `border(id=)`, `put_id`, `Code(ref=)`. Passing both the new and the deprecated spelling in one call raises `ContractError` rather than silently preferring either. Pickles written by ≤0.6 carry the pre-rename slot names and still load (`__setstate__` remaps them through the same deprecation window). Alias removal lands at 1.0 alongside the `show()` alias removal — one deprecation horizon.
+
 ## [0.6.0] — 2026-07-05
 
 This release adds **declared vocabularies** — the mark channel's mechanism, and the rule that every color a renderer applies for *meaning* traces to a declaration (`docs/VOCABULARIES_DESIGN.md`). A vocabulary is a closed set of named values bound to roles, validated at construction; `mark_style(vocab, value)` is the single point meaning becomes color. Severity is reframed as the *built-in* ordered vocabulary (the depth-vs-Tag pattern repeating: painted ships the anonymous axis, apps extend it), and painted takes its own medicine — the three hardcoded `record.py` gutter if-chains are now ordered vocabulary declarations over one `record_gutter` factory.

@@ -78,12 +78,13 @@ primitives/
   diagnostics.py    render_traceback: stdlib-vs-painted delta, zoom ladder, redacted locals, ExceptionGroup tree ✓
   errors.py         Exception hierarchy: introspected class tree, each contract broken + logged ✓
   logging_handler.py PaintedHandler: declared severities, extra= payload, exc_info composition ✓
+  refs.py           Refs: RefScheme + use_refs, denotation → OSC 8 link, inert cases ✓
   show.py           show() auto-dispatch                       ✓
 
 patterns/
   rendering.py      Rendering patterns: --explicit, --custom, --palette   ✓
   palette_icons.py  Ambient config: Palette + IconSet switching           ✓
-  hit_testing.py    Hit testing: Block.id -> composition -> Buffer.hit()   ✓
+  hit_testing.py    Hit testing: Block.ref -> composition -> Buffer.hit()  ✓
   fidelity.py       CLI harness: -q → default → -v → -vv      ✓
   responsive.py     Responsive layout: join_responsive + breakpoints (-i) ✓
   table.py          Table construction: fixed→AUTO→Fill→responsive ladder, column-drop priority, live -i reflow ✓

@@ -202,3 +202,22 @@ with use_palette(NORD_PALETTE):  # or scoped override
 `Palette` — 5 semantic Style roles (success, warning, error, accent, muted), plus a `series` categorical ramp for visually separating N peers.
 `IconSet` — named glyph slots (spinner, progress, tree, sparkline).
 Both use ContextVar — scoped overrides via context manager.
+
+## Refs — denotation becomes a link
+
+A **ref** is an opaque per-cell annotation: what a cell *refers to*, never how
+it looks. Stamp it at construction (`Block.text("deploy ok", style,
+ref="fact:01JQ8F")`); it survives every compose op and paint. Deliveries read
+it: the TUI resolves clicks (`Surface.hit(x, y) → ref`), and a declared
+`RefScheme` turns `scheme:value` refs into links — OSC 8 hyperlinks in ANSI,
+`<a href>` in HTML:
+
+```python
+from painted import RefScheme, use_refs
+
+use_refs(RefScheme("fact", lambda value: f"https://loops.dev/f/{value}"))
+```
+
+No declared scheme → refs stay inert in every delivery (painted never invents
+URIs); scheme-less refs (`ref="sidebar"`) are the hit-testing idiom and stay
+inert in link deliveries by design. See `docs/REFS_DESIGN.md`.

@@ -44,6 +44,12 @@ __all__ = [
     "current_vocabularies",
     "reset_vocabularies",
     "mark_style",
+    # Ref schemes — the denotation channel's sibling declaration
+    "RefScheme",
+    "use_refs",
+    "current_ref_schemes",
+    "reset_refs",
+    "resolve_ref",
     # Stateless views
     "NodeRenderer",
     "shape_lens",
@@ -148,6 +154,12 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "current_vocabularies": ("..vocabulary", "current_vocabularies"),
     "reset_vocabularies": ("..vocabulary", "reset_vocabularies"),
     "mark_style": ("..vocabulary", "mark_style"),
+    # Ref schemes
+    "RefScheme": ("..refs", "RefScheme"),
+    "use_refs": ("..refs", "use_refs"),
+    "current_ref_schemes": ("..refs", "current_ref_schemes"),
+    "reset_refs": ("..refs", "reset_refs"),
+    "resolve_ref": ("..refs", "resolve_ref"),
     # Stateless views
     "NodeRenderer": (".lens", "NodeRenderer"),
     "shape_lens": (".lens", "shape_lens"),

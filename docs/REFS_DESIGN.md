@@ -1,6 +1,7 @@
 # Refs — the denotation channel reaches every delivery
 
-**Status: DESIGN, targets 0.7.0** (branch `ref-deliveries`). The per-cell
+**Status: IMPLEMENTED 2026-07-05, ships in 0.7.0** (branch
+`ref-deliveries`). The per-cell
 denotation channel has existed since v0.1.2 — `Block.text(id=)`, per-cell
 grids threaded through every compose op, `Buffer.put_id`, `Surface.hit` —
 but only one delivery reads it: TUI hit-testing. This document names the

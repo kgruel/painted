@@ -144,6 +144,12 @@ STABLE_VIEWS_SURFACE = frozenset(
         "current_vocabularies",
         "reset_vocabularies",
         "mark_style",
+        # Ref schemes (the denotation channel's sibling declaration, 0.7)
+        "RefScheme",
+        "use_refs",
+        "current_ref_schemes",
+        "reset_refs",
+        "resolve_ref",
         # Stateless views
         "NodeRenderer",
         "shape_lens",
