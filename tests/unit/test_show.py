@@ -1,7 +1,6 @@
 """Tests for show() and print_block() — zero-config display."""
 
 import io
-import json
 
 from painted import Block, Style, show
 from painted.core.writer import print_block
@@ -160,14 +159,6 @@ class TestShowScalars:
         show("hello", lens=my_lens, file=buf)
         assert "[hello]" in buf.getvalue()
 
-    def test_scalar_json_still_works(self):
-        """show(scalar, format=JSON) still outputs JSON."""
-        from painted import Format
-
-        buf = io.StringIO()
-        show(42, format=Format.JSON, file=buf)
-        assert json.loads(buf.getvalue()) == 42
-
 
 class TestShowAutoDetect:
     """show() auto-detects format from TTY state."""
@@ -179,15 +170,6 @@ class TestShowAutoDetect:
         output = buf.getvalue()
         # StringIO.isatty() returns False -> format resolves to PLAIN
         assert "\x1b[" not in output  # no ANSI escape codes
-
-    def test_format_plain_override(self):
-        """format=PLAIN forces plain text (no ANSI)."""
-        from painted import Format
-
-        buf = io.StringIO()
-        show({"key": "value"}, format=Format.PLAIN, file=buf)
-        output = buf.getvalue()
-        assert "\x1b[" not in output
 
 
 class TestPrintBlockAutoDetect:

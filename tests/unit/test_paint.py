@@ -132,6 +132,20 @@ def test_show_no_longer_honours_format_json():
     assert "a" in out  # it rendered instead
 
 
+def test_show_format_is_inert_on_scalar():
+    """format has no effect at all — a scalar renders identically with or without it.
+
+    Guards against the coincidence that str(42) happens to parse as JSON: the
+    assertion is equality-to-no-format, not a JSON shape.
+    """
+    plain, with_fmt = io.StringIO(), io.StringIO()
+    with pytest.warns(DeprecationWarning):
+        show(42, file=plain)
+    with pytest.warns(DeprecationWarning):
+        show(42, format="json", file=with_fmt)
+    assert with_fmt.getvalue() == plain.getvalue() == "42\n"
+
+
 def test_show_stays_bug_compatible_reads_stdout(monkeypatch):
     """show() preserves the pre-0.8 sys.stdout-based detection (the un-fixed bug).
 
