@@ -9,8 +9,8 @@ Paths:
 - No args: blank line (the sole print() parity concession)
 - Block: delivered directly via print_block
 - Scalar: str()
-- Otherwise: render through the lens (Slice 1 keeps shape_lens as the no-lens
-  default; the transcription default lands in Slice 2)
+- Otherwise: transcribe the declared shape (the no-lens default `transcribe`),
+  or render through an explicit lens
 
 `show()` is a deprecated alias (removed at 1.0): it retains the pre-0.8 render
 body and its sys.stdout-based detection, warns, and no longer honours `format`.
@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import sys
 from collections.abc import Callable
+from enum import Enum
 from typing import TYPE_CHECKING, Any, TextIO
 
 if TYPE_CHECKING:
@@ -71,8 +72,13 @@ def _render_and_deliver(
             print_block(subject, file, use_ansi=use_ansi)
             return
 
-    # Scalars — no structure to inspect, just print (only on the no-lens path)
-    if lens is None and (subject is None or isinstance(subject, (str, int, float, bool))):
+    # Scalars — no structure to inspect, just print (only on the no-lens path).
+    # Enum is excluded: a StrEnum/IntEnum subclasses str/int but is a declared
+    # schema (renders as Type.MEMBER), so it must reach the renderer, not str().
+    if lens is None and (
+        subject is None
+        or (isinstance(subject, (str, int, float, bool)) and not isinstance(subject, Enum))
+    ):
         file.write(str(subject))
         file.write("\n")
         file.flush()
@@ -117,12 +123,12 @@ def paint(
         return
 
     use_ansi, width = _detect_context(out)
-    from .views.lens.shape import shape_lens
+    from .views.lens.shape import transcribe
 
-    # Slice 1 keeps shape_lens (inferring); Slice 2 swaps in the transcription
-    # renderer as paint()'s no-lens default.
+    # paint()'s no-lens default TRANSCRIBES (never infers arrangement, at any
+    # depth); a lens is taken only to interpret. show() keeps shape_lens.
     _render_and_deliver(
-        subject, zoom, lens, out, use_ansi=use_ansi, width=width, render_default=shape_lens
+        subject, zoom, lens, out, use_ansi=use_ansi, width=width, render_default=transcribe
     )
 
 

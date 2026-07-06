@@ -52,20 +52,6 @@ def _is_numeric_sequence(data: Any) -> bool:
     return all(isinstance(x, (int, float)) and not isinstance(x, bool) for x in data)
 
 
-def _is_labeled_numeric(data: Any) -> bool:
-    """Check if data is a non-empty dict with all numeric values."""
-    if not isinstance(data, dict) or not data:
-        return False
-    return all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in data.values())
-
-
-def _is_hierarchical(data: Any) -> bool:
-    """Check if data is a dict containing nested dict/list values."""
-    if not isinstance(data, dict) or not data:
-        return False
-    return any(isinstance(v, (dict, list)) and v for v in data.values())
-
-
 def shape_lens(content: Any, zoom: int, width: int, *, fidelity: Fidelity | None = None) -> Block:
     """Auto-dispatching renderer: picks the best strategy based on data shape.
 
@@ -81,8 +67,26 @@ def shape_lens(content: Any, zoom: int, width: int, *, fidelity: Fidelity | None
     - 2: full (complete representation)
 
     For nested structures, each nesting level reduces effective zoom by 1.
+
+    This is the *interpreting* renderer: it infers arrangement (chart/tree) from
+    shape. paint() takes it only via an explicit ``lens=shape_lens``; paint()'s
+    no-lens default is ``transcribe`` (below), which never infers.
     """
-    return _shape_lens(content, zoom, width, fidelity, frozenset(), 0)
+    return _shape_lens(content, zoom, width, fidelity, frozenset(), 0, infer=True)
+
+
+def transcribe(content: Any, zoom: int, width: int, *, fidelity: Fidelity | None = None) -> Block:
+    """Transcribe a subject by the shape it *declares* — never inferring one.
+
+    paint()'s no-lens default (PAINT_DESIGN §3). Identical to ``shape_lens``
+    except the three inference stanzas are dropped: a numeric sequence stays
+    items (not a chart), a numeric or nested dict stays a key/value table (not a
+    chart or tree). Declared schemas still transcribe their declared structure
+    (dataclass / NamedTuple -> fields, Enum -> ``Type.MEMBER``). The refusal is
+    recursive: nested values transcribe as transcription, so inference never
+    re-enters at depth.
+    """
+    return _shape_lens(content, zoom, width, fidelity, frozenset(), 0, infer=False)
 
 
 def _shape_lens(
@@ -92,11 +96,17 @@ def _shape_lens(
     fidelity: Fidelity | None,
     seen: frozenset[int],
     depth: int,
+    *,
+    infer: bool,
 ) -> Block:
-    """The recursive worker. Threads cycle state (`seen` = container ids on the
-    current path) and an absolute `depth` counter through the built-in path; the
-    public `shape_lens` seeds both. Scalars are leaves and skip the guards; every
-    container is guarded before it descends."""
+    """The recursive worker, shared by `shape_lens` (infer=True) and `transcribe`
+    (infer=False). Threads cycle state (`seen` = container ids on the current
+    path), an absolute `depth` counter, and `infer` through the built-in path;
+    the public entries seed all three. When `infer` is False the three inference
+    stanzas (dict->chart, dict->tree, numeric-seq->chart) are skipped and `infer`
+    is threaded into the container helpers so nested values transcribe too.
+    Scalars are leaves and skip the guards; every container is guarded before it
+    descends."""
     if width <= 0:
         return Block.empty(0, 1)
 
@@ -125,9 +135,10 @@ def _shape_lens(
     seen = seen | {id(content)}
     depth += 1
 
-    # Auto-dispatch for dicts in one pass over values
+    # Dict: infer chart (all-numeric) / tree (nested) only when inferring;
+    # otherwise transcribe straight to the key/value table.
     if isinstance(content, dict):
-        if content:
+        if content and infer:
             values = content.values()
             all_numeric = True
             any_nested = False
@@ -150,27 +161,31 @@ def _shape_lens(
 
                 return tree_lens(content, zoom, width, fidelity=fidelity)
 
-        return _render_dict(content, zoom, width, fidelity, seen, depth)
+        return _render_dict(content, zoom, width, fidelity, seen, depth, infer=infer)
 
     # Declared schema: a dataclass instance renders its fields through the dict
     # machinery. `repr=False` is declared suppression — honor it by dropping the
     # field. Every value routes back through the budgeted recursive path.
     if is_dataclass(content) and not isinstance(content, type):
         rendered = {f.name: getattr(content, f.name) for f in fields(content) if f.repr}
-        return _render_dict(rendered, zoom, width, fidelity, seen, depth)
+        return _render_dict(rendered, zoom, width, fidelity, seen, depth, infer=infer)
 
     # Declared schema: a NamedTuple renders its `_asdict()` through the dict path.
     if _is_namedtuple(content):
-        return _render_dict(dict(content._asdict()), zoom, width, fidelity, seen, depth)
+        return _render_dict(
+            dict(content._asdict()), zoom, width, fidelity, seen, depth, infer=infer
+        )
 
-    # Auto-dispatch: numeric sequences -> chart
-    if _is_numeric_sequence(content):
+    # Auto-dispatch: numeric sequences -> chart (only when inferring)
+    if infer and _is_numeric_sequence(content):
         from .chart import chart_lens
 
         return chart_lens(content, zoom, width, fidelity=fidelity)
 
-    if isinstance(content, list):
-        return _render_list(content, zoom, width, fidelity, seen, depth)
+    # list / tuple both transcribe as items (a tuple declares order). A NamedTuple
+    # was handled above; a bare tuple lands here.
+    if isinstance(content, (list, tuple)):
+        return _render_list(list(content), zoom, width, fidelity, seen, depth, infer=infer)
 
     if isinstance(content, set):
         return _render_set(content, zoom, width)
@@ -233,8 +248,11 @@ def _render_dict(
     fidelity: Fidelity | None,
     seen: frozenset[int],
     depth: int,
+    *,
+    infer: bool,
 ) -> Block:
-    """Render dict at zoom levels."""
+    """Render dict at zoom levels. `infer` is threaded to the recursive value
+    render so nested values follow the same transcribe/interpret discipline."""
     style = Style()
 
     if zoom <= 0:
@@ -270,7 +288,9 @@ def _render_dict(
             )
         val_col_width = max(1, width - key_col_width)
         key_block = Block.text(key_text, key_style, width=key_col_width)
-        val_block = _shape_lens(value, max(0, zoom - 1), val_col_width, fidelity, seen, depth)
+        val_block = _shape_lens(
+            value, max(0, zoom - 1), val_col_width, fidelity, seen, depth, infer=infer
+        )
         return join_horizontal(key_block, val_block)
 
     rows: list[Block] = []
@@ -300,7 +320,9 @@ def _render_dict(
 
         # Render value recursively with reduced zoom
         nested_zoom = max(0, zoom - 1)
-        val_block = _shape_lens(value, nested_zoom, val_col_width, fidelity, seen, depth)
+        val_block = _shape_lens(
+            value, nested_zoom, val_col_width, fidelity, seen, depth, infer=infer
+        )
 
         row = join_horizontal(key_block, val_block)
         rows.append(row)
@@ -322,8 +344,11 @@ def _render_list(
     fidelity: Fidelity | None,
     seen: frozenset[int],
     depth: int,
+    *,
+    infer: bool,
 ) -> Block:
-    """Render list at zoom levels."""
+    """Render list at zoom levels. `infer` is threaded to the recursive item
+    render so nested items follow the same transcribe/interpret discipline."""
     style = Style()
 
     if zoom <= 0:
@@ -367,7 +392,7 @@ def _render_list(
     for item in visible:
         # Render item recursively with reduced zoom
         nested_zoom = max(0, zoom - 1)
-        item_block = _shape_lens(item, nested_zoom, item_width, fidelity, seen, depth)
+        item_block = _shape_lens(item, nested_zoom, item_width, fidelity, seen, depth, infer=infer)
 
         # Prefix with "- "
         prefix_block = Block.text("- ", Style(dim=True))

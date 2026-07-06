@@ -164,6 +164,121 @@ def test_show_stays_bug_compatible_reads_stdout(monkeypatch):
 # --------------------------------------------------------------------------- #
 
 
+# --------------------------------------------------------------------------- #
+# Transcription (Slice 2) — no-lens paint() transcribes the declared shape,
+# never inferring arrangement, at any depth.
+# --------------------------------------------------------------------------- #
+
+
+def _is_chart(text: str) -> bool:
+    # chart_lens emits a "[N values, min–max]" header in every colour mode;
+    # transcription (items / key-value) never does. Robust across ANSI/plain —
+    # plain-mode charts use ASCII bar glyphs, so glyph-matching is not mode-safe.
+    return "values" in text
+
+
+def _paint(subject, **kw) -> str:
+    buf = io.StringIO()
+    paint(subject, file=buf, **kw)
+    return buf.getvalue()
+
+
+def test_numeric_list_transcribes_as_items_not_chart():
+    out = _paint([1, 2, 3])
+    assert not _is_chart(out)
+    assert "1" in out and "2" in out and "3" in out
+
+
+def test_nested_numeric_list_stays_items_recursive():
+    """The refusal is recursive — a numeric list nested in a dict is NOT charted."""
+    out = _paint({"xs": [1, 2, 3]})
+    assert not _is_chart(out)
+    assert "xs" in out
+
+
+def test_nested_dict_transcribes_not_tree():
+    """A nested dict transcribes as nested key/value, not a tree drawing."""
+    out = _paint({"outer": {"inner": "v"}})
+    assert "outer" in out and "inner" in out and "v" in out
+
+
+def test_bare_tuple_transcribes_as_items():
+    out = _paint((10, 20, 30))
+    assert not _is_chart(out)
+    assert "10" in out and "20" in out and "30" in out
+
+
+def test_dataclass_transcribes_declared_fields():
+    from dataclasses import dataclass
+
+    @dataclass
+    class Server:
+        name: str
+        port: int
+
+    out = _paint(Server("api", 8080))
+    assert "name" in out and "api" in out and "port" in out and "8080" in out
+
+
+def test_namedtuple_transcribes_declared_fields():
+    from typing import NamedTuple
+
+    class Point(NamedTuple):
+        x: int
+        y: int
+
+    out = _paint(Point(3, 4))
+    assert "x" in out and "y" in out and "3" in out and "4" in out
+
+
+def test_plain_enum_transcribes_as_type_member():
+    from enum import Enum
+
+    class Status(Enum):
+        DOWN = "down"
+
+    assert _paint(Status.DOWN).strip() == "Status.DOWN"
+
+
+def test_int_enum_transcribes_as_member_not_value():
+    """IntEnum subclasses int but is a declared schema — Type.MEMBER, not '9'.
+
+    Guards the display.py scalar-short-circuit exclusion: without it, isinstance
+    int would str() the value before the renderer's Enum branch.
+    """
+    from enum import IntEnum
+
+    class Level(IntEnum):
+        HIGH = 9
+
+    assert _paint(Level.HIGH).strip() == "Level.HIGH"
+
+
+def test_explicit_chart_lens_still_interprets():
+    from painted.views import chart_lens
+
+    assert _is_chart(_paint([1, 2, 3], lens=chart_lens))
+
+
+def test_explicit_shape_lens_still_infers():
+    """lens=shape_lens restores the old inferring behaviour (a chart)."""
+    from painted.views import shape_lens
+
+    assert _is_chart(_paint([1, 2, 3], lens=shape_lens))
+
+
+def test_transcribe_recurses_as_transcription_directly():
+    """Unit-level: transcribe() never re-enters inference at depth."""
+    import io as _io
+
+    from painted.core.writer import print_block
+    from painted.views.lens.shape import transcribe
+
+    buf = _io.StringIO()
+    print_block(transcribe({"series": [4, 8, 2]}, 2, 40), buf, use_ansi=False)
+    assert not _is_chart(buf.getvalue())
+
+
 def _sgr(writer: Writer, style: Style) -> str:
     return writer.apply_style(style)
 
