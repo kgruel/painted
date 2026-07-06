@@ -62,14 +62,14 @@ class Writer:
         # the color_depth override, without a detect_ counterpart.
         self._hyperlinks: bool = hyperlinks
         # NO_COLOR (no-color.org): ambient colour-off — suppresses fg/bg while
-        # keeping bold/underline/etc. Resolved once. An explicit no_color= wins;
-        # an explicit color_depth is a programmatic override that opts out of
-        # ambient detection (NO_COLOR included), so forced-depth callers (tests)
-        # are unaffected; otherwise read the env (present and non-empty).
+        # keeping bold/underline/etc. Resolved once. An explicit no_color= wins
+        # (True or False); otherwise read the env (present and non-empty). This
+        # is orthogonal to color_depth: a forced depth does NOT bypass NO_COLOR —
+        # PaintedHandler snapshots a *detected* depth and passes it as a forced
+        # depth, and that must still honour the user's NO_COLOR. Callers that need
+        # colour regardless of the environment pass no_color=False explicitly.
         if no_color is not None:
             self._no_color: bool = no_color
-        elif color_depth is not None:
-            self._no_color = False
         else:
             self._no_color = bool(os.environ.get("NO_COLOR"))
 

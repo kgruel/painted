@@ -206,9 +206,19 @@ def test_transcription_refuses_charts_recursively():
 
 
 def test_nested_dict_transcribes_not_tree():
-    """A nested dict transcribes as nested key/value, not a tree drawing."""
+    """A nested dict transcribes as nested key/value, not a tree drawing.
+
+    The tree the inferring path would draw *also* contains every key/value, so
+    key-presence alone cannot tell transcription from a tree. The load-bearing
+    assertion is the contrast against the inferring path plus the absence of the
+    tree's own artifacts (a synthetic ``root`` node and branch glyphs).
+    """
+    from painted.views import shape_lens
+
     out = _paint({"outer": {"inner": "v"}})
     assert "outer" in out and "inner" in out and "v" in out
+    assert out != _paint({"outer": {"inner": "v"}}, lens=shape_lens)
+    assert "root" not in out and "--" not in out  # no tree drawing
 
 
 def test_bare_tuple_transcribes_as_items():
@@ -359,14 +369,37 @@ def test_no_color_env_empty_is_treated_as_unset(monkeypatch):
     assert "31" in _sgr(w, Style(fg="red"))
 
 
-def test_forced_color_depth_opts_out_of_ambient_no_color(monkeypatch):
-    """An explicit color_depth is a programmatic override — NO_COLOR does not
-    reach forced-depth callers (keeps existing colour tests deterministic)."""
+def test_forced_color_depth_still_honours_env_no_color(monkeypatch):
+    """A forced color_depth is orthogonal to NO_COLOR — it must NOT bypass it.
+    PaintedHandler snapshots a *detected* depth and passes it as a forced depth;
+    coupling NO_COLOR to color_depth made all logging ignore NO_COLOR. The escape
+    hatch for callers that need colour regardless of env is explicit no_color=False."""
     monkeypatch.setenv("NO_COLOR", "1")
     w = Writer(io.StringIO(), color_depth=ColorDepth.TRUECOLOR)
-    assert "31" in _sgr(w, Style(fg="red"))
+    assert "31" not in _sgr(w, Style(fg="red"))  # env wins over a forced depth
+    w2 = Writer(io.StringIO(), color_depth=ColorDepth.TRUECOLOR, no_color=False)
+    assert "31" in _sgr(w2, Style(fg="red"))  # explicit opt-out is the escape hatch
 
 
 def test_explicit_no_color_beats_forced_depth():
     w = Writer(io.StringIO(), color_depth=ColorDepth.TRUECOLOR, no_color=True)
     assert "31" not in _sgr(w, Style(fg="red"))
+
+
+def test_painted_handler_honours_no_color(monkeypatch):
+    """The real-world NO_COLOR path: PaintedHandler renders a record through a
+    Writer built with a forced (snapshotted) color_depth. NO_COLOR must reach it
+    — otherwise piped/CI logs carry ANSI the user asked to suppress."""
+    import logging
+
+    from painted.diagnostics import PaintedHandler
+
+    monkeypatch.setenv("NO_COLOR", "1")
+    buf = io.StringIO()
+    handler = PaintedHandler(stream=buf)
+    logger = logging.getLogger("test_paint_no_color_probe")
+    logger.handlers[:] = [handler]
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
+    logger.info("a log line that must not be coloured")
+    assert "\x1b" not in buf.getvalue()
