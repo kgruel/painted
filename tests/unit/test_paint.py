@@ -227,6 +227,38 @@ def test_bare_tuple_transcribes_as_items():
     assert "10" in out and "20" in out and "30" in out
 
 
+# --- Deferred base cases (PAINT_DESIGN §3, ratified 2026-07-06) -------------
+# These pin behaviours that are DEFERRED in 0.8, not bugs. Whoever implements
+# the deferred feature updates a failing test here on purpose.
+
+
+def test_exception_renders_message_not_traceback_deferred():
+    """§3 defers Exception→render_traceback: paint(exc) prints str(exc), not a
+    traceback. Load-bearing: the message is present and the traceback header
+    (the exception type) is absent — a render_traceback would show 'ValueError'."""
+    out = _paint(ValueError("boom"))
+    assert out.strip() == "boom"
+    assert "ValueError" not in out  # not the traceback rendering
+
+
+def test_abstract_mapping_renders_via_str_deferred():
+    """§3 keys container dispatch on concrete dict/list/tuple. A MappingProxyType
+    is a Mapping but not a dict, so it renders via str() — contrast against the
+    concrete dict, which transcribes."""
+    from types import MappingProxyType
+
+    proxy = _paint(MappingProxyType({"a": 1, "b": 2}))
+    assert proxy != _paint({"a": 1, "b": 2})  # proxy str()s, dict transcribes
+    assert "{" in proxy and "'a'" in proxy  # the str() form, not 'a: 1'
+
+
+def test_abstract_sequence_renders_via_str_deferred():
+    """range is a Sequence but not a list/tuple → str(), not transcribed items."""
+    out = _paint(range(3))
+    assert "range(" in out
+    assert out != _paint([0, 1, 2])  # list transcribes, range str()s
+
+
 def test_dataclass_transcribes_declared_fields():
     from dataclasses import dataclass
 

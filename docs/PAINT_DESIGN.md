@@ -84,10 +84,10 @@ vs structure:
 | Subject | `paint(x)` with no lens | Why |
 |---|---|---|
 | `str` | the text | it is already its own rendering |
-| `Exception` | the traceback as a record tree (`render_traceback`) | structure is intrinsic |
+| `Exception` | the traceback as a record tree (`render_traceback`) † | structure is intrinsic |
 | `Block` | the cells, delivered | it is already painted |
-| `dict` / mapping | keys and values, as themselves | it declares key→value pairs |
-| `list` / `tuple` / sequence | the items, as themselves | it declares order |
+| `dict` | keys and values, as themselves | it declares key→value pairs |
+| `list` / `tuple` | the items, as themselves | it declares order |
 | `dataclass` / `NamedTuple` | its declared fields, as themselves | the type declares named fields |
 | `Enum` | `Type.MEMBER` | a named member of a named type |
 
@@ -115,6 +115,20 @@ shape" means _stdlib_-declared** (`dataclass`, `NamedTuple`, `Enum`);
 third-party schema types (pydantic, attrs) are a deferred lane (trigger: a
 second consumer), not reached without a lens — so the net stays principled,
 not open-ended.
+
+**Deferred in 0.8** (both ratified 2026-07-06 after cross-family review; each
+is design-intent above, not yet implemented):
+
+- **† `Exception` → `render_traceback`.** 0.8 renders `str(exc)` (the message).
+  The framework-worn path — `install()` / `PaintedHandler` (§5) — already
+  renders full tracebacks, so *direct* `paint(exc)` is the rare case; it waits
+  on demand rather than pulling the traceback machinery into the front door now.
+- **Container dispatch keys on the _concrete_ `dict` / `list` / `tuple`**, not
+  `abc.Mapping` / `abc.Sequence`. An abstract `Mapping` (e.g. `MappingProxyType`)
+  or `Sequence` (e.g. `range`) renders via `str`. ABC dispatch is leaky — `str`
+  and `bytes` *are* `Sequence`s, so the abstract net would have to special-case
+  them back out; broadening waits on a consumer holding a genuine custom
+  container.
 
 ## 4. The signature — a closed kwarg surface
 
@@ -340,7 +354,13 @@ forward to `paint()` is impossible — `paint()` has neither `format` nor the
 `shape_lens`-*inferring* default, and those are exactly the two behaviours
 `show()` must keep — so `show()` retains its pre-0.8 render body (inferring
 default, ANSI detection, `Block`/scalar handling) and existing callers' output
-is unchanged. On every call it emits `DeprecationWarning`, and it **narrows**:
+is unchanged **except** that a bare `Enum` now renders as `Type.MEMBER` rather
+than `str(value)`: `show()` shares `paint()`'s render core, and the Slice-2
+scalar exclusion that routes a declared schema to the renderer applies to both.
+The drift is accepted (2026-07-06) rather than fenced off with a `paint()`-only
+branch — `show()` is removed at 1.0, so propping up a dying alias's exact
+Enum bytes isn't worth the seam. On every call it emits `DeprecationWarning`,
+and it **narrows**:
 `format` is dropped (`format="json"`/`"plain"` no longer honoured —
 warn-and-narrow, the settled decision). `show()` has effectively no external
 users (loops pins `<0.5`; siftd locks `0.4.0` with *zero* `show()` call-sites —

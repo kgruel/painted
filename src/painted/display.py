@@ -1,7 +1,7 @@
 """paint() — render any Python value onto a surface.
 
 `paint(subject)` is the single entry point (0.8+). With no lens it transcribes
-what carries its own meaning (text, a Block, a mapping/sequence, a declared
+what carries its own meaning (text, a Block, a dict/list/tuple, a declared
 schema); a lens is taken only to *interpret* — arrangement that reinterprets the
 subject as something other than itself. See docs/PAINT_DESIGN.md.
 
@@ -11,6 +11,11 @@ Paths:
 - Scalar: str()
 - Otherwise: transcribe the declared shape (the no-lens default `transcribe`),
   or render through an explicit lens
+
+Deferred in 0.8 (see PAINT_DESIGN §3): an ``Exception`` renders as ``str(exc)``,
+not ``render_traceback`` (that path is the framework-worn ``install()`` /
+``PaintedHandler``); container dispatch keys on the concrete ``dict``/``list``/
+``tuple``, so an abstract ``Mapping``/``Sequence`` renders via ``str``.
 
 `show()` is a deprecated alias (removed at 1.0): it retains the pre-0.8 render
 body and its sys.stdout-based detection, warns, and no longer honours `format`.
