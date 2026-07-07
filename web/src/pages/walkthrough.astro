@@ -13,6 +13,7 @@ import Base from "../layouts/Base.astro";
 import PaintedSurface from "../components/PaintedSurface.jsx";
 
 import monitorQ from "../generated/panels/monitor_q.html?raw";
+import monitorTranscribe from "../generated/panels/monitor_transcribe.html?raw";
 import monitorDefault from "../generated/panels/monitor_default.html?raw";
 import monitorHonest from "../generated/panels/monitor_default_honest.html?raw";
 import monitorVv from "../generated/panels/monitor_vv.html?raw";
@@ -21,7 +22,7 @@ import monitorPlain from "../generated/panels/monitor_plain.html?raw";
 import monitorJson from "../generated/panels/monitor_json.html?raw";
 
 const STOPS = [
-  { id: "show", n: "01", label: "styled print", entry: "show()" },
+  { id: "paint", n: "01", label: "zero config", entry: "paint()" },
   { id: "format", n: "02", label: "format dial", entry: "--json" },
   { id: "fidelity", n: "03", label: "fidelity dial", entry: "-q / -vv" },
   { id: "live", n: "04", label: "mode dial", entry: "--live" },
@@ -65,10 +66,24 @@ const STOPS = [
       </nav>
 
       <main class="wt-main">
-        <!-- 01 — styled print -->
-        <section id="show" data-stage="show" class="wt-stage">
-          <div class="wt-stage-head"><span class="wt-n">01</span><span class="wt-label">styled print</span><span class="wt-entry">show(data) → severity bars</span></div>
-          <h2 class="wt-title">Drop it in. It detects the TTY and styles itself.</h2>
+        <!-- 01 — zero config -->
+        <section id="paint" data-stage="paint" class="wt-stage">
+          <div class="wt-stage-head"><span class="wt-n">01</span><span class="wt-label">zero config</span><span class="wt-entry">paint(vitals) → key/value</span></div>
+          <h2 class="wt-title">Drop it in. It transcribes your data — styled, TTY-aware.</h2>
+          <div class="shell">
+            <div class="shell-bar"><span class="shell-title">bash</span><span class="shell-tty">tty · truecolor</span></div>
+            <div class="shell-body">
+              <div class="cmd"><span class="cmd-prompt">~/svc $ </span>python -c 'from painted import paint; paint(vitals)'</div>
+              <div class="panel" set:html={monitorTranscribe} />
+            </div>
+          </div>
+          <p class="note">
+            Zero config — <code>paint()</code> transcribes what the value
+            <em>declares</em>: a dict becomes its key/value pairs, as themselves.
+            It never invents a shape the data didn't state. Severity bars? That's
+            a <em>claim</em> — an arrangement you opt into, one render function
+            (or <code>lens=</code>) away:
+          </p>
           <div class="shell" data-alt="false">
             <div class="shell-bar"><span class="shell-title">bash</span><span class="shell-tty">tty · truecolor</span></div>
             <div class="shell-body">
@@ -78,8 +93,8 @@ const STOPS = [
             </div>
           </div>
           <p class="note">
-            Zero config — a numeric dict renders as bars; color is semantic
-            (mem in the red, cpu warned, net cool), vivid truecolor by default.
+            monitor.py's render draws the bars; color is semantic (mem in the
+            red, cpu warned, net cool), vivid truecolor by default.
             <button class="toggle" data-toggle-alt>see the 16-color downsample ▸</button>
             <span class="note-dim">the toggle swaps to the named-color palette a basic terminal would show — one <code>use_palette()</code> call away.</span>
           </p>
@@ -246,7 +261,7 @@ const STOPS = [
   // Vivid default ↔ honest "downsample" toggle (the use_palette() story, live).
   document.querySelectorAll("[data-toggle-alt]").forEach((btn) => {
     btn.addEventListener("click", () => {
-      const shell = btn.closest(".wt-stage").querySelector(".shell");
+      const shell = btn.closest(".wt-stage").querySelector(".shell[data-alt]");
       const on = shell.getAttribute("data-alt") === "true";
       shell.setAttribute("data-alt", on ? "false" : "true");
       btn.textContent = on ? "see the 16-color downsample ▸" : "back to truecolor ▸";

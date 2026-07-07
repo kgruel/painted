@@ -113,6 +113,18 @@ def _module_panel(name: str, demo_path: str) -> OutputSpec:
 
 
 PANELS: dict[str, OutputSpec] = {
+    # Stage 01's zero-config truth: paint(SAMPLE) transcribes the vitals dict to
+    # its key/value pairs — NOT severity bars (those are monitor.py's render / a
+    # lens). The walkthrough reveals the bars from here as the opt-in claim.
+    "monitor_transcribe": OutputSpec(
+        name="monitor_transcribe",
+        demo_path="demos/patterns/monitor.py",
+        function_or_zoom="<paint>",
+        format="html",
+        width=48,
+        data_attr="SAMPLE",
+        palette=PAINTED_PALETTE,
+    ),
     "monitor_q": OutputSpec(
         name="monitor_q",
         demo_path="demos/patterns/monitor.py",
@@ -261,6 +273,24 @@ def _generate_output(*, repo_root: Path, spec: OutputSpec) -> str:
         else:
             text = result
         return _render_text_as_html(text)
+
+    if spec.function_or_zoom == "<paint>":
+        # paint()'s zero-config default: transcription of the *declared* shape.
+        # Renders the real dataset through the same transcribe() paint() calls,
+        # so the walkthrough's "zero config" panel is genuine paint output — a
+        # dict as its key/value pairs, NOT the severity bars (those are the app's
+        # render / an opt-in lens). transcribe is private (paint's default; you
+        # never name it), so reach it directly here as tools already do.
+        if spec.data_attr is None:
+            raise ValueError(f"panel {spec.name!r} '<paint>' shape requires data_attr")
+        from painted.views.lens.shape import transcribe
+
+        mod = import_module_by_path(repo_root / spec.demo_path)
+        data = getattr(mod, spec.data_attr)
+        palette_cm = use_palette(spec.palette) if spec.palette is not None else nullcontext()
+        with palette_cm:
+            block = transcribe(data, int(Zoom.DETAILED), spec.width)
+            return render_html(block)
 
     palette_cm = use_palette(spec.palette) if spec.palette is not None else nullcontext()
     refs_cm = use_refs(*spec.refs) if spec.refs is not None else nullcontext()
