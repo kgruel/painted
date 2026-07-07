@@ -17,10 +17,16 @@ This release ships **`paint()`** — the single display entry point, and the 1.0
 ### Changed
 
 - **`paint()` is the taught entry, everywhere.** The README hero, the consumer guide's Level 0, the disclosure ladder's rung 0, the demo curriculum (`demos/primitives/paint.py`), and the "no cliffs" walkthrough now lead with `paint()` and the altitude story — the same verb every layer up the stack renders through. The walkthrough's stage 01 leads with genuine transcription output and reveals severity bars as the opt-in *lens* claim, not something `paint()` invents.
+- **`shape_lens` (semver-stable, `painted.views`) now renders a non-numeric tuple as an item list**, matching `list` — container dispatch now matches `(list, tuple)` rather than `list` alone. Previously a non-numeric tuple fell through to the `str()` fallback (`"(1, 'x')"`); nested non-numeric tuples drift the same way. Numeric tuples are unaffected — they still dispatch to `chart_lens` on the inferring path.
+
+### Fixed
+
+- **A zero/composite `Flag` value no longer renders as `'TypeName.None'`.** A `Flag`/`IntFlag` with no single named member (`.name is None` — a zero value or an OR'd composite) now falls back to the enum's own `str()` (`'Perm(0)'`, `'Perm.R|W'`) instead of the misleading `f'{type}.{None}'` string. Reachable via both `paint()`'s Enum scalar-exclusion and `lens=shape_lens`.
+- **The `set` branch now includes `frozenset`.** Previously a `frozenset` fell through to the `str()` fallback; it now renders as tags, matching `set`.
 
 ### Deprecated
 
-- **`show()` — deprecated retained alias, removed at 1.0.** It keeps its pre-0.8 render body (the `shape_lens`-*inferring* default, so existing output is unchanged) and warns on every call, but **narrows**: `format=` is accepted and ignored (JSON/plain are a harness concern, `run_cli`). One behavioural drift is accepted rather than fenced off behind a `paint()`-only branch: a bare `Enum` now renders as `Type.MEMBER` (it shares `paint()`'s render core) rather than `str(value)` — `show()` is removed at 1.0, so a dying alias's exact Enum bytes are not worth the seam.
+- **`show()` — deprecated retained alias, removed at 1.0.** It keeps its pre-0.8 render body (the `shape_lens`-*inferring* default, so existing output is unchanged) and warns on every call, but **narrows**: `format=` is accepted and ignored (JSON/plain are a harness concern, `run_cli`). Two behavioural drifts are accepted rather than fenced off behind a `paint()`-only branch, both because `show()` shares `paint()`'s render core: (1) a top-level `IntEnum`/`StrEnum` — which previously hit the scalar short-circuit and rendered `str(value)` (`'ok'`, `'1'`) — now reaches the renderer and prints `Type.MEMBER` (`'Status.OK'`); a bare `Enum` already rendered `Type.MEMBER` on 0.7 and is unaffected, as are nested `Enum`s. (2) container dispatch now matches `(list, tuple)` rather than `list` alone (see Changed), so `show((1, 'x'))` drifts from the `str()` fallback to a dash-item list, and nested tuples drift the same way. `show()` is removed at 1.0, so propping up a dying alias's exact bytes for either drift is not worth the seam.
 
 ### Deferred
 
