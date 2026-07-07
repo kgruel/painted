@@ -340,8 +340,10 @@ keymaps the fourth.
 3. **DONE (c1e40ab)** — Internal remediation: `record.py` gutter functions
    re-expressed via the mechanism (the acceptance test — passed; see §7).
    `record_gutter` joined the stable views surface.
-4. `paint(mark=)` lands with the paint() entry-point work (separate
-   release; this mechanism ships first, so callers can consume
-   `mark_style` immediately — before the `paint(mark=)` sugar).
+4. **Superseded by `PAINT_DESIGN.md` §4** (ratified 2026-07-04, landed 0.8):
+   there is no `paint(mark=)` kwarg — `paint()`'s kwarg surface is closed to
+   the four meaning channels plus `file`, and `mark` (like `ref`) rides the
+   *subject* instead, stamped onto cells by a lens. `mark_style` is already
+   consumable that way today; no follow-on sugar is planned.
 5. Consumer migration guidance (loops/hlab/tasks) — their schedule, with
    the §7 dissolution map as the offer.
