@@ -71,6 +71,36 @@ floor you start on and the first rung of the climb, **not** the whole
 staircase. "Never leave `paint()`" was the overclaim; "never rewrite the
 lens" is the contract.
 
+### The no-lens graduate (ratified 2026-07-07, `design/no-lens-graduate`)
+
+The walk above starts at a lens. The consumer who starts at *no* lens —
+`paint(status)`, transcription exactly right — has nothing to port when they
+reach `+argv`: there is no public name for what `paint()` was doing for them,
+and `lens=shape_lens` is not it (that is the *inferring* renderer, a
+different behavior). The gap is real, but the export is the wrong fix: the
+transcription renderer stays **deliberately unexported** — naming the default
+would convert the *absence* of a claim into a claimable arrangement
+(`lens=transcribe`, "the interpretation that interprets as nothing") and
+smear §3's line between declining interpretation and choosing one.
+
+The resolution is §7's own discipline: drive is orthogonal to render, so a
+meaning that was valid at the static drive — "no claim, transcribe the
+declared shape" — must survive the move to argv, or the axes leak into each
+other at the boundary this design just separated. The default recurs at the
+deliverer: **`run_cli`'s `render=` becomes optional, defaulting to
+transcription.** `run_cli(argv, fetch=get_status)` is then a complete, honest
+tool — declared flags, zoom and fidelity threading into transcription,
+`--json` re-deriving from the fetch data (the tool *is* its data) — and the
+graduate ports the base case the same way they held it: by not passing a
+render. You write your first lens at the moment you make your first *claim*,
+and that lens is the artifact that ports onward to `Surface` (§2). It also
+completes §5's wearing-a-framework table: `run_cli` wears the whole verb,
+base case included, instead of only wearing it once handed a render.
+
+Deferred — additive on the evolving `cli` surface, not part of the 0.8
+`paint()` entry work. Trigger: the first real no-lens graduate (loops'
+migration is the named candidate).
+
 ## 3. The base case is transcription, not "text only"
 
 `show()` led with shape dispatch: `show({...})` guessed key-value,
@@ -421,6 +451,9 @@ the keystone, and it is invisible if only the module call is shown.
 - **The auto-lens question is answered, not deferred**: no lens ⇒
   transcription (§3). There is no "auto" default that guesses arrangement.
   `lens=shape_lens` remains available as explicit exploration.
+- **`run_cli`'s optional `render=`** (the no-lens graduate, §2) is a
+  trigger-gated lane on the evolving `cli` surface — recorded there, built
+  when the first no-lens graduate arrives.
 - **`format`/JSON reshaping at the harness** is not touched here — `run_cli`
   keeps its flags as they are (§8). The `to_markdown` emitter and promoting
   `to_html` to the library surface stay their own trigger-gated lanes
