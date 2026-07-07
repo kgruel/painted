@@ -31,6 +31,10 @@ from typing import TYPE_CHECKING, Any, TextIO
 if TYPE_CHECKING:
     from .core.block import Block
 
+# paint()'s closed kwarg surface is a public ABI; show carries a documented 1.0
+# removal horizon. Both are semver-stable and guarded by test_public_api.py.
+__all__ = ["paint", "show"]
+
 _MISSING = object()
 
 

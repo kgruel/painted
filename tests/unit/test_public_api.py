@@ -3,8 +3,13 @@
 painted is one package with two stability tiers (see CLAUDE.md "Stability
 tiers"):
 
-  * ``painted.core`` + ``painted.views`` — the **semver-stable** library. A
-    renderer is a thing you *call*; its surface should be maximally stable.
+  * ``painted.core`` + ``painted.views`` + ``painted.display`` — the
+    **semver-stable** library. A renderer is a thing you *call*; its surface
+    should be maximally stable. ``painted.display`` is the entry-point module:
+    ``paint()``'s closed kwarg surface is a public ABI, and ``show`` — though
+    deprecated — carries a documented 1.0 removal horizon, so its presence is a
+    commitment until then. loops imports from ``painted.display`` directly (the
+    submodule path), so this surface is load-bearing for a real consumer.
   * ``painted.cli`` + ``painted.tui`` — the **evolving** frameworks. They *call
     you*, and churn as apps' needs change.
 
@@ -20,11 +25,11 @@ The guard is bidirectional: the snapshot must equal ``__all__`` exactly.
   * Removing/renaming a snapshotted name -> FAILS (semver-major break).
   * Publishing a name in ``__all__`` that is not in the snapshot -> FAILS too.
 
-The second direction is deliberate. ``painted.core``/``painted.views`` are
-*wholly* the semver-stable surface: a name in their ``__all__`` is already a
-published stable name — there is no "stage it now, commit to it later" state for
-these namespaces (that's what the evolving ``painted.cli``/``painted.tui`` are
-for). An earlier one-directional guard let an addition ship silently unsnapshotted
+The second direction is deliberate. ``painted.core``/``painted.views``/
+``painted.display`` are *wholly* the semver-stable surface: a name in their
+``__all__`` is already a published stable name — there is no "stage it now,
+commit to it later" state for these namespaces (that's what the evolving
+``painted.cli``/``painted.tui`` are for). An earlier one-directional guard let an addition ship silently unsnapshotted
 — ``callout`` and ``Overflow`` both reached ``views.__all__`` in the 0.4.0 batch
 while the snapshot, and the green suite, said nothing. Requiring equality forces
 every new stable export to be a conscious entry here, reviewed in the diff — it
@@ -40,6 +45,7 @@ otherwise slip through.
 from __future__ import annotations
 
 import painted.core
+import painted.display
 import painted.views
 
 # --- The committed stable surface ---------------------------------------------
@@ -216,6 +222,15 @@ STABLE_VIEWS_SURFACE = frozenset(
 )
 
 
+STABLE_DISPLAY_SURFACE = frozenset(
+    {
+        # The single entry point (0.8+) and its deprecated warn-and-narrow alias.
+        "paint",
+        "show",
+    }
+)
+
+
 def _removed(snapshot: frozenset[str], current: list[str]) -> set[str]:
     return set(snapshot - set(current))
 
@@ -302,6 +317,46 @@ class TestStableViewsSurface:
                 # surface as an uncaught error.
                 unresolved.append(f"{name}: {exc}")
         assert not unresolved, "painted.views stable names that do not resolve:\n" + "\n".join(
+            unresolved
+        )
+
+
+class TestStableDisplaySurface:
+    """``painted.display`` — the entry-point module — is semver-stable.
+
+    Same bidirectional guard as core/views: ``paint``/``show`` may not be
+    dropped, renamed, or joined by an unsnapshotted public name. paint()'s kwarg
+    surface is a public ABI and show carries a documented 1.0 removal horizon, so
+    a change here is a semver decision reviewed in the diff — not a quiet edit."""
+
+    def test_no_removals_or_renames(self) -> None:
+        """Every snapshotted display name is still published in ``display.__all__``."""
+        removed = _removed(STABLE_DISPLAY_SURFACE, painted.display.__all__)
+        assert not removed, (
+            "semver-MAJOR break: painted.display dropped/renamed stable names "
+            f"{sorted(removed)}. If intentional, this is a major-version change — "
+            "update the snapshot in this test deliberately."
+        )
+
+    def test_no_unsnapshotted_additions(self) -> None:
+        """Every name published in ``display.__all__`` is in the snapshot."""
+        extra = _unsnapshotted(STABLE_DISPLAY_SURFACE, painted.display.__all__)
+        assert not extra, (
+            "painted.display publishes stable names not in the snapshot: "
+            f"{sorted(extra)}. Add them to STABLE_DISPLAY_SURFACE — a name in the "
+            "stable module's __all__ is a permanent public commitment and must be "
+            "guarded against future rename/removal."
+        )
+
+    def test_every_stable_name_resolves(self) -> None:
+        """Every snapshotted display name resolves on the module."""
+        unresolved = []
+        for name in sorted(STABLE_DISPLAY_SURFACE):
+            try:
+                getattr(painted.display, name)
+            except (AttributeError, ImportError) as exc:
+                unresolved.append(f"{name}: {exc}")
+        assert not unresolved, "painted.display stable names that do not resolve:\n" + "\n".join(
             unresolved
         )
 
