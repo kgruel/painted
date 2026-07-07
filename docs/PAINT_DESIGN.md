@@ -184,7 +184,11 @@ def paint(
   *positionally*, `lens(subject, zoom, width)`: that is the ABI every shipped
   lens satisfies (`shape_lens`, `chart_lens`, …) and the shape a custom lens
   must accept. The lens is the portable render unit (§2), so this is its
-  public ABI, stated here.
+  public ABI, stated here. Precedence: a `Block` subject is already painted,
+  so it is delivered as-is and an explicit `lens=` is **ignored** for it (a
+  lens interprets a raw value into a Block; a Block has nothing left to
+  interpret); for every non-Block subject — scalars included — the lens wins
+  over the transcription default.
 - **`ref`** (denotation) and **`mark`** do *not* appear as kwargs — they
   ride the *subject*. A cell already carries its ref (`Block.text(…,
   ref=…)`) and its mark; a lens stamps them on the cells it lays out. This
