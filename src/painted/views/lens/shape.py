@@ -183,11 +183,17 @@ def _shape_lens(
         return chart_lens(content, zoom, width, fidelity=fidelity)
 
     # list / tuple both transcribe as items (a tuple declares order). A NamedTuple
-    # was handled above; a bare tuple lands here.
+    # was handled above; a bare tuple lands here. The type label keeps the
+    # zoom<=0 count honest — a tuple must not report itself as "list[N]".
     if isinstance(content, (list, tuple)):
-        return _render_list(list(content), zoom, width, fidelity, seen, depth, infer=infer)
+        label = "tuple" if isinstance(content, tuple) else "list"
+        return _render_list(
+            list(content), zoom, width, fidelity, seen, depth, infer=infer, label=label
+        )
 
-    if isinstance(content, set):
+    # frozenset is not a subclass of set, so it must be named explicitly — both
+    # declare an unordered collection and transcribe as tags.
+    if isinstance(content, (set, frozenset)):
         return _render_set(content, zoom, width)
 
     # Fallback: treat as string representation
@@ -352,14 +358,17 @@ def _render_list(
     depth: int,
     *,
     infer: bool,
+    label: str = "list",
 ) -> Block:
     """Render list at zoom levels. `infer` is threaded to the recursive item
-    render so nested items follow the same transcribe/interpret discipline."""
+    render so nested items follow the same transcribe/interpret discipline.
+    `label` names the sequence type for the zoom<=0 count (bare tuples pass
+    "tuple" so the count doesn't misreport them as a list)."""
     style = Style()
 
     if zoom <= 0:
         # Count only
-        text = f"list[{len(lst)}]"
+        text = f"{label}[{len(lst)}]"
         return Block.text(text, style, width=width)
 
     if zoom == 1:
@@ -429,8 +438,8 @@ def _render_list(
     return fit_to_width(join_vertical(*rows), width)
 
 
-def _render_set(s: set, zoom: int, width: int) -> Block:
-    """Render set at zoom levels."""
+def _render_set(s: set | frozenset, zoom: int, width: int) -> Block:
+    """Render set/frozenset at zoom levels."""
     style = Style()
 
     if zoom <= 0:
@@ -473,6 +482,10 @@ def _summarize_item(item: Any) -> str:
         return f"dict[{len(item)}]"
     if isinstance(item, list):
         return f"list[{len(item)}]"
+    if isinstance(item, tuple):
+        # Mirror the list summary; a bare tuple item must not fall through to a
+        # raw repr byte-sliced to 10 chars.
+        return f"tuple[{len(item)}]"
     if isinstance(item, set):
         return f"set[{len(item)}]"
     return str(item)[:10]

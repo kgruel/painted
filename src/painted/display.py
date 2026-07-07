@@ -66,7 +66,7 @@ def _render_and_deliver(
     """
     # Block passthrough — avoid importing Block for common builtin payloads
     if (
-        not isinstance(subject, (dict, list, set, tuple, str, int, float, bool))
+        not isinstance(subject, (dict, list, set, frozenset, tuple, str, int, float, bool))
         and subject is not None
     ):
         from .core.block import Block

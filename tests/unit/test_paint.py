@@ -240,6 +240,32 @@ def test_bare_tuple_transcribes_as_items():
     assert "10" in out and "20" in out and "30" in out
 
 
+def test_frozenset_transcribes_as_set_tags():
+    """frozenset is NOT a subclass of set, so the set branch must name it
+    explicitly — otherwise it falls through to the str() fallback and renders
+    'frozenset({...})'. Load-bearing: the tag form appears, the repr form does
+    not."""
+    out = _paint(frozenset({1, 2, 3}))
+    assert "[1]" in out and "[2]" in out and "[3]" in out  # set-tag form
+    assert "frozenset(" not in out  # not the str() fallback
+
+
+def test_tuple_count_label_is_honest_at_low_zoom():
+    """At zoom<=0 a sequence renders its type + count. A bare tuple must report
+    'tuple[N]', not 'list[N]' — _render_list receives list(content) and would
+    otherwise misname it."""
+    assert _paint((1, 2, 3), zoom=0).strip() == "tuple[3]"
+    assert _paint([1, 2, 3], zoom=0).strip() == "list[3]"
+
+
+def test_tuple_item_summarizes_like_a_list_item():
+    """A tuple *item* inside a list at zoom 1 must summarize as 'tuple[N]' —
+    mirroring the list summary — not a raw repr byte-sliced to 10 chars."""
+    out = _paint([(1, 2), (3, 4)], zoom=1)
+    assert "tuple[2]" in out
+    assert "(1, 2)" not in out  # not the raw-repr slice
+
+
 # --- Deferred base cases (PAINT_DESIGN §3, ratified 2026-07-06) -------------
 # These pin behaviours that are DEFERRED in 0.8, not bugs. Whoever implements
 # the deferred feature updates a failing test here on purpose.
