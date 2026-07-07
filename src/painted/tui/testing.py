@@ -104,7 +104,11 @@ class TestSurface:
         self.surface._on_emit = _capture_emit
 
         # Ensure the Surface has deterministic dimensions and no TTY dependency.
-        self.surface._writer = Writer(self.stream, color_depth=color_depth)
+        # no_color=False keeps the harness hermetic: the writer resolves NO_COLOR
+        # ambiently at construction, so without this a run under NO_COLOR=1 would
+        # strip fg/bg from every write_ansi=True frame and the harness would stop
+        # being a function of its inputs alone.
+        self.surface._writer = Writer(self.stream, color_depth=color_depth, no_color=False)
         self.surface._buf = Buffer(width, height)
         self.surface._prev = Buffer(width, height)
         self.surface.layout(width, height)
