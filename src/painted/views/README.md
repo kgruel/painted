@@ -10,7 +10,7 @@ Stateless functions: `fn(data, zoom, width) → Block`.
 from painted.views import shape_lens, tree_lens, chart_lens, flame_lens, sparkline
 ```
 
-- **`shape_lens`** — auto-dispatch by data shape. This is the default in `show()`. Dict → key-value, list → items, numeric → chart, nested → tree.
+- **`shape_lens`** — auto-dispatch by data shape: the explicit *inference* lens (`lens=shape_lens`). Dict → key-value, list → items, numeric → chart, nested → tree. `paint()`'s no-lens default is `transcribe` — it never infers arrangement; `shape_lens` is what you reach for when you want the guess.
 - **`tree_lens`** — hierarchical data with expand/collapse.
 - **`chart_lens`** — numeric data as horizontal bar charts.
 - **`flame_lens`** — proportional visualization (flame graph style).
