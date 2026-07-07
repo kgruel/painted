@@ -132,8 +132,9 @@ One dependency: [wcwidth](https://pypi.org/project/wcwidth/) (wide character dis
 
 ## API
 
-Two stability tiers: `painted.core` + `painted.views` are semver-stable
-(removing or renaming a public name is a major version); `painted.cli` +
+Two stability tiers: `painted.core` + `painted.views` + `painted.display` are
+semver-stable (removing or renaming a public name is a major version —
+`show()`'s removal at 1.0 is that pre-declared event); `painted.cli` +
 `painted.tui` are the evolving framework surface and may change across minor
 versions — pre-1.0, pin accordingly.
 

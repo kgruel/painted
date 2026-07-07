@@ -157,7 +157,7 @@ Key patterns:
 All state types are frozen; update with `dataclasses.replace()` (which returns new state), and render is a pure function `render_fn(state, ...) → Block`.
 <!-- docgen:end -->
 <!-- docgen:begin frag:stability-tiers#summary -->
-`painted.core` + `painted.views` are the **semver-stable** library surface (removing or renaming an `__all__` name is semver-MAJOR, guarded by `tests/unit/test_public_api.py`); `painted.cli` + `painted.tui` are the **evolving** framework surface that may change across minor versions.
+`painted.core` + `painted.views` + `painted.display` are the **semver-stable** library surface (removing or renaming an `__all__` name is semver-MAJOR, guarded by `tests/unit/test_public_api.py`); `painted.cli` + `painted.tui` are the **evolving** framework surface that may change across minor versions.
 <!-- docgen:end -->
 - Surface diff-renders: only changed cells written to terminal.
 - `shape_lens` auto-dispatches by data shape: numeric → chart, hierarchical → tree, else built-in rendering.
