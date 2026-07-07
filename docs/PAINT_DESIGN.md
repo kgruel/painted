@@ -90,6 +90,7 @@ vs structure:
 | `list` / `tuple` | the items, as themselves | it declares order |
 | `dataclass` / `NamedTuple` | its declared fields, as themselves | the type declares named fields |
 | `Enum` | `Type.MEMBER` | a named member of a named type |
+| `set` / `frozenset` | its members, as tags (`[a] [b] [c]`) | it declares membership, not order — `frozenset` joins `set` in this cut |
 
 A **lens** is required only for *interpretation* — arrangement that
 reinterprets the subject as something other than itself: `paint([1,2,3],
@@ -173,6 +174,12 @@ and is refused.
 
 Adding a fifth kwarg-channel is a **ratification event**, not an API add —
 the same rule that governs the meaning channels themselves.
+
+This closed surface is why `painted.display` (home of `paint()` and the
+deprecated `show()`) joins the **semver-stable** tier alongside
+`painted.core`/`painted.views`: `paint()`'s kwarg surface is a declared
+public ABI, and `show()`'s removal at 1.0 is a pre-declared semver-MAJOR
+event riding the deprecation horizon §9 documents — not a surprise break.
 
 ## 5. `paint()` at every altitude
 
@@ -353,14 +360,26 @@ harness concern, struck from the module surface.
 forward to `paint()` is impossible — `paint()` has neither `format` nor the
 `shape_lens`-*inferring* default, and those are exactly the two behaviours
 `show()` must keep — so `show()` retains its pre-0.8 render body (inferring
-default, ANSI detection, `Block`/scalar handling) and existing callers' output
-is unchanged **except** that a bare `Enum` now renders as `Type.MEMBER` rather
-than `str(value)`: `show()` shares `paint()`'s render core, and the Slice-2
-scalar exclusion that routes a declared schema to the renderer applies to both.
-The drift is accepted (2026-07-06) rather than fenced off with a `paint()`-only
-branch — `show()` is removed at 1.0, so propping up a dying alias's exact
-Enum bytes isn't worth the seam. On every call it emits `DeprecationWarning`,
-and it **narrows**:
+default, ANSI detection, `Block`/scalar handling), but existing callers'
+output is unchanged **except** two drifts, both accepted (2026-07-06) rather
+than fenced off with a `paint()`-only branch — `show()` is removed at 1.0, so
+propping up a dying alias's exact bytes for either isn't worth the seam:
+
+- A **top-level `IntEnum`/`StrEnum`** previously hit the scalar
+  short-circuit and rendered `str(value)` (`'ok'`, `'1'`); the Slice-2 scalar
+  exclusion that routes a declared schema to the renderer now applies to
+  `show()` too (it shares `paint()`'s render core), so it reaches the
+  renderer and prints `Type.MEMBER` (`'Status.OK'`) instead. A bare (plain)
+  `Enum` already rendered `Type.MEMBER` on 0.7 — `shape_lens` handled it —
+  and is unaffected; nested `Enum`s of any flavor are unaffected too (the
+  recursive path always dispatched through the same `Enum` branch).
+- **Container dispatch now matches `(list, tuple)`, not `list` alone** — a
+  shared spine change, not Enum-specific. `show((1, 'x'))` drifts from the
+  `str()` fallback (`"(1, 'x')"`) to a dash-item list; a nested non-numeric
+  tuple drifts the same way. Numeric tuples are unaffected — they always
+  dispatched to `chart_lens` on `show()`'s inferring path.
+
+On every call it emits `DeprecationWarning`, and it **narrows**:
 `format` is dropped (`format="json"`/`"plain"` no longer honoured —
 warn-and-narrow, the settled decision). `show()` has effectively no external
 users (loops pins `<0.5`; siftd locks `0.4.0` with *zero* `show()` call-sites —
@@ -375,7 +394,7 @@ rule requires it lands in the *same* change, not a follow-up:
 | src | 4 files: `display.py`, `__init__.py` (`__all__` + lazy map), `core/zoom.py` (comment), `_doc_pages.py:577` (help text) |
 | tests | ~56: `test_show.py` → `test_paint.py` (51), `test_fidelity_defaults.py` (4), `test_demo_liveness.py` (1 — the `'show'` primitive entry) |
 | demos | ~24 real: `demos/primitives/show.py` → `paint.py` (15), `demos/patterns/rendering.py` (9). **Not 38** — the extra raw hits are `demos/primitives/span_line.py`'s *coincidental* local `def show(line)` (17), which is **not** the API and **must not** be swept |
-| docs | ~18 across 8 files: ARCHITECTURE (1), FIDELITY (3), DIAGNOSTICS (3), DEMO_PATTERNS (1), REFS_DESIGN (2), **`PROFILING.md` (6 — runnable `from painted import show` examples)**, VOCABULARIES (1), ERRORS (1) |
+| docs | ~15 across 6 files: ARCHITECTURE (1), FIDELITY (3), DIAGNOSTICS (3), DEMO_PATTERNS (1), **`PROFILING.md` (6 — runnable `from painted import show` examples)**, VOCABULARIES (1). REFS_DESIGN (2) and ERRORS (1) mention `show()` only as deprecation-horizon context and are **retained deliberately** — not flip scope |
 | web | `walkthrough.astro` stage id `'show'` ×3 (+ the same section's `show(data) →` label text, incidental) |
 | README | 4 (import, call, the `TODO` comment naming `show()`, the feature-table row) |
 | consumer guide (`src/painted/CLAUDE.md` → symlink to README) | 7 |
@@ -511,12 +530,13 @@ The §9 table, landed in this cut, not deferred:
   → `paint.py` (update `demos/CLAUDE.md`, the outputgen manifest if it names
   the demo).
 - Flip docs per the corrected §9 table — ARCHITECTURE, FIDELITY, DIAGNOSTICS,
-  DEMO_PATTERNS, REFS_DESIGN, **`PROFILING.md` (runnable examples)**,
-  VOCABULARIES, ERRORS — README ×4, `src/painted/CLAUDE.md` (→README) ×7,
-  `web/walkthrough.astro` stage id `'show'` ×3, then `./dev panels` to
-  regenerate any panel that renders the old name (the `outputgen` gate will
-  catch drift). **Targeted edits only — no global `s/show(/paint(/`** (the
-  `span_line.py` collision, §9).
+  DEMO_PATTERNS, **`PROFILING.md` (runnable examples)**, VOCABULARIES —
+  README ×4, `src/painted/CLAUDE.md` (→README) ×7, `web/walkthrough.astro`
+  stage id `'show'` ×3, then `./dev panels` to regenerate any panel that
+  renders the old name (the `outputgen` gate will catch drift). REFS_DESIGN
+  and ERRORS keep their `show()` deprecation-horizon mentions — **retained
+  deliberately, not flip scope** (§9). **Targeted edits only — no global
+  `s/show(/paint(/`** (the `span_line.py` collision, §9).
 - **Doc obligation** (§5, `paint-entry`): where `paint()` is introduced —
   consumer-guide Level 0, README hero, `PRIMITIVES.md` — teach the altitude
   story (module→buffer, the recurring verb), not just the module call.
