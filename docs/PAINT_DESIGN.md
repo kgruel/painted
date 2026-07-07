@@ -1,6 +1,6 @@
 # paint() — the single entry, the library's name as its verb
 
-**Status: PLANNED for 0.8.0** (design-of-record; not yet implemented).
+**Status: IMPLEMENTED in 0.8.0** (design-of-record).
 `show()` becomes `paint()` — the single entry point, and the 1.0 keystone:
 the library's name becomes the verb you call. This document fixes the
 signature, the base-case boundary, the altitude stack, and the migration.

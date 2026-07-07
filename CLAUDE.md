@@ -186,4 +186,5 @@ docs/
   ERRORS_DESIGN.md    # Exception hierarchy: PaintedError/DeclarationError/ContractError/LifecycleError, site table (implemented)
   VOCABULARIES_DESIGN.md  # Declared vocabularies: the mark channel, roles, thresholds, the color contract (implemented)
   REFS_DESIGN.md      # Refs: the denotation channel's readers — id→ref naming, RefScheme resolver seam, OSC 8 + HTML anchors (implemented)
+  PAINT_DESIGN.md     # paint(): the single entry, transcription base case (declared-not-invented, recursive + wide), closed kwarg surface, show() warn-and-narrow alias (implemented)
 ```
