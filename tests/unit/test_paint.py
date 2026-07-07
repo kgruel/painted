@@ -13,7 +13,7 @@ import io
 import pytest
 
 import painted
-from painted import Block, Style, paint, show
+from painted import Block, Style, Zoom, paint, show
 from painted.core.writer import ColorDepth, Writer
 
 
@@ -80,6 +80,58 @@ def test_paint_mapping_transcribes_keys_and_values():
     paint({"status": "ok"}, file=buf)
     out = buf.getvalue()
     assert "status" in out and "ok" in out
+
+
+# --------------------------------------------------------------------------- #
+# paint() — zoom (the disclosure channel) reaches the render, unpinned
+# --------------------------------------------------------------------------- #
+# These use a NON-DEFAULT zoom (SUMMARY, not the DETAILED=2 default): the entry
+# points resolve `zoom = 2 if zoom is None else zoom`, and mutating that to a
+# flat `zoom = 2` must FAIL here. A test that passed DETAILED would be blind to
+# exactly that mutation (2 == 2) — the gap that let it slip through before.
+
+
+def test_paint_passes_zoom_through_to_the_lens():
+    """The disclosure channel reaches the lens verbatim — a spy captures it.
+
+    Load-bearing against `zoom = 2` (dropping the caller's value): SUMMARY (1)
+    is not the default, so a flattened zoom would arrive as 2 and fail here.
+    """
+    received: dict = {}
+
+    def spy_lens(data, zoom, width):
+        received["zoom"] = zoom
+        return Block.text("ok", Style())
+
+    buf = io.StringIO()
+    paint("hello", zoom=Zoom.SUMMARY, lens=spy_lens, file=buf)
+    assert received["zoom"] == Zoom.SUMMARY
+
+
+def test_show_passes_zoom_through_to_the_lens():
+    """The show() alias resolves zoom the same way — pinned so the shared
+    `zoom = 2 if zoom is None else zoom` cannot silently flatten there either."""
+    received: dict = {}
+
+    def spy_lens(data, zoom, width):
+        received["zoom"] = zoom
+        return Block.text("ok", Style())
+
+    buf = io.StringIO()
+    with pytest.warns(DeprecationWarning):
+        show("hello", zoom=Zoom.SUMMARY, lens=spy_lens, file=buf)
+    assert received["zoom"] == Zoom.SUMMARY
+
+
+def test_paint_summary_zoom_is_compact_one_line():
+    """zoom=SUMMARY collapses a dict to one inline `key: value` line — not the
+    DETAILED key/value table. A flattened `zoom = 2` would render the table
+    (multiple lines), so the single-line assertion catches it."""
+    buf = io.StringIO()
+    paint({"host": "prod-1", "status": "ok"}, zoom=Zoom.SUMMARY, file=buf)
+    out = buf.getvalue()
+    assert "host: prod-1" in out
+    assert out.count("\n") == 1  # single line
 
 
 # --------------------------------------------------------------------------- #
