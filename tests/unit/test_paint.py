@@ -1,10 +1,11 @@
 """Tests for paint() — the single entry point (0.8+) — and the deprecated show() alias.
 
-Slice 1 scope: the name, the closed kwarg surface, the file-aware ANSI detection
-(the isatty fix), and show()'s warn-and-narrow deprecation. The transcription
-front door (dict/list identity, declared schemas, recursion) lands in Slice 2 —
-here paint() still routes its no-lens default through shape_lens, so this file
-does not pin the rendered *shape* of containers (that changes in Slice 2).
+Covers the name and closed kwarg surface, the file-aware ANSI detection (the
+isatty fix), the transcription front door (dict/list identity, declared schemas
+— dataclass/NamedTuple/Enum — and recursion that never re-infers at depth), the
+0.8 deferred base cases (Exception→str, abstract Mapping/Sequence→str; §3), the
+NO_COLOR contract, and show()'s warn-and-narrow deprecation (warns, drops
+format, retains its inferring body). Consolidates the former test_show.py.
 """
 
 import io
@@ -157,6 +158,18 @@ def test_show_stays_bug_compatible_reads_stdout(monkeypatch):
     with pytest.warns(DeprecationWarning):
         show(Block.text("hi", Style(fg="red")), file=buf)
     assert "\x1b" in buf.getvalue()
+
+
+def test_show_retains_inferring_body_where_paint_transcribes():
+    """§9's reason show() is a *retained* alias, not a thin forward: its default
+    is the shape_lens *inferring* body, which paint() dropped for transcription.
+    show([1,2,3]) infers a chart; paint([1,2,3]) transcribes items. This is the
+    one behaviour that cannot forward to paint()."""
+    show_buf = io.StringIO()
+    with pytest.warns(DeprecationWarning):
+        show([1, 2, 3], file=show_buf)
+    assert _is_chart(show_buf.getvalue())  # show still infers a chart
+    assert not _is_chart(_paint([1, 2, 3]))  # paint transcribes items
 
 
 # --------------------------------------------------------------------------- #

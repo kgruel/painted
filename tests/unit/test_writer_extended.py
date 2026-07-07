@@ -412,6 +412,26 @@ class TestPrintBlock:
         output = buf.getvalue()
         assert "\x1b" not in output
 
+    def test_print_block_stream_without_isatty_defaults_plain(self):
+        """A stream lacking isatty() (hasattr guard) defaults to no ANSI."""
+
+        class BareStream:
+            def __init__(self):
+                self.data = []
+
+            def write(self, s):
+                self.data.append(s)
+
+            def flush(self):
+                pass
+
+        block = Block.text("hi", Style(fg="red"))
+        stream = BareStream()
+        print_block(block, stream)  # use_ansi=None (auto)
+        output = "".join(stream.data)
+        assert "hi" in output
+        assert "\x1b" not in output
+
     def test_print_block_plain_wide_chars_do_not_emit_placeholder_spaces(self):
         block = Block.text("A\u4e16B", Style())
         buf = io.StringIO()

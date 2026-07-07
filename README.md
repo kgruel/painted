@@ -3,15 +3,16 @@
 One library. Print to TUI. One dependency.
 
 ```python
-from painted import show
+from painted import paint
 
-show({"cpu": 67, "mem": 82, "disk": 45})
+paint({"cpu": 67, "mem": 82, "disk": 45})
 ```
 
-TTY gets a styled bar chart. Pipe gets plain text. `--json` gets JSON.
-Same data, same function — the stack figures out the rest.
+TTY gets styled output. Pipe gets plain text. Same data, same function —
+`paint()` transcribes what the value declares, and it's the same verb every
+layer up the stack renders through.
 
-<!-- TODO: tapes/hero.gif — show() in TTY, pipe, JSON contexts -->
+<!-- TODO: tapes/hero.gif — paint() in TTY and pipe contexts -->
 
 ## Enter anywhere
 
@@ -156,7 +157,7 @@ versions — pre-1.0, pin accordingly.
 
 | Export | Purpose |
 |--------|---------|
-| `show(data)` | Zero-config display with auto-detection |
+| `paint(data)` | Zero-config display; transcribes any value onto the surface |
 | `print_block(block)` | Print a Block to stdout (TTY-aware) |
 | `run_cli(args, render=, fetch=, ...)` | CLI harness: zoom/mode/format, plus declared `tags=`, `depth_aliases=`, `budgets=`, `fetch_stream=`, `live_delivery=` |
 | `run_app(argv, commands)` | Multi-command routing; each `AppCommand` handler calls `run_cli` |

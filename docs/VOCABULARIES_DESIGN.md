@@ -341,7 +341,7 @@ keymaps the fourth.
    re-expressed via the mechanism (the acceptance test — passed; see §7).
    `record_gutter` joined the stable views surface.
 4. `paint(mark=)` lands with the paint() entry-point work (separate
-   release; this mechanism ships first and `show()` can consume
-   `mark_style` immediately).
+   release; this mechanism ships first, so callers can consume
+   `mark_style` immediately — before the `paint(mark=)` sugar).
 5. Consumer migration guidance (loops/hlab/tasks) — their schedule, with
    the §7 dissolution map as the offer.

@@ -574,8 +574,8 @@ def diagnostics_doc() -> Doc:
                     ),
                     Prose(
                         "The three surfaces share one substrate. render_traceback's "
-                        "locals route through the same shape_lens show() uses — hardened "
-                        "here to be cycle-safe and schema-aware, so a cyclic local can't "
+                        "locals route through the same shape_lens the inferring path uses "
+                        "— hardened here to be cycle-safe and schema-aware, so a cyclic local can't "
                         "crash the error renderer. PaintedHandler composes "
                         "render_traceback for exc_info rather than re-deriving frame "
                         "structure. One hardening, two deliverers."

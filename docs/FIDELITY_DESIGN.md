@@ -15,7 +15,7 @@ contract; this one does the same for *disclosure*.
 
 `run_cli` has two axes: how output reaches the terminal (delivery) and how
 much output there is (disclosure). Delivery got the full treatment — a
-graduation ladder (`show` → `run_cli` → `--live` → Surface), a declared
+graduation ladder (`paint` → `run_cli` → `--live` → Surface), a declared
 capability surface (`modes=` filters which of `-i`/`--live`/`--static` exist),
 and the invariant that climbing a rung never rewrites the rung below.
 Disclosure got the spec (`Fidelity`) but no ladder, no declaration grammar,
@@ -26,7 +26,7 @@ The disclosure ladder, each rung additive:
 
 | Rung | You need | You write | The framework provides |
 |------|----------|-----------|------------------------|
-| 0 | decent defaults | `show(data)` | sensible disclosure, no ctx at all |
+| 0 | decent defaults | `paint(data)` | sensible disclosure, no ctx at all |
 | 1 | detail levels | `if ctx.zoom >= Zoom.DETAILED:` | `-q`/`-v`/`-vv`, free |
 | 2 | a semantic layer | declare a `Tag`; gate with `ctx.fidelity.shows("thinking")` | the `--thinking` flag, help text, depth implication |
 | 3 | density control | declare budget support; read `fidelity.chars`/`lines` | `--max-chars`/`--max-lines`, only now |
@@ -344,6 +344,6 @@ painted's own migration, same commit series as the grammar:
   had every motivation to invent a selector idiom and chose parsing instead.
 - **No `record_line` signature change.** It is a rung-1 citizen; a
   `fidelity=` kwarg can ride a future need.
-- **No `show()` change.** Rung 0's `zoom=` is the rung-appropriate porthole.
+- **No `paint()` change.** Rung 0's `zoom=` is the rung-appropriate porthole.
 - **Downstream adoption is downstream's call.** painted ships the grammar
   and proves expressibility; siftd/loops migrate on their own schedule.

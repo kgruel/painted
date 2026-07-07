@@ -7,13 +7,13 @@ Profile your app's rendering pipeline and visualize the results as flame graphs 
 Wrap any code block in `profile()`, render the result with `flame_lens`:
 
 ```python
-from painted import show
+from painted import paint
 from painted.views import profile, flame_lens
 
 with profile() as result:
     app.run()
 
-show(result[0].flame_dict, lens=flame_lens)
+paint(result[0].flame_dict, lens=flame_lens)
 ```
 
 The flame graph shows where CPU time goes: function call tree with proportional widths.
@@ -61,12 +61,12 @@ Zoom levels:
 
 ```python
 from painted.views import parse_collapsed, flame_lens
-from painted import show
+from painted import paint
 
 # From py-spy:  py-spy record -f folded -o profile.folded -- python myapp.py
 text = Path("profile.folded").read_text()
 d = parse_collapsed(text)
-show(d, lens=flame_lens)
+paint(d, lens=flame_lens)
 ```
 
 The collapsed format is one stack per line, semicolon-separated frames, space + sample count:
@@ -96,7 +96,7 @@ The flame graph answers "where does time go?" at a glance:
 ```python
 from painted.tui import Surface, TestSurface
 from painted.views import profile, flame_lens
-from painted import show
+from painted import paint
 
 app = MyApp()
 harness = TestSurface(app, width=120, height=40, input_queue=inputs)
@@ -105,7 +105,7 @@ with profile(module="painted") as result:
     harness.run_to_completion()
 
 # Where did painted spend time?
-show(result[0].flame_dict, lens=flame_lens)
+paint(result[0].flame_dict, lens=flame_lens)
 ```
 
 See `demos/patterns/profiler.py` for a complete working example.

@@ -27,8 +27,8 @@ from painted import (
     join_horizontal,
     join_vertical,
     pad,
+    paint,
     print_block,
-    show,
     use_palette,
     ROUNDED,
 )
@@ -81,7 +81,7 @@ def demo_explicit():
             header("chart_lens: zoom 0 → stats only"),
         )
     )
-    show(chart_lens(METRICS, zoom=0, width=60))
+    paint(chart_lens(METRICS, zoom=0, width=60))
 
     print_block(
         join_vertical(
@@ -89,7 +89,7 @@ def demo_explicit():
             header("chart_lens: zoom 1 → sparkline"),
         )
     )
-    show(chart_lens(METRICS, zoom=1, width=60))
+    paint(chart_lens(METRICS, zoom=1, width=60))
 
     print_block(
         join_vertical(
@@ -97,7 +97,7 @@ def demo_explicit():
             header("chart_lens: zoom 2 → bar chart"),
         )
     )
-    show(chart_lens(METRICS, zoom=2, width=60))
+    paint(chart_lens(METRICS, zoom=2, width=60))
 
     print_block(
         join_vertical(
@@ -105,7 +105,7 @@ def demo_explicit():
             header("tree_lens: zoom 0 → summary"),
         )
     )
-    show(tree_lens(SERVICE, zoom=0, width=60))
+    paint(tree_lens(SERVICE, zoom=0, width=60))
 
     print_block(
         join_vertical(
@@ -113,14 +113,14 @@ def demo_explicit():
             header("tree_lens: zoom 3 → full expansion"),
         )
     )
-    show(tree_lens(SERVICE, zoom=3, width=60))
+    paint(tree_lens(SERVICE, zoom=3, width=60))
 
 
 # --- --custom: write your own render function ---
 
 
 def demo_custom():
-    """Custom (data, zoom, width) -> Block plugs into show()."""
+    """Custom (data, zoom, width) -> Block plugs into paint()."""
 
     def status_card(data: dict, zoom: int, width: int) -> Block:
         rows = []
@@ -174,7 +174,7 @@ def demo_custom():
             header("custom lens: zoom 1 → bordered card"),
         )
     )
-    show(SERVICE, lens=status_card, zoom=Zoom.SUMMARY)
+    paint(SERVICE, lens=status_card, zoom=Zoom.SUMMARY)
 
     print_block(
         join_vertical(
@@ -182,7 +182,7 @@ def demo_custom():
             header("custom lens: zoom 2 → card with endpoint details"),
         )
     )
-    show(SERVICE, lens=status_card, zoom=Zoom.DETAILED)
+    paint(SERVICE, lens=status_card, zoom=Zoom.DETAILED)
 
 
 # --- --palette: semantic colors change everywhere ---
