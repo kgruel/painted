@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import importlib.util
 import sys
-from contextlib import contextmanager, redirect_stdout
+from contextlib import redirect_stdout
 from io import StringIO
 from pathlib import Path
 from types import ModuleType
@@ -36,30 +36,6 @@ def import_module_by_path(path: str | Path, *, module_name: str | None = None) -
     sys.modules[spec.name] = mod  # required for dataclass module lookup
     spec.loader.exec_module(mod)
     return mod
-
-
-@contextmanager
-def _patch_show_to_sys_stdout():
-    """Make painted.show() respect redirect_stdout by using sys.stdout dynamically.
-
-    show() has file=sys.stdout as an early-bound default, so redirect_stdout
-    won't capture it unless we temporarily wrap the call site.
-    print_block() already resolves sys.stdout at call time — no patch needed.
-    """
-    import painted as _painted
-
-    orig_show = _painted.show
-
-    def _show(*args, **kwargs):
-        if "file" not in kwargs:
-            kwargs["file"] = sys.stdout
-        return orig_show(*args, **kwargs)
-
-    _painted.show = _show  # type: ignore[assignment]
-    try:
-        yield
-    finally:
-        _painted.show = orig_show  # type: ignore[assignment]
 
 
 def capture_demo(
@@ -122,7 +98,7 @@ def capture_demo(
 
     fn_name = function_or_zoom
     buf = StringIO()
-    with _patch_show_to_sys_stdout(), redirect_stdout(buf):
+    with redirect_stdout(buf):
         mod = import_module_by_path(demo_path, module_name=f"_demo_{Path(demo_path).stem}_output")
         if fn_name == "<module>":
             if data_attr is not None:

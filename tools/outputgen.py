@@ -161,7 +161,7 @@ PANELS: dict[str, OutputSpec] = {
         data_attr="SAMPLE",
         palette=PAINTED_PALETTE,
     ),
-    # --live: a later tick (SAMPLE_LIVE) so the frame visibly differs from show().
+    # --live: a later tick (SAMPLE_LIVE) so the frame visibly differs from the static paint() panel.
     "monitor_live": OutputSpec(
         name="monitor_live",
         demo_path="demos/patterns/monitor.py",

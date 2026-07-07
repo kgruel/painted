@@ -527,7 +527,7 @@ def _spacing_cells() -> Block:
 
 def _type_bigtext() -> Block:
     """render_big — FILLED solid blocks vs OUTLINE box-drawing (views/big_text.py)."""
-    filled = render_big("show", Style(fg="cyan"), format=BigTextFormat.FILLED)
+    filled = render_big("paint", Style(fg="cyan"), format=BigTextFormat.FILLED)
     outline = render_big("paint", Style(fg="yellow"), format=BigTextFormat.OUTLINE)
     return join_vertical(filled, Block.empty(1, 1), outline, gap=0)
 
