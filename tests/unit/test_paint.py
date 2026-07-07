@@ -74,6 +74,32 @@ def test_paint_block_is_delivered():
     assert "hello" in buf.getvalue()
 
 
+def test_paint_block_ignores_an_explicit_lens():
+    """Precedence pin (docstring): a Block is already painted, so paint() delivers
+    it directly and never consults ``lens=``. Inherited from show() and
+    defensible — there is nothing for a lens to interpret on a Block."""
+
+    def boom(data, zoom, width):
+        raise AssertionError("lens called for a Block subject")
+
+    buf = io.StringIO()
+    paint(Block.text("direct", Style()), lens=boom, file=buf)
+    assert "direct" in buf.getvalue()
+
+
+def test_paint_scalar_with_explicit_lens_calls_the_lens():
+    """The scalar short-circuit is guarded by ``lens is None`` — an explicit lens
+    overrides it. Load-bearing: dropping that guard would str() the scalar before
+    the lens ran, so the wrapped form would never appear."""
+
+    def wrap(data, zoom, width):
+        return Block.text(f"[{data}]", Style())
+
+    buf = io.StringIO()
+    paint("hi", lens=wrap, file=buf)
+    assert "[hi]" in buf.getvalue()
+
+
 def test_paint_mapping_transcribes_keys_and_values():
     """dict → key/value (stable across Slice 1→2; only inference changes later)."""
     buf = io.StringIO()
@@ -173,6 +199,42 @@ def test_show_emits_deprecation_warning():
     buf = io.StringIO()
     with pytest.warns(DeprecationWarning, match="paint"):
         show({"a": 1}, file=buf)
+
+
+def test_show_no_args_prints_blank_line_still_warning():
+    """The no-arg blank-line affordance survives on the alias — and still warns
+    (restored from the dropped test_show.py pin)."""
+    buf = io.StringIO()
+    with pytest.warns(DeprecationWarning):
+        show(file=buf)
+    assert buf.getvalue() == "\n"
+
+
+def test_show_str_enum_drifts_to_type_member():
+    """Accepted 0.8 drift (§9): show() shares paint()'s scalar exclusion, so a
+    top-level StrEnum now renders Type.MEMBER (was str(value))."""
+    from enum import Enum
+
+    class Color(str, Enum):
+        RED = "red"
+
+    buf = io.StringIO()
+    with pytest.warns(DeprecationWarning):
+        show(Color.RED, file=buf)
+    assert buf.getvalue().strip() == "Color.RED"
+
+
+def test_show_int_enum_drifts_to_type_member():
+    """The IntEnum half of the same accepted drift (§9)."""
+    from enum import IntEnum
+
+    class Level(IntEnum):
+        HIGH = 9
+
+    buf = io.StringIO()
+    with pytest.warns(DeprecationWarning):
+        show(Level.HIGH, file=buf)
+    assert buf.getvalue().strip() == "Level.HIGH"
 
 
 def test_show_no_longer_honours_format_json():

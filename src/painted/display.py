@@ -35,11 +35,14 @@ _MISSING = object()
 
 
 def _detect_context(stream: TextIO) -> tuple[bool, int]:
-    """Resolve ``(use_ansi, width)`` from the destination stream.
+    """Resolve ``(use_ansi, width)`` — ANSI from the stream, width from ambient.
 
-    ANSI is a property of the destination (PAINT_DESIGN §8): a real TTY renders
-    ANSI, anything else (pipe, file, StringIO) renders plain. paint() passes the
-    caller's ``file``; show() passes ``sys.stdout`` (bug-compatible — see show()).
+    Only ``use_ansi`` reads ``stream``: ANSI is a property of the destination
+    (PAINT_DESIGN §8) — a real TTY renders ANSI, anything else (pipe, file,
+    StringIO) renders plain. paint() passes the caller's ``file``; show() passes
+    ``sys.stdout`` (bug-compatible — see show()). ``width`` does NOT consult the
+    stream — it is ambient (``shutil.get_terminal_size`` → ``COLUMNS`` or, failing
+    that, ``sys.__stdout__``), independent of where the paint is delivered.
     """
     use_ansi = hasattr(stream, "isatty") and stream.isatty()
     import shutil
@@ -117,6 +120,12 @@ def paint(
     is no ``format`` — JSON is a harness concern (``run_cli --json``). The kwarg
     surface is closed to the four meaning channels plus the destination; see
     docs/PAINT_DESIGN.md.
+
+    Precedence: a ``Block`` subject is already painted, so it is delivered as-is
+    and an explicit ``lens=`` is **ignored** for it (a lens interprets a raw
+    value into a Block; a Block has nothing left to interpret). For every
+    non-Block subject the lens wins over the transcription default — including
+    scalars, so ``paint("hi", lens=spy)`` calls the lens.
     """
     out: TextIO = sys.stdout if file is None else file
     zoom = 2 if zoom is None else zoom  # Zoom.DETAILED
@@ -148,9 +157,12 @@ def show(
     """Deprecated alias for paint() — removed in painted 1.0.
 
     Retains the pre-0.8 render body (the ``shape_lens``-inferring default) and
-    its ``sys.stdout``-based detection so existing output is unchanged, but warns
-    and **no longer honours** ``format`` (warn-and-narrow): JSON/plain are a
-    harness concern (``run_cli``). Use paint().
+    its ``sys.stdout``-based detection, so existing output is unchanged **except**
+    for two accepted drifts (PAINT_DESIGN §9): a top-level ``IntEnum``/``StrEnum``
+    now renders ``Type.MEMBER`` (was ``str(value)`` via the scalar short-circuit),
+    and a ``tuple`` now renders as an item list (was ``str()``). It warns and
+    **no longer honours** ``format`` (warn-and-narrow): JSON/plain are a harness
+    concern (``run_cli``). Use paint().
     """
     import warnings
 
