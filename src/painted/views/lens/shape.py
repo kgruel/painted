@@ -486,6 +486,6 @@ def _summarize_item(item: Any) -> str:
         # Mirror the list summary; a bare tuple item must not fall through to a
         # raw repr byte-sliced to 10 chars.
         return f"tuple[{len(item)}]"
-    if isinstance(item, set):
+    if isinstance(item, (set, frozenset)):
         return f"set[{len(item)}]"
     return str(item)[:10]

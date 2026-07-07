@@ -380,6 +380,15 @@ def test_tuple_item_summarizes_like_a_list_item():
     assert "(1, 2)" not in out  # not the raw-repr slice
 
 
+def test_frozenset_item_summarizes_like_a_set_item():
+    """A frozenset *item* inside a list at zoom 1 must summarize as 'set[N]' —
+    frozenset is not a `set` subclass, so an unwidened isinstance falls through
+    to the raw repr byte-sliced to 10 chars ('frozenset(')."""
+    out = _paint([frozenset({1, 2}), frozenset({3, 4})], zoom=1)
+    assert "set[2]" in out
+    assert "frozenset(" not in out  # not the raw-repr slice
+
+
 # --- Deferred base cases (PAINT_DESIGN §3, ratified 2026-07-06) -------------
 # These pin behaviours that are DEFERRED in 0.8, not bugs. Whoever implements
 # the deferred feature updates a failing test here on purpose.
