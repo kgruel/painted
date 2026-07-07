@@ -572,19 +572,43 @@ def test_explicit_no_color_beats_forced_depth():
 
 
 def test_painted_handler_honours_no_color(monkeypatch):
-    """The real-world NO_COLOR path: PaintedHandler renders a record through a
-    Writer built with a forced (snapshotted) color_depth. NO_COLOR must reach it
-    — otherwise piped/CI logs carry ANSI the user asked to suppress."""
+    """The real-world NO_COLOR path: PaintedHandler renders each record through a
+    Writer built with a FORCED (snapshotted) color_depth — exactly what it does on
+    every emit. NO_COLOR must reach that forced-depth writer, or piped/CI logs
+    carry the ANSI colour the user asked to suppress.
+
+    The pre-fix vacuous version passed a StringIO whose *detected* depth was NONE,
+    so the handler took the plain-text branch and never exercised the coloured
+    writer at all — it would pass even if the writer ignored NO_COLOR entirely.
+    Forcing TRUECOLOR drives the SGR path: under NO_COLOR every emitted SGR
+    parameter must be a non-colour attribute (reset / bold / dim / …), never a
+    colour code — and at least one styling attribute must survive, proving the
+    coloured path ran (rather than the assertion passing on empty output).
+    """
     import logging
+    import re
 
     from painted.diagnostics import PaintedHandler
 
     monkeypatch.setenv("NO_COLOR", "1")
     buf = io.StringIO()
-    handler = PaintedHandler(stream=buf)
-    logger = logging.getLogger("test_paint_no_color_probe")
+    # Force a depth, as the handler does when it snapshots a *detected* depth.
+    handler = PaintedHandler(stream=buf, color_depth=ColorDepth.TRUECOLOR)
+    logger = logging.getLogger("test_paint_no_color_forced_depth")
     logger.handlers[:] = [handler]
     logger.setLevel(logging.INFO)
     logger.propagate = False
     logger.info("a log line that must not be coloured")
-    assert "\x1b" not in buf.getvalue()
+
+    out = buf.getvalue()
+    # Every SGR parameter must be a non-colour attribute: reset(0) or an
+    # intensity/underline/reverse flag. A colour would surface as 30-37 / 40-47 /
+    # 90-97 / 38 / 48 (or the extended 5;n · 2;r;g;b forms), all of which NO_COLOR
+    # must strip even under a forced depth.
+    flags = {"0", "1", "2", "3", "4", "7"}
+    params = [p for seq in re.findall(r"\x1b\[([0-9;]*)m", out) for p in seq.split(";")]
+    colour = [p for p in params if p not in flags]
+    assert not colour, f"NO_COLOR must strip fg/bg even under a forced depth; saw {colour}"
+    # A styling attribute (dim from the muted timestamp) survived — the coloured
+    # SGR path ran, so the "no colour" assertion above isn't vacuously green.
+    assert any(p in {"1", "2", "3", "4", "7"} for p in params)
