@@ -34,7 +34,7 @@ plus **Showcase** — a *presentation* tier, not a new test shape.
 | **Showcase** | Spectacle | Data only | `_render(ctx, data) → Block` *(pattern shape)* |
 
 **Primitives** teach a single type or composition. No `main()`, no CLI flags.
-Output via `print_block` / `show`. The output is the lesson.
+Output via `print_block` / `paint`. The output is the lesson.
 
 **Patterns** are runnable examples with CLI flags — the invocation IS the lesson.
 They expose `_fetch()` and `_render(ctx, data) → Block`, exercised by the liveness
@@ -79,7 +79,7 @@ primitives/
   errors.py         Exception hierarchy: introspected class tree, each contract broken + logged ✓
   logging_handler.py PaintedHandler: declared severities, extra= payload, exc_info composition ✓
   refs.py           Refs: RefScheme + use_refs, denotation → OSC 8 link, inert cases ✓
-  show.py           show() auto-dispatch                       ✓
+  paint.py          paint() transcription: scalars, dict, list, nested, declared schemas ✓
 
 patterns/
   rendering.py      Rendering patterns: --explicit, --custom, --palette   ✓

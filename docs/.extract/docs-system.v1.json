@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-06-02T08:50:54+00:00",
+  "generated_at": "2026-07-07T17:50:01+00:00",
   "snippets": {
     "frag:abstraction-chain#fragment": {
       "id": "frag:abstraction-chain#fragment",
@@ -46,7 +46,7 @@
         "path": "docs/_fragments/stability-tiers.md",
         "start_line": 2
       },
-      "source": "`painted.core` + `painted.views` are the **semver-stable** library surface (removing or renaming an `__all__` name is semver-MAJOR, guarded by `tests/unit/test_public_api.py`); `painted.cli` + `painted.tui` are the **evolving** framework surface that may change across minor versions.\n",
+      "source": "`painted.core` + `painted.views` + `painted.display` are the **semver-stable** library surface (removing or renaming an `__all__` name is semver-MAJOR, guarded by `tests/unit/test_public_api.py`); `painted.cli` + `painted.tui` are the **evolving** framework surface that may change across minor versions.\n",
       "title": "stability-tiers"
     },
     "frag:width-contract#full#fragment": {

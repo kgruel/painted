@@ -4,6 +4,32 @@ Quick reference for painted primitives. See ARCHITECTURE.md for data flow, DATA_
 
 ---
 
+## paint()
+
+**`paint(subject, *, zoom=None, lens=None, file=None)`** — the single entry point. With no lens it transcribes what a value declares (dict → key/value, list → items, a dataclass/NamedTuple/Enum → its fields); a lens is taken only to *interpret* — arrangement that reinterprets the subject as something other than itself.
+
+```python
+from painted import paint
+
+paint({"status": "ok", "items": 42})   # transcribes its declared shape
+paint([1, 2, 3], lens=chart_lens)      # interpret as a chart (explicit)
+```
+
+`paint()` is not a one-off call — it's a recurring verb, the same shape at every altitude:
+
+| Altitude | Verb | Surface |
+|---|---|---|
+| module | `paint(x)` | the terminal (one shot) |
+| block | `block.paint(buffer)` | a `Buffer` (one frame) |
+| arrangement | a lens paints | structure → a `Block` |
+| atom | a `Block` paints | cells → a rectangle |
+
+Script, tool, and TUI reuse the identical lens (`subject → Block`); only the deliverer around it changes — `paint()` direct, `run_cli` over argv, `Surface` over keyboard events. See `docs/PAINT_DESIGN.md` for the full design.
+
+**Connects to:** `Block.paint(buffer, x, y)` below is the buffer altitude in this table. `paint()` itself lives in `painted.display`.
+
+---
+
 ## Cell / Style
 
 **Style** — Immutable text attributes (fg, bg, bold, italic, underline, reverse, dim).

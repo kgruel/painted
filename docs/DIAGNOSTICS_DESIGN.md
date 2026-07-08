@@ -32,11 +32,11 @@ data. Nothing is invented; the rendering derives.
 ## 2. The substrate-sharing argument — why one arc, not three features
 
 The three surfaces are not independent. `render_traceback`'s FULL-zoom locals
-route each value back through the *same* `shape_lens` that `show()` uses — so a
+route each value back through the *same* `shape_lens` the inferring path uses — so a
 cyclic or unrepresentable local can't crash the error renderer only because S1
 first made `shape_lens` cycle-safe, depth-capped, and schema-aware. That was a
 real latent bug (a self-referential container raised `RecursionError` in
-`show()` before this arc), fixed as the substrate the traceback renderer stands
+`shape_lens` before this arc), fixed as the substrate the traceback renderer stands
 on. And `PaintedHandler.emit` composes `render_traceback` for `exc_info` — the
 handler doesn't re-derive traceback structure, it mounts the S2 renderer. One
 hardening (S1) is consumed by two deliverers (S2, S3); the arc is the shared
@@ -151,7 +151,8 @@ params — the hook is glue, not a second renderer.
   `(detect, to_dict)` pairs rather than a hard `import attr`.
 - **`inspect_lens` / a reflection register — NOT BUILT.** Rendering a live object
   by reflecting its methods/signature (as opposed to its declared fields) is
-  exploration mode by another name; it belongs with `show()`'s duck-typing, not
+  exploration mode by another name; it belongs with the inferring lens's
+  duck-typing (`lens=shape_lens`), not
   on the diagnostics spine. *Trigger:* a concrete debugging workflow that the
   schema branch can't serve.
 - **Syntax highlighting (pygments) — REJECTED, chosen non-goal.** Zero runtime

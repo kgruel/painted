@@ -4,6 +4,34 @@ All notable changes to painted are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/); pre-1.0, minor versions may carry
 breaking changes.
 
+## [0.8.0] — 2026-07-06
+
+This release ships **`paint()`** — the single display entry point, and the 1.0 keystone: the library's name becomes the verb you call (`docs/PAINT_DESIGN.md`). `paint(subject)` transcribes what a value *declares* — a dict as its key/value pairs, a list as its items, a `dataclass`/`NamedTuple`/`Enum` as its declared fields — recursively, and it never *invents* a shape the subject did not declare. That is the line that made `show()`'s chart-from-a-list guess the sin: rendering a dict *as a dict* is transcription; guessing a chart is interpretation, and interpretation now requires an explicit `lens=`. `show()` becomes a deprecated alias (removed at 1.0), sharing its deprecation horizon with the `id→ref` aliases from 0.7.
+
+### Added
+
+- **`paint(subject, *, zoom=None, lens=None, file=None)`** — the single entry point (home: `painted.display`, re-exported from `painted`). A closed kwarg surface: the meaning channels reachable today (disclosure via `zoom`, arrangement via `lens`) plus the destination (`file`); there is deliberately **no `format`** — JSON is a harness concern (`run_cli --json`). With no lens, `paint()` transcribes the declared shape; a lens is taken only to *interpret* — arrangement that reinterprets the subject as something other than itself (`paint([1,2,3], lens=chart_lens)` claims "these are a series worth plotting"; `paint()` never makes that claim on its own). ANSI vs plain is detected from the resolved `file` (`file.isatty()`), not `sys.stdout`.
+- **Transcription is recursive and wide.** A numeric list nested inside a transcribed dict stays items, never a chart — `paint()` never infers at *any* depth. "Declared shape" means stdlib-declared: `dataclass`, `NamedTuple`, `Enum` transcribe as their fields (an `Enum` as `Type.MEMBER`); third-party schema types (pydantic, attrs) are a deferred lane, not reached without a lens.
+- **`Writer(no_color=…)` and the `NO_COLOR` contract.** An explicit `no_color=` wins (True or False); otherwise the environment (`NO_COLOR`, honoured when present and non-empty) suppresses foreground/background color while keeping bold/underline/etc. It is orthogonal to `color_depth` — a *forced* depth (as `PaintedHandler` passes on every emit) does not bypass `NO_COLOR`, so piped and CI logs honour it.
+
+### Changed
+
+- **`paint()` is the taught entry, everywhere.** The README hero, the consumer guide's Level 0, the disclosure ladder's rung 0, the demo curriculum (`demos/primitives/paint.py`), and the "no cliffs" walkthrough now lead with `paint()` and the altitude story — the same verb every layer up the stack renders through. The walkthrough's stage 01 leads with genuine transcription output and reveals severity bars as the opt-in *lens* claim, not something `paint()` invents.
+- **`shape_lens` (semver-stable, `painted.views`) now renders a non-numeric tuple as an item list**, matching `list` — container dispatch now matches `(list, tuple)` rather than `list` alone. Previously a non-numeric tuple fell through to the `str()` fallback (`"(1, 'x')"`); nested non-numeric tuples drift the same way. Numeric tuples are unaffected — they still dispatch to `chart_lens` on the inferring path.
+
+### Fixed
+
+- **A zero/composite `Flag` value no longer renders as `'TypeName.None'`.** A `Flag`/`IntFlag` with no single named member (`.name is None` — a zero value or an OR'd composite) now falls back to the enum's own `str()` (`'Perm(0)'`, `'Perm.R|W'`) instead of the misleading `f'{type}.{None}'` string. Reachable via both `paint()`'s Enum scalar-exclusion and `lens=shape_lens`.
+- **The `set` branch now includes `frozenset`.** Previously a `frozenset` fell through to the `str()` fallback; it now renders as tags, matching `set`.
+
+### Deprecated
+
+- **`show()` — deprecated retained alias, removed at 1.0.** It keeps its pre-0.8 render body (the `shape_lens`-*inferring* default) and warns on every call, but **narrows**: `format=` is accepted and ignored (JSON/plain are a harness concern, `run_cli`). Two behavioural drifts are accepted rather than fenced off behind a `paint()`-only branch, both because `show()` shares `paint()`'s render core: (1) a top-level `IntEnum`/`StrEnum` — which previously hit the scalar short-circuit and rendered `str(value)` (`'ok'`, `'1'`) — now reaches the renderer and prints `Type.MEMBER` (`'Status.OK'`); a bare `Enum` already rendered `Type.MEMBER` on 0.7 and is unaffected, as are nested `Enum`s. (2) container dispatch now matches `(list, tuple)` rather than `list` alone (see Changed), so `show((1, 'x'))` drifts from the `str()` fallback to a dash-item list, and nested tuples drift the same way. `show()` is removed at 1.0, so propping up a dying alias's exact bytes for either drift is not worth the seam.
+
+### Deferred
+
+- **`paint(exc)` renders `str(exc)`, not `render_traceback`** (the framework-worn path — `install()` / `PaintedHandler` — already renders tracebacks, so direct `paint(exc)` waits on demand). **Container dispatch keys on the concrete `dict`/`list`/`tuple`**; an abstract `Mapping` (e.g. `MappingProxyType`) or `Sequence` (e.g. `range`) renders via `str` (`str`/`bytes` *are* `Sequence`s — the ABC net is leaky). Both are design-intent in `docs/PAINT_DESIGN.md` §3, deferred pending demand.
+
 ## [0.7.0] — 2026-07-05
 
 This release ships **ref deliveries** — the denotation channel reaches every delivery that can express it (`docs/REFS_DESIGN.md`). The per-cell annotation has existed since 0.1.2 (`Block.text(id=)`, threaded through every compose op, read by TUI hit-testing); it now takes its ratified name — **ref** — and gains its two missing readers: OSC 8 hyperlinks in ANSI output and `<a href>` anchors in HTML. Resolution is a declaration: a `RefScheme` turns `scheme:value` refs into URIs, and without one, refs stay inert in every delivery — painted never invents URIs. Scheme-less refs (`ref="sidebar"`, the hit-testing idiom) stay inert in link deliveries by design.

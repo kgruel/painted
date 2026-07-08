@@ -33,6 +33,16 @@ class NoopRenderSurface(Surface):
         return
 
 
+class ColorFillSurface(Surface):
+    """Fills every cell with a coloured style — probes the writer's colour path."""
+
+    def __init__(self):
+        super().__init__(scroll_optimization=False)
+
+    def render(self) -> None:
+        self._buf.fill(0, 0, self._buf.width, self._buf.height, "C", Style(fg="red"))
+
+
 def _sync_begin() -> str:
     return "\x1b[?2026h"
 
@@ -327,3 +337,23 @@ class TestHarnessResizeIntegration:
         harness._render_and_capture(frames)
         next_frame = stream.getvalue()[before:]
         assert _clear() not in next_frame
+
+
+def test_harness_is_hermetic_to_ambient_no_color(monkeypatch):
+    """TestSurface must be a function of its inputs alone. The writer resolves
+    NO_COLOR ambiently at construction, so the harness pins ``no_color=False`` —
+    a ``write_ansi`` run under ``NO_COLOR=1`` must still emit colour, or captured
+    frames would silently vary with the environment. Load-bearing: dropping the
+    ``no_color=False`` makes the red fg (SGR 31) vanish under NO_COLOR."""
+    monkeypatch.setenv("NO_COLOR", "1")
+    stream = io.StringIO()
+    harness = TestSurface(
+        ColorFillSurface(),
+        width=4,
+        height=2,
+        stream=stream,
+        write_ansi=True,
+        color_depth=ColorDepth.BASIC,
+    )
+    harness.run_to_completion()
+    assert "31" in stream.getvalue()  # red fg survived — harness ignores ambient NO_COLOR

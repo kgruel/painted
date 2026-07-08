@@ -3,7 +3,7 @@
 The other axis of rendering constraint alongside width.
 Width says how much space, Zoom says how much detail.
 
-Used by lenses, record_line, components, and show() — shared
+Used by lenses, record_line, components, and paint() — shared
 vocabulary that flows from CLI parsing through to rendering.
 """
 

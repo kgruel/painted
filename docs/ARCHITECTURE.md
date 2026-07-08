@@ -233,7 +233,7 @@ The source is organized into four subsystems. Layer boundaries are enforced by a
 | **root** | `theme.py` | Theme, use_theme(), DEFAULT_THEME, NORD_THEME, MONO_THEME, PAINTED_THEME |
 | **root** | `inplace.py` | InPlaceRenderer |
 | **root** | `viewport.py` | Viewport |
-| **root** | `display.py` | show() |
+| **root** | `display.py` | paint() |
 | **root** | `focus.py` | Focus, ring_next, ring_prev |
 | **root** | `search.py` | Search, filter_contains, filter_prefix, filter_fuzzy |
 

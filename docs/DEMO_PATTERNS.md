@@ -66,7 +66,7 @@ demos/
 │   ├── cell.py                 # Cell, Style
 │   ├── span_line.py            # Span, Line
 │   ├── compose.py              # join, pad, border
-│   └── show.py                 # show() auto-dispatch
+│   └── paint.py                # paint() transcription
 │
 ├── apps/                        # TUI applications (interactive)
 │   ├── minimal.py              # Simplest Surface subclass

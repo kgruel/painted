@@ -53,6 +53,6 @@ handler = PaintedHandler(thresholds={
 <section>
 <h2>Design note</h2>
 <p>The delivery glue lives at the package root, not in painted.cli. A log handler and an excepthook are not argv-driven, and the CLI layer holds a frozen tripwire — nothing in cli/ may import the renderer. Root modules may (the precedent is inplace.py), so diagnostics mounts render_traceback there without touching the CLI seam. Full design: docs/DIAGNOSTICS_DESIGN.md.</p>
-<p>The three surfaces share one substrate. render_traceback&#x27;s locals route through the same shape_lens show() uses — hardened here to be cycle-safe and schema-aware, so a cyclic local can&#x27;t crash the error renderer. PaintedHandler composes render_traceback for exc_info rather than re-deriving frame structure. One hardening, two deliverers.</p>
+<p>The three surfaces share one substrate. render_traceback&#x27;s locals route through the same shape_lens the inferring path uses — hardened here to be cycle-safe and schema-aware, so a cyclic local can&#x27;t crash the error renderer. PaintedHandler composes render_traceback for exc_info rather than re-deriving frame structure. One hardening, two deliverers.</p>
 </section>
 </article>

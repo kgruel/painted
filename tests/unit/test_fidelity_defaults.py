@@ -4,27 +4,32 @@ from __future__ import annotations
 
 import io
 
-from painted import Block, Format, Style, show
+from painted import Block, Style, paint
 from painted.cli import CliContext, OutputMode, Zoom, run_cli
 from painted.icon_set import ASCII_ICONS, current_icons, reset_icons
 
 
-def test_plain_render_does_not_leak_ascii_icons(monkeypatch):
-    """After a Format.PLAIN render, ambient icons must be restored."""
-    monkeypatch.setattr("sys.stdout.isatty", lambda: False)
+class _FakeTTY(io.StringIO):
+    """A StringIO that claims to be a terminal — drives paint()'s ANSI path."""
+
+    def isatty(self) -> bool:
+        return True
+
+
+def test_plain_render_does_not_leak_ascii_icons():
+    """After a plain render (non-TTY file), ambient icons must be restored."""
     reset_icons()
     default_icons = current_icons()
 
-    show({"a": 1}, format=Format.PLAIN, file=io.StringIO())
+    paint({"a": 1}, file=io.StringIO())  # StringIO.isatty() is False -> plain
 
     assert current_icons() is default_icons
     assert current_icons() is not ASCII_ICONS
     reset_icons()
 
 
-def test_plain_render_uses_ascii_icons_during_render(monkeypatch):
-    """Format.PLAIN must use ASCII icons for the lens call, not Unicode."""
-    monkeypatch.setattr("sys.stdout.isatty", lambda: False)
+def test_plain_render_uses_ascii_icons_during_render():
+    """A plain render must use ASCII icons for the lens call, not Unicode."""
     reset_icons()
     captured_icons = None
 
@@ -33,7 +38,7 @@ def test_plain_render_uses_ascii_icons_during_render(monkeypatch):
         captured_icons = current_icons()
         return Block.text(str(data), Style())
 
-    show({"a": 1}, format=Format.PLAIN, lens=spy_lens, file=io.StringIO())
+    paint({"a": 1}, lens=spy_lens, file=io.StringIO())
 
     assert captured_icons is ASCII_ICONS
     # And restored after
@@ -80,13 +85,12 @@ def test_run_cli_plain_uses_ascii_icons_during_render(monkeypatch):
     reset_icons()
 
 
-def test_ansi_render_keeps_default_icons(monkeypatch):
-    """Format.ANSI render should not touch icons at all."""
-    monkeypatch.setattr("sys.stdout.isatty", lambda: True)
+def test_ansi_render_keeps_default_icons():
+    """An ANSI render (TTY file) should not touch icons at all."""
     reset_icons()
     default_icons = current_icons()
 
-    show({"a": 1}, format=Format.ANSI, file=io.StringIO())
+    paint({"a": 1}, file=_FakeTTY())  # isatty() True -> ANSI, no icon scoping
 
     assert current_icons() is default_icons
     reset_icons()

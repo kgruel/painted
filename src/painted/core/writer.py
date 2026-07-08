@@ -51,6 +51,7 @@ class Writer:
         *,
         color_depth: ColorDepth | None = None,
         hyperlinks: bool = True,
+        no_color: bool | None = None,
     ):
         self._stream = stream
         # When provided, forces color capability resolution (useful for tests and
@@ -60,6 +61,17 @@ class Writer:
         # not a detection — unsupporting terminals ignore the wrapper. Mirrors
         # the color_depth override, without a detect_ counterpart.
         self._hyperlinks: bool = hyperlinks
+        # NO_COLOR (no-color.org): ambient colour-off — suppresses fg/bg while
+        # keeping bold/underline/etc. Resolved once. An explicit no_color= wins
+        # (True or False); otherwise read the env (present and non-empty). This
+        # is orthogonal to color_depth: a forced depth does NOT bypass NO_COLOR —
+        # PaintedHandler snapshots a *detected* depth and passes it as a forced
+        # depth, and that must still honour the user's NO_COLOR. Callers that need
+        # colour regardless of the environment pass no_color=False explicitly.
+        if no_color is not None:
+            self._no_color: bool = no_color
+        else:
+            self._no_color = bool(os.environ.get("NO_COLOR"))
 
     def size(self) -> tuple[int, int]:
         """Terminal dimensions (columns, rows)."""
@@ -107,11 +119,14 @@ class Writer:
         if style.reverse:
             codes.append("7")
 
-        depth = self.detect_color_depth()
-        if style.fg is not None:
-            codes.extend(self._color_codes(style.fg, foreground=True, depth=depth))
-        if style.bg is not None:
-            codes.extend(self._color_codes(style.bg, foreground=False, depth=depth))
+        # NO_COLOR suppresses colour (fg/bg) while keeping bold/underline/etc.;
+        # ColorDepth is untouched (NONE still emits basic for forced-depth callers).
+        if not self._no_color:
+            depth = self.detect_color_depth()
+            if style.fg is not None:
+                codes.extend(self._color_codes(style.fg, foreground=True, depth=depth))
+            if style.bg is not None:
+                codes.extend(self._color_codes(style.bg, foreground=False, depth=depth))
 
         if not codes:
             return ""

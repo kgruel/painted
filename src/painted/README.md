@@ -22,14 +22,19 @@ Below painted in the monorepo: `libs/atoms/` defines Facts and Specs; `libs/engi
 **Trigger**: I have data and want it to look decent in a terminal.
 
 ```python
-from painted import show
+from painted import paint
 
-show({"status": "ok", "items": 42})       # auto-formats by shape
-show(data, zoom=Zoom.DETAILED)            # more detail
-show(data, zoom=Zoom.MINIMAL)             # one-liner
+paint({"status": "ok", "items": 42})      # transcribes its declared shape
+paint(data, zoom=Zoom.DETAILED)           # more detail
+paint(data, zoom=Zoom.MINIMAL)            # one-liner
 ```
 
-`show()` auto-dispatches by data shape: dict → key-value, list → items, numeric → chart. This is the right starting point 80% of the time.
+`paint()` transcribes what a value declares — dict → key/value, list → items, a
+dataclass/Enum → its fields — recursively, and never invents a shape a value
+didn't declare (a bare list is items, not a chart; that claim needs
+`lens=chart_lens`). It's the recurring verb the whole stack renders through,
+from this one-liner up to a full TUI — the same call, more fidelity at each
+level. The right starting point 80% of the time.
 
 **Don't reach for yet**: Block, join, border, run_cli.
 
@@ -83,7 +88,7 @@ You provide `render(ctx, data) → Block` and `fetch() → data`. The framework 
 
 | Rung | You need | You write |
 |------|----------|-----------|
-| 0 | decent defaults | `show(data)` — no ctx at all |
+| 0 | decent defaults | `paint(data)` — no ctx at all |
 | 1 | detail levels | `if ctx.zoom >= Zoom.DETAILED:` — `-q`/`-v`/`-vv` come free |
 | 2 | a named facet | declare `tags=[Tag("thinking", "Show reasoning", implied_at=3)]`; gate with `ctx.fidelity.shows("thinking")` — the `--thinking` flag, its help entry, and the depth implication are generated |
 | 3 | density control | pass `budgets=True`; read `fidelity.chars`/`fidelity.lines` — only now do `--max-chars`/`--max-lines` exist |
@@ -136,7 +141,7 @@ See `tui/CLAUDE.md` for the interactive app subsystem.
 
 - **Frozen types**: all types are immutable. Create new instances, don't mutate.
 <!-- docgen:begin frag:stability-tiers#summary -->
-`painted.core` + `painted.views` are the **semver-stable** library surface (removing or renaming an `__all__` name is semver-MAJOR, guarded by `tests/unit/test_public_api.py`); `painted.cli` + `painted.tui` are the **evolving** framework surface that may change across minor versions.
+`painted.core` + `painted.views` + `painted.display` are the **semver-stable** library surface (removing or renaming an `__all__` name is semver-MAJOR, guarded by `tests/unit/test_public_api.py`); `painted.cli` + `painted.tui` are the **evolving** framework surface that may change across minor versions.
 <!-- docgen:end -->
 <!-- docgen:begin frag:width-contract#summary -->
 width is a two-part contract: *width-aware* — wcwidth counts display columns, so a block's display width is not `len()`; and *honors-width* — a passed `width` is *exact*, clipping or padding by default (pass `wrap=Wrap.CHAR`/`Wrap.WORD` to reflow), omitted for natural sizing.
@@ -196,7 +201,7 @@ use_palette(NORD_PALETTE)   # set globally
 use_icons(ASCII_ICONS)      # set globally
 
 with use_palette(NORD_PALETTE):  # or scoped override
-    show(data)
+    paint(data)
 ```
 
 `Palette` — 5 semantic Style roles (success, warning, error, accent, muted), plus a `series` categorical ramp for visually separating N peers.

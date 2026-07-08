@@ -53,8 +53,8 @@ PRIMITIVES = [
     "diagnostics",
     "errors",
     "logging_handler",
+    "paint",
     "refs",
-    "show",
     "span_line",
 ]
 

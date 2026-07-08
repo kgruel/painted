@@ -13,6 +13,7 @@ import Base from "../layouts/Base.astro";
 import PaintedSurface from "../components/PaintedSurface.jsx";
 
 import monitorQ from "../generated/panels/monitor_q.html?raw";
+import monitorTranscribe from "../generated/panels/monitor_transcribe.html?raw";
 import monitorDefault from "../generated/panels/monitor_default.html?raw";
 import monitorHonest from "../generated/panels/monitor_default_honest.html?raw";
 import monitorVv from "../generated/panels/monitor_vv.html?raw";
@@ -21,11 +22,11 @@ import monitorPlain from "../generated/panels/monitor_plain.html?raw";
 import monitorJson from "../generated/panels/monitor_json.html?raw";
 
 const STOPS = [
-  { id: "show", n: "01", label: "styled print", entry: "show()" },
-  { id: "format", n: "02", label: "format dial", entry: "--json" },
-  { id: "fidelity", n: "03", label: "fidelity dial", entry: "-q / -vv" },
-  { id: "live", n: "04", label: "mode dial", entry: "--live" },
-  { id: "tui", n: "05", label: "interactive", entry: "-i  +  Layer" },
+  { id: "paint", n: "01", label: "transcribe", entry: "paint(vitals)" },
+  { id: "lens", n: "02", label: "+ lens", entry: "lens=vitals_lens" },
+  { id: "tool", n: "03", label: "+ argv", entry: "run_cli" },
+  { id: "live", n: "04", label: "+ time", entry: "--live" },
+  { id: "tui", n: "05", label: "+ events", entry: "-i  ·  Surface" },
 ];
 ---
 
@@ -34,10 +35,12 @@ const STOPS = [
     <header class="wt-hero">
       <div class="wt-bigword">no cliffs</div>
       <p class="wt-intro">
-        One library. Print to TUI. One dataset — a host's vitals — enters as a
-        styled print and never hands over control; it just escalates across
-        surfaces. Here is the whole continuum, <strong>rendered by painted
-        itself</strong> — every panel below is real <code>render_html</code>
+        One library. Print to TUI. One dataset — a host's vitals — enters as
+        <code>paint(vitals)</code> and walks all the way to a full-screen app.
+        Watch what survives each step: not the call — the <strong>lens</strong>,
+        the one <code>data&nbsp;→&nbsp;Block</code> function every stop below
+        renders through. Here is the whole continuum, <strong>rendered by
+        painted itself</strong> — every panel is real <code>render_html</code>
         output, not a mock.
       </p>
     </header>
@@ -45,7 +48,7 @@ const STOPS = [
     <div class="wt-page">
       <nav class="wt-spine" aria-label="continuum">
         <div class="wt-spine-inner">
-          <div class="wt-spine-eyebrow">ONE DATASET →</div>
+          <div class="wt-spine-eyebrow">ONE LENS →</div>
           <ol class="wt-stops">
             {STOPS.map((s) => (
               <li><a href={`#${s.id}`} data-stop={s.id}>
@@ -59,16 +62,41 @@ const STOPS = [
           </ol>
           <div class="wt-spine-foot">
             <div class="wt-foot-title">no cliffs</div>
-            <div class="wt-foot-sub">same data, same render fn — only the surface escalates.</div>
+            <div class="wt-foot-sub">same lens, three deliverers — only the trigger changes.</div>
           </div>
         </div>
       </nav>
 
       <main class="wt-main">
-        <!-- 01 — styled print -->
-        <section id="show" data-stage="show" class="wt-stage">
-          <div class="wt-stage-head"><span class="wt-n">01</span><span class="wt-label">styled print</span><span class="wt-entry">show(data) → severity bars</span></div>
-          <h2 class="wt-title">Drop it in. It detects the TTY and styles itself.</h2>
+        <!-- 01 — transcribe -->
+        <section id="paint" data-stage="paint" class="wt-stage">
+          <div class="wt-stage-head"><span class="wt-n">01</span><span class="wt-label">transcribe</span><span class="wt-entry">paint(vitals) → key/value</span></div>
+          <h2 class="wt-title">Drop it in. It transcribes your data — styled, TTY-aware.</h2>
+          <div class="shell">
+            <div class="shell-bar"><span class="shell-title">bash</span><span class="shell-tty">tty · truecolor</span></div>
+            <div class="shell-body">
+              <div class="cmd"><span class="cmd-prompt">~/svc $ </span>python -c 'from painted import paint; paint(vitals)'</div>
+              <div class="panel" set:html={monitorTranscribe} />
+            </div>
+          </div>
+          <p class="note">
+            Zero config — <code>paint()</code> transcribes what the value
+            <em>declares</em>: a dict becomes its key/value pairs, as themselves.
+            It never invents a shape the data didn't state — a bare list is
+            items, never a chart. This is the floor of the walk, and the one
+            stop that needs no lens: you haven't made a claim yet.
+          </p>
+        </section>
+
+        <!-- 02 — the lens: your first claim -->
+        <section id="lens" data-stage="lens" class="wt-stage">
+          <div class="wt-stage-head"><span class="wt-n">02</span><span class="wt-label">+ lens</span><span class="wt-entry">paint(vitals, lens=vitals_lens)</span></div>
+          <h2 class="wt-title">Make a claim. A lens interprets — and it's the piece that ports.</h2>
+          <pre class="code"><span class="code-dim"># the lens: data → Block. Write it once — every stop below renders through it.</span>
+def vitals_lens(vitals, zoom, width):
+    ...  <span class="code-dim"># severity bars, semantic color, per-metric status</span>
+
+paint(vitals, lens=vitals_lens)</pre>
           <div class="shell" data-alt="false">
             <div class="shell-bar"><span class="shell-title">bash</span><span class="shell-tty">tty · truecolor</span></div>
             <div class="shell-body">
@@ -78,38 +106,24 @@ const STOPS = [
             </div>
           </div>
           <p class="note">
-            Zero config — a numeric dict renders as bars; color is semantic
-            (mem in the red, cpu warned, net cool), vivid truecolor by default.
+            Severity bars are a <em>claim</em> — "these numbers sit on a scale" —
+            so they live in a lens, never in <code>paint()</code>'s default. The
+            lens is also where mark and ref attach: color is semantic (mem in the
+            red, cpu warned, net cool), vivid truecolor by default.
             <button class="toggle" data-toggle-alt>see the 16-color downsample ▸</button>
             <span class="note-dim">the toggle swaps to the named-color palette a basic terminal would show — one <code>use_palette()</code> call away.</span>
           </p>
         </section>
 
-        <!-- 02 — format dial -->
-        <section id="format" data-stage="format" class="wt-stage">
-          <div class="wt-stage-head"><span class="wt-n">02</span><span class="wt-label">format dial</span><span class="wt-entry">| cat · --json</span></div>
-          <h2 class="wt-title">Pipe it and the ANSI vanishes. Ask for JSON and it complies.</h2>
-          <div class="shell">
-            <div class="shell-bar"><span class="shell-title">bash</span><span class="shell-tty">pipe · no tty</span></div>
-            <div class="shell-body">
-              <div class="cmd"><span class="cmd-prompt">~/svc $ </span>python monitor.py | cat</div>
-              <div class="panel" set:html={monitorPlain} />
-            </div>
-          </div>
-          <div class="shell">
-            <div class="shell-bar"><span class="shell-title">bash</span><span class="shell-tty">--json</span></div>
-            <div class="shell-body">
-              <div class="cmd"><span class="cmd-prompt">~/svc $ </span>python monitor.py --json</div>
-              <div class="panel" set:html={monitorJson} />
-            </div>
-          </div>
-          <p class="note">No ANSI in a pipe — same structure, color stripped. And <code>--json</code> is orthogonal: structured out for machines, untouched by fidelity or mode.</p>
-        </section>
+        <!-- 03 — argv: the call disappears, the lens doesn't -->
+        <section id="tool" data-stage="tool" class="wt-stage">
+          <div class="wt-stage-head"><span class="wt-n">03</span><span class="wt-label">+ argv</span><span class="wt-entry">run_cli · -q / -vv · | cat · --json</span></div>
+          <h2 class="wt-title">Grow into a tool. The paint() call is gone — the lens is unchanged.</h2>
+          <pre class="code"><span class="code-dim"># run_cli is paint() wearing argv. Same lens, new trigger.</span>
+def render(ctx, data):
+    return vitals_lens(data, ctx.zoom, ctx.width)
 
-        <!-- 03 — fidelity dial -->
-        <section id="fidelity" data-stage="fidelity" class="wt-stage">
-          <div class="wt-stage-head"><span class="wt-n">03</span><span class="wt-label">fidelity dial</span><span class="wt-entry">-q · (default) · -vv</span></div>
-          <h2 class="wt-title">Turn the detail up or down. The data is identical.</h2>
+run_cli(sys.argv[1:], render=render, fetch=get_vitals)</pre>
           <div class="shell">
             <div class="shell-bar"><span class="shell-title">bash</span><span class="shell-tty">-q · quiet</span></div>
             <div class="shell-body">
@@ -124,13 +138,28 @@ const STOPS = [
               <div class="panel" set:html={monitorVv} />
             </div>
           </div>
-          <p class="note">Depth 0 is worst-first, one line — for a status bar or a cron log. Depth 2 is the same numbers plus per-metric status. Escalation is a feature, not a different tool.</p>
+          <p class="note">The dials come free: <code>-q</code>/<code>-vv</code> turn the zoom your lens already reads. Depth 0 is worst-first, one line — for a status bar or a cron log; depth 2 is the same numbers plus per-metric status. Escalation is a feature, not a different tool.</p>
+          <div class="shell">
+            <div class="shell-bar"><span class="shell-title">bash</span><span class="shell-tty">pipe · no tty</span></div>
+            <div class="shell-body">
+              <div class="cmd"><span class="cmd-prompt">~/svc $ </span>python monitor.py | cat</div>
+              <div class="panel" set:html={monitorPlain} />
+            </div>
+          </div>
+          <div class="shell">
+            <div class="shell-bar"><span class="shell-title">bash</span><span class="shell-tty">--json</span></div>
+            <div class="shell-body">
+              <div class="cmd"><span class="cmd-prompt">~/svc $ </span>python monitor.py --json</div>
+              <div class="panel" set:html={monitorJson} />
+            </div>
+          </div>
+          <p class="note">Format is the harness's job, not the lens's: no ANSI in a pipe — same structure, color stripped — and <code>--json</code> re-derives from the fetched data. That's why <code>paint()</code> itself has no <code>format=</code>.</p>
           <p class="note"><a class="branch" href="/walkthrough/fidelity">go deeper — the disclosure ladder ▸</a> <span class="note-dim">depth is the first rung: named facets, named depth spellings, density budgets, structural disclosure climb from here.</span></p>
         </section>
 
-        <!-- 04 — mode dial -->
+        <!-- 04 — time -->
         <section id="live" data-stage="live" class="wt-stage">
-          <div class="wt-stage-head"><span class="wt-n">04</span><span class="wt-label">mode dial</span><span class="wt-entry">--live → diff-flush</span></div>
+          <div class="wt-stage-head"><span class="wt-n">04</span><span class="wt-label">+ time</span><span class="wt-entry">--live → diff-flush</span></div>
           <h2 class="wt-title">Same output, rewritten in place on a steady tick.</h2>
           <div class="shell">
             <div class="shell-bar"><span class="shell-title">bash</span><span class="shell-tty">--live · 60s</span></div>
@@ -139,20 +168,24 @@ const STOPS = [
               <div class="panel" set:html={monitorLive} />
             </div>
           </div>
-          <p class="note">A later tick — cpu and net drifted, mem eased; only the cells that changed are rewritten. This is the bridge from a one-shot print to a living surface.</p>
+          <p class="note">A later tick — cpu and net drifted, mem eased; only the cells that changed are rewritten. The lens fires per tick now instead of once; it still hasn't changed. This is the bridge from a one-shot print to a living surface.</p>
         </section>
 
-        <!-- 05 — interactive -->
+        <!-- 05 — events -->
         <section id="tui" data-stage="tui" class="wt-stage">
-          <div class="wt-stage-head"><span class="wt-n">05</span><span class="wt-label">interactive</span><span class="wt-entry">-i  ·  Surface + Layer</span></div>
-          <h2 class="wt-title">Cross into the alt-screen. Still the same data — now you drive it.</h2>
+          <div class="wt-stage-head"><span class="wt-n">05</span><span class="wt-label">+ events</span><span class="wt-entry">-i  ·  Surface + Layer</span></div>
+          <h2 class="wt-title">Cross into the alt-screen. The lens ports a third time.</h2>
+          <pre class="code"><span class="code-dim"># the same lens, driven by keystrokes instead of argv.</span>
+class StatusApp(Surface):
+    def render(self):
+        return vitals_lens(self.state, self.zoom, self.width)</pre>
           <div class="hero-slot"><PaintedSurface client:visible initialView="Status" /></div>
           <p class="note"><span class="note-dim">cosmetic hero — recreation, not the renderer.</span> The full TUI: keyboard-first, diff-flushed; modal Blocks paint on top while the base dims. (click to focus, then use the keys.)</p>
         </section>
 
         <footer class="wt-end">
-          <h2>You never handed over control.</h2>
-          <p>Five surfaces, one dataset, one render function. You enter wherever your problem sits and escalate without rewriting — that's the continuous surface.</p>
+          <h2>You never rewrote the lens.</h2>
+          <p>One dataset, one lens, three deliverers — <code>paint()</code> direct, <code>run_cli</code> on argv, <code>Surface</code> on events. The verb recurs at every altitude; you swap the trigger around your render function, never the function itself. That's the continuous surface.</p>
         </footer>
       </main>
     </div>
@@ -204,6 +237,10 @@ const STOPS = [
   .cmd { white-space: pre-wrap; margin-bottom: var(--sp-2); font-size: var(--t-cell); }
   .cmd-prompt { color: var(--green); font-weight: var(--w-bold); }
 
+  /* the lens snippet — the porting artifact, shown as code */
+  .code { border: 1px solid var(--line); border-radius: 6px; background: var(--ink); padding: var(--sp-3) var(--sp-4); margin: 0 0 var(--sp-3); font-size: var(--t-cell); line-height: 1.6; color: var(--fg-2); overflow-x: auto; }
+  .code-dim { color: var(--fg-dim); }
+
   /* painted-output panels render via the global .painted-output rule (tokens) */
   .panel :global(.painted-output) { margin: 0; background: transparent; }
 
@@ -246,7 +283,7 @@ const STOPS = [
   // Vivid default ↔ honest "downsample" toggle (the use_palette() story, live).
   document.querySelectorAll("[data-toggle-alt]").forEach((btn) => {
     btn.addEventListener("click", () => {
-      const shell = btn.closest(".wt-stage").querySelector(".shell");
+      const shell = btn.closest(".wt-stage").querySelector(".shell[data-alt]");
       const on = shell.getAttribute("data-alt") === "true";
       shell.setAttribute("data-alt", on ? "false" : "true");
       btn.textContent = on ? "see the 16-color downsample ▸" : "back to truecolor ▸";

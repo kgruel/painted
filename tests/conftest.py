@@ -1,5 +1,7 @@
 """Root test configuration — suite-wide flags and ambient-state isolation."""
 
+import os
+
 import pytest
 
 from painted.refs import reset_refs
@@ -37,11 +39,20 @@ def _reset_ambient_state():
     two-layer like `vocabularies` (there is no built-in ref scheme). All three are
     promoted here from the per-directory fixtures they replace so isolation is a
     property of the whole suite, not something each test directory remembers.
+
+    `NO_COLOR` is scrubbed too: the writer resolves it *ambiently* at construction
+    (`core/writer.py`), so a caller who runs the suite under `NO_COLOR=1` (or a
+    test that leaks it) would silently strip fg/bg from every colour assertion.
+    Deleting it makes the suite hermetic to the ambient environment — tests that
+    genuinely exercise NO_COLOR set it explicitly via `monkeypatch.setenv`, which
+    is applied after this fixture and torn down before it, so they are unaffected.
     """
+    os.environ.pop("NO_COLOR", None)
     reset_theme()
     reset_vocabularies()
     reset_refs()
     yield
+    os.environ.pop("NO_COLOR", None)
     reset_theme()
     reset_vocabularies()
     reset_refs()
