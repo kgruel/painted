@@ -173,6 +173,12 @@ class CliRunner(Generic[T]):
             no_input = bool(getattr(parsed, "no_input", False))
             for prompt in self.prompts or ():
                 for dest in prompt.dests():
+                    # Each prompt dest carries argparse default=_UNSET (the
+                    # absent-flag sentinel), so an absent flag parks as _UNSET —
+                    # kept distinct from a flag that legally parsed to None
+                    # (design §6, the flag_supplied seam). The dest is always on
+                    # the namespace (the parser registered it), so the getattr
+                    # fallback is unreachable.
                     parked[dest] = getattr(parsed, dest, None)
 
         is_json = fmt == Format.JSON
@@ -387,6 +393,7 @@ class CliRunner(Generic[T]):
 
         from ..inplace import InPlaceRenderer
         from ..core.writer import print_block
+        from .prompts import PromptAbort
 
         if self.fetch_stream is not None:
             # Alt-screen delivery for sustained streams — only on a real TTY
@@ -410,6 +417,10 @@ class CliRunner(Generic[T]):
                                     ctx, self._render_error_block(ctx, exc), exc, use_ansi=False
                                 )
                                 return 2
+                    except PromptAbort:
+                        # A prompt abort is not a graceful stop — propagate it
+                        # out of run_cli like a static-mode abort (§7).
+                        raise
                     except (KeyboardInterrupt, asyncio.CancelledError):
                         return 0
                     except Exception as exc:
@@ -448,6 +459,11 @@ class CliRunner(Generic[T]):
                             renderer.render(block)
                             if meter is not None:
                                 meter.stop()
+                    except PromptAbort:
+                        # Settle the live region, then propagate — a prompt abort
+                        # exits like static mode, never as a graceful stop (§7).
+                        renderer.finalize()
+                        raise
                     except (KeyboardInterrupt, asyncio.CancelledError):
                         renderer.finalize()
                         return 0
@@ -464,6 +480,8 @@ class CliRunner(Generic[T]):
 
             try:
                 return asyncio.run(stream())
+            except PromptAbort:
+                raise  # a prompt abort propagates out of run_cli, not exit-0
             except KeyboardInterrupt:
                 return 0
 
@@ -494,7 +512,7 @@ class CliRunner(Generic[T]):
         import asyncio
 
         from ..core.writer import print_block
-        from .prompts import PromptContractError
+        from .prompts import PromptAbort, PromptContractError
         from .stream_surface import StreamSurface
 
         assert self.fetch_stream is not None  # guarded by the caller
@@ -506,6 +524,8 @@ class CliRunner(Generic[T]):
         )
         try:
             asyncio.run(surface.run())
+        except PromptAbort:
+            raise  # a prompt abort propagates out of run_cli, not a silent deposit
         except KeyboardInterrupt:
             pass  # final frame still deposited below
         except PromptContractError:

@@ -307,6 +307,7 @@ def detect_context(
         stdin_tty=stdin_is_tty,
         stderr_tty=stderr_is_tty,
         no_input=no_input,
+        force_plain=force_plain,
         stdin=stdin,
     )
 

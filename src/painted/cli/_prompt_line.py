@@ -22,13 +22,13 @@ from __future__ import annotations
 
 from typing import Any, TextIO
 
-from ..core.cell import Style
+from ..core.cell import Style, scrub_control
 from ..core.span import Span
 from ..core.writer import Writer
 from ..icon_set import current_icons
 from ..palette import current_palette
 from ..vocabulary import vocab_style
-from .prompts import MISSING, Confirm, Danger, Input, Prompt, Select
+from .prompts import MISSING, Confirm, Danger, Input, Prompt, PromptAbort, Select
 
 __all__ = ["resolve_line"]
 
@@ -67,20 +67,22 @@ def _read_line(stdin: TextIO, stderr: TextIO) -> str:
     NONE-tier default-accept, handled by each caller), while EOF (Ctrl-D)
     reads as ``""``. Both EOF and a ``KeyboardInterrupt`` raised out of the
     blocking read (a real terminal delivers it here on Ctrl-C) take the
-    *same* abort path: a restoring newline to stderr, then the exception
-    propagates — never an answer, never a silent fall-through to the
-    default.
+    *same* abort path: a restoring newline to stderr, then a ``PromptAbort``
+    (a ``KeyboardInterrupt`` subclass) propagates — never an answer, never a
+    silent fall-through to the default. ``PromptAbort`` is what the runner's
+    live paths re-raise past their graceful-stop handlers so a prompt abort
+    exits like a static-mode abort, not as success (§7).
     """
     try:
         raw = stdin.readline()
     except KeyboardInterrupt:
         stderr.write("\n")
         stderr.flush()
-        raise
+        raise PromptAbort
     if raw == "":
         stderr.write("\n")
         stderr.flush()
-        raise KeyboardInterrupt
+        raise PromptAbort
     return raw[:-1] if raw.endswith("\n") else raw
 
 
@@ -90,9 +92,17 @@ def _read_line(stdin: TextIO, stderr: TextIO) -> str:
 
 
 def _render(spans: tuple[Span, ...], *, stderr: TextIO, use_ansi: bool) -> str:
-    """Spans to a plain or SGR-styled string, no trailing newline."""
+    """Spans to a plain or SGR-styled string, no trailing newline.
+
+    Every span's text is scrubbed of C0/C1 control characters through the same
+    :func:`scrub_control` a ``Cell`` applies (§8, the 0.4.0 hardening). This
+    writer emits ``Span.text`` straight to stderr — it never builds ``Cell``s —
+    so a hostile declaration string (``Confirm("go", "Go?\\x1b[2J")``) would
+    otherwise issue raw escapes; the CELL rung is already covered because it
+    composes Blocks, whose cells neutralize on construction.
+    """
     if not use_ansi:
-        return "".join(s.text for s in spans)
+        return "".join(scrub_control(s.text) for s in spans)
     writer = Writer(stderr)
     palette = current_palette()
     out: list[str] = []
@@ -100,7 +110,7 @@ def _render(spans: tuple[Span, ...], *, stderr: TextIO, use_ansi: bool) -> str:
         sgr = writer.apply_style(palette.resolve_style(span.style))
         if sgr:
             out.append(sgr)
-        out.append(span.text)
+        out.append(scrub_control(span.text))
         if sgr:
             out.append(writer.reset_style())
     return "".join(out)

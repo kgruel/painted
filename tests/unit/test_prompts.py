@@ -16,7 +16,14 @@ import sys
 import pytest
 
 from painted.cli import Confirm, Danger, Input, Select
-from painted.cli.prompts import MISSING, Prompt, PromptContractError, PromptSession
+from painted.cli.prompts import (
+    _UNSET,
+    MISSING,
+    Prompt,
+    PromptAbort,
+    PromptContractError,
+    PromptSession,
+)
 from painted.cli.types import (
     build_parser,
     consumer_args,
@@ -203,7 +210,9 @@ def test_confirm_generates_boolean_pair() -> None:
     parsed = parser.parse_args(["--no-reseal"])
     assert parsed.reseal is False
     parsed = parser.parse_args([])
-    assert parsed.reseal is None  # absent is distinguishable from False
+    # Absent parks as the _UNSET sentinel, distinguishable from an explicit
+    # --no-reseal (False) — presence is sentinel-based, not None-based (§6).
+    assert parsed.reseal is _UNSET
 
 
 def test_select_flag_is_choices_validated() -> None:
@@ -335,7 +344,7 @@ def test_flag_resolves_silently(capsys: pytest.CaptureFixture[str]) -> None:
 
 def test_default_fires_when_not_a_terminal(capsys: pytest.CaptureFixture[str]) -> None:
     sel = Select("scope", "w", values=("local", "all"), default="local")
-    session = PromptSession([sel], {"scope": None}, stdin_tty=False, stderr_tty=False)
+    session = PromptSession([sel], {"scope": _UNSET}, stdin_tty=False, stderr_tty=False)
     assert session.ask("scope") == "local"
     err = capsys.readouterr().err
     assert "scope: local (default)" in err
@@ -345,14 +354,14 @@ def test_default_record_line_is_the_only_echo_and_fires_once(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     sel = Select("scope", "w", values=("local", "all"), default="local")
-    session = PromptSession([sel], {"scope": None}, stdin_tty=False)
+    session = PromptSession([sel], {"scope": _UNSET}, stdin_tty=False)
     session.ask("scope")
     session.ask("scope")  # memoized — no second record line
     assert capsys.readouterr().err.count("(default)") == 1
 
 
 def test_refusal_names_the_flag(capsys: pytest.CaptureFixture[str]) -> None:
-    session = PromptSession([Confirm("overwrite", "o")], {"overwrite": None}, stdin_tty=False)
+    session = PromptSession([Confirm("overwrite", "o")], {"overwrite": _UNSET}, stdin_tty=False)
     with pytest.raises(PromptContractError) as excinfo:
         session.ask("overwrite")
     msg = str(excinfo.value)
@@ -372,7 +381,7 @@ def test_memoization_returns_recorded_answer() -> None:
 def test_no_input_suppresses_interaction_at_a_tty(capsys: pytest.CaptureFixture[str]) -> None:
     sel = Select("scope", "w", values=("local", "all"), default="local")
     # stdin IS a tty, but --no-input makes it behave as if it were not.
-    session = PromptSession([sel], {"scope": None}, stdin_tty=True, no_input=True)
+    session = PromptSession([sel], {"scope": _UNSET}, stdin_tty=True, no_input=True)
     assert session.ask("scope") == "local"
 
 
@@ -385,7 +394,7 @@ def test_declared_default_at_a_tty_goes_through_line_not_the_default_path(
     # record line proves which path fired: LINE's carries no "(default)"
     # suffix (§7's rule — that suffix marks an answer nobody chose).
     sel = Select("scope", "w", values=("local", "all"), default="local")
-    session = PromptSession([sel], {"scope": None}, stdin_tty=True, stdin=_FakeInput(["\n"]))
+    session = PromptSession([sel], {"scope": _UNSET}, stdin_tty=True, stdin=_FakeInput(["\n"]))
     assert session.ask("scope") == "local"
     err = capsys.readouterr().err
     # "scope: local" appears only in the record line — the option listing
@@ -397,7 +406,7 @@ def test_declared_default_at_a_tty_goes_through_line_not_the_default_path(
 def test_no_input_without_a_default_refuses() -> None:
     # --no-input at a TTY behaves as non-terminal: no flag, no default → refusal.
     session = PromptSession(
-        [Confirm("overwrite", "o")], {"overwrite": None}, stdin_tty=True, no_input=True
+        [Confirm("overwrite", "o")], {"overwrite": _UNSET}, stdin_tty=True, no_input=True
     )
     with pytest.raises(PromptContractError):
         session.ask("overwrite")
@@ -423,7 +432,7 @@ def test_hard_flag_mismatch_is_a_contract_error() -> None:
 
 def test_hard_no_flag_resolves_false() -> None:
     hard = Confirm("reseal", "r", danger=Danger.HARD, challenge="win-1")
-    session = PromptSession([hard], {"reseal": None, "no_reseal": True}, stdin_tty=False)
+    session = PromptSession([hard], {"reseal": _UNSET, "no_reseal": True}, stdin_tty=False)
     assert session.ask("reseal") is False
 
 
@@ -441,7 +450,7 @@ def test_input_parsed_flag_resolves_to_T() -> None:
 
 def test_input_parsed_default_resolves_to_T(capsys: pytest.CaptureFixture[str]) -> None:
     inp = Input("count", "how many", parse=int, default="7")
-    session = PromptSession([inp], {"count": None}, stdin_tty=False)
+    session = PromptSession([inp], {"count": _UNSET}, stdin_tty=False)
     answer = session.ask("count")
     assert answer == 7 and isinstance(answer, int)
 
@@ -458,7 +467,7 @@ def test_input_without_parse_answers_the_raw_string() -> None:
 
 
 def test_ask_undeclared_name_raises_declaration_error() -> None:
-    session = PromptSession([Confirm("overwrite", "o")], {"overwrite": None})
+    session = PromptSession([Confirm("overwrite", "o")], {"overwrite": _UNSET})
     with pytest.raises(DeclarationError, match="no prompt named 'nope'"):
         session.ask("nope")
 
@@ -696,7 +705,7 @@ def test_prompt_base_is_the_shared_primitive() -> None:
 def _line_session(prompt, lines, *, stderr_tty: bool = False) -> PromptSession:
     return PromptSession(
         [prompt],
-        {d: None for d in prompt.dests()},
+        {prompt.dest: _UNSET},
         stdin_tty=True,
         stderr_tty=stderr_tty,
         stdin=_FakeInput(lines),
@@ -856,7 +865,7 @@ def test_default_record_line_is_marked_by_vocabulary_too(
     # (default) record — both are drawn by the same _emit_record, so both
     # must carry the mark.
     sel = Select("scope", "Which?", vocabulary=_SCOPE_VOCAB, default="local")
-    session = PromptSession([sel], {"scope": None}, stdin_tty=False, stderr_tty=True)
+    session = PromptSession([sel], {"scope": _UNSET}, stdin_tty=False, stderr_tty=True)
     assert session.ask("scope") == "local"
     err = capsys.readouterr().err
     assert "scope:" in err and "local" in err and "(default)" in err
@@ -867,7 +876,7 @@ def test_default_record_line_unmarked_for_values_tuple_select(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     sel = Select("scope", "Which?", values=("local", "all"), default="local")
-    session = PromptSession([sel], {"scope": None}, stdin_tty=False, stderr_tty=True)
+    session = PromptSession([sel], {"scope": _UNSET}, stdin_tty=False, stderr_tty=True)
     session.ask("scope")
     err = capsys.readouterr().err
     assert "\x1b[4m" not in err
@@ -1082,6 +1091,7 @@ def test_run_cli_line_prompt_reads_from_injected_stdin(
 # =============================================================================
 
 import io  # noqa: E402
+import os  # noqa: E402
 
 from painted._prompt_cell import (  # noqa: E402
     _confirm_block,
@@ -1305,7 +1315,7 @@ def test_cell_abort_restores_cbreak_before_settling(monkeypatch: pytest.MonkeyPa
 def _rung_session(prompt, *, stdin_tty, stderr_tty):
     return PromptSession(
         [prompt],
-        {prompt.dest: None},
+        {prompt.dest: _UNSET},
         stdin_tty=stdin_tty,
         stderr_tty=stderr_tty,
         stdin=io.StringIO(),
@@ -1348,7 +1358,7 @@ def test_rung_declared_when_stdin_not_a_tty(monkeypatch: pytest.MonkeyPatch) -> 
     monkeypatch.setattr("painted.cli._prompt_line.resolve_line", _boom)
     sess = PromptSession(
         [Select("s", "w", values=("a", "b"), default="a")],
-        {"s": None},
+        {"s": _UNSET},
         stdin_tty=False,
         stderr_tty=True,
     )
@@ -1395,7 +1405,7 @@ def test_cell_answer_collapses_to_the_record_line(
     monkeypatch.setattr("painted._prompt_cell.resolve_cell", lambda p, **k: "config")
     sess = PromptSession(
         [Select("scope", "w", values=("local", "config", "all"))],
-        {"scope": None},
+        {"scope": _UNSET},
         stdin_tty=True,
         stderr_tty=True,  # CELL requires a TTY stderr
         stdin=io.StringIO(),
@@ -1404,3 +1414,271 @@ def test_cell_answer_collapses_to_the_record_line(
     err = capsys.readouterr().err
     assert "scope" in err and "config" in err  # the record line is present
     assert "?" not in err  # no prompt residue — the region became the record
+
+
+# =============================================================================
+# Checkpoint B remediations (docs/PROMPTS_DESIGN.md §6, §7, §5, §8)
+# =============================================================================
+
+
+# --- F1: presence is sentinel-based, not None-based -------------------------
+
+
+def test_input_parse_returning_none_is_a_supplied_answer() -> None:
+    # parse may legally return None; a supplied flag that parses to None is an
+    # answer, not an absent flag — the _UNSET sentinel keeps them distinct (§6).
+    inp = Input("maybe", "m?", parse=lambda s: None)
+    session = PromptSession([inp], {"maybe": None}, stdin_tty=False)
+    assert session.ask("maybe") is None
+
+
+def test_input_parse_none_absent_flag_still_proceeds_down_the_ladder() -> None:
+    inp = Input("maybe", "m?", parse=lambda s: None)
+    session = PromptSession([inp], {"maybe": _UNSET}, stdin_tty=False)  # absent
+    with pytest.raises(PromptContractError):
+        session.ask("maybe")
+
+
+def test_run_cli_input_parsing_to_none_resolves_none(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # The whole path: --maybe x, parse→None, ctx.ask returns None (not refusal).
+    monkeypatch.setattr(sys, "stdin", _FakeStream(False))
+    prompts = [Input("maybe", "m?", parse=lambda s: None)]
+
+    def fetch(ctx):
+        return {"maybe": ctx.ask("maybe")}
+
+    rc = run_cli(["--maybe", "x", "--plain"], _render, fetch, prompts=prompts)
+    assert rc == 0
+    assert "'maybe': None" in capsys.readouterr().out
+
+
+# --- F2: PromptAbort — a prompt abort is not a graceful stop -----------------
+
+
+def test_prompt_abort_is_a_keyboard_interrupt_subclass() -> None:
+    assert issubclass(PromptAbort, KeyboardInterrupt)
+
+
+def test_line_abort_raises_prompt_abort_specifically() -> None:
+    with pytest.raises(PromptAbort):
+        _line_session(Confirm("go", "Go?"), []).ask("go")  # EOF
+    with pytest.raises(PromptAbort):
+        _line_session(Confirm("go", "Go?"), [KeyboardInterrupt()]).ask("go")  # Ctrl-C
+
+
+def test_cell_abort_raises_prompt_abort_specifically() -> None:
+    with pytest.raises(PromptAbort):
+        _cell(Confirm("go", "Go?"), [])  # EOF (None)
+    with pytest.raises(PromptAbort):
+        _cell(Confirm("go", "Go?"), ["\x04"])  # Ctrl-D byte
+
+
+def test_cell_read_raising_keyboard_interrupt_normalizes_to_prompt_abort() -> None:
+    # A real terminal raises SIGINT→KeyboardInterrupt inside the blocking read;
+    # _next_key normalizes it so the runner can tell a prompt abort apart.
+    def boom() -> str:
+        raise KeyboardInterrupt
+
+    with pytest.raises(PromptAbort):
+        resolve_cell(
+            Confirm("go", "Go?"), stdin=io.StringIO(), stderr=io.StringIO(), key_source=boom
+        )
+
+
+def test_run_cli_live_prompt_abort_propagates_not_exit_zero(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A prompt EOF inside a live stream raises out of run_cli — never swallowed
+    # as a graceful stop (exit 0). Propagates like a static-mode abort (§7).
+    monkeypatch.setattr(sys, "stdin", _FakeTTYInput([]))  # EOF at the read
+
+    async def gen(ctx):
+        ctx.ask("go")  # aborts before the first yield
+        yield {"n": 1}
+
+    with pytest.raises(PromptAbort):
+        run_cli(
+            ["--live", "--plain"],
+            _render,
+            lambda ctx: {},
+            fetch_stream=gen,
+            prompts=[Confirm("go", "Go?")],
+        )
+
+
+def test_run_cli_live_bare_ctrl_c_without_prompt_stays_graceful(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A non-prompt KeyboardInterrupt keeps today's graceful-stop behavior (0).
+    monkeypatch.setattr(sys, "stdin", _FakeStream(False))
+
+    async def gen(ctx):
+        raise KeyboardInterrupt
+        yield {}  # pragma: no cover
+
+    rc = run_cli(["--live", "--plain"], _render, lambda ctx: {}, fetch_stream=gen)
+    assert rc == 0
+
+
+# --- F3: --plain forces LINE + no ANSI, even at a full TTY -------------------
+
+
+def test_rung_plain_forces_line_even_with_cbreak(monkeypatch: pytest.MonkeyPatch) -> None:
+    _stub_rungs(monkeypatch, cbreak=True)
+    sess = PromptSession(
+        [Select("s", "w", values=("a", "b"))],
+        {"s": _UNSET},
+        stdin_tty=True,
+        stderr_tty=True,
+        force_plain=True,
+        stdin=io.StringIO(),
+    )
+    assert sess._render_interactive(sess._by_name["s"]) == "LINE"
+
+
+def test_plain_prompt_emits_no_sgr_at_a_full_tty(capsys: pytest.CaptureFixture[str]) -> None:
+    session = PromptSession(
+        [Confirm("go", "Go?")],
+        {"go": _UNSET},
+        stdin_tty=True,
+        stderr_tty=True,
+        force_plain=True,
+        stdin=_FakeInput(["y\n"]),
+    )
+    assert session.ask("go") is True  # answered via LINE (readline), not CELL
+    assert "\x1b[" not in capsys.readouterr().err  # zero SGR bytes on stderr
+
+
+# --- F4: control-char neutralization on the LINE writer ---------------------
+
+
+def test_line_neutralizes_control_chars_in_declaration_strings(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # A hostile question must not issue raw escapes at LINE even plain (§8, the
+    # 0.4.0 hardening) — the writer scrubs through the same sanitizer Cell uses.
+    _line_session(Confirm("go", "Go?\x1b[2J"), ["y\n"]).ask("go")
+    err = capsys.readouterr().err
+    assert "\x1b[2J" not in err
+    assert "\x1b" not in err  # the ESC was scrubbed to a space (plain path)
+
+
+def test_cell_neutralizes_control_chars_in_question() -> None:
+    # CELL is already covered by Block/Cell construction — assert it anyway.
+    text = _block_text(_confirm_block(Confirm("go", "Go?\x1b[2J"), None))
+    assert "\x1b" not in text
+
+
+# --- F5: runtime single-value Select collapses to its only choice -----------
+
+
+def test_runtime_single_value_select_collapses_to_only_choice(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    sel = Select("only", "pick", values=("sole",))
+    session = PromptSession([], {}, stdin_tty=False)  # runtime ask, non-interactive
+    assert session.ask(sel) == "sole"
+    err = capsys.readouterr().err
+    assert "only: sole" in err and "(only choice)" in err
+
+
+def test_parse_time_single_value_select_still_refuses() -> None:
+    # A declared Select keeps its flag channel — no flag, non-TTY → refusal, not
+    # a silent collapse (§6 scopes the collapse to the runtime channel).
+    sel = Select("only", "pick", values=("sole",))
+    session = PromptSession([sel], {"only": _UNSET}, stdin_tty=False)
+    with pytest.raises(PromptContractError):
+        session.ask("only")
+
+
+def test_runtime_single_value_select_still_asks_at_a_tty(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # TTY unchanged: it still asks (honest even if quaint), so the record line
+    # carries no "(only choice)" — the collapse is the non-interactive channel.
+    sel = Select("only", "pick", values=("sole",))
+    session = PromptSession([], {}, stdin_tty=True, stderr_tty=False, stdin=_FakeInput(["1\n"]))
+    assert session.ask(sel) == "sole"
+    assert "(only choice)" not in capsys.readouterr().err
+
+
+# --- F6: CELL clamps its block to the terminal width ------------------------
+
+
+class _RecordingRenderer:
+    def __init__(self) -> None:
+        self.frames: list[Block] = []
+
+    def render(self, block: Block) -> None:
+        self.frames.append(block)
+
+
+def test_cell_paint_clamps_wide_block_to_terminal_width(monkeypatch: pytest.MonkeyPatch) -> None:
+    import painted._prompt_cell as pc
+
+    monkeypatch.setattr(pc.shutil, "get_terminal_size", lambda *a: os.terminal_size((10, 24)))
+    rec = _RecordingRenderer()
+    pc._paint(rec, Block.text("x" * 50, Style()))
+    assert rec.frames[0].width == 10  # clipped to the terminal, no soft-wrap
+
+
+def test_cell_paint_leaves_a_narrow_block_untouched(monkeypatch: pytest.MonkeyPatch) -> None:
+    import painted._prompt_cell as pc
+
+    monkeypatch.setattr(pc.shutil, "get_terminal_size", lambda *a: os.terminal_size((80, 24)))
+    rec = _RecordingRenderer()
+    narrow = Block.text("hi", Style())
+    pc._paint(rec, narrow)
+    assert rec.frames[0] is narrow  # no-op when it already fits
+
+
+# --- F7: terminal restoration is unconditional on the answer path -----------
+
+
+def test_cell_stderr_raising_during_clear_still_exits_cbreak(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    order: list[str] = []
+
+    class _FakeKB:
+        def __init__(self, stream=None):
+            pass
+
+        def __enter__(self):
+            order.append("kb_enter")
+            return self
+
+        def __exit__(self, *a):
+            order.append("kb_exit")
+
+        def read_key(self):
+            return "y"  # answers immediately
+
+    class _FakeRenderer:
+        def __init__(self, stream=None):
+            pass
+
+        def __enter__(self):
+            order.append("r_enter")
+            return self
+
+        def __exit__(self, *a):
+            order.append("r_exit")
+
+        def render(self, block):
+            pass
+
+        def clear(self):
+            order.append("clear")
+            raise OSError("stderr gone")
+
+    monkeypatch.setattr("painted._prompt_cell.KeyboardInput", _FakeKB)
+    monkeypatch.setattr("painted._prompt_cell.InPlaceRenderer", _FakeRenderer)
+    with pytest.raises(OSError):
+        resolve_cell(Confirm("go", "Go?"), stdin=io.StringIO(), stderr=io.StringIO())
+    # cbreak exit ran before the failing clear, and the renderer still exited
+    # (show cursor) despite clear raising — restoration is unconditional (§7).
+    assert order.index("kb_exit") < order.index("clear")
+    assert "r_exit" in order

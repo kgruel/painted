@@ -90,6 +90,18 @@ class _MissingType:
 MISSING: Any = _MissingType()
 
 
+# The argparse default for every prompt dest — a private sentinel meaning "argv
+# did not supply this flag". Presence must be sentinel-based, not None-based:
+# an ``Input(parse=...)`` may legally *parse to* ``None`` (or a flag may carry a
+# literal that parses to None), which is a supplied answer, not an absent flag.
+# ``None`` as the default would collapse those two — the flag-supplied None would
+# read as "absent" and refuse (non-TTY) or re-prompt (TTY). A distinct sentinel
+# keeps "absent" and "parsed to None" separable at the ``flag_supplied`` seam.
+# Separate from ``MISSING`` (which marks an absent *declared default*, a
+# different axis): this one lives only in the parked argv namespace.
+_UNSET: Any = object()
+
+
 # =============================================================================
 # Danger — the ordered confirmation-ceremony vocabulary
 # =============================================================================
@@ -154,6 +166,21 @@ class PromptContractError(ContractError):
     pipe into ``jq``. The runner's error-block path recognizes this subclass and
     reroutes; every other ``ContractError`` keeps stdout. Private — the public
     contract names ``ContractError``, not this seam.
+    """
+
+
+class PromptAbort(KeyboardInterrupt):
+    """A prompt was aborted at the terminal — Ctrl-C or EOF at the read (§7).
+
+    A ``KeyboardInterrupt`` subclass so §7's rule "a prompt abort is a
+    ``KeyboardInterrupt``" stays literally true: every ``except
+    KeyboardInterrupt`` still catches it, and the terminal-restore paths (LINE's
+    restoring newline, CELL's cbreak exit) fire unchanged. The subclass exists so
+    the runner's live/surface loops — which catch ``KeyboardInterrupt`` as a
+    *graceful stop* (exit 0) — can tell a prompt abort apart and re-raise it,
+    letting it propagate out of ``run_cli`` exactly as it already does from
+    static mode (terminal restored, no exit-0). Private, like
+    ``PromptContractError``: the contract names the abort, not this seam.
     """
 
 
@@ -330,7 +357,7 @@ class Confirm(Prompt[bool]):
             challenge_action = group.add_argument(
                 f"--{self.name}",
                 dest=self.dest,
-                default=None,
+                default=_UNSET,
                 metavar="CHALLENGE",
                 help=f"{self.question} (type the challenge to proceed)",
             )
@@ -346,20 +373,21 @@ class Confirm(Prompt[bool]):
                 help=f"Decline: {self.question}",
             )
             return
-        # NONE / SOFT: a boolean pair. default=None so "not passed" is
-        # distinguishable from an explicit --no-{name}.
+        # NONE / SOFT: a boolean pair. default=_UNSET so "not passed" is
+        # distinguishable from an explicit --{name}/--no-{name} (which set
+        # True/False) — the presence sentinel, not None.
         container.add_argument(
             f"--{self.name}",
             action=argparse.BooleanOptionalAction,
-            default=None,
+            default=_UNSET,
             dest=self.dest,
             help=self.question,
         )
 
     def flag_supplied(self, parked: Mapping[str, object]) -> bool:
         if self.danger is Danger.HARD:
-            return parked.get(self.dest) is not None or bool(parked.get(self._no_dest))
-        return parked.get(self.dest) is not None
+            return parked.get(self.dest, _UNSET) is not _UNSET or bool(parked.get(self._no_dest))
+        return parked.get(self.dest, _UNSET) is not _UNSET
 
     def resolve_flag(self, parked: Mapping[str, object]) -> bool:
         if self.danger is Danger.HARD:
@@ -447,12 +475,12 @@ class Select(Prompt[str]):
             f"--{self.name}",
             dest=self.dest,
             choices=list(self.choices),
-            default=None,
+            default=_UNSET,
             help=self.question,
         )
 
     def flag_supplied(self, parked: Mapping[str, object]) -> bool:
-        return parked.get(self.dest) is not None
+        return parked.get(self.dest, _UNSET) is not _UNSET
 
     def resolve_flag(self, parked: Mapping[str, object]) -> str:
         # argparse already validated membership via choices=.
@@ -521,7 +549,7 @@ class Input(Prompt[T]):
             action = container.add_argument(
                 f"--{self.name}",
                 dest=self.dest,
-                default=None,
+                default=_UNSET,
                 type=self.parse,
                 metavar=self.dest.upper(),
                 help=self.question,
@@ -530,7 +558,7 @@ class Input(Prompt[T]):
             action = container.add_argument(
                 f"--{self.name}",
                 dest=self.dest,
-                default=None,
+                default=_UNSET,
                 metavar=self.dest.upper(),
                 help=self.question,
             )
@@ -543,10 +571,12 @@ class Input(Prompt[T]):
             complete_via(action, self.completer)
 
     def flag_supplied(self, parked: Mapping[str, object]) -> bool:
-        return parked.get(self.dest) is not None
+        return parked.get(self.dest, _UNSET) is not _UNSET
 
     def resolve_flag(self, parked: Mapping[str, object]) -> T:
-        # argparse already applied parse via type=, so the parked value is T.
+        # argparse already applied parse via type=, so the parked value is T
+        # (which may legally be None — flag_supplied's sentinel test kept this
+        # answer distinct from an absent flag).
         return parked[self.dest]  # type: ignore[return-value]
 
 
@@ -574,6 +604,7 @@ class PromptSession:
         stdin_tty: bool = False,
         stderr_tty: bool = False,
         no_input: bool = False,
+        force_plain: bool = False,
         stdin: TextIO | None = None,
     ) -> None:
         self._by_name: dict[str, Prompt[Any]] = {p.name: p for p in prompts}
@@ -582,12 +613,28 @@ class PromptSession:
         self._stdin_tty = stdin_tty
         self._stderr_tty = stderr_tty
         self._no_input = no_input
+        # --plain forces the LINE rung and strips ANSI from the *whole* prompt UI
+        # (§5, §8): plain requested → LINE, byte-for-byte the accessibility
+        # exchange, no cbreak repaint and no SGR — even at a full TTY, and the
+        # answer→record line follows suit (:attr:`_use_ansi`).
+        self._force_plain = force_plain
         # The LINE rung's injectable read stream (design §10) — for tests only;
         # the public contract stays §3. Captured once, at construction, the same
         # moment stdin_tty/stderr_tty are — not re-read per ask() the way a bare
         # `sys.stdin` reference would drift if something reassigned it mid-run.
         self._stdin: TextIO = stdin if stdin is not None else sys.stdin
         self._answers: dict[str, Any] = {}
+
+    @property
+    def _use_ansi(self) -> bool:
+        """Whether prompt UI on stderr may carry SGR — the one ANSI gate.
+
+        Styled only when stderr is a TTY *and* ``--plain`` was not requested
+        (§8): the render fidelity follows stderr's own TTY-ness, but ``--plain``
+        overrides it to a plain exchange across the whole prompt UI (the rendered
+        prompt and its answer→record line alike).
+        """
+        return self._stderr_tty and not self._force_plain
 
     def ask(self, prompt: str | Prompt[Any]) -> Any:
         """Resolve a prompt once — the single door (design Q3).
@@ -643,6 +690,16 @@ class PromptSession:
             value = p.resolve_default()
             self._emit_record(p, value, suffix=" (default)")
             return value
+        # A runtime Select whose domain collapsed to a single value resolves to
+        # it through the declared channel (§6, the gum --select-if-one shape):
+        # there is nothing to ask when exactly one answer is legal. Runtime-only
+        # — a parse-time Select keeps its flag channel and refuses without it,
+        # so a scripted invocation stays explicit. Echoes like (default): an
+        # assumed answer the invocation doesn't show.
+        if isinstance(p, Select) and p.name not in self._declared and len(p.choices) == 1:
+            value = p.choices[0]
+            self._emit_record(p, value, suffix=" (only choice)")
+            return value
         raise self._refusal(p)
 
     def _interactive(self, p: Prompt[Any]) -> Any:
@@ -663,12 +720,13 @@ class PromptSession:
         Capability-honest, same as mode resolution: CELL (raw-mode repaint) needs
         stdin a TTY *and* stderr a TTY (CELL repaints on the stream it draws —
         repainting into a log is not a render) *and* cbreak actually available on
-        stdin, probed before any terminal mutation. Anything short of that falls
-        to LINE, the accessibility floor — same options, same answer type (§5),
-        so a downgrade is byte-for-byte the slice-2 exchange. The stdin gate
-        itself was already cleared by the caller.
+        stdin, probed before any terminal mutation. ``--plain`` forces the floor
+        regardless of capability (§5): plain requested → LINE, no ANSI. Anything
+        short of the CELL bar falls to LINE, the accessibility floor — same
+        options, same answer type (§5), so a downgrade is byte-for-byte the
+        slice-2 exchange. The stdin gate itself was already cleared by the caller.
         """
-        if self._stdin_tty and self._stderr_tty:
+        if not self._force_plain and self._stdin_tty and self._stderr_tty:
             from ..keyboard import cbreak_supported
 
             if cbreak_supported(self._stdin):
@@ -678,7 +736,7 @@ class PromptSession:
 
         from ._prompt_line import resolve_line
 
-        return resolve_line(p, stdin=self._stdin, stderr=sys.stderr, use_ansi=self._stderr_tty)
+        return resolve_line(p, stdin=self._stdin, stderr=sys.stderr, use_ansi=self._use_ansi)
 
     def _refusal(self, p: Prompt[Any]) -> PromptContractError:
         """The terraform-shaped rule-3 refusal (design §3, §8), stderr-routed."""
@@ -706,8 +764,8 @@ class PromptSession:
         chose; an interactively-asked answer gets none. Drawn with core
         primitives only (never ``views`` — the cli→views boundary) and
         imported lazily here, the single point this module touches the
-        renderer. Fidelity follows stderr's TTY-ness (§8): piped stderr →
-        plain, no ANSI.
+        renderer. Fidelity follows :attr:`_use_ansi` (§8): piped stderr —
+        or ``--plain`` at any TTY — renders plain, no ANSI.
 
         The answer's own style is its declared mark when the prompt is a
         vocabulary-backed ``Select`` (design §7: "styled by the answer's mark
@@ -737,4 +795,4 @@ class PromptSession:
             )
         )
         block = line.to_block(max(1, line.width))
-        print_block(block, sys.stderr, use_ansi=self._stderr_tty)
+        print_block(block, sys.stderr, use_ansi=self._use_ansi)

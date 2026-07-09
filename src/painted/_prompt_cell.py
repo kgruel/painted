@@ -25,11 +25,12 @@ the terminal is restored (cbreak exit) *first*, the region is settled, and the
 
 from __future__ import annotations
 
+import shutil
 from typing import Any, Callable, TextIO
 
 from .core.block import Block
 from .core.cell import Style
-from .core.compose import join_horizontal, join_vertical
+from .core.compose import join_horizontal, join_vertical, truncate
 from .core.span import Line, Span
 from .icon_set import current_icons
 from .inplace import InPlaceRenderer
@@ -37,7 +38,7 @@ from .keyboard import KeyboardInput
 from .palette import current_palette
 from .vocabulary import vocab_style
 from .views import ListState, TextInputState, list_view, text_input
-from .cli.prompts import MISSING, Confirm, Danger, Input, Prompt, Select
+from .cli.prompts import MISSING, Confirm, Danger, Input, Prompt, PromptAbort, Select
 
 __all__ = ["resolve_cell"]
 
@@ -78,21 +79,20 @@ def resolve_cell(
 
     try:
         answer = _run(prompt, renderer, read)
-    except BaseException:
-        # Abort ordering (§7): restore the terminal (cbreak exit) FIRST, then
-        # settle the region, then let the exception propagate.
-        if keyboard is not None:
-            keyboard.__exit__()
-        renderer.clear()
-        renderer.__exit__()
-        raise
-
-    # Answer: clear the live region and exit, so the caller's record line lands
-    # where the region was — the interactive region becomes the record (§7).
-    renderer.clear()
-    if keyboard is not None:
-        keyboard.__exit__()
-    renderer.__exit__()
+    finally:
+        # One cleanup for every exit — answer, abort, or a clear() that itself
+        # raises (§7). Ordering: restore the terminal (cbreak exit) FIRST, so a
+        # stderr that raises mid-clear can never leak raw mode; then settle the
+        # region (on answer it clears, so the caller's record line lands where
+        # the live region was — the region *becomes* the record). The inner
+        # try/finally makes ``renderer.__exit__`` (show cursor) unconditional
+        # even if ``clear()`` raises.
+        try:
+            if keyboard is not None:
+                keyboard.__exit__()
+            renderer.clear()
+        finally:
+            renderer.__exit__()
     return answer
 
 
@@ -101,13 +101,36 @@ def _next_key(read: Callable[[], str | None]) -> str:
 
     EOF and Ctrl-D are the same abort path as Ctrl-C (which raises at the read
     on its own): never an answer, never a silent fall-through to the default
-    (§7). The ``KeyboardInterrupt`` is the shared abort signal the loops let
-    propagate to ``resolve_cell``'s restore-then-raise handler.
+    (§7). ``PromptAbort`` (a ``KeyboardInterrupt`` subclass) is the shared abort
+    signal the loops let propagate to ``resolve_cell``'s restore-then-raise
+    handler — and, past there, out of the runner's graceful-stop catches (§7).
     """
-    key = read()
+    try:
+        key = read()
+    except KeyboardInterrupt:
+        # A real Ctrl-C in cbreak (ISIG stays on) raises SIGINT→KeyboardInterrupt
+        # inside the blocking read itself — normalize it to PromptAbort so every
+        # CELL abort route (this, EOF's None, and the Ctrl-D/Ctrl-C bytes below)
+        # carries the one signal the runner re-raises past graceful-stop.
+        raise PromptAbort from None
     if key is None or key in _ABORT_KEYS:
-        raise KeyboardInterrupt
+        raise PromptAbort
     return key
+
+
+def _paint(renderer: InPlaceRenderer, block: Block) -> None:
+    """Render one frame, clipped to the terminal width.
+
+    ``InPlaceRenderer`` addresses the cursor by *logical* rows, so a block wider
+    than the terminal — which the terminal soft-wraps into extra visual rows —
+    desyncs ``clear()`` (it moves up too few rows) and leaves residue under the
+    collapsed record line. Clipping to the terminal width keeps logical rows and
+    visual rows one-to-one. Width comes from the same source the live paths read
+    (``shutil.get_terminal_size`` — which honors ``COLUMNS``); ``truncate`` is a
+    no-op when the block already fits, so natural narrow prompts are untouched.
+    """
+    width = shutil.get_terminal_size().columns
+    renderer.render(truncate(block, width) if block.width > width else block)
 
 
 def _run(prompt: Prompt[Any], renderer: InPlaceRenderer, read: Callable[[], str | None]) -> Any:
@@ -140,7 +163,7 @@ def _run_select(prompt: Select, renderer: InPlaceRenderer, read: Callable[[], st
     state = ListState().with_count(len(choices)).move_to(start).scroll_into_view(visible)
 
     while True:
-        renderer.render(_select_block(prompt, state, visible))
+        _paint(renderer, _select_block(prompt, state, visible))
         key = _next_key(read)
         if key in ("up", "k"):
             state = state.move_up().scroll_into_view(visible)
@@ -189,7 +212,7 @@ def _run_input(prompt: Input, renderer: InPlaceRenderer, read: Callable[[], str 
     hint: str | None = None
 
     while True:
-        renderer.render(_input_block(prompt, state, hint))
+        _paint(renderer, _input_block(prompt, state, hint))
         key = _next_key(read)
         if key == "enter":
             text = state.text
@@ -244,7 +267,7 @@ def _run_confirm(
     hint: str | None = None
 
     while True:
-        renderer.render(_confirm_block(prompt, hint))
+        _paint(renderer, _confirm_block(prompt, hint))
         key = _next_key(read)
         low = key.lower() if len(key) == 1 else key
         if low == "y":
@@ -299,7 +322,7 @@ def _run_hard_confirm(
     """
     state = TextInputState()
     while True:
-        renderer.render(_hard_confirm_block(prompt, state))
+        _paint(renderer, _hard_confirm_block(prompt, state))
         key = _next_key(read)
         if key == "enter":
             return state.text == prompt.challenge
