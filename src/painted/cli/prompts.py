@@ -646,24 +646,39 @@ class PromptSession:
     def _interactive(self, p: Prompt[Any]) -> Any:
         """Render an interactive prompt and read its answer (design §5).
 
-        Rung selection is capability-honest, same as mode resolution: CELL
-        (stdin TTY + raw mode available + stderr TTY) would be the top rung,
-        but it does not exist until slice 3 — the branch slots in here later
-        without touching anything above it (monotonic upgrade, enforced by
-        build order per §12). LINE is the top rung for now. HARD confirms stay
-        stubbed regardless of rung: their type-the-challenge ceremony is
-        CELL-only (§9, slice 5).
+        HARD confirms stay stubbed regardless of rung: their type-the-challenge
+        ceremony is CELL-only (§9, slice 5). Otherwise the rung is chosen
+        capability-honestly (:meth:`_render_interactive`), and either rung feeds
+        the same answer→record collapse (§7).
         """
         if p.danger is Danger.HARD:
             return _hard_unavailable(p)
-        # CELL selection slots in here (slice 3): stdin TTY + raw mode
-        # available + stderr TTY → CELL. Until then every interactive
-        # resolution renders at LINE.
-        from ._prompt_line import resolve_line
-
-        value = resolve_line(p, stdin=self._stdin, stderr=sys.stderr, use_ansi=self._stderr_tty)
+        value = self._render_interactive(p)
         self._emit_record(p, value, suffix="")
         return value
+
+    def _render_interactive(self, p: Prompt[Any]) -> Any:
+        """Pick the fidelity rung and render (design §5).
+
+        Capability-honest, same as mode resolution: CELL (raw-mode repaint) needs
+        stdin a TTY *and* stderr a TTY (CELL repaints on the stream it draws —
+        repainting into a log is not a render) *and* cbreak actually available on
+        stdin, probed before any terminal mutation. Anything short of that falls
+        to LINE, the accessibility floor — same options, same answer type (§5),
+        so a downgrade is byte-for-byte the slice-2 exchange. The stdin gate
+        itself was already cleared by the caller.
+        """
+        if self._stdin_tty and self._stderr_tty:
+            from ..keyboard import cbreak_supported
+
+            if cbreak_supported(self._stdin):
+                from .._prompt_cell import resolve_cell
+
+                return resolve_cell(p, stdin=self._stdin, stderr=sys.stderr)
+
+        from ._prompt_line import resolve_line
+
+        return resolve_line(p, stdin=self._stdin, stderr=sys.stderr, use_ansi=self._stderr_tty)
 
     def _refusal(self, p: Prompt[Any]) -> PromptContractError:
         """The terraform-shaped rule-3 refusal (design §3, §8), stderr-routed."""

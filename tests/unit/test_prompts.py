@@ -1024,3 +1024,260 @@ def test_run_cli_line_prompt_reads_from_injected_stdin(
     assert "'scope': 'all'" in captured.out
     assert "scope: all" in captured.err
     assert "1) local" in captured.err and "2) all" in captured.err
+
+
+# =============================================================================
+# CELL rung — reducer-driven, injected key source (§5, §7, §12 step 3)
+# =============================================================================
+
+import io  # noqa: E402
+
+from painted._prompt_cell import (  # noqa: E402
+    _confirm_block,
+    _input_block,
+    _select_block,
+    resolve_cell,
+)
+from painted.views import ListState, TextInputState  # noqa: E402
+
+
+def _keys(seq):
+    """A blocking key source over a fixed list; None (EOF) once exhausted."""
+    it = iter(seq)
+    return lambda: next(it, None)
+
+
+def _block_text(block: Block) -> str:
+    return "\n".join("".join(c.char for c in block.row(y)) for y in range(block.height))
+
+
+def _cell(prompt, seq):
+    return resolve_cell(prompt, stdin=io.StringIO(), stderr=io.StringIO(), key_source=_keys(seq))
+
+
+# --- Select: ListState cursor -------------------------------------------------
+
+
+def test_cell_select_arrow_then_enter() -> None:
+    p = Select("scope", "Which store?", values=("local", "config", "all"))
+    assert _cell(p, ["down", "enter"]) == "config"
+    assert _cell(p, ["down", "down", "up", "enter"]) == "config"
+
+
+def test_cell_select_home_end() -> None:
+    p = Select("scope", "w", values=("local", "config", "all"))
+    assert _cell(p, ["end", "enter"]) == "all"
+    assert _cell(p, ["end", "home", "enter"]) == "local"
+
+
+def test_cell_select_starts_cursor_on_default() -> None:
+    p = Select("scope", "w", values=("local", "config", "all"), default="config")
+    # Bare Enter accepts the default because the cursor starts *on* it (visible).
+    assert _cell(p, ["enter"]) == "config"
+
+
+def test_cell_select_block_shows_cursor_and_options() -> None:
+    p = Select("scope", "Which?", values=("local", "config", "all"))
+    state = ListState().with_count(3).move_to(1)
+    text = _block_text(_select_block(p, state, 3))
+    assert "Which?" in text
+    assert "local" in text and "config" in text and "all" in text
+    assert "▸" in text  # the ListState cursor glyph on the selected row
+
+
+def test_cell_select_marks_vocabulary_values() -> None:
+    vocab = Vocabulary("scope", values=("local", "all"), roles={"local": "error", "all": "success"})
+    p = Select("scope", "w", vocabulary=vocab)
+    state = ListState().with_count(2).move_to(0)
+    block = _select_block(p, state, 2)
+    fgs = {c.style.fg for y in range(block.height) for c in block.row(y)}
+    # Same value → same treatment (§5): the marks apply at CELL as everywhere.
+    assert "green" in fgs and "red" in fgs
+
+
+# --- Input: TextInputState editing + parse ------------------------------------
+
+
+def test_cell_input_types_and_parses() -> None:
+    p = Input("count", "How many", parse=int)
+    assert _cell(p, ["4", "2", "enter"]) == 42
+
+
+def test_cell_input_cursor_editing() -> None:
+    p = Input("word", "Word")
+    # type "ac", move left, insert "b" → "abc"
+    assert _cell(p, ["a", "c", "left", "b", "enter"]) == "abc"
+    # backspace deletes before the cursor
+    assert _cell(p, ["a", "x", "backspace", "b", "enter"]) == "ab"
+
+
+def test_cell_input_reject_then_fix() -> None:
+    p = Input("count", "How many", parse=int)
+    # "x" fails parse → hint, keep editing; backspace, "5" → 5
+    assert _cell(p, ["x", "enter", "backspace", "5", "enter"]) == 5
+
+
+def test_cell_input_empty_enter_takes_default() -> None:
+    p = Input("count", "How many", parse=int, default="7")
+    assert _cell(p, ["enter"]) == 7
+
+
+def test_cell_input_block_shows_hint_after_reject() -> None:
+    p = Input("count", "How many", parse=int)
+    state = TextInputState().insert("x")
+    text = _block_text(_input_block(p, state, "Invalid input: bad"))
+    assert "How many" in text and "Invalid input" in text
+
+
+# --- Confirm: single-key y/n, danger governs Enter ----------------------------
+
+
+def test_cell_confirm_y_and_n() -> None:
+    p = Confirm("go", "Go?")
+    assert _cell(p, ["y"]) is True
+    assert _cell(p, ["n"]) is False
+    assert _cell(p, ["Y"]) is True  # case-insensitive
+
+
+def test_cell_confirm_none_enter_accepts_default() -> None:
+    assert _cell(Confirm("go", "Go?", default=True), ["enter"]) is True
+    assert _cell(Confirm("go", "Go?", default=False), ["enter"]) is False
+
+
+def test_cell_confirm_soft_ignores_enter() -> None:
+    # SOFT has no default and demands an explicit key — Enter re-prompts (§9).
+    p = Confirm("go", "Go?", danger=Danger.SOFT)
+    assert _cell(p, ["enter", "enter", "y"]) is True
+
+
+def test_cell_confirm_block_shows_default_cue() -> None:
+    assert "[Y/n]" in _block_text(_confirm_block(Confirm("go", "Go?", default=True), None))
+    assert "[y/N]" in _block_text(_confirm_block(Confirm("go", "Go?", default=False), None))
+    assert "[y/n]" in _block_text(_confirm_block(Confirm("go", "Go?"), None))
+
+
+# --- Abort: EOF / Ctrl-D are the same KeyboardInterrupt path (§7) -------------
+
+
+@pytest.mark.parametrize("seq", [[], ["\x04"], ["\x03"]], ids=["eof", "ctrl-d", "ctrl-c-byte"])
+def test_cell_abort_raises_keyboard_interrupt(seq) -> None:
+    with pytest.raises(KeyboardInterrupt):
+        _cell(Confirm("go", "Go?"), seq)
+
+
+def test_cell_abort_restores_cbreak_before_settling(monkeypatch: pytest.MonkeyPatch) -> None:
+    # §7 ordering: exit cbreak FIRST, then settle the region, then propagate.
+    order: list[str] = []
+
+    class _FakeKB:
+        def __init__(self, stream=None):
+            pass
+
+        def __enter__(self):
+            order.append("kb_enter")
+            return self
+
+        def __exit__(self, *a):
+            order.append("kb_exit")
+
+        def read_key(self):
+            return "\x04"  # abort immediately
+
+    class _FakeRenderer:
+        def __init__(self, stream=None):
+            pass
+
+        def __enter__(self):
+            order.append("r_enter")
+            return self
+
+        def __exit__(self, *a):
+            order.append("r_exit")
+
+        def render(self, block):
+            order.append("render")
+
+        def clear(self):
+            order.append("clear")
+
+    monkeypatch.setattr("painted._prompt_cell.KeyboardInput", _FakeKB)
+    monkeypatch.setattr("painted._prompt_cell.InPlaceRenderer", _FakeRenderer)
+    with pytest.raises(KeyboardInterrupt):
+        resolve_cell(Confirm("go", "Go?"), stdin=io.StringIO(), stderr=io.StringIO())
+    assert order.index("kb_exit") < order.index("clear") < order.index("r_exit")
+
+
+# --- Rung selection matrix (stdin × probe × stderr → CELL / LINE / DECLARED) --
+
+
+def _rung_session(prompt, *, stdin_tty, stderr_tty):
+    return PromptSession(
+        [prompt],
+        {prompt.dest: None},
+        stdin_tty=stdin_tty,
+        stderr_tty=stderr_tty,
+        stdin=io.StringIO(),
+    )
+
+
+def _stub_rungs(monkeypatch, *, cbreak):
+    monkeypatch.setattr("painted.keyboard.cbreak_supported", lambda s=None: cbreak)
+    monkeypatch.setattr("painted._prompt_cell.resolve_cell", lambda p, **k: "CELL")
+    monkeypatch.setattr("painted.cli._prompt_line.resolve_line", lambda p, **k: "LINE")
+
+
+def test_rung_cell_when_stdin_stderr_tty_and_cbreak(monkeypatch: pytest.MonkeyPatch) -> None:
+    _stub_rungs(monkeypatch, cbreak=True)
+    sess = _rung_session(Select("s", "w", values=("a", "b")), stdin_tty=True, stderr_tty=True)
+    assert sess._render_interactive(sess._by_name["s"]) == "CELL"
+
+
+def test_rung_line_when_probe_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+    # stdin + stderr both TTY, but cbreak unavailable → LINE (byte-identical to
+    # slice 2, whose own tests pin the exchange).
+    _stub_rungs(monkeypatch, cbreak=False)
+    sess = _rung_session(Select("s", "w", values=("a", "b")), stdin_tty=True, stderr_tty=True)
+    assert sess._render_interactive(sess._by_name["s"]) == "LINE"
+
+
+def test_rung_line_when_stderr_not_a_tty(monkeypatch: pytest.MonkeyPatch) -> None:
+    # stderr piped → LINE even if cbreak is available (CELL repaints on stderr).
+    _stub_rungs(monkeypatch, cbreak=True)
+    sess = _rung_session(Select("s", "w", values=("a", "b")), stdin_tty=True, stderr_tty=False)
+    assert sess._render_interactive(sess._by_name["s"]) == "LINE"
+
+
+def test_rung_declared_when_stdin_not_a_tty(monkeypatch: pytest.MonkeyPatch) -> None:
+    # stdin not a TTY: neither interactive rung is reached — the default fires.
+    def _boom(*a, **k):
+        raise AssertionError("interactive rung reached with stdin not a TTY")
+
+    monkeypatch.setattr("painted._prompt_cell.resolve_cell", _boom)
+    monkeypatch.setattr("painted.cli._prompt_line.resolve_line", _boom)
+    sess = PromptSession(
+        [Select("s", "w", values=("a", "b"), default="a")],
+        {"s": None},
+        stdin_tty=False,
+        stderr_tty=True,
+    )
+    assert sess.ask("s") == "a"
+
+
+def test_cell_answer_collapses_to_the_record_line(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # With CELL selected and the region drawn+cleared by resolve_cell, the only
+    # thing left on stderr is the one static record line (§7 collapse).
+    monkeypatch.setattr("painted.keyboard.cbreak_supported", lambda s=None: True)
+    monkeypatch.setattr("painted._prompt_cell.resolve_cell", lambda p, **k: "config")
+    sess = PromptSession(
+        [Select("scope", "w", values=("local", "config", "all"))],
+        {"scope": None},
+        stdin_tty=True,
+        stderr_tty=True,  # CELL requires a TTY stderr
+        stdin=io.StringIO(),
+    )
+    assert sess.ask("scope") == "config"
+    err = capsys.readouterr().err
+    assert "scope" in err and "config" in err  # the record line is present
+    assert "?" not in err  # no prompt residue — the region became the record
