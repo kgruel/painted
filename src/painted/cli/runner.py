@@ -39,6 +39,7 @@ if TYPE_CHECKING:
 
     from ..core.block import Block
     from .help import HelpArg
+    from .prompts import Prompt
 
 # .help is imported lazily inside _handle_help, never at module top: it pulls
 # core.doc (the renderer), and importing the runner must not — the no-renderer-
@@ -99,6 +100,11 @@ class CliRunner(Generic[T]):
     tags: list[Tag] | None = None
     depth_aliases: dict[str, int] | None = None
 
+    # Declared inline prompts (docs/PROMPTS_DESIGN.md). Each generates its
+    # flag(s) and is resolvable through ctx.ask; a prompt's answer never appears
+    # in ctx.args — one door for the answer (design Q3).
+    prompts: list[Prompt] | None = None
+
     # Whether this app honors --max-chars/--max-lines. Opt-in: a flag exists
     # only because a capability was declared.
     budgets: bool = False
@@ -135,7 +141,9 @@ class CliRunner(Generic[T]):
         if "-h" in args or "--help" in args:
             return self._handle_help(args)
 
-        has_declarations = bool(self.tags) or bool(self.depth_aliases)
+        has_declarations = bool(self.tags) or bool(self.depth_aliases) or bool(self.prompts)
+        parked: dict[str, object] = {}
+        no_input = False
         if (
             not args
             and self.add_args is None
@@ -159,7 +167,13 @@ class CliRunner(Generic[T]):
             )
             if self.build_fidelity is not None:
                 fidelity = self.build_fidelity(parsed, fidelity)
-            args_view = consumer_args(parsed, self.tags, self.depth_aliases)
+            args_view = consumer_args(parsed, self.tags, self.depth_aliases, self.prompts)
+            # Park each prompt's argv answer, keyed by its dest(s); stripped from
+            # ctx.args above, resolved lazily behind ctx.ask (design Q3).
+            no_input = bool(getattr(parsed, "no_input", False))
+            for prompt in self.prompts or ():
+                for dest in prompt.dests():
+                    parked[dest] = getattr(parsed, dest, None)
 
         is_json = fmt == Format.JSON
         force_plain = fmt == Format.PLAIN
@@ -171,7 +185,14 @@ class CliRunner(Generic[T]):
             mode = OutputMode.STATIC
 
         ctx = detect_context(
-            fidelity, mode, force_plain=force_plain, default_mode=self.default_mode, args=args_view
+            fidelity,
+            mode,
+            force_plain=force_plain,
+            default_mode=self.default_mode,
+            args=args_view,
+            prompts=self.prompts,
+            parked=parked,
+            no_input=no_input,
         )
 
         # JSON short-circuits — it's data export, not rendering — but still
@@ -208,6 +229,7 @@ class CliRunner(Generic[T]):
             tags=self.tags,
             depth_aliases=self.depth_aliases,
             budgets=self.budgets,
+            prompts=self.prompts,
             modes=modes,
             prog=self.prog,
             description=self.description,
@@ -331,15 +353,13 @@ class CliRunner(Generic[T]):
         try:
             state = self._do_fetch(ctx)
         except Exception as exc:
-            block = self._fetch_error_block(ctx, exc)
-            print_block(block, use_ansi=ctx.use_ansi)
+            self._print_error_block(ctx, self._fetch_error_block(ctx, exc), exc)
             return 1
 
         try:
             block = self.render(ctx, state)
         except Exception as exc:
-            block = self._render_error_block(ctx, exc)
-            print_block(block, use_ansi=ctx.use_ansi)
+            self._print_error_block(ctx, self._render_error_block(ctx, exc), exc)
             return 2
 
         print_block(block, use_ansi=ctx.use_ansi)
@@ -370,12 +390,16 @@ class CliRunner(Generic[T]):
                             try:
                                 last_block = self.render(ctx, state)
                             except Exception as exc:
-                                print_block(self._render_error_block(ctx, exc), use_ansi=False)
+                                self._print_error_block(
+                                    ctx, self._render_error_block(ctx, exc), exc, use_ansi=False
+                                )
                                 return 2
                     except (KeyboardInterrupt, asyncio.CancelledError):
                         return 0
                     except Exception as exc:
-                        print_block(self._fetch_error_block(ctx, exc), use_ansi=False)
+                        self._print_error_block(
+                            ctx, self._fetch_error_block(ctx, exc), exc, use_ansi=False
+                        )
                         return 1
                     if last_block is not None:
                         print_block(last_block, use_ansi=False)
@@ -422,15 +446,13 @@ class CliRunner(Generic[T]):
         try:
             state = self._do_fetch(ctx)
         except Exception as exc:
-            block = self._fetch_error_block(ctx, exc)
-            print_block(block, use_ansi=ctx.use_ansi)
+            self._print_error_block(ctx, self._fetch_error_block(ctx, exc), exc)
             return 1
 
         try:
             block = self.render(ctx, state)
         except Exception as exc:
-            block = self._render_error_block(ctx, exc)
-            print_block(block, use_ansi=ctx.use_ansi)
+            self._print_error_block(ctx, self._render_error_block(ctx, exc), exc)
             return 2
 
         print_block(block, use_ansi=ctx.use_ansi)
@@ -488,6 +510,25 @@ class CliRunner(Generic[T]):
         return 0
 
     @staticmethod
+    def _print_error_block(
+        ctx: CliContext, block: Block, exc: Exception, *, use_ansi: bool | None = None
+    ) -> None:
+        """Print an error block, routing prompt refusals to stderr (design §8).
+
+        A prompt ``ContractError`` (the rule-3 refusal, or a HARD-challenge /
+        Input-validate failure) carries remediation text that must never ride
+        the stdout data pipe into ``jq`` — it renders to stderr, at stderr's own
+        fidelity. Every other error keeps the existing stdout path unchanged.
+        """
+        from ..core.writer import print_block
+        from .prompts import PromptContractError
+
+        if isinstance(exc, PromptContractError):
+            print_block(block, sys.stderr, use_ansi=ctx.stderr_is_tty)
+            return
+        print_block(block, use_ansi=ctx.use_ansi if use_ansi is None else use_ansi)
+
+    @staticmethod
     def _exception_message(exc: Exception) -> str:
         message = str(exc).strip()
         return message or type(exc).__name__
@@ -540,6 +581,7 @@ def run_cli(
     help_args: list[HelpArg] | None = None,
     tags: list[Tag] | None = None,
     depth_aliases: dict[str, int] | None = None,
+    prompts: list[Prompt] | None = None,
     budgets: bool = False,
     build_fidelity: Callable[[argparse.Namespace, Fidelity], Fidelity] | None = None,
 ) -> int:
@@ -562,6 +604,8 @@ def run_cli(
         tags: Declared disclosure layers — each generates a --{name} flag
             compiled into fidelity.visible
         depth_aliases: App-local depth spellings ({"brief": 0} → --brief)
+        prompts: Declared inline prompts — each generates its flag(s) and is
+            resolvable through ctx.ask (docs/PROMPTS_DESIGN.md)
         budgets: Whether the app honors --max-chars/--max-lines
         build_fidelity: Transform Fidelity after tag compilation — the escape
             hatch for app-specific residue
@@ -584,6 +628,7 @@ def run_cli(
         help_args=help_args,
         tags=tags,
         depth_aliases=depth_aliases,
+        prompts=prompts,
         budgets=budgets,
         build_fidelity=build_fidelity,
     ).run(args)
