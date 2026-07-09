@@ -31,6 +31,28 @@ from painted.cli.types import OutputMode
 from painted.vocabulary import Vocabulary
 
 
+class _FakeInput:
+    """An injectable LINE-rung read stream (design §10) — for tests only.
+
+    Each queued entry is returned verbatim from ``readline()`` — including or
+    omitting its trailing newline, exactly like a real ``TextIOWrapper`` — or,
+    if it is a ``BaseException`` instance, raised instead (simulating a
+    Ctrl-C delivered mid-read). Once exhausted, further reads return ``""``
+    (EOF), matching a real stream at end-of-input.
+    """
+
+    def __init__(self, lines: list[str | BaseException]) -> None:
+        self._lines = list(lines)
+
+    def readline(self) -> str:
+        if not self._lines:
+            return ""
+        item = self._lines.pop(0)
+        if isinstance(item, BaseException):
+            raise item
+        return item
+
+
 # =============================================================================
 # Danger — the ordered ceremony vocabulary
 # =============================================================================
@@ -349,20 +371,31 @@ def test_no_input_suppresses_interaction_at_a_tty(capsys: pytest.CaptureFixture[
     assert session.ask("scope") == "local"
 
 
-def test_interactive_seam_is_a_stub_at_a_tty() -> None:
-    session = PromptSession([Confirm("overwrite", "o")], {"overwrite": None}, stdin_tty=True)
-    with pytest.raises(LifecycleError, match="not built yet"):
-        session.ask("overwrite")
+def test_hard_confirm_interactive_seam_is_a_stub_at_a_tty() -> None:
+    # HARD's type-the-challenge ceremony is CELL-only (slice 5) — it stays
+    # stubbed at every rung, LINE included.
+    hard = Confirm("reseal", "r", danger=Danger.HARD, challenge="win-1")
+    session = PromptSession([hard], {"reseal": None, "no_reseal": False}, stdin_tty=True)
+    with pytest.raises(LifecycleError, match="CELL"):
+        session.ask("reseal")
 
 
-def test_declared_default_at_a_tty_still_hits_the_stub() -> None:
+def test_declared_default_at_a_tty_goes_through_line_not_the_default_path(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     # Resolution order (§6): interactive-at-TTY precedes the declared default —
-    # at a real TTY the default is presented *through* the (unbuilt) interactive
-    # rung, so a default does not short-circuit the stub.
+    # at a real TTY the default is *presented through* the LINE rung (bare
+    # Enter accepts it), not returned by the non-interactive default path. The
+    # record line proves which path fired: LINE's carries no "(default)"
+    # suffix (§7's rule — that suffix marks an answer nobody chose).
     sel = Select("scope", "w", values=("local", "all"), default="local")
-    session = PromptSession([sel], {"scope": None}, stdin_tty=True)
-    with pytest.raises(LifecycleError):
-        session.ask("scope")
+    session = PromptSession([sel], {"scope": None}, stdin_tty=True, stdin=_FakeInput(["\n"]))
+    assert session.ask("scope") == "local"
+    err = capsys.readouterr().err
+    # "scope: local" appears only in the record line — the option listing
+    # spells it "1) local (default)", not "scope: local".
+    assert "scope: local" in err
+    assert "scope: local (default)" not in err
 
 
 def test_no_input_without_a_default_refuses() -> None:
@@ -654,3 +687,251 @@ def test_prompt_base_is_the_shared_primitive() -> None:
     assert issubclass(Confirm, Prompt)
     assert issubclass(Select, Prompt)
     assert issubclass(Input, Prompt)
+
+
+# =============================================================================
+# LINE rung (§5, §7, §12 step 2) — cooked-mode interactive resolution
+# =============================================================================
+# All three domain shapes, driven through PromptSession with an injected
+# stdin (§10) and stdin_tty=True so the interactive seam actually fires.
+# Every test asserts on stderr only — stdout is untouched by prompt UI (§8).
+
+
+def _line_session(prompt, lines, *, stderr_tty: bool = False) -> PromptSession:
+    return PromptSession(
+        [prompt],
+        {d: None for d in prompt.dests()},
+        stdin_tty=True,
+        stderr_tty=stderr_tty,
+        stdin=_FakeInput(lines),
+    )
+
+
+# --- Confirm ------------------------------------------------------------
+
+
+def test_line_confirm_explicit_yes_and_no(capsys: pytest.CaptureFixture[str]) -> None:
+    assert _line_session(Confirm("go", "Go?"), ["y\n"]).ask("go") is True
+    assert _line_session(Confirm("go", "Go?"), ["yes\n"]).ask("go") is True
+    assert _line_session(Confirm("go", "Go?"), ["n\n"]).ask("go") is False
+    assert _line_session(Confirm("go", "Go?"), ["no\n"]).ask("go") is False
+
+
+def test_line_confirm_none_bare_enter_accepts_default(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    session = _line_session(Confirm("go", "Go?", default=True), ["\n"])
+    assert session.ask("go") is True
+    err = capsys.readouterr().err
+    assert "go: yes" in err
+    assert "(default)" not in err  # LINE's own record line, not the default path's
+
+
+def test_line_confirm_soft_bare_enter_is_invalid_and_reprompts(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # SOFT forbids default= at construction, so bare Enter can never accept
+    # one — it's simply invalid input, same as any unparseable answer.
+    soft = Confirm("go", "Go?", danger=Danger.SOFT)
+    session = _line_session(soft, ["\n", "y\n"])
+    assert session.ask("go") is True
+    err = capsys.readouterr().err
+    assert "Please answer y or n" in err
+
+
+def test_line_confirm_invalid_answer_reprompts_then_succeeds(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    session = _line_session(Confirm("go", "Go?"), ["maybe\n", "y\n"])
+    assert session.ask("go") is True
+    err = capsys.readouterr().err
+    assert "Please answer y or n" in err
+    assert err.count("Please answer") == 1  # exactly one bad attempt
+
+
+# --- Select ---------------------------------------------------------------
+
+
+def test_line_select_numeric_choice(capsys: pytest.CaptureFixture[str]) -> None:
+    sel = Select("scope", "Which?", values=("local", "all"))
+    session = _line_session(sel, ["2\n"])
+    assert session.ask("scope") == "all"
+    err = capsys.readouterr().err
+    assert "1) local" in err
+    assert "2) all" in err
+    assert "Enter 1-2" in err
+
+
+def test_line_select_none_bare_enter_accepts_default(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    sel = Select("scope", "Which?", values=("local", "all"), default="local")
+    session = _line_session(sel, ["\n"])
+    assert session.ask("scope") == "local"
+    err = capsys.readouterr().err
+    assert "1) local (default)" in err
+    assert "Enter 1-2 [1]" in err
+    # "scope: local" appears only in the record line — the option listing
+    # spells it "1) local (default)", not "scope: local" — so this pins the
+    # record line specifically to carry no "(default)" suffix.
+    assert "scope: local" in err
+    assert "scope: local (default)" not in err
+
+
+def test_line_select_out_of_range_and_non_numeric_reprompt(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    sel = Select("scope", "Which?", values=("local", "all"))
+    session = _line_session(sel, ["0\n", "bogus\n", "3\n", "1\n"])
+    assert session.ask("scope") == "local"
+    err = capsys.readouterr().err
+    assert err.count("Please enter a number between 1 and 2") == 3
+
+
+# --- Input ------------------------------------------------------------
+
+
+def test_line_input_happy_path_with_parse(capsys: pytest.CaptureFixture[str]) -> None:
+    inp = Input("count", "How many?", parse=int)
+    session = _line_session(inp, ["42\n"])
+    assert session.ask("count") == 42
+    err = capsys.readouterr().err
+    assert "count: 42" in err
+
+
+def test_line_input_reprompts_on_parse_failure(capsys: pytest.CaptureFixture[str]) -> None:
+    inp = Input("count", "How many?", parse=int)
+    session = _line_session(inp, ["abc\n", "7\n"])
+    assert session.ask("count") == 7
+    err = capsys.readouterr().err
+    assert "Invalid input" in err
+
+
+def test_line_input_none_bare_enter_accepts_default_through_parse(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    inp = Input("count", "How many?", parse=int, default="7")
+    session = _line_session(inp, ["\n"])
+    answer = session.ask("count")
+    assert answer == 7 and isinstance(answer, int)
+
+
+def test_line_input_without_parse_answers_raw_string(capsys: pytest.CaptureFixture[str]) -> None:
+    inp = Input("reason", "Why?")
+    session = _line_session(inp, ["because\n"])
+    assert session.ask("reason") == "because"
+
+
+# --- Abort paths (§7): EOF and Ctrl-C, never an answer, never the default ---
+
+
+def test_line_eof_aborts_distinct_from_bare_enter_default(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # No queued lines at all: the very first readline() is EOF (""), not the
+    # NONE-tier bare-Enter default-accept ("\n") — the ambiguity trap (§7).
+    session = _line_session(Confirm("go", "Go?", default=True), [])
+    with pytest.raises(KeyboardInterrupt):
+        session.ask("go")
+
+
+def test_line_ctrl_c_propagates_as_keyboard_interrupt(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    session = _line_session(Confirm("go", "Go?"), [KeyboardInterrupt()])
+    with pytest.raises(KeyboardInterrupt):
+        session.ask("go")
+    # A restoring newline was written to stderr before the exception propagated.
+    assert capsys.readouterr().err.endswith("\n")
+
+
+def test_line_abort_never_yields_none_or_falls_to_default() -> None:
+    session = _line_session(Confirm("go", "Go?", default=True), [])
+    try:
+        session.ask("go")
+        pytest.fail("expected KeyboardInterrupt")
+    except KeyboardInterrupt:
+        pass
+    # The memo must not have recorded an invented answer for the aborted ask.
+    assert "go" not in session._answers
+
+
+# --- Record-line collapse: once, memoized second ask stays silent (§7) -----
+
+
+def test_line_record_line_fires_once_second_ask_is_silent(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    session = _line_session(Confirm("go", "Go?"), ["y\n"])
+    assert session.ask("go") is True
+    assert session.ask("go") is True  # memoized — no second read, no second line
+    err = capsys.readouterr().err
+    assert err.count("go: yes") == 1
+
+
+# --- Styled vs plain, by stderr's own TTY-ness (§8) -------------------------
+
+
+def test_line_styles_when_stderr_is_a_tty_plain_when_not(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    styled = _line_session(Confirm("go", "Go?"), ["y\n"], stderr_tty=True)
+    styled.ask("go")
+    styled_err = capsys.readouterr().err
+    assert "\x1b[" in styled_err  # some SGR escape made it out
+
+    plain = _line_session(Confirm("go", "Go?"), ["y\n"], stderr_tty=False)
+    plain.ask("go")
+    plain_err = capsys.readouterr().err
+    assert "\x1b[" not in plain_err
+
+
+# --- HARD still stubbed at LINE (§9, §12 step 5) ----------------------------
+
+
+def test_line_hard_confirm_still_raises_lifecycle_error() -> None:
+    hard = Confirm("reseal", "r", danger=Danger.HARD, challenge="win-1")
+    session = _line_session(hard, ["win-1\n"])  # never read — the stub raises first
+    with pytest.raises(LifecycleError, match="CELL"):
+        session.ask("reseal")
+
+
+# --- The suite passes identically piped and at a terminal (§10) ------------
+# These tests never consult ambient TTY-ness — stdin_tty/stdin are always
+# explicit constructor arguments — so running under `pytest < /dev/null` or
+# interactively makes no difference to any assertion above.
+
+
+# --- run_cli integration: the injected stdin reaches the LINE rung ---------
+
+
+class _FakeTTYInput:
+    """A combined isatty()+readline() fake for the run_cli integration path."""
+
+    def __init__(self, lines: list[str]) -> None:
+        self._lines = list(lines)
+
+    def isatty(self) -> bool:
+        return True
+
+    def readline(self) -> str:
+        return self._lines.pop(0) if self._lines else ""
+
+
+def test_run_cli_line_prompt_reads_from_injected_stdin(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # Select's LINE rung reads a *number*, not the value text, so drive it
+    # with the option index rather than the literal string.
+    monkeypatch.setattr(sys, "stdin", _FakeTTYInput(["2\n"]))
+    prompts = [Select("scope", "Which store?", values=("local", "all"))]
+
+    def fetch(ctx):
+        return {"scope": ctx.ask("scope")}
+
+    rc = run_cli(["--plain"], _render, fetch, prompts=prompts)
+    captured = capsys.readouterr()
+    assert rc == 0
+    assert "'scope': 'all'" in captured.out
+    assert "scope: all" in captured.err
+    assert "1) local" in captured.err and "2) all" in captured.err

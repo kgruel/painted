@@ -9,12 +9,17 @@ buy, and the headless resolution contract (``ctx.ask``): argv flag → interacti
 at a TTY → declared default → ``ContractError`` naming the channel. See
 ``docs/PROMPTS_DESIGN.md``.
 
-Scope of this file (the DECLARED rung, §12 step 1): **no prompt rendering**. The
-interactive rungs (LINE, CELL) are stubbed — reaching the interactive seam raises
-``LifecycleError``. Everything else — construction-time rules, flag generation,
+Scope, DECLARED rung (§12 step 1): construction-time rules, flag generation,
 ``--no-input``, memoized resolution, the ``(default)`` record line, and the
-stderr-routed refusal — is testable with a faked ``stdin.isatty()`` and no
-terminal.
+stderr-routed refusal — testable with a faked ``stdin.isatty()`` and no terminal.
+
+Scope, LINE rung (§12 step 2, this slice): cooked-mode rendering for all three
+domain shapes at a TTY, filled in by the private sibling ``cli/_prompt_line.py``
+(imported lazily from :meth:`PromptSession._interactive` — the one point this
+module reaches past DECLARED). ``danger=HARD`` still raises ``LifecycleError``
+at every rung: its type-the-challenge ceremony is CELL-only (slice 5). CELL
+itself (raw-mode repaint) does not exist yet (slice 3) — LINE is the top rung
+until then.
 
 This is evolving ``painted.cli`` surface (design Q2): the domain shapes and
 ``ask`` live here, not on the semver-stable renderer surface, until 1.x hardens
@@ -33,7 +38,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
 from functools import total_ordering
-from typing import TYPE_CHECKING, Any, Generic, TypeVar
+from typing import TYPE_CHECKING, Any, Generic, TextIO, TypeVar
 
 from ..core.errors import ContractError, DeclarationError, LifecycleError
 from ..vocabulary import Vocabulary
@@ -142,23 +147,26 @@ class PromptContractError(ContractError):
 
 
 # =============================================================================
-# The interactive seam — a stub until the rendering rungs land
+# The interactive seam — HARD stays stubbed until CELL lands (slice 5)
 # =============================================================================
 
 
-def _interactive_unavailable(prompt: Prompt[Any]) -> Any:
-    """The interactive seam the LINE/CELL rungs (slices 2–3) will fill.
+def _hard_unavailable(prompt: Prompt[Any]) -> Any:
+    """The interactive seam a ``danger=HARD`` confirm still hits.
 
-    Reached when stdin is a TTY, ``--no-input`` is absent, and no flag answered:
-    the contract wants a rendered prompt, which this slice does not ship. Raises
-    ``LifecycleError`` — the right call (ask a human) in the wrong state (no
-    renderer yet), naming the escape hatches that *do* resolve headless.
+    Reached when stdin is a TTY, ``--no-input`` is absent, no flag answered, and
+    the prompt is HARD: HARD's type-the-challenge ceremony is a CELL-only build
+    (design §9, §12 step 5) — LINE speaks yes/no, not "type the target's name to
+    proceed". Raises ``LifecycleError`` — the right call (ask a human) in the
+    wrong state (no ceremony renderer yet), naming the escape hatches that *do*
+    resolve headless.
     """
     raise LifecycleError(
-        f"Prompt {prompt.name!r} needs an interactive rung to render, but the "
-        "LINE and CELL rungs are not built yet (this build ships the DECLARED "
-        f"rung only). Pass its flag ({' / '.join(prompt.flag_spellings())}), "
-        "run with --no-input, or declare a default= for non-interactive use."
+        f"Prompt {prompt.name!r} is danger=HARD, whose type-the-challenge "
+        "ceremony needs the CELL rung — not built yet (this build ships DECLARED "
+        f"+ LINE). Pass its flag ({' / '.join(prompt.flag_spellings())}), run "
+        "with --no-input, or lift the decision to parse time where HARD gets "
+        "its value-carrying flag."
     )
 
 
@@ -564,6 +572,7 @@ class PromptSession:
         stdin_tty: bool = False,
         stderr_tty: bool = False,
         no_input: bool = False,
+        stdin: TextIO | None = None,
     ) -> None:
         self._by_name: dict[str, Prompt[Any]] = {p.name: p for p in prompts}
         self._declared: frozenset[str] = frozenset(self._by_name)
@@ -571,6 +580,11 @@ class PromptSession:
         self._stdin_tty = stdin_tty
         self._stderr_tty = stderr_tty
         self._no_input = no_input
+        # The LINE rung's injectable read stream (design §10) — for tests only;
+        # the public contract stays §3. Captured once, at construction, the same
+        # moment stdin_tty/stderr_tty are — not re-read per ask() the way a bare
+        # `sys.stdin` reference would drift if something reassigned it mid-run.
+        self._stdin: TextIO = stdin if stdin is not None else sys.stdin
         self._answers: dict[str, Any] = {}
 
     def ask(self, prompt: str | Prompt[Any]) -> Any:
@@ -618,16 +632,38 @@ class PromptSession:
         if p.flag_supplied(self._parked):
             return p.resolve_flag(self._parked)
         if self._stdin_tty and not self._no_input:
-            # A human is driving and no flag answered: the contract wants a
-            # rendered prompt. This slice has no renderer — the seam raises.
-            return _interactive_unavailable(p)
+            # A human is driving and no flag answered: render an interactive
+            # prompt and read the answer.
+            return self._interactive(p)
         # No terminal (or --no-input): the default fires on *absence of a
         # terminal*, not on EOF (§3 rule 5).
         if p.default is not MISSING:
             value = p.resolve_default()
-            self._emit_default_record(p, value)
+            self._emit_record(p, value, suffix=" (default)")
             return value
         raise self._refusal(p)
+
+    def _interactive(self, p: Prompt[Any]) -> Any:
+        """Render an interactive prompt and read its answer (design §5).
+
+        Rung selection is capability-honest, same as mode resolution: CELL
+        (stdin TTY + raw mode available + stderr TTY) would be the top rung,
+        but it does not exist until slice 3 — the branch slots in here later
+        without touching anything above it (monotonic upgrade, enforced by
+        build order per §12). LINE is the top rung for now. HARD confirms stay
+        stubbed regardless of rung: their type-the-challenge ceremony is
+        CELL-only (§9, slice 5).
+        """
+        if p.danger is Danger.HARD:
+            return _hard_unavailable(p)
+        # CELL selection slots in here (slice 3): stdin TTY + raw mode
+        # available + stderr TTY → CELL. Until then every interactive
+        # resolution renders at LINE.
+        from ._prompt_line import resolve_line
+
+        value = resolve_line(p, stdin=self._stdin, stderr=sys.stderr, use_ansi=self._stderr_tty)
+        self._emit_record(p, value, suffix="")
+        return value
 
     def _refusal(self, p: Prompt[Any]) -> PromptContractError:
         """The terraform-shaped rule-3 refusal (design §3, §8), stderr-routed."""
@@ -643,14 +679,20 @@ class PromptSession:
             "the ctx.ask call site for non-interactive use"
         )
 
-    def _emit_default_record(self, p: Prompt[Any], value: Any) -> None:
-        """Emit the one static ``✓ name: value (default)`` line to stderr (§7).
+    def _emit_record(self, p: Prompt[Any], value: Any, *, suffix: str) -> None:
+        """Emit the one static ``✓ name: value`` collapse line to stderr (§7).
 
-        The one resolution path where the answer came from neither argv nor
-        keystrokes, so the transcript must say so. Drawn with core primitives
-        only (never ``views`` — the cli→views boundary) and imported lazily here,
-        the single point this module touches the renderer. Fidelity follows
-        stderr's TTY-ness (§8): piped stderr → plain, no ANSI.
+        Shared by both resolution paths that produce a *new* answer this run
+        (a declared default firing non-interactively, or a LINE/CELL prompt
+        actually asked) — a flag-supplied answer never reaches here, because
+        it is already visible in the invocation (§7's "the record line marks
+        an answer the invocation doesn't show"). ``suffix`` is the only
+        difference between the two: ``" (default)"`` marks an answer nobody
+        chose; an interactively-asked answer gets none. Drawn with core
+        primitives only (never ``views`` — the cli→views boundary) and
+        imported lazily here, the single point this module touches the
+        renderer. Fidelity follows stderr's TTY-ness (§8): piped stderr →
+        plain, no ANSI.
         """
         from ..core.cell import Style
         from ..core.span import Line, Span
@@ -665,7 +707,7 @@ class PromptSession:
                 Span(f"{icons.ok} ", palette.success),
                 Span(f"{p.name}: ", Style()),
                 Span(p._format(value), palette.accent),
-                Span(" (default)", palette.muted),
+                Span(suffix, palette.muted),
             )
         )
         block = line.to_block(max(1, line.width))
