@@ -94,6 +94,7 @@ patterns/
   testing.py        Replay testing: emit capture, observation traces      ✓
   profiler.py       Self-profiling: frame cost, emission timeline, flame  ✓
   help.py           Zoom-aware help: HelpData rendered at each zoom level ✓
+  prompts.py        Declared prompts: real default record lines + refusal text, non-interactive ✓
 
 apps/
   (behavior graduated to tests/unit/test_*_app.py — TestSurface drives keys,
