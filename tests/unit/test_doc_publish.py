@@ -199,3 +199,52 @@ class TestCompletionPage:
         html = to_html(DOCS["completion"].build())
         assert "<figure>" in html  # the live producer gallery routed through render_html
         assert "Design note" in html  # the tag="rationale" section
+
+
+class TestPromptsPage:
+    """The 'prompts' doc-IR page (dogfoods the DECLARED rung it documents)."""
+
+    def test_registered(self):
+        assert "prompts" in DOCS
+        assert isinstance(DOCS["prompts"].build(), Doc)
+
+    def test_renders_at_every_depth(self):
+        doc = DOCS["prompts"].build()
+        for depth in (Zoom.MINIMAL, Zoom.DETAILED, Zoom.FULL):
+            block = doc_lens(doc, fidelity=Fidelity(depth=depth), width=80)
+            assert block.height > 0, depth
+
+    def test_figures_render(self):
+        # guards the lazy PromptSession import + the real non-interactive
+        # resolution both galleries drive.
+        from painted._doc_pages import _prompt_record_gallery, _prompt_refusal_gallery
+
+        for fig in (_prompt_record_gallery(), _prompt_refusal_gallery()):
+            assert fig.width > 0 and fig.height > 0
+
+    def test_record_gallery_shows_real_default_lines(self):
+        from painted._doc_pages import _prompt_record_gallery
+        from tests.helpers import block_to_text
+
+        text = block_to_text(_prompt_record_gallery())
+        assert "force: no (default)" in text
+        assert "scope: local (default)" in text
+
+    def test_refusal_gallery_names_the_real_flag(self):
+        from painted._doc_pages import _prompt_refusal_gallery
+        from tests.helpers import block_to_text
+
+        text = block_to_text(_prompt_refusal_gallery())
+        assert "--overwrite" in text
+        assert "stdin is not a terminal" in text
+
+    def test_has_rationale_layer(self):
+        from painted._docs_cli import _collect_tags
+
+        names = {tag.name for tag in _collect_tags(DOCS["prompts"].build())}
+        assert "rationale" in names  # so `painted docs prompts --rationale` exists
+
+    def test_publishes_figure_and_rationale(self):
+        html = to_html(DOCS["prompts"].build())
+        assert "<figure>" in html  # the live resolver galleries routed through render_html
+        assert "Design note" in html  # the tag="rationale" section

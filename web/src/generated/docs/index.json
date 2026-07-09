@@ -10,5 +10,9 @@
   {
     "name": "diagnostics",
     "description": "Diagnostics: log records and tracebacks rendered as structured Blocks"
+  },
+  {
+    "name": "prompts",
+    "description": "Inline prompts: declared questions that generate a flag, a render, and completion"
   }
 ]

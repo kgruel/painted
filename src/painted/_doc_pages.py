@@ -586,6 +586,222 @@ def diagnostics_doc() -> Doc:
     )
 
 
+def _prompt_record_gallery() -> Block:
+    """A genuine Figure: real record lines from the real declared-rung resolver.
+
+    Runs ``PromptSession.ask()`` against declared prompts with stdin not a
+    TTY — the flag/default resolution path every non-interactive run takes —
+    and captures exactly what the resolver writes to stderr. No fabricated
+    text: this is DECLARED-rung output, byte for byte. Imports are local to
+    keep this module off the prompt resolver at import time."""
+    import contextlib
+    import io
+
+    from painted.cli import Confirm, Select
+    from painted.cli.prompts import PromptSession
+
+    prompts = [
+        Confirm("force", "Force overwrite?", default=False),
+        Select("scope", "Which store?", values=("local", "config", "all"), default="local"),
+    ]
+    session = PromptSession(prompts, {}, stdin_tty=False, stderr_tty=False)
+    captured = io.StringIO()
+    with contextlib.redirect_stderr(captured):
+        session.ask("force")
+        session.ask("scope")
+    lines = [line for line in captured.getvalue().splitlines() if line]
+    return join_vertical(*(Block.text(line, Style()) for line in lines))
+
+
+def _prompt_refusal_gallery() -> Block:
+    """A genuine Figure: the real ``ContractError`` text a script sees with no
+    flag and no default at a non-TTY — the diagram's third column, an honest
+    refusal that names the flag because the flag provably exists."""
+    from painted.cli import Confirm
+    from painted.cli.prompts import PromptSession
+
+    session = PromptSession(
+        [Confirm("overwrite", "Overwrite existing files?")], {}, stdin_tty=False
+    )
+    try:
+        session.ask("overwrite")
+        message = ""
+    except Exception as exc:
+        message = str(exc)
+    return Block.text(message, Style(fg="red"))
+
+
+def prompts_doc() -> Doc:
+    return Doc(
+        title="Inline prompts",
+        body=(
+            Prose(
+                "A prompt is an input, and painted's CLI grammar already has an "
+                "input channel: declared flags. --force and 'Are you sure? "
+                "[y/N]' are the same declaration at different fidelities — one "
+                "resolves from argv, one resolves interactively at a TTY. A "
+                "declared prompt is the parser's fourth reflection, after "
+                "parse, help, and completion: one declaration generates a "
+                "flag, a rendered question, an honest refusal, and completion "
+                "of its answer values."
+            ),
+            Defs(
+                (
+                    Def(
+                        "Confirm(name, question, default=, danger=)",
+                        "A yes/no question — the two-element domain.",
+                        "Generates --name/--no-name; danger=HARD swaps the "
+                        "pair for a value-carrying --name <challenge> and a "
+                        "bare --no-name.",
+                    ),
+                    Def(
+                        "Select(name, question, values=|vocabulary=, default=)",
+                        "A choice over an enumerable domain.",
+                        "values= is an open tuple; vocabulary= is a declared "
+                        "Vocabulary whose members are the legal values — the "
+                        "mark channel styles them wherever the answer renders.",
+                    ),
+                    Def(
+                        "Input(name, question, parse=, completer=, default=)",
+                        "A free-text question over an open domain.",
+                        "parse raises to reject; its return value becomes the "
+                        "answer. completer= rides the third reflection; "
+                        "without one the flag falls back to file/dir "
+                        "completion.",
+                    ),
+                    Def(
+                        "ctx.ask(name_or_prompt)",
+                        "The single door an answer comes through — memoized, "
+                        "fires at most once per run.",
+                        "A Tag's answer lives in ctx.args; a Prompt's answer "
+                        "lives behind ctx.ask — never both, so nothing "
+                        "silently bypasses the resolution ladder.",
+                    ),
+                    Def(
+                        "--no-input",
+                        "One framework flag: every prompt resolves as if "
+                        "stdin were not a terminal.",
+                        "CI scripts declare their nature instead of relying on TTY detection.",
+                    ),
+                )
+            ),
+            Section(
+                "What you get for free",
+                body=(
+                    Prose(
+                        "Declare a prompt beside your tags and it generates "
+                        "its own flag, its own -h entry, and completion of "
+                        "its answer values — with zero prompt-specific code "
+                        "in any of the three. At a TTY, the same declaration "
+                        "renders and reads an answer; everywhere else, it "
+                        "resolves from the flag or the declared default and "
+                        "leaves one line of proof."
+                    ),
+                    Figure(
+                        _prompt_record_gallery(),
+                        caption=(
+                            "Real record lines from a non-interactive run: a "
+                            "declared default resolving for Confirm and "
+                            "Select, each marked (default) — the transcript's "
+                            "proof that nobody was asked."
+                        ),
+                    ),
+                ),
+            ),
+            Section(
+                "The resolution ladder",
+                body=(
+                    Prose(
+                        "Every prompt resolves the same four-step ladder, "
+                        "declared or asked at runtime: the argv flag first "
+                        "(it's already visible in the invocation), then an "
+                        "interactive prompt at a TTY, then the declared "
+                        "default, then an honest refusal. A script without a "
+                        "flag or a default never hangs and never invents an "
+                        "answer — it gets a ContractError naming the exact "
+                        "flag that would resolve it."
+                    ),
+                    Figure(
+                        _prompt_refusal_gallery(),
+                        caption=(
+                            "The real refusal text: no flag, no default, "
+                            "stdin not a terminal — the error names the flag, "
+                            "because the flag provably exists."
+                        ),
+                    ),
+                ),
+            ),
+            Section(
+                "Danger tiers",
+                body=(
+                    Defs(
+                        (
+                            Def(
+                                "Danger.NONE",
+                                "y/N — Enter accepts the default.",
+                                "The only tier that may carry default=.",
+                            ),
+                            Def(
+                                "Danger.SOFT",
+                                "y/N — no Enter-default, an explicit key.",
+                                '"Did you mean to proceed?" — accidental Enter, muscle memory.',
+                            ),
+                            Def(
+                                "Danger.HARD",
+                                "Type the declared challenge= to proceed.",
+                                '"Do you know what you\'re aiming at?" — '
+                                "Confirm-only; anything but an exact match "
+                                "resolves False, fail-closed.",
+                            ),
+                        )
+                    ),
+                ),
+            ),
+            Section(
+                "Why this matters",
+                min_depth=2,
+                body=(
+                    Prose(
+                        "The prompt UI draws on stderr, never stdout, so "
+                        "`tool --json | jq` stays parseable even when the "
+                        "tool asked a question mid-run. And a prompt never "
+                        "forces an environment rewrite: it renders at "
+                        "whatever rung the terminal supports — a raw-mode "
+                        "cursor at a real TTY, a cooked-mode y/n on a dumb "
+                        "terminal or screen reader, or no interaction at all "
+                        "in a script — and every rung answers the same "
+                        "question the same way."
+                    ),
+                ),
+            ),
+            Section(
+                "Design note",
+                tag="rationale",
+                body=(
+                    Prose(
+                        "clig.dev names 'conversation as the norm' as a tenet "
+                        "no standalone prompt library can fully honor, "
+                        "because an honest refusal must name the flag that "
+                        "answers the question — and the flag lives in the "
+                        "application's parser. painted is a prompt library "
+                        "and a CLI framework in one package, so it holds both "
+                        "ends."
+                    ),
+                    Prose(
+                        "default= fires on absence of a terminal, not on EOF "
+                        "— a deliberate break from the ecosystem, where 'the "
+                        "value on bare Enter' and 'the value when nobody "
+                        "answers' are conflated. EOF (Ctrl-D) and Ctrl-C take "
+                        "the identical abort path at every rung: never an "
+                        "answer, never a silent fall-through to the default."
+                    ),
+                    Prose("Full design: docs/PROMPTS_DESIGN.md."),
+                ),
+            ),
+        ),
+    )
+
+
 DOCS: dict[str, DocEntry] = {
     "primitives": DocEntry(
         "primitives",
@@ -601,5 +817,10 @@ DOCS: dict[str, DocEntry] = {
         "diagnostics",
         "Diagnostics: log records and tracebacks rendered as structured Blocks",
         diagnostics_doc,
+    ),
+    "prompts": DocEntry(
+        "prompts",
+        "Inline prompts: declared questions that generate a flag, a render, and completion",
+        prompts_doc,
     ),
 }
