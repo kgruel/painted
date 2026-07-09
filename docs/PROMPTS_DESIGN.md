@@ -445,7 +445,7 @@ wrong target).
 |--------|--------------|---------|
 | `NONE` | y/N, Enter accepts default | default applies |
 | `SOFT` | y/N, no Enter-default — an explicit key | flag or `ContractError` |
-| `HARD` | type the declared `challenge` to proceed | flag **required and value-carrying** — `--reseal <challenge>`; the script restates the challenge |
+| `HARD` | type the declared `challenge` to proceed — anything else (mismatch, empty) resolves **False**, fail-closed, terraform-shaped: only the exact challenge approves, and a typo destroys nothing | flag **required and value-carrying** — `--reseal <challenge>`; the script restates the challenge |
 
 A field survey (2026-07-08: gh/heroku/flyctl type-the-name, terraform's
 literal `yes`, apt's `Yes, do as I say!`, rm's flag-only
