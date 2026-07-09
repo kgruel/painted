@@ -8,8 +8,7 @@ transcript like every other stderr line (§8 — prompt UI always draws on
 stderr). This is the rung every environment has (dumb terminals, screen
 readers, teleprinters — huh documents its equivalent as an accessibility
 feature first, §5), so it offers the same options and produces the same
-answer type CELL will (slice 3) — same value, same treatment, applied to
-input.
+answer type CELL does — same value, same treatment, applied to input.
 
 Private sibling of ``cli/prompts.py``, imported lazily from there (the
 framework→renderer boundary: this module pulls ``core``/``palette`` at
