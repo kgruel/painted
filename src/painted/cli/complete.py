@@ -570,11 +570,17 @@ def _command_parser(cmd: AppCommand, prog: str | None) -> argparse.ArgumentParse
 
     modes={STATIC} suppresses the whole mode group (-i/--live/--static): an
     AppCommand can't declare its delivery capability, so completion under-lists
-    rather than suggest a flag the command may reject."""
+    rather than suggest a flag the command may reject. ``prompts`` rides the
+    same ``build_parser`` every other declaration does (docs/PROMPTS_DESIGN.md
+    §12 step 4) — a prompt-generated flag completes exactly as a ``tags``- or
+    ``add_args``-declared one does, with zero completion-specific code: the
+    producer walks whatever actions the parser holds, never asking who
+    registered them."""
     prog_str = f"{prog} {cmd.name}" if prog else cmd.name
     return build_parser(
         add_args=cmd.add_args,
         tags=cmd.tags,
+        prompts=cmd.prompts,
         modes={OutputMode.STATIC},
         prog=prog_str,
     )

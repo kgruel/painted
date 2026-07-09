@@ -32,6 +32,7 @@ if TYPE_CHECKING:
     from ..core.block import Block
     from ..core.doc import Doc, Node
     from .help import HelpArg
+    from .prompts import Prompt
 
 # core.doc and .help are imported lazily inside the render methods below, never
 # at module top: constructing an AppCommand and completing it must not pull the
@@ -80,6 +81,13 @@ class AppCommand:
     the declaration, introspected directly. The callback must be a pure parser
     builder (it is invoked to introspect the args; it must only call
     ``parser.add_argument`` and never act on them).
+
+    ``prompts`` is the same mirror again, for the fourth reflection
+    (docs/PROMPTS_DESIGN.md §6, §12 step 4): the author passes the *same* list
+    to both this field and the handler's ``run_cli(prompts=...)`` call. Without
+    the mirror, a declared prompt's flag would exist inside the handler's own
+    parser but stay invisible to the intercepted ``-h`` and to ``<TAB>`` — the
+    two surfaces that never construct or run the handler.
     """
 
     name: str  # "status"
@@ -91,6 +99,7 @@ class AppCommand:
     add_args: Callable[[argparse.ArgumentParser], None] | None = (
         None  # declared args; intercepts -h
     )
+    prompts: Sequence[Prompt] | None = None  # declared inline prompts (mirrors run_cli)
     aliases: tuple[str, ...] = ()  # alternate spellings that route to this command
 
     def __post_init__(self) -> None:
@@ -100,13 +109,15 @@ class AppCommand:
             object.__setattr__(self, "help_args", tuple(self.help_args))
         if self.tags is not None and not isinstance(self.tags, tuple):
             object.__setattr__(self, "tags", tuple(self.tags))
+        if self.prompts is not None and not isinstance(self.prompts, tuple):
+            object.__setattr__(self, "prompts", tuple(self.prompts))
         if not isinstance(self.aliases, tuple):
             object.__setattr__(self, "aliases", tuple(self.aliases))
         # Declarations are promises — validate here, same as parser construction.
         # Alias↔command collisions need every command's full name set, so they
         # are checked at AppRunner construction (see _check_alias_collisions),
         # not here where only this command is in view.
-        check_declarations(self.tags, None)
+        check_declarations(self.tags, None, self.prompts)
 
 
 @dataclass(frozen=True)
@@ -298,7 +309,11 @@ class AppRunner:
             body.append(Prose(cmd.description))
         if cmd_defs:
             body.append(Defs(cmd_defs))
-        body.extend(framework_sections(framework_depth, include_options=False, tags=cmd.tags))
+        body.extend(
+            framework_sections(
+                framework_depth, include_options=False, tags=cmd.tags, prompts=cmd.prompts
+            )
+        )
 
         prog = f"{self.prog} {cmd.name}" if self.prog else cmd.name
         return Doc(title=prog, body=tuple(body))

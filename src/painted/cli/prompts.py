@@ -134,6 +134,17 @@ class Danger(Enum):
 _NAME_RE = re.compile(r"^[a-z][a-z0-9]*(-[a-z0-9]+)*$")
 
 
+def _never_completes(_ctx: Any) -> tuple[str, ...]:
+    """The "complete nothing" completer (COMPLETION_DESIGN §5's explicit
+    opt-out: a completer returning no candidates suppresses both dynamic
+    candidates *and* the open-slot file/dir fallback ``wants_file_completion``
+    would otherwise offer). Wired onto HARD's value-carrying challenge flag —
+    typing the challenge is the ceremony (design §9); a completer would let a
+    shell surface it, defeating the point of demanding it be typed.
+    """
+    return ()
+
+
 class PromptContractError(ContractError):
     """A prompt refusal, routed to stderr by the runner (design §8).
 
@@ -340,13 +351,18 @@ class Confirm(Prompt[bool]):
         if self.danger is Danger.HARD:
             # A mutually exclusive pair: the value-carrying yes and the bare no.
             group = container.add_mutually_exclusive_group()
-            group.add_argument(
+            challenge_action = group.add_argument(
                 f"--{self.name}",
                 dest=self.dest,
                 default=None,
                 metavar="CHALLENGE",
                 help=f"{self.question} (type the challenge to proceed)",
             )
+            # The challenge value never completes (design §9): typing it is the
+            # ceremony, so a shell must not surface it as a candidate.
+            from .complete import complete_via
+
+            complete_via(challenge_action, _never_completes)
             group.add_argument(
                 f"--no-{self.name}",
                 dest=self._no_dest,
@@ -483,9 +499,12 @@ class Input(Prompt[T]):
     ``parse`` at resolution (validated at construction). Without ``parse``,
     ``Input`` is a ``Prompt[str]`` and the answer is the raw string.
 
-    ``completer=`` is accepted and stored for the third reflection to complete
-    the answer values — its wiring lands in slice 4. ``danger=HARD`` is a
-    ``DeclarationError`` (HARD is ``Confirm``-only, §9).
+    ``completer=`` rides the third reflection (design §6's domain table):
+    attached to the generated flag's action via ``complete_via``, its
+    candidates replace the open-slot file/dir fallback ``wants_file_completion``
+    would otherwise offer. Without one, the flag stays an open slot and gets
+    that fallback. ``danger=HARD`` is a ``DeclarationError`` (HARD is
+    ``Confirm``-only, §9).
     """
 
     parse: Callable[[str], T] | None = None
@@ -523,7 +542,7 @@ class Input(Prompt[T]):
         # parse is argparse's type=, so the flag and the default share one
         # str → T map. Omitted when parse is None — the open-domain str default.
         if self.parse is not None:
-            container.add_argument(
+            action = container.add_argument(
                 f"--{self.name}",
                 dest=self.dest,
                 default=None,
@@ -532,13 +551,20 @@ class Input(Prompt[T]):
                 help=self.question,
             )
         else:
-            container.add_argument(
+            action = container.add_argument(
                 f"--{self.name}",
                 dest=self.dest,
                 default=None,
                 metavar=self.dest.upper(),
                 help=self.question,
             )
+        if self.completer is not None:
+            # Riding the third reflection (design §6's domain table): a
+            # declared completer's candidates, in place of the open-slot
+            # file/dir fallback wants_file_completion would otherwise offer.
+            from .complete import complete_via
+
+            complete_via(action, self.completer)
 
     def flag_supplied(self, parked: Mapping[str, object]) -> bool:
         return parked.get(self.dest) is not None

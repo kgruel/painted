@@ -26,10 +26,14 @@ from __future__ import annotations
 import argparse
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any
 
 from ..core.zoom import Zoom
 from ..core.doc import Def, Defs, Doc, Node, Prose, Section
 from .types import Format, Tag, depth_alias_help
+
+if TYPE_CHECKING:
+    from .prompts import Prompt
 
 
 @dataclass(frozen=True)
@@ -68,6 +72,23 @@ def _add_args_defs(add_args_fn: Callable[[argparse.ArgumentParser], None]) -> li
 
     parser = argparse.ArgumentParser(add_help=False)
     add_args_fn(parser)
+    return [Def(term=spec.term, summary=spec.help) for spec in walk_args(parser)]
+
+
+def _prompts_defs(prompts: Sequence[Prompt[Any]]) -> list[Def]:
+    """Declared prompts as Defs — the help projection of the same ArgSpec walk
+    completion projects to Candidates (the one-walk principle, extended to the
+    fourth reflection, docs/PROMPTS_DESIGN.md §12 step 4). Mirrors
+    ``_add_args_defs`` exactly: register the real flag(s) on a throwaway
+    parser via ``Prompt.add_to_parser`` — the same call ``build_parser`` makes
+    for the live parser — then walk it, so a prompt's help text (and HARD's
+    two-row asymmetry: a value-carrying yes, a bare no) is read off the one
+    place it's authored, never re-described here."""
+    from ._argwalk import walk_args
+
+    parser = argparse.ArgumentParser(add_help=False)
+    for prompt in prompts:
+        prompt.add_to_parser(parser)
     return [Def(term=spec.term, summary=spec.help) for spec in walk_args(parser)]
 
 
@@ -125,20 +146,23 @@ def framework_sections(
     tags: Sequence[Tag] | None = None,
     depth_aliases: Mapping[str, int] | None = None,
     budgets: bool = False,
+    prompts: Sequence[Prompt[Any]] | None = None,
 ) -> list[Node]:
-    """The Layers / Zoom / Mode / Format / Density / Help groups. Layers and
-    Density appear only when declared — the help surface mirrors the flag
-    surface.
+    """The Layers / Prompts / Zoom / Mode / Format / Density / Help groups.
+    Layers, Prompts, and Density appear only when declared — the help surface
+    mirrors the flag surface.
 
     ``depth`` gates the universal grammar (Zoom/Mode/Format/Density/Help) —
     flags with the same meaning on every tool, safe to render terse when
-    command args lead. Layers is app-declared *vocabulary*: ``--stats`` exists
-    only where a Tag declared it, so it leads the groups and stays at MINIMAL,
-    fully rendered at default ``--help`` regardless of ``depth``.
+    command args lead. Layers and Prompts are app-declared *content*
+    (vocabulary and questions, respectively, not grammar): both lead the
+    groups and stay at MINIMAL, fully rendered at default ``--help``
+    regardless of ``depth`` — the same treatment, for the same reason
+    (docs/PROMPTS_DESIGN.md §12 step 4 mirrors §1's Tag precedent).
 
-    ``include_options=False`` keeps only Layers (when tags are declared) and
+    ``include_options=False`` keeps only Layers/Prompts (when declared) and
     Help — subcommand help, where zoom/mode/format belong to the handler but
-    declared facets are the command's own.
+    declared facets and questions are the command's own.
     """
     sections: list[Node] = []
     # Layers leads: app-declared vocabulary is command content, not grammar —
@@ -150,6 +174,17 @@ def framework_sections(
                 "(named facets)",
                 "Toggleable layers of this view, independent of depth.",
                 tuple(_tag_def(t) for t in tags),
+                Zoom.MINIMAL,
+            )
+        )
+    if prompts:
+        sections.append(
+            _group(
+                "Prompts",
+                "(interactive questions)",
+                "Answered at a TTY; these flags resolve them non-interactively "
+                "(for scripts, CI, and --no-input).",
+                tuple(_prompts_defs(prompts)),
                 Zoom.MINIMAL,
             )
         )
@@ -271,6 +306,7 @@ def help_doc(runner) -> Doc:  # runner: CliRunner (avoid import cycle)
             tags=runner.tags,
             depth_aliases=runner.depth_aliases,
             budgets=runner.budgets,
+            prompts=runner.prompts,
         )
     )
     return Doc(title=title, body=tuple(body))
