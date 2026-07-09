@@ -224,7 +224,7 @@ class CliRunner(Generic[T]):
                 return self._export_json(ctx)
             return self._dispatch(ctx)
         except PromptContractError as exc:
-            return self._emit_refusal(ctx, exc)
+            return self._emit_refusal(ctx, exc, plain=plain_requested)
 
     def _get_parser(self) -> argparse.ArgumentParser:
         """Build and cache the parser for repeated invocations.
@@ -589,18 +589,22 @@ class CliRunner(Generic[T]):
 
         print_block(block, use_ansi=ctx.use_ansi if use_ansi is None else use_ansi)
 
-    def _emit_refusal(self, ctx: CliContext, exc: Exception) -> int:
+    def _emit_refusal(self, ctx: CliContext, exc: Exception, *, plain: bool) -> int:
         """Route a prompt refusal to stderr, leaving stdout a clean data channel.
 
         The single seam every mode funnels a ``PromptContractError`` through
         (design §8): the remediation text renders to stderr at stderr's own
         fidelity, stdout emits nothing (``tool --json | jq`` stays parseable even
         when the tool refused mid-run), and the exit is nonzero — a refusal is a
-        run that produced no answer.
+        run that produced no answer. A refusal is prompt UI, so its plainness
+        follows the same gate as the prompts it speaks for: stderr's TTY-ness
+        overridden by the ``--plain`` *request* (cf. ``PromptSession._use_ansi``),
+        never the resolved stdout format.
         """
         from ..core.writer import print_block
 
-        print_block(self._fetch_error_block(ctx, exc), sys.stderr, use_ansi=ctx.stderr_is_tty)
+        use_ansi = ctx.stderr_is_tty and not plain
+        print_block(self._fetch_error_block(ctx, exc), sys.stderr, use_ansi=use_ansi)
         return 1
 
     @staticmethod

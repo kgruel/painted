@@ -217,7 +217,14 @@ class AppRunner:
         rest = argv[1:]
         for cmd in self.commands:
             if name == cmd.name or name in cmd.aliases:
-                intercepts = cmd.help_args is not None or cmd.add_args is not None
+                # Any declaration mirror opts the command into interception:
+                # a declared prompt's flag must reach the intercepted -h even
+                # when it is the command's only declaration (§12 step 4 — the
+                # mirror exists exactly for the surfaces that never run the
+                # handler).
+                intercepts = (
+                    cmd.help_args is not None or cmd.add_args is not None or cmd.prompts is not None
+                )
                 if intercepts and ("-h" in rest or "--help" in rest):
                     return self._handle_subcommand_help(cmd, rest)
                 return cmd.handler(rest)
@@ -294,11 +301,13 @@ class AppRunner:
         Args come from either declaration mirror: ``help_args`` (re-described)
         or ``add_args`` (introspected). command_defs merges both, so a command
         migrating help_args → add_args renders the same arg list throughout.
+        A prompt-only command has no cmd_defs at all — its help is the Prompts
+        group (rendered at MINIMAL regardless of depth) plus Help.
         """
         from ..core.doc import Defs, Doc, Prose
         from .help import command_defs, framework_sections
 
-        assert cmd.help_args is not None or cmd.add_args is not None
+        assert cmd.help_args is not None or cmd.add_args is not None or cmd.prompts is not None
 
         cmd_defs = command_defs(cmd.help_args, cmd.add_args)
         # Help subordinates only when the command has its own args to lead with.

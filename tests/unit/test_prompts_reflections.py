@@ -231,6 +231,24 @@ class TestAppSubcommandHelpRendersPrompts:
         assert "--scope" in out
         assert "Force reseal?" in out
 
+    def test_prompt_only_command_intercepts_help(self, capsys, monkeypatch):
+        # prompts as the ONLY declaration mirror still intercepts -h: the
+        # mirror exists exactly for the surfaces that never run the handler
+        # (§12 step 4) — without interception the declared flag would be
+        # invisible to help whenever the handler is opaque.
+        monkeypatch.setattr("sys.stdout.isatty", lambda: False)
+        cmd = AppCommand(
+            "go",
+            "Go",
+            handler=lambda argv: 17,  # sentinel exit — interception must not run this
+            prompts=[Confirm("force", "Force?")],
+        )
+        assert run_app(["go", "-h"], [cmd], prog="myapp") == 0
+        out = capsys.readouterr().out
+        assert "Prompts" in out
+        assert "--force" in out
+        assert "Force?" in out
+
 
 # =============================================================================
 # 3. Completion — the third reflection composing with the fourth

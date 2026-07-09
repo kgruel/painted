@@ -1717,6 +1717,43 @@ def test_json_plain_prompt_is_plain_line_on_stderr_json_on_stdout(
     assert "go: yes" in err  # the plain record line rendered (LINE rung)
 
 
+def test_plain_refusal_at_tty_stderr_has_no_sgr(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # A refusal is prompt UI (§8): --plain at a TTY stderr must strip its SGR
+    # the same way it strips the prompts' — plainness follows the *request*,
+    # never stderr's TTY-ness alone (the F3 plane, at the refusal seam).
+    stderr = _TTYStringIO()
+    monkeypatch.setattr(sys, "stdin", _FakeStream(False))  # headless → refusal
+    monkeypatch.setattr(sys, "stderr", stderr)
+
+    def fetch(ctx):
+        return {"go": ctx.ask("go")}
+
+    rc = run_cli(["--plain"], _render, fetch, prompts=[Confirm("go", "Go?")])
+    assert rc == 1
+    err = stderr.getvalue()
+    assert "--go" in err  # the refusal still names the flag
+    assert "\x1b[" not in err  # zero SGR — the request wins
+
+
+def test_refusal_at_tty_stderr_stays_styled_without_plain(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # The control for the test above: absent --plain, a TTY stderr refusal is
+    # styled — pins that the gate is the request, not a blanket de-styling.
+    stderr = _TTYStringIO()
+    monkeypatch.setattr(sys, "stdin", _FakeStream(False))
+    monkeypatch.setattr(sys, "stderr", stderr)
+
+    def fetch(ctx):
+        return {"go": ctx.ask("go")}
+
+    rc = run_cli([], _render, fetch, prompts=[Confirm("go", "Go?")])
+    assert rc == 1
+    assert "\x1b[" in stderr.getvalue()  # styled: stderr is a TTY, no request
+
+
 def test_json_only_prompt_unregressed(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
