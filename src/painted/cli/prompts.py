@@ -252,10 +252,23 @@ class Prompt(Generic[T]):
         """The answer argv supplied — may raise ``PromptContractError``.
 
         Called lazily (on ``ctx.ask``), never at parse time: a HARD challenge
-        mismatch or a failed ``Input`` validator is a resolution-time refusal,
-        so eager validation cannot refuse a run over a question never asked.
+        mismatch is a resolution-time refusal, so eager validation cannot refuse
+        a run over a question never asked. (``Input``'s ``parse`` is the one
+        exception — it runs eagerly as argparse ``type=``, so a malformed
+        ``--reason`` fails at parse like any typed flag.)
         """
         raise NotImplementedError
+
+    def resolve_default(self) -> T:
+        """The answer form of the declared default (design §3 rule 2).
+
+        Identity for most shapes — the default *is* the answer. ``Input``
+        overrides: its declared default is the raw string form, mapped through
+        ``parse`` so the default rides the same ``str → T`` path as the flag,
+        keeping "same declaration, same domain" across the flag and default
+        channels. Only called when ``default is not MISSING``.
+        """
+        return self.default  # type: ignore[return-value]  # guarded: not MISSING
 
 
 # --- Confirm — Prompt[bool] --------------------------------------------------
@@ -275,12 +288,20 @@ class Confirm(Prompt[bool]):
     challenge: str | None = None
 
     def __post_init__(self) -> None:
-        if self.danger is Danger.HARD and self.challenge is None:
-            raise DeclarationError(
-                f"Confirm {self.name!r}: danger=HARD requires challenge= (the "
-                "token the operator types to proceed); ceremony with nothing to "
-                "type is a dead declaration"
-            )
+        if self.danger is Danger.HARD:
+            if self.challenge is None:
+                raise DeclarationError(
+                    f"Confirm {self.name!r}: danger=HARD requires challenge= (the "
+                    "token the operator types to proceed); ceremony with nothing "
+                    "to type is a dead declaration"
+                )
+            if not self.challenge.strip():
+                raise DeclarationError(
+                    f"Confirm {self.name!r}: challenge= must be a non-empty token; "
+                    "an empty or whitespace-only challenge is satisfied by --"
+                    f'{self.name} "" (an unset shell variable), the very accident '
+                    "the HARD tier exists to refuse (§9)"
+                )
         if self.challenge is not None and self.danger is not Danger.HARD:
             raise DeclarationError(
                 f"Confirm {self.name!r}: challenge= is only meaningful at "
@@ -376,8 +397,22 @@ class Select(Prompt[str]):
     vocabulary: Vocabulary | None = None
 
     def __post_init__(self) -> None:
-        if self.values is not None and not isinstance(self.values, tuple):
-            object.__setattr__(self, "values", tuple(self.values))
+        if self.values is not None:
+            values = tuple(self.values)
+            object.__setattr__(self, "values", values)
+            # Domain coherence: the flag channel is str, so the domain must be a
+            # non-empty set of unique, non-empty strings — otherwise a default or
+            # runtime answer could carry a value the flag could never produce
+            # (mirrors Vocabulary's own construction checks).
+            if not values:
+                raise DeclarationError(f"Select {self.name!r} declares no values")
+            if any(not isinstance(v, str) or not v for v in values):
+                raise DeclarationError(
+                    f"Select {self.name!r} values must be non-empty strings (the "
+                    "flag channel is str, so the domain is too)"
+                )
+            if len(set(values)) != len(values):
+                raise DeclarationError(f"Select {self.name!r} has duplicate values")
         has_values = self.values is not None
         has_vocab = self.vocabulary is not None
         if has_values == has_vocab:
@@ -428,19 +463,24 @@ class Select(Prompt[str]):
 
 
 @dataclass(frozen=True)
-class Input(Prompt[str]):
+class Input(Prompt[T]):
     """A free-text question over an *open* domain (design §6).
 
-    ``validate=`` is an optional callable run against the answer: it raises to
-    reject (any exception rejects), and its return value is ignored — the raw
-    string is the answer. A declared ``default`` is validated at construction; a
-    flag-supplied value is validated at resolution (a failure is a
-    stderr-routed refusal). ``completer=`` is accepted and stored for the third
-    reflection to complete the answer values — its wiring lands in slice 4.
-    ``danger=HARD`` is a ``DeclarationError`` (HARD is ``Confirm``-only, §9).
+    ``parse=`` is an optional ``str → T`` callable: it raises to reject, and its
+    return value *becomes the answer* (``Input("count", parse=int)`` resolves the
+    int ``42``). It is the domain — the same callable runs on both channels, so
+    the flag and the default produce the same ``T``. On the flag channel it is
+    argparse's ``type=``, so a malformed ``--count abc`` fails at parse like any
+    typed flag; the declared ``default`` is the raw string form, mapped through
+    ``parse`` at resolution (validated at construction). Without ``parse``,
+    ``Input`` is a ``Prompt[str]`` and the answer is the raw string.
+
+    ``completer=`` is accepted and stored for the third reflection to complete
+    the answer values — its wiring lands in slice 4. ``danger=HARD`` is a
+    ``DeclarationError`` (HARD is ``Confirm``-only, §9).
     """
 
-    validate: Callable[[str], object] | None = None
+    parse: Callable[[str], T] | None = None
     completer: Completer | None = None
 
     def __post_init__(self) -> None:
@@ -452,40 +492,52 @@ class Input(Prompt[str]):
         super().__post_init__()
 
     def _admits(self, value: object) -> bool:
+        # The declared default is the raw string form (the same shape argv
+        # supplies), so parse maps it exactly as it maps a flag value.
         if not isinstance(value, str):
             return False
-        if self.validate is not None:
+        if self.parse is not None:
             try:
-                self.validate(value)
+                self.parse(value)
             except Exception:
                 return False
         return True
+
+    def resolve_default(self) -> T:
+        if self.parse is not None:
+            return self.parse(self.default)  # type: ignore[arg-type]  # default is the raw str form
+        return self.default  # type: ignore[return-value]  # Prompt[str] when parse is None
 
     def flag_spellings(self) -> tuple[str, ...]:
         return (f"--{self.name}",)
 
     def add_to_parser(self, container: argparse._ActionsContainer) -> None:
-        container.add_argument(
-            f"--{self.name}",
-            dest=self.dest,
-            default=None,
-            metavar=self.dest.upper(),
-            help=self.question,
-        )
+        # parse is argparse's type=, so the flag and the default share one
+        # str → T map. Omitted when parse is None — the open-domain str default.
+        if self.parse is not None:
+            container.add_argument(
+                f"--{self.name}",
+                dest=self.dest,
+                default=None,
+                type=self.parse,
+                metavar=self.dest.upper(),
+                help=self.question,
+            )
+        else:
+            container.add_argument(
+                f"--{self.name}",
+                dest=self.dest,
+                default=None,
+                metavar=self.dest.upper(),
+                help=self.question,
+            )
 
     def flag_supplied(self, parked: Mapping[str, object]) -> bool:
         return parked.get(self.dest) is not None
 
-    def resolve_flag(self, parked: Mapping[str, object]) -> str:
-        value = str(parked[self.dest])
-        if self.validate is not None:
-            try:
-                self.validate(value)
-            except Exception as exc:
-                raise PromptContractError(
-                    f"--{self.name} {value!r} is not a valid answer: {exc}"
-                ) from exc
-        return value
+    def resolve_flag(self, parked: Mapping[str, object]) -> T:
+        # argparse already applied parse via type=, so the parked value is T.
+        return parked[self.dest]  # type: ignore[return-value]
 
 
 # =============================================================================
@@ -527,7 +579,11 @@ class PromptSession:
         Accepts a declared name (str) or a runtime declaration object. Memoized
         by name: a prompt fires at most once, and a second read returns the
         recorded answer. An undeclared name is a ``DeclarationError`` naming the
-        declared prompts, never a bare ``KeyError``.
+        declared prompts, never a bare ``KeyError``. A runtime declaration whose
+        name collides with a parse-time declared prompt is also a
+        ``DeclarationError``: it would otherwise silently resolve against the
+        declared prompt's parked flag answer — outside the runtime domain — so
+        the caller is told to reach the declared prompt by name instead.
         """
         if isinstance(prompt, str):
             resolved = self._by_name.get(prompt)
@@ -542,6 +598,13 @@ class PromptSession:
         else:
             p = prompt
             name = p.name
+            if name in self._declared:
+                raise DeclarationError(
+                    f"ctx.ask() was handed a runtime prompt named {name!r}, which "
+                    "is already declared at parse time; resolve the declared "
+                    f"prompt by name — ctx.ask({name!r}) — so its flag and domain "
+                    "apply, rather than shadowing it with a second declaration"
+                )
 
         if name in self._answers:
             return self._answers[name]
@@ -561,8 +624,9 @@ class PromptSession:
         # No terminal (or --no-input): the default fires on *absence of a
         # terminal*, not on EOF (§3 rule 5).
         if p.default is not MISSING:
-            self._emit_default_record(p, p.default)
-            return p.default
+            value = p.resolve_default()
+            self._emit_default_record(p, value)
+            return value
         raise self._refusal(p)
 
     def _refusal(self, p: Prompt[Any]) -> PromptContractError:

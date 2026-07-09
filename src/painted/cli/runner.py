@@ -195,12 +195,22 @@ class CliRunner(Generic[T]):
             no_input=no_input,
         )
 
-        # JSON short-circuits — it's data export, not rendering — but still
-        # carries ctx so an arity-1 fetch reads the same resolved invocation.
-        if is_json:
-            return self._export_json(ctx)
+        # The single refusal seam (design §8): a prompt ContractError raised
+        # anywhere under fetch/render/handler — in any mode, JSON included —
+        # propagates here and routes to stderr with a clean stdout, rather than
+        # each mode path re-implementing the routing. The per-mode handlers let
+        # PromptContractError pass through (they never render it as an ordinary
+        # error block).
+        from .prompts import PromptContractError
 
-        return self._dispatch(ctx)
+        try:
+            # JSON short-circuits — it's data export, not rendering — but still
+            # carries ctx so an arity-1 fetch reads the same resolved invocation.
+            if is_json:
+                return self._export_json(ctx)
+            return self._dispatch(ctx)
+        except PromptContractError as exc:
+            return self._emit_refusal(ctx, exc)
 
     def _get_parser(self) -> argparse.ArgumentParser:
         """Build and cache the parser for repeated invocations.
@@ -303,8 +313,14 @@ class CliRunner(Generic[T]):
         best-effort by contract, so a non-JSON-clean field yields its repr,
         not a failure.
         """
+        from .prompts import PromptContractError
+
         try:
             state = self._do_fetch(ctx)
+        except PromptContractError:
+            # A refusal is not export data — let the single seam route it to
+            # stderr with nothing on stdout, so `tool --json | jq` stays clean.
+            raise
         except Exception as exc:
             message = self._exception_message(exc)
             print(json.dumps({"error": message}))
@@ -353,13 +369,13 @@ class CliRunner(Generic[T]):
         try:
             state = self._do_fetch(ctx)
         except Exception as exc:
-            self._print_error_block(ctx, self._fetch_error_block(ctx, exc), exc)
+            self._emit_error(ctx, self._fetch_error_block(ctx, exc), exc)
             return 1
 
         try:
             block = self.render(ctx, state)
         except Exception as exc:
-            self._print_error_block(ctx, self._render_error_block(ctx, exc), exc)
+            self._emit_error(ctx, self._render_error_block(ctx, exc), exc)
             return 2
 
         print_block(block, use_ansi=ctx.use_ansi)
@@ -390,14 +406,14 @@ class CliRunner(Generic[T]):
                             try:
                                 last_block = self.render(ctx, state)
                             except Exception as exc:
-                                self._print_error_block(
+                                self._emit_error(
                                     ctx, self._render_error_block(ctx, exc), exc, use_ansi=False
                                 )
                                 return 2
                     except (KeyboardInterrupt, asyncio.CancelledError):
                         return 0
                     except Exception as exc:
-                        self._print_error_block(
+                        self._emit_error(
                             ctx, self._fetch_error_block(ctx, exc), exc, use_ansi=False
                         )
                         return 1
@@ -410,6 +426,8 @@ class CliRunner(Generic[T]):
                     from .live_meter import LiveMeter
 
                     meter = LiveMeter()
+                from .prompts import PromptContractError
+
                 with InPlaceRenderer() as renderer:
                     try:
                         async for state in self._stream_iter(ctx):
@@ -417,6 +435,10 @@ class CliRunner(Generic[T]):
                                 meter.start()
                             try:
                                 block = self.render(ctx, state)
+                            except PromptContractError:
+                                # A refusal never renders into the live region —
+                                # propagate to the outer finalize + the seam.
+                                raise
                             except Exception as exc:
                                 renderer.render(self._render_error_block(ctx, exc))
                                 renderer.finalize()
@@ -429,6 +451,9 @@ class CliRunner(Generic[T]):
                     except (KeyboardInterrupt, asyncio.CancelledError):
                         renderer.finalize()
                         return 0
+                    except PromptContractError:
+                        renderer.finalize()
+                        raise
                     except Exception as exc:
                         renderer.render(self._fetch_error_block(ctx, exc))
                         renderer.finalize()
@@ -446,13 +471,13 @@ class CliRunner(Generic[T]):
         try:
             state = self._do_fetch(ctx)
         except Exception as exc:
-            self._print_error_block(ctx, self._fetch_error_block(ctx, exc), exc)
+            self._emit_error(ctx, self._fetch_error_block(ctx, exc), exc)
             return 1
 
         try:
             block = self.render(ctx, state)
         except Exception as exc:
-            self._print_error_block(ctx, self._render_error_block(ctx, exc), exc)
+            self._emit_error(ctx, self._render_error_block(ctx, exc), exc)
             return 2
 
         print_block(block, use_ansi=ctx.use_ansi)
@@ -469,6 +494,7 @@ class CliRunner(Generic[T]):
         import asyncio
 
         from ..core.writer import print_block
+        from .prompts import PromptContractError
         from .stream_surface import StreamSurface
 
         assert self.fetch_stream is not None  # guarded by the caller
@@ -482,6 +508,8 @@ class CliRunner(Generic[T]):
             asyncio.run(surface.run())
         except KeyboardInterrupt:
             pass  # final frame still deposited below
+        except PromptContractError:
+            raise  # route through the seam, not the delivery-failure path below
         except Exception as exc:
             # User fetch/render failures are captured in surface.error; what
             # reaches here is a delivery failure (terminal setup, sizing).
@@ -491,6 +519,9 @@ class CliRunner(Generic[T]):
             return 1
 
         if surface.error is not None:
+            # A refusal captured inside the surface routes through the seam too.
+            if isinstance(surface.error, PromptContractError):
+                raise surface.error
             if surface.error_kind == "render":
                 print_block(self._render_error_block(ctx, surface.error), use_ansi=ctx.use_ansi)
                 return 2
@@ -500,6 +531,8 @@ class CliRunner(Generic[T]):
         if surface.last_state is not None:
             try:
                 block = self.render(ctx, surface.last_state)
+            except PromptContractError:
+                raise
             except Exception as exc:
                 print_block(self._render_error_block(ctx, exc), use_ansi=ctx.use_ansi)
                 return 2
@@ -510,23 +543,37 @@ class CliRunner(Generic[T]):
         return 0
 
     @staticmethod
-    def _print_error_block(
+    def _emit_error(
         ctx: CliContext, block: Block, exc: Exception, *, use_ansi: bool | None = None
     ) -> None:
-        """Print an error block, routing prompt refusals to stderr (design §8).
+        """Print an ordinary fetch/render error block to stdout.
 
-        A prompt ``ContractError`` (the rule-3 refusal, or a HARD-challenge /
-        Input-validate failure) carries remediation text that must never ride
-        the stdout data pipe into ``jq`` — it renders to stderr, at stderr's own
-        fidelity. Every other error keeps the existing stdout path unchanged.
+        A prompt refusal is *not* ordinary: it re-raises here so the single
+        refusal seam in ``run()`` routes it to stderr with a clean stdout
+        (design §8). Every other error keeps the existing stdout path unchanged,
+        so this is the one place mode handlers funnel error rendering through.
         """
-        from ..core.writer import print_block
         from .prompts import PromptContractError
 
         if isinstance(exc, PromptContractError):
-            print_block(block, sys.stderr, use_ansi=ctx.stderr_is_tty)
-            return
+            raise exc
+        from ..core.writer import print_block
+
         print_block(block, use_ansi=ctx.use_ansi if use_ansi is None else use_ansi)
+
+    def _emit_refusal(self, ctx: CliContext, exc: Exception) -> int:
+        """Route a prompt refusal to stderr, leaving stdout a clean data channel.
+
+        The single seam every mode funnels a ``PromptContractError`` through
+        (design §8): the remediation text renders to stderr at stderr's own
+        fidelity, stdout emits nothing (``tool --json | jq`` stays parseable even
+        when the tool refused mid-run), and the exit is nonzero — a refusal is a
+        run that produced no answer.
+        """
+        from ..core.writer import print_block
+
+        print_block(self._fetch_error_block(ctx, exc), sys.stderr, use_ansi=ctx.stderr_is_tty)
+        return 1
 
     @staticmethod
     def _exception_message(exc: Exception) -> str:

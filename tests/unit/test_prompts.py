@@ -120,9 +120,30 @@ def test_select_default_must_be_in_domain() -> None:
         Select("x", "y", values=("a", "b"), default="z")
 
 
-def test_input_default_must_pass_validate() -> None:
+def test_input_default_must_parse() -> None:
+    # The declared default is the raw string form; parse validates it at
+    # construction, so a default parse can't fail cannot construct.
     with pytest.raises(DeclarationError, match="domain"):
-        Input("x", "y", default="bad", validate=_only_digits)
+        Input("x", "y", default="bad", parse=int)
+
+
+def test_empty_challenge_is_rejected() -> None:
+    # An empty / whitespace challenge is satisfied by an unset shell variable —
+    # the accident the HARD tier exists to refuse (§9).
+    with pytest.raises(DeclarationError, match="non-empty token"):
+        Confirm("destroy", "d", danger=Danger.HARD, challenge="")
+    with pytest.raises(DeclarationError, match="non-empty token"):
+        Confirm("destroy", "d", danger=Danger.HARD, challenge="   ")
+
+
+@pytest.mark.parametrize(
+    "bad_values",
+    [(), ("a", "a"), ("", "b"), (1, 2)],
+    ids=["empty", "duplicate", "empty-string", "non-string"],
+)
+def test_select_values_must_be_a_coherent_str_domain(bad_values) -> None:
+    with pytest.raises(DeclarationError):
+        Select("s", "q", values=bad_values)
 
 
 def test_name_must_be_kebab() -> None:
@@ -133,13 +154,8 @@ def test_name_must_be_kebab() -> None:
 def test_valid_default_in_domain_constructs() -> None:
     assert Select("s", "q", values=("a", "b"), default="a").default == "a"
     assert Confirm("c", "q", default=True).default is True
-    assert Input("i", "q", default="42", validate=_only_digits).default == "42"
-
-
-def _only_digits(raw: str) -> str:
-    if not raw.isdigit():
-        raise ValueError("must be digits")
-    return raw
+    # Input's declared default stays the raw string; parse maps it at resolution.
+    assert Input("i", "q", default="42", parse=int).default == "42"
 
 
 # =============================================================================
@@ -180,6 +196,15 @@ def test_input_flag_takes_a_value() -> None:
     assert parser.parse_args(["--reason", "because"]).reason == "because"
 
 
+def test_input_parse_maps_str_to_answer_on_the_flag_channel() -> None:
+    # parse is argparse type=: a good value converts to T, a bad one fails at
+    # parse like any typed flag (eager, not a lazy resolution refusal).
+    parser = build_parser(prompts=[Input("count", "how many", parse=int)])
+    assert parser.parse_args(["--count", "42"]).count == 42
+    with pytest.raises(SystemExit):
+        parser.parse_args(["--count", "abc"])
+
+
 def test_hard_flag_pair_is_value_carrying_and_mutually_exclusive() -> None:
     parser = build_parser(prompts=[Confirm("reseal", "r", danger=Danger.HARD, challenge="win-1")])
     parsed = parser.parse_args(["--reseal", "win-1"])
@@ -197,8 +222,25 @@ def test_no_input_flag_always_exists() -> None:
     assert parser.parse_args([]).no_input is False
 
 
-@pytest.mark.parametrize("name", ["input", "json", "plain", "quiet", "verbose", "help"])
+@pytest.mark.parametrize(
+    "name",
+    [
+        "input",  # Confirm("input") → --no-input, the doc's canonical case
+        "json",
+        "plain",
+        "quiet",
+        "verbose",
+        "help",
+        "interactive",
+        "static",
+        "live",
+        "max-chars",
+        "max-lines",
+    ],
+)
 def test_prompt_colliding_with_framework_flag_raises(name: str) -> None:
+    # The full reserved registry — checked regardless of budgets=/modes=
+    # filtering, so a declaration valid in one configuration can't break another.
     with pytest.raises(DeclarationError, match="collides"):
         build_parser(prompts=[Confirm(name, "y")])
 
@@ -313,6 +355,25 @@ def test_interactive_seam_is_a_stub_at_a_tty() -> None:
         session.ask("overwrite")
 
 
+def test_declared_default_at_a_tty_still_hits_the_stub() -> None:
+    # Resolution order (§6): interactive-at-TTY precedes the declared default —
+    # at a real TTY the default is presented *through* the (unbuilt) interactive
+    # rung, so a default does not short-circuit the stub.
+    sel = Select("scope", "w", values=("local", "all"), default="local")
+    session = PromptSession([sel], {"scope": None}, stdin_tty=True)
+    with pytest.raises(LifecycleError):
+        session.ask("scope")
+
+
+def test_no_input_without_a_default_refuses() -> None:
+    # --no-input at a TTY behaves as non-terminal: no flag, no default → refusal.
+    session = PromptSession(
+        [Confirm("overwrite", "o")], {"overwrite": None}, stdin_tty=True, no_input=True
+    )
+    with pytest.raises(PromptContractError):
+        session.ask("overwrite")
+
+
 # =============================================================================
 # HARD confirm resolution (§9)
 # =============================================================================
@@ -338,17 +399,28 @@ def test_hard_no_flag_resolves_false() -> None:
 
 
 # =============================================================================
-# Input validation at resolution
+# Input parse — str → T, the return becomes the answer (§6)
 # =============================================================================
 
 
-def test_input_flag_value_runs_validate() -> None:
-    inp = Input("count", "how many", validate=_only_digits)
-    ok = PromptSession([inp], {"count": "42"}, stdin_tty=False)
-    assert ok.ask("count") == "42"
-    bad = PromptSession([inp], {"count": "x"}, stdin_tty=False)
-    with pytest.raises(PromptContractError):
-        bad.ask("count")
+def test_input_parsed_flag_resolves_to_T() -> None:
+    inp = Input("count", "how many", parse=int)
+    # argparse type= already produced the int; resolution returns it as-is.
+    session = PromptSession([inp], {"count": 42}, stdin_tty=False)
+    assert session.ask("count") == 42
+
+
+def test_input_parsed_default_resolves_to_T(capsys: pytest.CaptureFixture[str]) -> None:
+    inp = Input("count", "how many", parse=int, default="7")
+    session = PromptSession([inp], {"count": None}, stdin_tty=False)
+    answer = session.ask("count")
+    assert answer == 7 and isinstance(answer, int)
+
+
+def test_input_without_parse_answers_the_raw_string() -> None:
+    inp = Input("reason", "why")
+    session = PromptSession([inp], {"reason": "because"}, stdin_tty=False)
+    assert session.ask("reason") == "because"
 
 
 # =============================================================================
@@ -360,6 +432,17 @@ def test_ask_undeclared_name_raises_declaration_error() -> None:
     session = PromptSession([Confirm("overwrite", "o")], {"overwrite": None})
     with pytest.raises(DeclarationError, match="no prompt named 'nope'"):
         session.ask("nope")
+
+
+def test_runtime_prompt_colliding_with_declared_name_raises() -> None:
+    # A runtime declaration whose name shadows a parse-time prompt would resolve
+    # against the declared prompt's parked flag answer — outside the runtime
+    # domain. That is a DeclarationError telling the caller to ask by name.
+    declared = Select("scope", "w", values=("local", "all"))
+    session = PromptSession([declared], {"scope": "all"}, stdin_tty=False)
+    runtime = Select("scope", "different domain", values=("a", "b"), default="a")
+    with pytest.raises(DeclarationError, match="already declared at parse time"):
+        session.ask(runtime)
 
 
 def test_runtime_declaration_refusal_names_the_channel() -> None:
@@ -497,6 +580,73 @@ def test_run_cli_no_input_forces_declared_resolution(
     rc = run_cli(["--plain", "--no-input"], _render, fetch, prompts=prompts)
     assert rc == 0
     assert "'scope': 'local'" in capsys.readouterr().out
+
+
+def test_run_cli_json_refusal_emits_nothing_on_stdout(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # F1: --json must not print an {"error": ...} object on a refusal — stdout
+    # stays parseable (empty), remediation to stderr, nonzero exit.
+    monkeypatch.setattr(sys, "stdin", _FakeStream(False))
+
+    def fetch(ctx):
+        return {"ok": ctx.ask("overwrite")}
+
+    rc = run_cli(["--json"], _render, fetch, prompts=[Confirm("overwrite", "o")])
+    captured = capsys.readouterr()
+    assert rc == 1
+    assert captured.out == ""
+    assert "stdin is not a terminal" in captured.err
+
+
+def test_run_cli_live_stream_refusal_goes_to_stderr(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # F1: a refusal raised inside a streaming render routes through the seam too.
+    monkeypatch.setattr(sys, "stdin", _FakeStream(False))
+
+    async def fetch_stream(ctx):
+        yield {"n": 1}
+
+    def render(ctx, data):
+        ctx.ask("overwrite")  # refuses (non-tty, no flag/default)
+        return Block.text(str(data), Style())
+
+    rc = run_cli(
+        ["--plain"],
+        render,
+        lambda: {"n": 0},
+        fetch_stream=fetch_stream,
+        prompts=[Confirm("overwrite", "o")],
+    )
+    captured = capsys.readouterr()
+    assert rc == 1
+    assert captured.out == ""
+    assert "stdin is not a terminal" in captured.err
+
+
+def test_run_cli_custom_handler_refusal_goes_to_stderr(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # F1: a refusal from a custom mode handler must not leak a raw traceback —
+    # the dispatch-layer seam catches it uniformly.
+    monkeypatch.setattr(sys, "stdin", _FakeStream(False))
+
+    def handler(ctx):
+        ctx.ask("overwrite")
+        return 0
+
+    rc = run_cli(
+        ["-i"],
+        _render,
+        lambda: {},
+        handlers={OutputMode.INTERACTIVE: handler},
+        prompts=[Confirm("overwrite", "o")],
+    )
+    captured = capsys.readouterr()
+    assert rc == 1
+    assert captured.out == ""
+    assert "stdin is not a terminal" in captured.err
 
 
 def test_prompt_base_is_the_shared_primitive() -> None:
