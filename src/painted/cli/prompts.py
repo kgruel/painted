@@ -41,7 +41,7 @@ from functools import total_ordering
 from typing import TYPE_CHECKING, Any, Generic, TextIO, TypeVar
 
 from ..core.errors import ContractError, DeclarationError, LifecycleError
-from ..vocabulary import Vocabulary
+from ..vocabulary import Vocabulary, vocab_style
 
 if TYPE_CHECKING:
     from .complete import Completer
@@ -693,6 +693,14 @@ class PromptSession:
         imported lazily here, the single point this module touches the
         renderer. Fidelity follows stderr's TTY-ness (§8): piped stderr →
         plain, no ANSI.
+
+        The answer's own style is its declared mark when the prompt is a
+        vocabulary-backed ``Select`` (design §7: "styled by the answer's mark
+        where a vocabulary is declared") — resolved through ``vocab_style``,
+        the same by-reference seam ``views/record.py`` uses, so the record
+        line matches the mark everywhere else it appears. Every other shape
+        (and a ``values=``-tuple ``Select``, which has no vocabulary to mark
+        with) keeps the plain ``accent`` role, unchanged.
         """
         from ..core.cell import Style
         from ..core.span import Line, Span
@@ -702,11 +710,14 @@ class PromptSession:
 
         palette = current_palette()
         icons = current_icons()
+        value_style = palette.accent
+        if isinstance(p, Select) and p.vocabulary is not None:
+            value_style = vocab_style(p.vocabulary, value)
         line = Line(
             (
                 Span(f"{icons.ok} ", palette.success),
                 Span(f"{p.name}: ", Style()),
-                Span(p._format(value), palette.accent),
+                Span(p._format(value), value_style),
                 Span(suffix, palette.muted),
             )
         )

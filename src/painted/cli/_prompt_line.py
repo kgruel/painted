@@ -28,6 +28,7 @@ from ..core.span import Span
 from ..core.writer import Writer
 from ..icon_set import current_icons
 from ..palette import current_palette
+from ..vocabulary import vocab_style
 from .prompts import MISSING, Confirm, Input, Prompt, Select
 
 __all__ = ["resolve_line"]
@@ -173,8 +174,17 @@ def _select_line(prompt: Select, stdin: TextIO, stderr: TextIO, use_ansi: bool) 
 
     lines: list[tuple[Span, ...]] = [(Span("? ", palette.accent), Span(prompt.question, Style()))]
     for i, choice in enumerate(choices, start=1):
-        marker = " (default)" if i == default_idx else ""
-        lines.append((Span(f"  {i}) ", palette.muted), Span(f"{choice}{marker}", Style())))
+        # Same value → same treatment, applied to input (design §5): a
+        # declared vocabulary marks its values at LINE exactly as it would
+        # anywhere else. A values=-tuple Select has no vocabulary to mark
+        # with, so its options stay unstyled — untouched by this branch.
+        value_style = (
+            vocab_style(prompt.vocabulary, choice) if prompt.vocabulary is not None else Style()
+        )
+        spans = [Span(f"  {i}) ", palette.muted), Span(choice, value_style)]
+        if i == default_idx:
+            spans.append(Span(" (default)", palette.muted))
+        lines.append(tuple(spans))
     _write_lines(stderr, use_ansi, *lines)
 
     suffix = f" [{default_idx}]" if has_default else ""

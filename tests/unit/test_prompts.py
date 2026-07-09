@@ -28,7 +28,7 @@ from painted.core.cell import Style
 from painted.core.errors import ContractError, DeclarationError, LifecycleError
 from painted.core.fidelity import Fidelity
 from painted.cli.types import OutputMode
-from painted.vocabulary import Vocabulary
+from painted.vocabulary import Role, Vocabulary
 
 
 class _FakeInput:
@@ -786,6 +786,95 @@ def test_line_select_out_of_range_and_non_numeric_reprompt(
     assert session.ask("scope") == "local"
     err = capsys.readouterr().err
     assert err.count("Please enter a number between 1 and 2") == 3
+
+
+# --- Vocabulary marks at LINE (design §5, §7) -------------------------
+# "Same value → same treatment, the vocabulary guarantee, applied to input" —
+# a Select(vocabulary=...) marks its option values and its record line
+# wherever they render styled; a values=-tuple Select has no vocabulary to
+# mark with and stays untouched; plain fidelity is unaffected either way
+# (marks degrade to nothing, monotonically).
+
+_SCOPE_VOCAB = Vocabulary(
+    "scope",
+    values=("local", "all"),
+    roles={"local": Role("scope-local", Style(underline=True)), "all": "warning"},
+)
+
+
+def test_line_select_vocabulary_marks_options_when_styled(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    sel = Select("scope", "Which?", vocabulary=_SCOPE_VOCAB)
+    session = _line_session(sel, ["1\n"], stderr_tty=True)
+    assert session.ask("scope") == "local"
+    err = capsys.readouterr().err
+    # "local" is bound to a Role carrying Style(underline=True) — its own,
+    # otherwise-unused SGR code — so this pins the mark to the option text,
+    # not just "some escape code appeared somewhere in the line".
+    assert "\x1b[4m" in err
+
+
+def test_line_select_vocabulary_options_plain_when_stderr_not_a_tty(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    sel = Select("scope", "Which?", vocabulary=_SCOPE_VOCAB)
+    session = _line_session(sel, ["1\n"], stderr_tty=False)
+    assert session.ask("scope") == "local"
+    err = capsys.readouterr().err
+    assert "\x1b[" not in err
+    assert "1) local" in err and "2) all" in err
+
+
+def test_line_select_values_tuple_stays_unmarked_even_when_styled(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # No vocabulary declared: nothing to mark with, even though the surrounding
+    # cue/number styling (accent "? ", muted numbering) still renders.
+    sel = Select("scope", "Which?", values=("local", "all"))
+    session = _line_session(sel, ["1\n"], stderr_tty=True)
+    session.ask("scope")
+    err = capsys.readouterr().err
+    assert "\x1b[4m" not in err  # the vocabulary test's distinguishing code, absent
+
+
+def test_line_select_vocabulary_marks_the_line_answered_record(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    sel = Select("scope", "Which?", vocabulary=_SCOPE_VOCAB)
+    session = _line_session(sel, ["1\n"], stderr_tty=True)
+    session.ask("scope")
+    err = capsys.readouterr().err
+    record_line = err.splitlines()[-1]
+    # Styled spans interleave SGR/reset codes between "scope:" and "local", so
+    # the record line's *text* isn't one contiguous substring — check both
+    # pieces are present, plus the mark's distinguishing code, on that line.
+    assert "scope:" in record_line and "local" in record_line
+    assert "\x1b[4m" in record_line
+
+
+def test_default_record_line_is_marked_by_vocabulary_too(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # §7 makes no distinction between the LINE-answered record and the
+    # (default) record — both are drawn by the same _emit_record, so both
+    # must carry the mark.
+    sel = Select("scope", "Which?", vocabulary=_SCOPE_VOCAB, default="local")
+    session = PromptSession([sel], {"scope": None}, stdin_tty=False, stderr_tty=True)
+    assert session.ask("scope") == "local"
+    err = capsys.readouterr().err
+    assert "scope:" in err and "local" in err and "(default)" in err
+    assert "\x1b[4m" in err
+
+
+def test_default_record_line_unmarked_for_values_tuple_select(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    sel = Select("scope", "Which?", values=("local", "all"), default="local")
+    session = PromptSession([sel], {"scope": None}, stdin_tty=False, stderr_tty=True)
+    session.ask("scope")
+    err = capsys.readouterr().err
+    assert "\x1b[4m" not in err
 
 
 # --- Input ------------------------------------------------------------
