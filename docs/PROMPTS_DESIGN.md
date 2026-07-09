@@ -412,7 +412,11 @@ exit promptly — a prompt abort is a `KeyboardInterrupt`, never swallowed
 into a `None` (the questionary sentinel is the named counterexample). EOF
 (Ctrl-D) at a live prompt is the same abort path: at a TTY too, EOF is
 never an answer and never falls through to the default — the §3 ledger's
-EOF refusal applies everywhere, not just in pipes.
+EOF refusal applies everywhere, not just in pipes. Concretely the abort is
+a private `KeyboardInterrupt` subclass, so `except KeyboardInterrupt`
+still catches it — but the framework's own graceful-stop handlers (the
+live-stream Ctrl-C → exit 0 path) re-raise it: a run whose question was
+aborted must never report success (checkpoint finding, 2026-07-09).
 
 HARD's decline on a mismatch carries the same information at both rungs,
 presented at each rung's own register: LINE prints an explicit inline note
