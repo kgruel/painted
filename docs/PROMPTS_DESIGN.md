@@ -315,7 +315,11 @@ can't be parse-time flags. They remain declarations *made before asking*,
 same object, handed to **the same door**: `ctx.ask` accepts a declaration
 as well as a name — one method, two arities, so a runtime prompt sees
 `--no-input`, the stream policy (§8), the memoization (keyed by name), and
-the record ledger (§7) with no hidden global state:
+the record ledger (§7) with no hidden global state. A runtime declaration
+whose name collides with a parse-time declared prompt is a
+`DeclarationError` pointing at `ctx.ask("name")` — otherwise a runtime ask
+could consume a parked argv answer from outside its own domain (checkpoint
+finding, 2026-07-09):
 
 ```python
 choice = ctx.ask(Select("conflict", "Overwrite which?", values=conflict_ids))
@@ -457,6 +461,9 @@ literal `yes`, apt's `Yes, do as I say!`, rm's flag-only
   phrase (apt) are all the same declaration — no fourth tier needed. HARD
   without `challenge`, and `challenge` on `NONE`/`SOFT`, are
   `DeclarationError`s: ceremony that can never fire is a dead declaration.
+  So is an empty or whitespace-only challenge — `--destroy ""` satisfying
+  HARD is the exact empty-shell-variable accident the value-carrying flag
+  refuses (checkpoint finding, 2026-07-09).
 - **HARD's flags are a pair, replacing the boolean pair (§6):**
   `--reseal <challenge>` is the yes — value-carrying, heroku's
   `--confirm <appname>` shape — and bare `--no-reseal` is the no, because
