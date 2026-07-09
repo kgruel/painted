@@ -29,7 +29,7 @@ from ..core.writer import Writer
 from ..icon_set import current_icons
 from ..palette import current_palette
 from ..vocabulary import vocab_style
-from .prompts import MISSING, Confirm, Input, Prompt, Select
+from .prompts import MISSING, Confirm, Danger, Input, Prompt, Select
 
 __all__ = ["resolve_line"]
 
@@ -39,11 +39,13 @@ def resolve_line(prompt: Prompt[Any], *, stdin: TextIO, stderr: TextIO, use_ansi
 
     Dispatches by domain shape — each shares the read/re-prompt/abort
     skeleton (``_read_line``) and differs only in its cue and answer parsing.
-    ``danger=HARD`` never reaches here: the caller (``PromptSession``) stubs
-    it before this module is even imported — HARD's type-the-challenge
-    ceremony is CELL-only (slice 5).
+    A ``danger=HARD`` ``Confirm`` takes the type-the-challenge ceremony
+    (``_hard_confirm_line``) instead of the y/n loop — HARD lives at LINE too,
+    the accessibility floor speaks the ceremony as one shown line to type.
     """
     if isinstance(prompt, Confirm):
+        if prompt.danger is Danger.HARD:
+            return _hard_confirm_line(prompt, stdin, stderr, use_ansi)
         return _confirm_line(prompt, stdin, stderr, use_ansi)
     if isinstance(prompt, Select):
         return _select_line(prompt, stdin, stderr, use_ansi)
@@ -159,6 +161,54 @@ def _confirm_line(prompt: Confirm, stdin: TextIO, stderr: TextIO, use_ansi: bool
             return False
         _hint(stderr, use_ansi, f"Please answer y or n {cue_text}.")
         _write_cue(stderr, use_ansi, cue)
+
+
+# =============================================================================
+# Confirm, danger=HARD — the type-the-challenge ceremony
+# =============================================================================
+
+
+def _hard_confirm_line(prompt: Confirm, stdin: TextIO, stderr: TextIO, use_ansi: bool) -> bool:
+    """HARD's type-the-challenge ceremony at LINE (design §9).
+
+    The challenge is *shown* — proof of aim, not a secret. One line is read,
+    and only the exact challenge approves: anything else (a mismatch, an empty
+    line, whitespace) resolves ``False``, fail-closed. There is no re-prompt
+    loop — a HARD decline is an answer, not an input error, so a typo destroys
+    nothing and asks nothing again. Ctrl-C / EOF still abort through
+    ``_read_line`` (a ``KeyboardInterrupt``, never a ``False``), same as every
+    other LINE shape. This is the interactive sibling of the flag path: a wrong
+    ``--{name}`` value is a ``ContractError`` (a script asserting the wrong
+    challenge), but a human at the ceremony who mistypes simply gets nothing —
+    the safe outcome, presented calmly.
+    """
+    palette = current_palette()
+    icons = current_icons()
+    # HARD requires a non-empty challenge at construction (Confirm.__post_init__).
+    assert prompt.challenge is not None
+    _write_lines(
+        stderr,
+        use_ansi,
+        (Span("? ", palette.accent), Span(prompt.question, Style())),
+    )
+    _write_cue(
+        stderr,
+        use_ansi,
+        (
+            Span(f"{icons.warn} Type ", palette.error),
+            Span(prompt.challenge, palette.error),
+            Span(" to proceed (anything else cancels): ", palette.error),
+        ),
+    )
+    raw = _read_line(stdin, stderr)
+    if raw == prompt.challenge:
+        return True
+    _write_lines(
+        stderr,
+        use_ansi,
+        (Span(f"{icons.warn} Did not match the challenge — nothing done.", palette.warning),),
+    )
+    return False
 
 
 # =============================================================================

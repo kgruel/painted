@@ -31,12 +31,13 @@ from .core.block import Block
 from .core.cell import Style
 from .core.compose import join_horizontal, join_vertical
 from .core.span import Line, Span
+from .icon_set import current_icons
 from .inplace import InPlaceRenderer
 from .keyboard import KeyboardInput
 from .palette import current_palette
 from .vocabulary import vocab_style
 from .views import ListState, TextInputState, list_view, text_input
-from .cli.prompts import MISSING, Confirm, Input, Prompt, Select
+from .cli.prompts import MISSING, Confirm, Danger, Input, Prompt, Select
 
 __all__ = ["resolve_cell"]
 
@@ -115,6 +116,8 @@ def _run(prompt: Prompt[Any], renderer: InPlaceRenderer, read: Callable[[], str 
     if isinstance(prompt, Input):
         return _run_input(prompt, renderer, read)
     if isinstance(prompt, Confirm):
+        if prompt.danger is Danger.HARD:
+            return _run_hard_confirm(prompt, renderer, read)
         return _run_confirm(prompt, renderer, read)
     raise TypeError(  # pragma: no cover — exhaustive over the three shipped shapes
         f"no CELL renderer for prompt shape {type(prompt).__name__}"
@@ -274,3 +277,60 @@ def _confirm_block(prompt: Confirm, hint: str | None) -> Block:
         return line.to_block(line.width)
     hint_line = Line((Span(hint, palette.warning),))
     return join_vertical(line.to_block(line.width), hint_line.to_block(hint_line.width))
+
+
+# =============================================================================
+# Confirm, danger=HARD — type the challenge (a TextInputState field)
+# =============================================================================
+
+
+def _run_hard_confirm(
+    prompt: Confirm, renderer: InPlaceRenderer, read: Callable[[], str | None]
+) -> bool:
+    """HARD's type-the-challenge ceremony at CELL (design §9).
+
+    Typing the challenge *is* the ceremony, so the field is a ``TextInputState``
+    — the same free-text component ``Input`` binds, reused whole. The challenge
+    is shown (proof of aim, not a secret); Enter resolves exactly once: the
+    exact challenge → ``True``, anything else (a mismatch, an empty field) →
+    ``False``, fail-closed. No re-prompt loop — a typo destroys nothing and the
+    region collapses to ``✓ name: no``. Abort keys raise through ``_next_key``
+    as everywhere, never a ``False``.
+    """
+    state = TextInputState()
+    while True:
+        renderer.render(_hard_confirm_block(prompt, state))
+        key = _next_key(read)
+        if key == "enter":
+            return state.text == prompt.challenge
+        elif key == "backspace":
+            state = state.delete_back()
+        elif key == "delete":
+            state = state.delete_forward()
+        elif key == "left":
+            state = state.move_left()
+        elif key == "right":
+            state = state.move_right()
+        elif key == "home":
+            state = state.move_home()
+        elif key == "end":
+            state = state.move_end()
+        elif len(key) == 1 and key.isprintable():
+            state = state.insert(key)
+        # Unknown keys are ignored — the field holds.
+
+
+def _hard_confirm_block(prompt: Confirm, state: TextInputState) -> Block:
+    palette = current_palette()
+    icons = current_icons()
+    header = Line((Span("? ", palette.accent), Span(prompt.question, Style())))
+    cue = Line(
+        (
+            Span(f"{icons.warn} type ", palette.error),
+            Span(f"{prompt.challenge}", palette.error),
+            Span(" to proceed: ", palette.error),
+        )
+    )
+    field = text_input(state, _FIELD_WIDTH)
+    cue_row = join_horizontal(cue.to_block(cue.width), field)
+    return join_vertical(header.to_block(header.width), cue_row)

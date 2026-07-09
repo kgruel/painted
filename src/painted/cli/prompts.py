@@ -13,13 +13,13 @@ Scope, DECLARED rung (§12 step 1): construction-time rules, flag generation,
 ``--no-input``, memoized resolution, the ``(default)`` record line, and the
 stderr-routed refusal — testable with a faked ``stdin.isatty()`` and no terminal.
 
-Scope, LINE rung (§12 step 2, this slice): cooked-mode rendering for all three
-domain shapes at a TTY, filled in by the private sibling ``cli/_prompt_line.py``
-(imported lazily from :meth:`PromptSession._interactive` — the one point this
-module reaches past DECLARED). ``danger=HARD`` still raises ``LifecycleError``
-at every rung: its type-the-challenge ceremony is CELL-only (slice 5). CELL
-itself (raw-mode repaint) does not exist yet (slice 3) — LINE is the top rung
-until then.
+Interactive rungs: cooked-mode rendering lives in the private sibling
+``cli/_prompt_line.py`` (LINE, the accessibility floor) and raw-mode repaint in
+``.._prompt_cell`` (CELL, the top rung), both imported lazily from
+:meth:`PromptSession._render_interactive` — the one point this module reaches
+past DECLARED. Every danger tier resolves at both rungs: a ``danger=HARD``
+``Confirm`` renders its type-the-challenge ceremony (§9) — only the exact
+challenge approves; anything else resolves ``False``, fail-closed.
 
 This is evolving ``painted.cli`` surface (design Q2): the domain shapes and
 ``ask`` live here, not on the semver-stable renderer surface, until 1.x hardens
@@ -40,7 +40,7 @@ from enum import Enum
 from functools import total_ordering
 from typing import TYPE_CHECKING, Any, Generic, TextIO, TypeVar
 
-from ..core.errors import ContractError, DeclarationError, LifecycleError
+from ..core.errors import ContractError, DeclarationError
 from ..vocabulary import Vocabulary, vocab_style
 
 if TYPE_CHECKING:
@@ -101,8 +101,8 @@ class Danger(Enum):
 
     ``NONE < SOFT < HARD``. Ordered because the ceremony *escalates*: the
     comparisons (``danger >= Danger.SOFT``) drive the construction rules here
-    and the TTY ceremony later (slice 5), exactly as ``Severity`` ordering
-    drives gutter escalation. Modeled as a total-ordered enum rather than a
+    and the interactive ceremony (the rendered prompt), exactly as ``Severity``
+    ordering drives gutter escalation. Modeled as a total-ordered enum rather than a
     ``vocabulary.Vocabulary`` because the tiers carry *behavior*, not color —
     the design sanctions "a total-ordered frozen class ... match how Severity is
     done" when a color-bearing Vocabulary doesn't fit (design §9).
@@ -155,30 +155,6 @@ class PromptContractError(ContractError):
     reroutes; every other ``ContractError`` keeps stdout. Private — the public
     contract names ``ContractError``, not this seam.
     """
-
-
-# =============================================================================
-# The interactive seam — HARD stays stubbed until CELL lands (slice 5)
-# =============================================================================
-
-
-def _hard_unavailable(prompt: Prompt[Any]) -> Any:
-    """The interactive seam a ``danger=HARD`` confirm still hits.
-
-    Reached when stdin is a TTY, ``--no-input`` is absent, no flag answered, and
-    the prompt is HARD: HARD's type-the-challenge ceremony is a CELL-only build
-    (design §9, §12 step 5) — LINE speaks yes/no, not "type the target's name to
-    proceed". Raises ``LifecycleError`` — the right call (ask a human) in the
-    wrong state (no ceremony renderer yet), naming the escape hatches that *do*
-    resolve headless.
-    """
-    raise LifecycleError(
-        f"Prompt {prompt.name!r} is danger=HARD, whose type-the-challenge "
-        "ceremony needs the CELL rung — not built yet (this build ships DECLARED "
-        f"+ LINE). Pass its flag ({' / '.join(prompt.flag_spellings())}), run "
-        "with --no-input, or lift the decision to parse time where HARD gets "
-        "its value-carrying flag."
-    )
 
 
 # =============================================================================
@@ -672,13 +648,11 @@ class PromptSession:
     def _interactive(self, p: Prompt[Any]) -> Any:
         """Render an interactive prompt and read its answer (design §5).
 
-        HARD confirms stay stubbed regardless of rung: their type-the-challenge
-        ceremony is CELL-only (§9, slice 5). Otherwise the rung is chosen
-        capability-honestly (:meth:`_render_interactive`), and either rung feeds
+        Every danger tier has a live path at both rungs — a HARD confirm renders
+        its type-the-challenge ceremony (§9) at CELL and at LINE alike, chosen
+        capability-honestly by :meth:`_render_interactive`, and either rung feeds
         the same answer→record collapse (§7).
         """
-        if p.danger is Danger.HARD:
-            return _hard_unavailable(p)
         value = self._render_interactive(p)
         self._emit_record(p, value, suffix="")
         return value

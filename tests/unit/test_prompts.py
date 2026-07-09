@@ -25,7 +25,7 @@ from painted.cli.types import (
 from painted.cli.runner import run_cli
 from painted.core.block import Block
 from painted.core.cell import Style
-from painted.core.errors import ContractError, DeclarationError, LifecycleError
+from painted.core.errors import ContractError, DeclarationError
 from painted.core.fidelity import Fidelity
 from painted.cli.types import OutputMode
 from painted.vocabulary import Role, Vocabulary
@@ -287,7 +287,12 @@ def test_add_args_cannot_land_on_a_prompt_dest() -> None:
     def add_args(parser) -> None:
         parser.add_argument("--other", dest="scope")
 
-    with pytest.raises(DeclarationError, match="collides"):
+    # The message names every declared channel the dest could have collided with,
+    # prompts included (the drive-by wording fix — it used to name only tags and
+    # depth aliases even though the dest set already covered prompts).
+    with pytest.raises(
+        DeclarationError, match="collides with a declared tag, depth alias, or prompt"
+    ):
         build_parser(add_args=add_args, prompts=[Select("scope", "w", values=("a",))])
 
 
@@ -369,15 +374,6 @@ def test_no_input_suppresses_interaction_at_a_tty(capsys: pytest.CaptureFixture[
     # stdin IS a tty, but --no-input makes it behave as if it were not.
     session = PromptSession([sel], {"scope": None}, stdin_tty=True, no_input=True)
     assert session.ask("scope") == "local"
-
-
-def test_hard_confirm_interactive_seam_is_a_stub_at_a_tty() -> None:
-    # HARD's type-the-challenge ceremony is CELL-only (slice 5) — it stays
-    # stubbed at every rung, LINE included.
-    hard = Confirm("reseal", "r", danger=Danger.HARD, challenge="win-1")
-    session = PromptSession([hard], {"reseal": None, "no_reseal": False}, stdin_tty=True)
-    with pytest.raises(LifecycleError, match="CELL"):
-        session.ask("reseal")
 
 
 def test_declared_default_at_a_tty_goes_through_line_not_the_default_path(
@@ -975,14 +971,69 @@ def test_line_styles_when_stderr_is_a_tty_plain_when_not(
     assert "\x1b[" not in plain_err
 
 
-# --- HARD still stubbed at LINE (§9, §12 step 5) ----------------------------
+# --- HARD's type-the-challenge ceremony at LINE (§9, §12 step 5) ------------
 
 
-def test_line_hard_confirm_still_raises_lifecycle_error() -> None:
+def test_line_hard_exact_challenge_resolves_true(capsys: pytest.CaptureFixture[str]) -> None:
     hard = Confirm("reseal", "r", danger=Danger.HARD, challenge="win-1")
-    session = _line_session(hard, ["win-1\n"])  # never read — the stub raises first
-    with pytest.raises(LifecycleError, match="CELL"):
-        session.ask("reseal")
+    assert _line_session(hard, ["win-1\n"]).ask("reseal") is True
+
+
+def test_line_hard_shows_the_challenge_it_is_proof_of_aim_not_a_secret(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    hard = Confirm("reseal", "r", danger=Danger.HARD, challenge="win-1")
+    session = _line_session(hard, ["win-1\n"])
+    assert session.ask("reseal") is True
+    err = capsys.readouterr().err
+    assert "win-1" in err  # the ceremony line names what to type
+    assert "reseal: yes" in err  # collapse record line
+
+
+def test_line_hard_mismatch_resolves_false_fail_closed(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # Anything but the exact challenge → False, and it resolves *immediately* —
+    # no re-prompt loop. The second queued line proves it is never read: a HARD
+    # decline is an answer, not an input error (§9).
+    hard = Confirm("reseal", "r", danger=Danger.HARD, challenge="win-1")
+    session = _line_session(hard, ["nope\n", "win-1\n"])
+    assert session.ask("reseal") is False
+    err = capsys.readouterr().err
+    assert "nothing done" in err  # terraform-shaped note
+    assert "reseal: no" in err  # the collapse says no
+
+
+def test_line_hard_empty_and_whitespace_resolve_false(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    hard = Confirm("reseal", "r", danger=Danger.HARD, challenge="win-1")
+    assert _line_session(hard, ["\n"]).ask("reseal") is False
+    assert _line_session(hard, ["   \n"]).ask("reseal") is False  # whitespace ≠ challenge
+
+
+def test_line_hard_no_reprompt_on_mismatch(capsys: pytest.CaptureFixture[str]) -> None:
+    # The y/n loop re-prompts on bad input; the HARD ceremony must not. One read,
+    # one resolution.
+    hard = Confirm("reseal", "r", danger=Danger.HARD, challenge="win-1")
+    session = _line_session(hard, ["typo\n"])
+    assert session.ask("reseal") is False
+    err = capsys.readouterr().err
+    assert "Type" in err and err.count("Type") == 1  # the ceremony cue drew once
+
+
+def test_line_hard_eof_aborts_not_false() -> None:
+    # EOF is an abort (KeyboardInterrupt), never the fail-closed False — the
+    # ambiguity trap the LINE read already guards (§7) holds for HARD too.
+    hard = Confirm("reseal", "r", danger=Danger.HARD, challenge="win-1")
+    with pytest.raises(KeyboardInterrupt):
+        _line_session(hard, []).ask("reseal")
+
+
+def test_line_hard_ctrl_c_aborts_not_false() -> None:
+    hard = Confirm("reseal", "r", danger=Danger.HARD, challenge="win-1")
+    with pytest.raises(KeyboardInterrupt):
+        _line_session(hard, [KeyboardInterrupt()]).ask("reseal")
 
 
 # --- The suite passes identically piped and at a terminal (§10) ------------
@@ -1034,6 +1085,7 @@ import io  # noqa: E402
 
 from painted._prompt_cell import (  # noqa: E402
     _confirm_block,
+    _hard_confirm_block,
     _input_block,
     _select_block,
     resolve_cell,
@@ -1156,6 +1208,46 @@ def test_cell_confirm_block_shows_default_cue() -> None:
     assert "[y/n]" in _block_text(_confirm_block(Confirm("go", "Go?"), None))
 
 
+# --- Confirm, danger=HARD: type the challenge (§9) ----------------------------
+
+
+def test_cell_hard_exact_challenge_resolves_true() -> None:
+    p = Confirm("reseal", "r", danger=Danger.HARD, challenge="win-1")
+    assert _cell(p, ["w", "i", "n", "-", "1", "enter"]) is True
+
+
+def test_cell_hard_mismatch_resolves_false_fail_closed() -> None:
+    # Type the wrong thing, press Enter → False, resolved once (no re-prompt).
+    p = Confirm("reseal", "r", danger=Danger.HARD, challenge="win-1")
+    assert _cell(p, ["n", "o", "enter"]) is False
+
+
+def test_cell_hard_empty_enter_resolves_false() -> None:
+    # Bare Enter with an empty field is not the challenge → False, fail-closed.
+    p = Confirm("reseal", "r", danger=Danger.HARD, challenge="win-1")
+    assert _cell(p, ["enter"]) is False
+
+
+def test_cell_hard_editing_reaches_the_exact_match() -> None:
+    # A typo the human fixes still resolves True — the field is real text input.
+    p = Confirm("reseal", "r", danger=Danger.HARD, challenge="ab")
+    assert _cell(p, ["a", "x", "backspace", "b", "enter"]) is True
+
+
+def test_cell_hard_block_shows_the_challenge() -> None:
+    p = Confirm("reseal", "Reseal the vault?", danger=Danger.HARD, challenge="win-1")
+    text = _block_text(_hard_confirm_block(p, TextInputState()))
+    assert "Reseal the vault?" in text
+    assert "win-1" in text  # the challenge is shown — proof of aim, not a secret
+
+
+@pytest.mark.parametrize("seq", [[], ["\x04"], ["\x03"]], ids=["eof", "ctrl-d", "ctrl-c-byte"])
+def test_cell_hard_abort_raises_keyboard_interrupt(seq) -> None:
+    p = Confirm("reseal", "r", danger=Danger.HARD, challenge="win-1")
+    with pytest.raises(KeyboardInterrupt):
+        _cell(p, seq)
+
+
 # --- Abort: EOF / Ctrl-D are the same KeyboardInterrupt path (§7) -------------
 
 
@@ -1261,6 +1353,37 @@ def test_rung_declared_when_stdin_not_a_tty(monkeypatch: pytest.MonkeyPatch) -> 
         stderr_tty=True,
     )
     assert sess.ask("s") == "a"
+
+
+# --- Every danger tier has a live path at every rung (stub removal, §9) ------
+# The old `_hard_unavailable` LifecycleError is gone: HARD now flows through
+# `_render_interactive` exactly like NONE and SOFT, choosing CELL or LINE by the
+# same capability probe. This matrix pins that no reachable LifecycleError
+# remains in the prompt subsystem — every (shape × danger × rung) resolves.
+
+_DANGER_CONFIRMS = {
+    "none": Confirm("c", "w"),
+    "soft": Confirm("c", "w", danger=Danger.SOFT),
+    "hard": Confirm("c", "w", danger=Danger.HARD, challenge="tok"),
+}
+
+
+@pytest.mark.parametrize("tier", ["none", "soft", "hard"])
+def test_rung_cell_reached_for_every_danger_tier(
+    tier: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _stub_rungs(monkeypatch, cbreak=True)
+    sess = _rung_session(_DANGER_CONFIRMS[tier], stdin_tty=True, stderr_tty=True)
+    assert sess._render_interactive(sess._by_name["c"]) == "CELL"
+
+
+@pytest.mark.parametrize("tier", ["none", "soft", "hard"])
+def test_rung_line_reached_for_every_danger_tier(
+    tier: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _stub_rungs(monkeypatch, cbreak=False)
+    sess = _rung_session(_DANGER_CONFIRMS[tier], stdin_tty=True, stderr_tty=True)
+    assert sess._render_interactive(sess._by_name["c"]) == "LINE"
 
 
 def test_cell_answer_collapses_to_the_record_line(

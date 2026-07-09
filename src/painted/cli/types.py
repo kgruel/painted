@@ -548,7 +548,7 @@ def _check_add_args_dests(
         if action.dest in declared:
             raise DeclarationError(
                 f"add_args registers dest {action.dest!r}, which collides "
-                "with a declared tag or depth alias"
+                "with a declared tag, depth alias, or prompt"
             )
 
 
