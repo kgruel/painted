@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import pytest
 
-from painted.tui.mouse import MouseAction, MouseButton, MouseEvent, parse_sgr_mouse
+from painted.mouse import MouseAction, MouseButton, MouseEvent, parse_sgr_mouse
 from painted.tui import KeyboardInput
 
 
