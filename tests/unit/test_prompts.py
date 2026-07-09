@@ -1682,3 +1682,51 @@ def test_cell_stderr_raising_during_clear_still_exits_cbreak(
     # (show cursor) despite clear raising — restoration is unconditional (§7).
     assert order.index("kb_exit") < order.index("clear")
     assert "r_exit" in order
+
+
+# --- F3 convergence: --json --plain plainness derives from the request -------
+
+
+class _TTYStringIO(io.StringIO):
+    """A StringIO that claims to be a TTY — a capturable stderr at a terminal."""
+
+    def isatty(self) -> bool:
+        return True
+
+
+def test_json_plain_prompt_is_plain_line_on_stderr_json_on_stdout(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # --json --plain resolves fmt=JSON (so the stdout force_plain is False), but
+    # the user still asked for --plain: the prompt UI on stderr must be the LINE
+    # rung with zero SGR — stdout format and prompt-UI style are different planes
+    # (§8). cbreak is available, so only the --plain request can force LINE here.
+    monkeypatch.setattr("painted.keyboard.cbreak_supported", lambda s=None: True)
+    stderr = _TTYStringIO()
+    monkeypatch.setattr(sys, "stdin", _FakeTTYInput(["y\n"]))  # TTY stdin, LINE-readable
+    monkeypatch.setattr(sys, "stderr", stderr)
+
+    def fetch(ctx):
+        return {"go": ctx.ask("go")}
+
+    rc = run_cli(["--json", "--plain"], _render, fetch, prompts=[Confirm("go", "Go?")])
+    assert rc == 0
+    assert '"go": true' in capsys.readouterr().out  # JSON on stdout unchanged
+    err = stderr.getvalue()
+    assert "\x1b[" not in err  # zero SGR on stderr — the prompt UI went plain
+    assert "go: yes" in err  # the plain record line rendered (LINE rung)
+
+
+def test_json_only_prompt_unregressed(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # json-only (no --plain), flag-supplied answer, non-TTY stdin — the JSON
+    # export path still resolves the prompt and emits data on stdout.
+    monkeypatch.setattr(sys, "stdin", _FakeStream(False))
+
+    def fetch(ctx):
+        return {"go": ctx.ask("go")}
+
+    rc = run_cli(["--json", "--go"], _render, fetch, prompts=[Confirm("go", "Go?")])
+    assert rc == 0
+    assert '"go": true' in capsys.readouterr().out

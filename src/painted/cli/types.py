@@ -265,12 +265,14 @@ def detect_context(
     prompts: Sequence[Prompt[Any]] | None = None,
     parked: Mapping[str, object] | None = None,
     no_input: bool = False,
+    plain_requested: bool | None = None,
 ) -> CliContext:
     """Detect and resolve full runtime context.
 
     JSON is not a context concern — callers handle it before reaching here.
-    ``force_plain`` suppresses ANSI when the user passes ``--plain``.
-    ``args`` carries the consumer's parsed args onto ``ctx.args``.
+    ``force_plain`` suppresses ANSI on *stdout* (the rendered output) when the
+    resolved format is PLAIN. ``args`` carries the consumer's parsed args onto
+    ``ctx.args``.
 
     ``prompts``/``parked``/``no_input`` seed the prompt session behind
     ``ctx.ask`` (design §6, §8): stdin's TTY-ness is the gate (never stdout's),
@@ -278,7 +280,16 @@ def detect_context(
     behave as if stdin were not a TTY. Omitted, the context still carries an
     empty session — a runtime ``ctx.ask(Select(...))`` always sees the stream
     policy.
+
+    ``plain_requested`` is the prompt UI's plainness — the ``--plain`` *request*
+    itself, a different plane from ``force_plain`` (§8: stdout is data, stderr is
+    where prompts draw). It must not derive from the resolved format, because
+    ``--json --plain`` resolves fmt=JSON (so ``force_plain`` is False) yet the
+    user still asked for a plain prompt UI. Defaults to ``force_plain`` when
+    unset, so direct callers that pass only the one flag keep today's behavior.
     """
+    if plain_requested is None:
+        plain_requested = force_plain
     stdout = sys.stdout
     stdin = sys.stdin
     stderr = sys.stderr
@@ -307,7 +318,7 @@ def detect_context(
         stdin_tty=stdin_is_tty,
         stderr_tty=stderr_is_tty,
         no_input=no_input,
-        force_plain=force_plain,
+        force_plain=plain_requested,
         stdin=stdin,
     )
 

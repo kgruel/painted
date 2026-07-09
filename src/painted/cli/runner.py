@@ -144,6 +144,7 @@ class CliRunner(Generic[T]):
         has_declarations = bool(self.tags) or bool(self.depth_aliases) or bool(self.prompts)
         parked: dict[str, object] = {}
         no_input = False
+        plain_requested = False
         if (
             not args
             and self.add_args is None
@@ -171,6 +172,12 @@ class CliRunner(Generic[T]):
             # Park each prompt's argv answer, keyed by its dest(s); stripped from
             # ctx.args above, resolved lazily behind ctx.ask (design Q3).
             no_input = bool(getattr(parsed, "no_input", False))
+            # The prompt session's plainness derives from the --plain *request*,
+            # not the resolved output format: --json --plain resolves fmt=JSON
+            # (stdout is data), but the user still asked for a plain prompt UI on
+            # stderr — a different plane (§8). stdout's ANSI stays fmt-derived
+            # below; the stderr prompt UI reads the flag itself.
+            plain_requested = bool(getattr(parsed, "plain", False))
             for prompt in self.prompts or ():
                 for dest in prompt.dests():
                     # Each prompt dest carries argparse default=_UNSET (the
@@ -199,6 +206,7 @@ class CliRunner(Generic[T]):
             prompts=self.prompts,
             parked=parked,
             no_input=no_input,
+            plain_requested=plain_requested,
         )
 
         # The single refusal seam (design §8): a prompt ContractError raised
