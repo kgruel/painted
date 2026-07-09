@@ -226,3 +226,47 @@ use_refs(RefScheme("fact", lambda value: f"https://loops.dev/f/{value}"))
 No declared scheme → refs stay inert in every delivery (painted never invents
 URIs); scheme-less refs (`ref="sidebar"`) are the hit-testing idiom and stay
 inert in link deliveries by design. See `docs/REFS_DESIGN.md`.
+
+## Prompts — conversation as CLI grammar
+
+`--force` and `Are you sure? [y/N]` are the same declaration at different
+fidelities: one resolves from argv, one resolves interactively at a TTY.
+Declare a prompt beside your tags and `run_cli` generates its flag, its
+`-h` entry, and completion of its answer values — for free.
+
+```python
+from painted.cli import Confirm, Danger, Select, run_cli
+
+def fetch(ctx):
+    if ctx.ask("force"):
+        ...
+
+run_cli(
+    args, render, fetch,
+    prompts=[
+        Confirm("force", "Force overwrite?", danger=Danger.SOFT),
+        Select("scope", "Which store?", values=("local", "config", "all"),
+               default="local"),
+    ],
+)
+```
+
+- **`Confirm`/`Select`/`Input`** — three domain shapes over one `Prompt[T]`
+  primitive: a yes/no, a choice over an enumerable domain (`values=` or a
+  declared `Vocabulary`), and free text (`parse=` maps `str → T`;
+  `completer=` rides shell completion).
+- **`ctx.ask(name)`** — the single door an answer comes through, memoized
+  (fires at most once per run). One sentence: a Tag's answer is in
+  `ctx.args`; a Prompt's answer is behind `ctx.ask`.
+- **`--no-input`** — one framework flag, disabling all interactivity: every
+  prompt resolves as if stdin were not a terminal (flag, then declared
+  `default=`, then an honest refusal naming the flag).
+- **`danger=`** — an ordered ceremony tier: `NONE` (Enter accepts the
+  default), `SOFT` (an explicit key, no Enter-default), `HARD`
+  (`Confirm`-only; type the declared `challenge=` to proceed — anything
+  else resolves `False`, fail-closed).
+
+Resolution never hangs and never invents an answer: a script with no flag
+and no default gets a `ContractError` naming the exact flag that would
+resolve it, not a silent default or a stalled pipe. See
+`docs/PROMPTS_DESIGN.md`.

@@ -1,9 +1,10 @@
 # Inline prompts — the parser's fourth reflection
 
-**Status: PLANNED (0.9)** — design of record for the inline-prompt subsystem:
-the new bottom interactive rung (scroll-flow interaction, no alt-screen)
-between LIVE and the Surface. Contract spine ratified 2026-07-07 (store:
-`decision/design/prompts-contract`, `decision/design/prompts-devtty-refusal`,
+**Status: IMPLEMENTED 2026-07-09** (branch `inline-prompts`, slices 1–6 —
+§12 below is the shipped sequencing). Design of record for the inline-prompt
+subsystem: the bottom interactive rung (scroll-flow interaction, no
+alt-screen) between LIVE and the Surface. Contract spine ratified 2026-07-07
+(store: `decision/design/prompts-contract`, `decision/design/prompts-devtty-refusal`,
 `decision/design/prompts-declared-foundation`); declaration grammar and the
 `Prompt[T]` primitive ratified 2026-07-07 (Q1–Q4 resolved inline in §6).
 Fresh-context review round 2026-07-08: §3.2 default-answer record line,
@@ -12,7 +13,11 @@ HARD, `challenge=`, value-carrying flag) ratified. Codex (GPT-5.5 xhigh)
 fresh-eyes review, same day: 12 findings triaged and remediated in place —
 danger×default construction rule, the HARD flag pair, single-door runtime
 arity (`ctx.ask`, two arities), stream-state and error-routing rules (§8),
-sequencing reorder (§12).
+sequencing reorder (§12). Two adversarial build-time checkpoints (Codex
+GPT-5.5 xhigh) — Checkpoint A after slice 1, Checkpoint B after slice 5 —
+each surfaced real cross-slice seam bugs and were remediated before the next
+slice built on top; both rounds are pinned in the build history alongside
+the slices they gate.
 
 Companion to `docs/COMPLETION_DESIGN.md` (the parser's third reflection) and
 `docs/FIDELITY_DESIGN.md` (the disclosure grammar prompts extend to the input
@@ -211,17 +216,22 @@ components delivered through `InPlaceRenderer` with the resolution contract
 consume the *same* components — nothing is duplicated across the two
 interactive rungs.
 
-One placement consequence: `KeyboardInput` lives in `tui/keyboard.py`
-today, and the module map sanctions no cli→tui edge. It hoists to the
-renderer's delivery layer (beside `InPlaceRenderer`) as part of the CELL
-rung — key reading is delivery machinery, not TUI machinery — and the
-Surface consumes it from its new home. `cli/prompts.py` never imports
-`tui/`. The hoist is a refactor, not a move (review finding, 2026-07-08):
-today's object opens cbreak (not raw), binds `sys.stdin` at construction,
-polls non-blocking, and learns availability only privately after mutating
-terminal state. The delivery-layer form needs a public availability probe
-that rung selection can read *before* any terminal mutation, a blocking
-read for prompt use, and an injectable stream (§10).
+One placement consequence, landed: `KeyboardInput` and `mouse.py` hoisted
+from `tui/` to the package root (beside `inplace.py`) as part of the CELL
+rung — key reading is delivery machinery, not TUI machinery, and `tui/`
+re-exports both so `Surface` is unaffected. The hoist is a refactor, not a
+move: the root form adds a public `cbreak_supported(stream)` probe
+(read-only, answering "can we?" *before* any terminal mutation), a blocking
+`read_key()` for prompt use, and an injectable stream (§10); the Surface's
+own non-blocking poll shares the same key classifier. `cli/prompts.py`
+never imports `tui/` — and the CELL render loop itself lives at root too,
+in `_prompt_cell.py`, for the identical reason: `cli` may not import
+`views`, and `_CLI_SEAMS` is frozen at two ("re-layer, never relax" — a
+third seam is evidence a delivery layer wants a name, not a third allowlist
+entry), so the `ListState`/`TextInputState` components CELL binds are
+reached from root, never from inside `cli/`. root→`views` and root→`cli`
+are the precedented edges — the same shape `inplace.py` and
+`diagnostics.py` already take.
 
 ## 6. The declaration — one primitive, three domain shapes (RATIFIED 2026-07-07)
 
@@ -327,7 +337,9 @@ choice = ctx.ask(Select("conflict", "Overwrite which?", values=conflict_ids))
 
 A runtime declaration has no argv flag, so its declared channel is the
 `default` (or the values' vocabulary collapsing to one — the gum
-`--select-if-one` shape); absent both, non-TTY raises `ContractError`
+`--select-if-one` shape, resolving to that single value with the §7 record
+line marked `(only choice)`, the same "an assumed answer must say so" rule
+`(default)` follows); absent both, non-TTY raises `ContractError`
 naming... what it *can* name: the prompt's name and the fact that the
 call site must supply a default for non-interactive use. The error text is
 honest about the thinner channel rather than pretending a flag exists.
@@ -374,21 +386,26 @@ replaced by a **single static record line** — question, chosen answer,
 styled by the answer's mark where a vocabulary is declared:
 
 ```
-? Overwrite 3 conflicts?  ▸ yes                 (while open: live region)
-✓ overwrite: yes                                (after: one record line)
+? Which store?
+▸ local                                          (while open: live region)
+  all
+✓ scope: local                                   (after: one record line)
 ```
 
 This is the dialoguer-`report`/clack precedent made structural: the
 transcript is the render, and a session that asked three questions reads
 afterward as three record lines — the same shape `record_line` gives log
 events. A default-resolved prompt at DECLARED fidelity emits the same
-record line marked `(default)`, so interactive and defaulted runs produce
+record line marked `(default)`; a runtime `Select` whose domain collapsed
+to a single legal value (§6) emits it marked `(only choice)` — the same
+rule applied twice: an answer the call site assumed, not one anybody chose,
+must say so. Interactive, defaulted, and collapsed runs all produce
 comparable transcripts — clig's "if you change state, tell the user"
 applied to answers. Flag-supplied answers are the one path that does not
 echo: the answer is already visible in the invocation itself, and repeating
 it fails "saying (just) enough". The rule in one line: **the record line
-marks an answer the invocation doesn't show** — one asked at a TTY, or one
-assumed from a declaration.
+marks an answer the invocation doesn't show** — one asked at a TTY, one
+assumed from a declaration, or one that was the only legal answer.
 
 Ctrl-C during a prompt follows clig signals guidance: restore the terminal,
 exit promptly — a prompt abort is a `KeyboardInterrupt`, never swallowed
@@ -396,6 +413,13 @@ into a `None` (the questionary sentinel is the named counterexample). EOF
 (Ctrl-D) at a live prompt is the same abort path: at a TTY too, EOF is
 never an answer and never falls through to the default — the §3 ledger's
 EOF refusal applies everywhere, not just in pipes.
+
+HARD's decline on a mismatch carries the same information at both rungs,
+presented at each rung's own register: LINE prints an explicit inline note
+("Did not match the challenge — nothing done.") before the record line,
+because LINE's whole exchange is line-by-line prose; CELL prints no such
+note — the collapsed record line (`✓ name: no`) alone already says what
+happened, matching CELL's terser register.
 
 ## 8. Stream discipline (RATIFIED for prompts 2026-07-08)
 
@@ -541,7 +565,7 @@ an `isTTY` override, `prompts.inject`. painted composes what it has:
   outgrows a scrollable list.
 - `PaintedHandler`/`live_meter` stderr reconciliation — own thread (§8).
 
-## 12. Sequencing sketch (not yet sliced)
+## 12. Sequencing (shipped, slices 1–6)
 
 1. Contract core: the declarations (`Prompt[T]`, the three shapes, every
    construction-time rule — danger's construction and flag-pair rules
@@ -550,19 +574,23 @@ an `isTTY` override, `prompts.inject`. painted composes what it has:
    order, `ContractError` messages routed to stderr — DECLARED rung only
    (no prompt rendering; the whole contract is testable headless, and the
    flags must exist before "passed flag resolves" is testable at all).
+   Shipped slice 1, Checkpoint A remediation folded in.
 2. LINE rung: cooked-mode renderers for all three domain shapes — the
-   accessibility floor, and the first visible prompt.
+   accessibility floor, and the first visible prompt. Shipped slice 2.
 3. CELL rung: bind the existing `ListState`/`TextInputState` components to
-   InPlaceRenderer delivery + the answered→record collapse.
+   InPlaceRenderer delivery + the answered→record collapse. Shipped
+   slice 3, alongside the `KeyboardInput`/`mouse.py` hoist to the delivery
+   layer (§5).
 4. The reflections beyond parse: the `run_app` mirror
    (`AppCommand.prompts`), help rendering, completion of answer values
-   (third reflection, including `Input`'s `completer=`).
+   (third reflection, including `Input`'s `completer=`). Shipped slice 4.
 5. Danger ceremony rendering over the ordered-vocabulary mechanism — the
    TTY behaviors (Enter handling, type-the-challenge); danger's
-   construction and flag rules landed in step 1.
+   construction and flag rules landed in step 1. Shipped slice 5,
+   Checkpoint B remediation folded in.
 6. Docs: this file's status flip, the doc-IR page, demos (a pattern-tier
    prompt demo; the walkthrough gains no stage — prompts are a rung, not a
-   drive).
+   drive). Shipped slice 6, this pass.
 
 Rung order is deliberate: DECLARED before LINE before CELL means the honesty
 contract exists before any pixel is drawn, and every later rung is pure
