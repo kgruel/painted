@@ -168,7 +168,7 @@ def test_esc_followed_by_control_byte_returns_escape():
 
 def test_utf8_continuation_uses_generous_timeout():
     """Continuation bytes should be read with _UTF8_CONT_TIMEOUT, not _ESC_TIMEOUT."""
-    from painted.tui.keyboard import _UTF8_CONT_TIMEOUT
+    from painted.keyboard import _UTF8_CONT_TIMEOUT
 
     kb = KeyboardInput()
     kb._available = True

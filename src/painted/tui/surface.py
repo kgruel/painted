@@ -7,9 +7,9 @@ import signal
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-from .mouse import MouseEvent
+from ..mouse import MouseEvent
 from ..core.buffer import Buffer, CellWrite
-from .keyboard import KeyboardInput
+from ..keyboard import KeyboardInput
 from .layer import Layer
 from .layer import process_key as _process_key
 from ..core.writer import ScrollOp, Writer

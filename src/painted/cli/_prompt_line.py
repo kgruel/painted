@@ -1,0 +1,292 @@
+"""LINE — cooked-mode prompt rendering, the interactive rung's accessibility
+floor (docs/PROMPTS_DESIGN.md §5, §7, §12 step 2).
+
+No raw terminal, no repaint: a LINE prompt is scroll-flow Q&A — the question
+(and, for ``Select``, its numbered options) prints once, an invalid answer
+gets a brief hint and a re-read, and the whole exchange scrolls into the
+transcript like every other stderr line (§8 — prompt UI always draws on
+stderr). This is the rung every environment has (dumb terminals, screen
+readers, teleprinters — huh documents its equivalent as an accessibility
+feature first, §5), so it offers the same options and produces the same
+answer type CELL does — same value, same treatment, applied to input.
+
+Private sibling of ``cli/prompts.py``, imported lazily from there (the
+framework→renderer boundary: this module pulls ``core``/``palette`` at
+import, so nothing above pays for it until an interactive prompt actually
+fires — the same lazy-import discipline ``prompts.py``'s own default-record
+line follows). ``cli/prompts.py`` never imports ``tui/`` — LINE needs no raw
+mode, so it has no reason to.
+"""
+
+from __future__ import annotations
+
+from typing import Any, TextIO
+
+from ..core.cell import Style, scrub_control
+from ..core.span import Span
+from ..core.writer import Writer
+from ..icon_set import current_icons
+from ..palette import current_palette
+from ..vocabulary import vocab_style
+from .prompts import MISSING, Confirm, Danger, Input, Prompt, PromptAbort, Select
+
+__all__ = ["resolve_line"]
+
+
+def resolve_line(prompt: Prompt[Any], *, stdin: TextIO, stderr: TextIO, use_ansi: bool) -> Any:
+    """Render ``prompt`` at the LINE rung and return its answer.
+
+    Dispatches by domain shape — each shares the read/re-prompt/abort
+    skeleton (``_read_line``) and differs only in its cue and answer parsing.
+    A ``danger=HARD`` ``Confirm`` takes the type-the-challenge ceremony
+    (``_hard_confirm_line``) instead of the y/n loop — HARD lives at LINE too,
+    the accessibility floor speaks the ceremony as one shown line to type.
+    """
+    if isinstance(prompt, Confirm):
+        if prompt.danger is Danger.HARD:
+            return _hard_confirm_line(prompt, stdin, stderr, use_ansi)
+        return _confirm_line(prompt, stdin, stderr, use_ansi)
+    if isinstance(prompt, Select):
+        return _select_line(prompt, stdin, stderr, use_ansi)
+    if isinstance(prompt, Input):
+        return _input_line(prompt, stdin, stderr, use_ansi)
+    raise TypeError(  # pragma: no cover — exhaustive over the three shipped shapes
+        f"no LINE renderer for prompt shape {type(prompt).__name__}"
+    )
+
+
+# =============================================================================
+# The shared read primitive — EOF and Ctrl-C both abort, never an answer
+# =============================================================================
+
+
+def _read_line(stdin: TextIO, stderr: TextIO) -> str:
+    """Block for one line of cooked input; return it without its newline.
+
+    The distinguishing case (design §7): bare Enter reads as ``"\\n"`` (a
+    NONE-tier default-accept, handled by each caller), while EOF (Ctrl-D)
+    reads as ``""``. Both EOF and a ``KeyboardInterrupt`` raised out of the
+    blocking read (a real terminal delivers it here on Ctrl-C) take the
+    *same* abort path: a restoring newline to stderr, then a ``PromptAbort``
+    (a ``KeyboardInterrupt`` subclass) propagates — never an answer, never a
+    silent fall-through to the default. ``PromptAbort`` is what the runner's
+    live paths re-raise past their graceful-stop handlers so a prompt abort
+    exits like a static-mode abort, not as success (§7).
+    """
+    try:
+        raw = stdin.readline()
+    except KeyboardInterrupt:
+        stderr.write("\n")
+        stderr.flush()
+        raise PromptAbort
+    if raw == "":
+        stderr.write("\n")
+        stderr.flush()
+        raise PromptAbort
+    return raw[:-1] if raw.endswith("\n") else raw
+
+
+# =============================================================================
+# Rendering — plain or SGR-styled spans, styled only when stderr is a TTY
+# =============================================================================
+
+
+def _render(spans: tuple[Span, ...], *, stderr: TextIO, use_ansi: bool) -> str:
+    """Spans to a plain or SGR-styled string, no trailing newline.
+
+    Every span's text is scrubbed of C0/C1 control characters through the same
+    :func:`scrub_control` a ``Cell`` applies (§8, the 0.4.0 hardening). This
+    writer emits ``Span.text`` straight to stderr — it never builds ``Cell``s —
+    so a hostile declaration string (``Confirm("go", "Go?\\x1b[2J")``) would
+    otherwise issue raw escapes; the CELL rung is already covered because it
+    composes Blocks, whose cells neutralize on construction.
+    """
+    if not use_ansi:
+        return "".join(scrub_control(s.text) for s in spans)
+    writer = Writer(stderr)
+    palette = current_palette()
+    out: list[str] = []
+    for span in spans:
+        sgr = writer.apply_style(palette.resolve_style(span.style))
+        if sgr:
+            out.append(sgr)
+        out.append(scrub_control(span.text))
+        if sgr:
+            out.append(writer.reset_style())
+    return "".join(out)
+
+
+def _write_lines(stderr: TextIO, use_ansi: bool, *lines: tuple[Span, ...]) -> None:
+    """Write complete, newline-terminated lines to stderr."""
+    for spans in lines:
+        stderr.write(_render(spans, stderr=stderr, use_ansi=use_ansi))
+        stderr.write("\n")
+    stderr.flush()
+
+
+def _write_cue(stderr: TextIO, use_ansi: bool, spans: tuple[Span, ...]) -> None:
+    """Write the trailing input cue — no newline; the cursor stays on the line."""
+    stderr.write(_render(spans, stderr=stderr, use_ansi=use_ansi))
+    stderr.flush()
+
+
+def _hint(stderr: TextIO, use_ansi: bool, message: str) -> None:
+    """A brief styled re-prompt hint (design: invalid input never errors out)."""
+    icons = current_icons()
+    _write_lines(stderr, use_ansi, (Span(f"{icons.warn} {message}", current_palette().warning),))
+
+
+# =============================================================================
+# Confirm — y/n
+# =============================================================================
+
+
+def _confirm_line(prompt: Confirm, stdin: TextIO, stderr: TextIO, use_ansi: bool) -> bool:
+    palette = current_palette()
+    has_default = prompt.default is not MISSING
+    if has_default:
+        cue_text = "[Y/n]" if prompt.default else "[y/N]"
+    else:
+        cue_text = "[y/n]"
+    cue = (Span(f"{cue_text} ", palette.muted),)
+
+    _write_cue(
+        stderr,
+        use_ansi,
+        (
+            Span("? ", palette.accent),
+            Span(f"{prompt.question} ", Style()),
+            *cue,
+        ),
+    )
+    while True:
+        raw = _read_line(stdin, stderr)
+        text = raw.strip().lower()
+        if text == "" and has_default:
+            return bool(prompt.default)
+        if text in ("y", "yes"):
+            return True
+        if text in ("n", "no"):
+            return False
+        _hint(stderr, use_ansi, f"Please answer y or n {cue_text}.")
+        _write_cue(stderr, use_ansi, cue)
+
+
+# =============================================================================
+# Confirm, danger=HARD — the type-the-challenge ceremony
+# =============================================================================
+
+
+def _hard_confirm_line(prompt: Confirm, stdin: TextIO, stderr: TextIO, use_ansi: bool) -> bool:
+    """HARD's type-the-challenge ceremony at LINE (design §9).
+
+    The challenge is *shown* — proof of aim, not a secret. One line is read,
+    and only the exact challenge approves: anything else (a mismatch, an empty
+    line, whitespace) resolves ``False``, fail-closed. There is no re-prompt
+    loop — a HARD decline is an answer, not an input error, so a typo destroys
+    nothing and asks nothing again. Ctrl-C / EOF still abort through
+    ``_read_line`` (a ``KeyboardInterrupt``, never a ``False``), same as every
+    other LINE shape. This is the interactive sibling of the flag path: a wrong
+    ``--{name}`` value is a ``ContractError`` (a script asserting the wrong
+    challenge), but a human at the ceremony who mistypes simply gets nothing —
+    the safe outcome, presented calmly.
+    """
+    palette = current_palette()
+    icons = current_icons()
+    # HARD requires a non-empty challenge at construction (Confirm.__post_init__).
+    assert prompt.challenge is not None
+    _write_lines(
+        stderr,
+        use_ansi,
+        (Span("? ", palette.accent), Span(prompt.question, Style())),
+    )
+    _write_cue(
+        stderr,
+        use_ansi,
+        (
+            Span(f"{icons.warn} Type ", palette.error),
+            Span(prompt.challenge, palette.error),
+            Span(" to proceed (anything else cancels): ", palette.error),
+        ),
+    )
+    raw = _read_line(stdin, stderr)
+    if raw == prompt.challenge:
+        return True
+    _write_lines(
+        stderr,
+        use_ansi,
+        (Span(f"{icons.warn} Did not match the challenge — nothing done.", palette.warning),),
+    )
+    return False
+
+
+# =============================================================================
+# Select — numbered options
+# =============================================================================
+
+
+def _select_line(prompt: Select, stdin: TextIO, stderr: TextIO, use_ansi: bool) -> str:
+    palette = current_palette()
+    choices = prompt.choices
+    has_default = prompt.default is not MISSING
+    default_idx = choices.index(prompt.default) + 1 if has_default else None
+
+    lines: list[tuple[Span, ...]] = [(Span("? ", palette.accent), Span(prompt.question, Style()))]
+    for i, choice in enumerate(choices, start=1):
+        # Same value → same treatment, applied to input (design §5): a
+        # declared vocabulary marks its values at LINE exactly as it would
+        # anywhere else. A values=-tuple Select has no vocabulary to mark
+        # with, so its options stay unstyled — untouched by this branch.
+        value_style = (
+            vocab_style(prompt.vocabulary, choice) if prompt.vocabulary is not None else Style()
+        )
+        spans = [Span(f"  {i}) ", palette.muted), Span(choice, value_style)]
+        if i == default_idx:
+            spans.append(Span(" (default)", palette.muted))
+        lines.append(tuple(spans))
+    _write_lines(stderr, use_ansi, *lines)
+
+    suffix = f" [{default_idx}]" if has_default else ""
+    cue = (Span(f"Enter 1-{len(choices)}{suffix}: ", palette.muted),)
+    _write_cue(stderr, use_ansi, cue)
+
+    while True:
+        raw = _read_line(stdin, stderr)
+        text = raw.strip()
+        if text == "" and has_default:
+            return str(prompt.default)
+        if text.isdigit():
+            n = int(text)
+            if 1 <= n <= len(choices):
+                return choices[n - 1]
+        _hint(stderr, use_ansi, f"Please enter a number between 1 and {len(choices)}.")
+        _write_cue(stderr, use_ansi, cue)
+
+
+# =============================================================================
+# Input — free text through parse
+# =============================================================================
+
+
+def _input_line(prompt: Input, stdin: TextIO, stderr: TextIO, use_ansi: bool) -> Any:
+    palette = current_palette()
+    has_default = prompt.default is not MISSING
+    suffix = f" [{prompt.default}]" if has_default else ""
+    cue = (
+        Span("? ", palette.accent),
+        Span(f"{prompt.question}{suffix}: ", Style()),
+    )
+    _write_cue(stderr, use_ansi, cue)
+
+    while True:
+        raw = _read_line(stdin, stderr)
+        if raw == "" and has_default:
+            return prompt.resolve_default()
+        if prompt.parse is None:
+            return raw
+        try:
+            return prompt.parse(raw)
+        except Exception as exc:
+            message = str(exc).strip() or type(exc).__name__
+            _hint(stderr, use_ansi, f"Invalid input: {message}")
+            _write_cue(stderr, use_ansi, cue)

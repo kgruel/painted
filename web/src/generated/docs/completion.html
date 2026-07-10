@@ -29,12 +29,13 @@ eval &quot;$(yourapp completion bash)&quot;</code></pre>
 <h2>What you get for free</h2>
 <p>Every command name (with its one-line summary), every flag your parser declares, and every static choice complete with no extra work — they are already in the parser that powers -h. In zsh, each candidate&#x27;s help text rides along as a description; bash shows the values alone.</p>
 <figure>
-<pre class="painted-output"><span style="color: #00c0c0">--json</span><span style="opacity: 0.6">     JSON output (implies --static)</span>               
-<span style="color: #00c0c0">--kind</span><span style="opacity: 0.6">     filter by kind</span>                               
-<span style="color: #00c0c0">--plain</span><span style="opacity: 0.6">    Plain text, no ANSI codes</span>                    
-<span style="color: #00c0c0">--quiet</span><span style="opacity: 0.6">    Minimal output (zoom=0)</span>                      
-<span style="color: #00c0c0">--since</span><span style="opacity: 0.6">    only rows after this time</span>                    
-<span style="color: #00c0c0">--verbose</span><span style="opacity: 0.6">  Increase detail level (-v=detailed, -vv=full)</span>
+<pre class="painted-output"><span style="color: #00c0c0">--json</span><span style="opacity: 0.6">      JSON output (implies --static)</span>                              
+<span style="color: #00c0c0">--kind</span><span style="opacity: 0.6">      filter by kind</span>                                              
+<span style="color: #00c0c0">--no-input</span><span style="opacity: 0.6">  Never prompt; resolve inline prompts by flag/default or fail</span>
+<span style="color: #00c0c0">--plain</span><span style="opacity: 0.6">     Plain text, no ANSI codes</span>                                   
+<span style="color: #00c0c0">--quiet</span><span style="opacity: 0.6">     Minimal output (zoom=0)</span>                                     
+<span style="color: #00c0c0">--since</span><span style="opacity: 0.6">     only rows after this time</span>                                   
+<span style="color: #00c0c0">--verbose</span><span style="opacity: 0.6">   Increase detail level (-v=detailed, -vv=full)</span>               
 </pre>
 <figcaption>Live producer output for `yourapp --&lt;TAB&gt;`: your declared flags plus the framework flags you get free, each with its description.</figcaption>
 </figure>

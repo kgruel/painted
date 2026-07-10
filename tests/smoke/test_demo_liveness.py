@@ -81,6 +81,7 @@ PATTERNS = [
     "monitor",
     "palette_icons",
     "profiler",
+    "prompts",
     "responsive",
     "table",
     "testing",

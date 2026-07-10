@@ -818,3 +818,16 @@ class TestRendererFreeGuard:
         # run_cli's module must import without the renderer (paid only on render)
         flags = self._imports_renderer("import painted.cli.runner")
         assert flags == {"block": False, "doc": False}
+
+    def test_app_command_prompts_completion_is_render_free(self):
+        # The fourth reflection's flags ride the same parser tags/add_args
+        # already do — declaring them must not newly drag the renderer onto
+        # the TAB path (docs/PROMPTS_DESIGN.md §12 step 4).
+        flags = self._imports_renderer(
+            "from painted.cli import AppCommand, Confirm, Select, complete_app\n"
+            "cmds = [AppCommand('go', 'Go', lambda a: 0, "
+            "prompts=[Confirm('force', 'Force?'), "
+            "Select('scope', 'Which?', values=('a', 'b'))])]\n"
+            "complete_app(cmds, ['go'], '--')\n"
+        )
+        assert flags == {"block": False, "doc": False}

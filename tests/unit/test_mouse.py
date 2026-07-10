@@ -2,7 +2,7 @@
 
 import pytest
 
-from painted.tui.mouse import (
+from painted.mouse import (
     MouseAction,
     MouseButton,
     MouseEvent,

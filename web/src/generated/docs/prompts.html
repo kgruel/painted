@@ -1,0 +1,64 @@
+<article class="painted-doc">
+<h1>Inline prompts</h1>
+<p>A prompt is an input, and painted&#x27;s CLI grammar already has an input channel: declared flags. --force and &#x27;Are you sure? [y/N]&#x27; are the same declaration at different fidelities — one resolves from argv, one resolves interactively at a TTY. A declared prompt is the parser&#x27;s fourth reflection, after parse, help, and completion: one declaration generates a flag, a rendered question, an honest refusal, and completion of its answer values.</p>
+<dl>
+<dt>Confirm(name, question, default=, danger=)</dt>
+<dd>A yes/no question — the two-element domain.</dd>
+<dd class="detail">Generates --name/--no-name; danger=HARD swaps the pair for a value-carrying --name &lt;challenge&gt; and a bare --no-name.</dd>
+<dt>Select(name, question, values=|vocabulary=, default=)</dt>
+<dd>A choice over an enumerable domain.</dd>
+<dd class="detail">values= is an open tuple; vocabulary= is a declared Vocabulary whose members are the legal values — the mark channel styles them wherever the answer renders.</dd>
+<dt>Input(name, question, parse=, completer=, default=)</dt>
+<dd>A free-text question over an open domain.</dd>
+<dd class="detail">parse raises to reject; its return value becomes the answer. completer= rides the third reflection; without one the flag falls back to file/dir completion.</dd>
+<dt>ctx.ask(name_or_prompt)</dt>
+<dd>The single door an answer comes through — memoized, fires at most once per run.</dd>
+<dd class="detail">A Tag&#x27;s answer lives in ctx.args; a Prompt&#x27;s answer lives behind ctx.ask — never both, so nothing silently bypasses the resolution ladder.</dd>
+<dt>--no-input</dt>
+<dd>One framework flag: every prompt resolves as if stdin were not a terminal.</dd>
+<dd class="detail">CI scripts declare their nature instead of relying on TTY detection.</dd>
+</dl>
+<section>
+<h2>What you get for free</h2>
+<p>Declare a prompt beside your tags and it generates its own flag, its own -h entry, and completion of its answer values — with zero prompt-specific code in any of the three. At a TTY, the same declaration renders and reads an answer; everywhere else, it resolves from the flag or the declared default and leaves one line of proof.</p>
+<figure>
+<pre class="painted-output">✓ force: no (default)   
+✓ scope: local (default)
+</pre>
+<figcaption>Real record lines from a non-interactive run: a declared default resolving for Confirm and Select, each marked (default) — the transcript&#x27;s proof that nobody was asked.</figcaption>
+</figure>
+</section>
+<section>
+<h2>The resolution ladder</h2>
+<p>Every prompt resolves the same four-step ladder, declared or asked at runtime: the argv flag first (it&#x27;s already visible in the invocation), then an interactive prompt at a TTY, then the declared default, then an honest refusal. A script without a flag or a default never hangs and never invents an answer — it gets a ContractError naming the exact flag that would resolve it.</p>
+<figure>
+<pre class="painted-output"><span style="color: #c00000">stdin is not a terminal and no answer was provided for &#x27;overwrite&#x27; — pass `--overwrite` / `--no-overwrite`</span>
+</pre>
+<figcaption>The real refusal text: no flag, no default, stdin not a terminal — the error names the flag, because the flag provably exists.</figcaption>
+</figure>
+</section>
+<section>
+<h2>Danger tiers</h2>
+<dl>
+<dt>Danger.NONE</dt>
+<dd>y/N — Enter accepts the default.</dd>
+<dd class="detail">The only tier that may carry default=.</dd>
+<dt>Danger.SOFT</dt>
+<dd>y/N — no Enter-default, an explicit key.</dd>
+<dd class="detail">&quot;Did you mean to proceed?&quot; — accidental Enter, muscle memory.</dd>
+<dt>Danger.HARD</dt>
+<dd>Type the declared challenge= to proceed.</dd>
+<dd class="detail">&quot;Do you know what you&#x27;re aiming at?&quot; — Confirm-only; anything but an exact match resolves False, fail-closed.</dd>
+</dl>
+</section>
+<section>
+<h2>Why this matters</h2>
+<p>The prompt UI draws on stderr, never stdout, so `tool --json | jq` stays parseable even when the tool asked a question mid-run. And a prompt never forces an environment rewrite: it renders at whatever rung the terminal supports — a raw-mode cursor at a real TTY, a cooked-mode y/n on a dumb terminal or screen reader, or no interaction at all in a script — and every rung answers the same question the same way.</p>
+</section>
+<section>
+<h2>Design note</h2>
+<p>clig.dev names &#x27;conversation as the norm&#x27; as a tenet no standalone prompt library can fully honor, because an honest refusal must name the flag that answers the question — and the flag lives in the application&#x27;s parser. painted is a prompt library and a CLI framework in one package, so it holds both ends.</p>
+<p>default= fires on absence of a terminal, not on EOF — a deliberate break from the ecosystem, where &#x27;the value on bare Enter&#x27; and &#x27;the value when nobody answers&#x27; are conflated. EOF (Ctrl-D) and Ctrl-C take the identical abort path at every rung: never an answer, never a silent fall-through to the default.</p>
+<p>Full design: docs/PROMPTS_DESIGN.md.</p>
+</section>
+</article>

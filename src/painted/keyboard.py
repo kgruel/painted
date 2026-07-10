@@ -1,4 +1,23 @@
-"""Terminal cbreak-mode keyboard and mouse input context manager."""
+"""Terminal cbreak-mode keyboard/mouse input — the renderer's key-reading seam.
+
+Delivery-layer machinery, beside ``inplace.py``: reading keys is how a live
+region (a TUI ``Surface``, an inline prompt at the CELL rung) learns what the
+human typed. It lives at the package root, not under ``tui/``, so the CELL
+prompt rung can consume it without a ``cli → tui`` edge (docs/PROMPTS_DESIGN.md
+§5's hoist); ``tui`` re-exports ``KeyboardInput``/``Input`` from here, so
+``from painted.tui import KeyboardInput`` still works.
+
+**cbreak, not raw** (be honest): ``tty.setcbreak`` disables ECHO and ICANON but
+leaves ISIG on — Ctrl-C still raises ``KeyboardInterrupt`` at the read, and
+Ctrl-D arrives as a byte (0x04), not an EOF, because VEOF is an ICANON feature.
+
+Two reader shapes over one cbreak session: ``get_input``/``get_key`` are
+*non-blocking* (the ``Surface`` render loop polls between frames), and
+``read_key`` *blocks* for one key (an inline prompt waits on the human). Rung
+selection reads :func:`cbreak_supported` *before* any terminal mutation — the
+availability answer must not require entering cbreak first (a probe that mutates
+can't gate the decision to mutate). The read stream is injectable for tests.
+"""
 
 from __future__ import annotations
 
@@ -7,8 +26,35 @@ import select
 import sys
 import termios
 import tty
+from typing import TextIO
 
 from .mouse import MouseEvent, parse_sgr_mouse
+
+
+def cbreak_supported(stream: TextIO | None = None) -> bool:
+    """Whether ``stream`` (default ``sys.stdin``) can enter cbreak — probed
+    without entering it.
+
+    The public availability probe rung selection reads *before* mutating the
+    terminal (docs/PROMPTS_DESIGN.md §5): a stream supports cbreak when it has a
+    real fd, that fd is a TTY, and ``tcgetattr`` succeeds — all read-only checks.
+    ``KeyboardInput.__enter__`` still guards defensively (a race between probe
+    and entry is possible), but selection no longer has to enter cbreak to learn
+    whether it can.
+    """
+    stream = stream if stream is not None else sys.stdin
+    try:
+        fd = stream.fileno()
+    except (OSError, ValueError, AttributeError):
+        return False
+    try:
+        if not os.isatty(fd):
+            return False
+        termios.tcgetattr(fd)
+    except (termios.error, OSError, ValueError):
+        return False
+    return True
+
 
 # Timeout (seconds) to wait for bytes following ESC
 # 50ms handles SSH latency while still feeling responsive for bare ESC
@@ -63,7 +109,11 @@ class KeyboardInput:
             key = kb.get_key()    # returns str | None (ignores mouse events)
     """
 
-    def __init__(self):
+    def __init__(self, stream: TextIO | None = None):
+        # Injectable read stream (default sys.stdin), captured at construction —
+        # the same discipline PromptSession follows so a mid-run reassignment of
+        # sys.stdin can't drift the fd this session already entered cbreak on.
+        self._stream: TextIO = stream if stream is not None else sys.stdin
         self._old_settings = None
         self._available = True
         self._fd: int = -1
@@ -71,10 +121,10 @@ class KeyboardInput:
 
     def __enter__(self):
         try:
-            self._fd = sys.stdin.fileno()
+            self._fd = self._stream.fileno()
             self._old_settings = termios.tcgetattr(self._fd)
             tty.setcbreak(self._fd)
-        except (termios.error, OSError):
+        except (termios.error, OSError, ValueError):
             self._available = False
         return self
 
@@ -85,8 +135,9 @@ class KeyboardInput:
             with contextlib.suppress(termios.error, OSError):
                 termios.tcsetattr(self._fd, termios.TCSADRAIN, self._old_settings)
 
-    def _read_byte(self, timeout: float = 0) -> bytes | None:
-        """Read a single byte with optional timeout. Returns None if unavailable."""
+    def _read_byte(self, timeout: float | None = 0) -> bytes | None:
+        """Read a single byte. ``timeout`` gates the wait: ``0`` polls, ``None``
+        blocks. Returns ``b""`` at EOF, ``None`` when nothing is available."""
         try:
             if select.select([self._fd], [], [], timeout)[0]:
                 return os.read(self._fd, 1)
@@ -193,11 +244,35 @@ class KeyboardInput:
         "alt_<char>" for Alt+key combinations), single character strings,
         or MouseEvent for mouse input. Returns None if no input is available.
         """
+        return self._read_input(0)
+
+    def read_key(self) -> str | None:
+        """Block for one key, ignoring mouse events. Returns None on EOF.
+
+        The prompt-side reader (docs/PROMPTS_DESIGN.md §5): an inline prompt at
+        the CELL rung waits on the human, where the ``Surface`` loop polls. Ctrl-C
+        raises ``KeyboardInterrupt`` at the read (ISIG stays on in cbreak); an
+        actual stream EOF returns ``None`` (the caller's abort path — Ctrl-D
+        arrives as the byte ``"\\x04"``, a key, not an EOF). Mouse events are
+        skipped: a prompt reads keys.
+        """
+        while True:
+            inp = self._read_input(None)  # None timeout → block
+            if inp is None:
+                return None
+            if isinstance(inp, str):
+                return inp
+            # A mouse event on a key-only reader — keep waiting.
+
+    def _read_input(self, first_timeout: float | None) -> Input | None:
+        """Read and classify one input event; ``first_timeout`` gates the first
+        byte (``0`` non-blocking, ``None`` blocking). Returns None when no byte
+        is available (timeout) or the stream is at EOF/unavailable."""
         if not self._available:
             return None
 
-        b = self._read_byte(0)
-        if b is None:
+        b = self._read_byte(first_timeout)
+        if not b:  # None (nothing available) or b"" (EOF) — both non-answers
             return None
 
         byte = b[0]

@@ -66,6 +66,7 @@ writer / InPlaceRenderer    # delivery: dump to stdout or cursor-controlled rewr
 core/fidelity.py            # Fidelity — the compiled disclosure spec
 cli/types.py                # Tag, depth aliases, CliContext — the grammar + context detection
 cli/runner.py               # CliRunner / run_cli — compile flags, dispatch by mode
+cli/prompts.py              # Prompt[T]/Confirm/Select/Input, PromptSession — ctx.ask's declared questions
 cli/help.py                 # help as a doc-IR document
 cli/app_runner.py           # run_app — multi-command routing through run_cli
 ```
@@ -87,6 +88,9 @@ Surface + Layer             # alt-screen TUI with keyboard + diff rendering
 | Renderer | `core/writer.py` | Writer, ColorDepth, print_block |
 | Renderer | `inplace.py` | InPlaceRenderer |
 | Diagnostics | `diagnostics.py` | PaintedHandler, install, DEFAULT_THRESHOLDS (logging + excepthook glue; root, imports views) |
+| Renderer | `keyboard.py` | KeyboardInput, cbreak_supported, read_key — the delivery layer's key-reading primitive (root; `tui/` re-exports) |
+| Renderer | `mouse.py` | MouseEvent — mouse protocol primitives (root; `tui/` re-exports) |
+| Prompts | `_prompt_cell.py` | CELL rung: raw-mode prompt rendering via `ListState`/`TextInputState` (root, imports views — `cli` may not) |
 | Renderer | `palette.py` | Palette (5 semantic Style roles + `series` categorical ramp), presets |
 | Renderer | `refs.py` | RefScheme, use_refs, resolve_ref (the denotation channel's resolver seam) |
 | Renderer | `icon_set.py` | IconSet (glyph vocabulary), ASCII fallback |
@@ -100,7 +104,9 @@ Surface + Layer             # alt-screen TUI with keyboard + diff rendering
 | Framework | `cli/runner.py` | CliRunner, run_cli |
 | Framework | `cli/help.py` | HelpArg, help_doc (help as a doc-IR Doc) |
 | Framework | `cli/app_runner.py` | AppCommand, run_app (multi-command dispatch) |
-| TUI | `tui/` | Surface, Layer, Focus, Search, Buffer, KeyboardInput |
+| Framework | `cli/prompts.py` | Prompt[T], Confirm, Select, Input, PromptSession — the declared-question grammar behind `ctx.ask` |
+| Framework | `cli/_prompt_line.py` | LINE rung: cooked-mode prompt rendering (private sibling of `cli/prompts.py`) |
+| TUI | `tui/` | Surface, Layer, Focus, Search, Buffer |
 
 **Don't reach for yet**: record_line internals, TUI subsystem, mouse protocol.
 
@@ -187,4 +193,5 @@ docs/
   VOCABULARIES_DESIGN.md  # Declared vocabularies: the mark channel, roles, thresholds, the color contract (implemented)
   REFS_DESIGN.md      # Refs: the denotation channel's readers — id→ref naming, RefScheme resolver seam, OSC 8 + HTML anchors (implemented)
   PAINT_DESIGN.md     # paint(): the single entry, transcription base case (declared-not-invented, recursive + wide), closed kwarg surface, show() warn-and-narrow alias (implemented)
+  PROMPTS_DESIGN.md   # Inline prompts: the parser's fourth reflection — stdin-TTY gate, /dev/tty refusal, prompt fidelity ladder, declared answers (implemented)
 ```

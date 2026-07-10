@@ -37,6 +37,13 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "parse_format": (".types", "parse_format"),
     "parse_fidelity": (".types", "parse_fidelity"),
     "implied_visible": (".types", "implied_visible"),
+    # Inline prompts (render-free: prompts pulls core.errors + vocabulary)
+    "MISSING": (".prompts", "MISSING"),
+    "Danger": (".prompts", "Danger"),
+    "Prompt": (".prompts", "Prompt"),
+    "Confirm": (".prompts", "Confirm"),
+    "Select": (".prompts", "Select"),
+    "Input": (".prompts", "Input"),
     # Completion producer (render-free: complete pulls only types + _argwalk)
     "Candidate": (".complete", "Candidate"),
     "CompletionContext": (".complete", "CompletionContext"),

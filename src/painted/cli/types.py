@@ -24,10 +24,14 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import Enum
 from types import MappingProxyType
+from typing import TYPE_CHECKING, Any
 
 from ..core.errors import DeclarationError
 from ..core.fidelity import Fidelity
 from ..core.zoom import Zoom
+
+if TYPE_CHECKING:
+    from .prompts import Prompt
 
 __all__ = [
     "Fidelity",
@@ -128,6 +132,21 @@ class ArgsView:
 # =============================================================================
 
 
+def _empty_session() -> Any:
+    """A non-interactive, prompt-free PromptSession — the ``CliContext`` default.
+
+    Imported lazily so ``cli.types`` stays render-free at module load (the
+    completion path imports this module and must not pay for the mark channel
+    ``prompts`` pulls). ``detect_context`` overrides this with a session carrying
+    the real stream state and declared prompts; a directly-constructed
+    ``CliContext`` gets this empty, stdin-not-a-TTY session, so ``ctx.ask`` there
+    resolves by flag/default or refuses — it never tries to prompt.
+    """
+    from .prompts import PromptSession
+
+    return PromptSession()
+
+
 @dataclass(frozen=True)
 class CliContext:
     """Resolved runtime context.
@@ -136,6 +155,13 @@ class CliContext:
     ``ctx.zoom`` is the rung-1 view of it, blessed permanently.
     ``args`` is the read-only view of the consumer's parsed args (the same
     trunk completion walks); empty when no ``add_args`` were declared.
+
+    ``is_tty``/``use_ansi`` are stdout-derived (they govern how the program's
+    *output* renders). ``stdin_is_tty`` is the prompt gate — "is a human
+    driving?" is a question about stdin (design §3) — and ``stderr_is_tty``
+    governs a prompt's own render fidelity, since prompt UI draws on stderr
+    (design §8). Both are added for the inline-prompt subsystem and leave the
+    stdout-derived rendering path untouched.
     """
 
     fidelity: Fidelity
@@ -145,6 +171,23 @@ class CliContext:
     width: int
     height: int
     args: ArgsView = field(default_factory=ArgsView)
+    stdin_is_tty: bool = False
+    stderr_is_tty: bool = False
+    # The memoized prompt resolver behind ctx.ask. A plain object (not a
+    # dataclass), referenced by one field, so the frozen-collection invariant
+    # sees an opaque holder, not a mutable dict. Excluded from eq/repr — it is
+    # runtime resolution state, not part of the context's identity.
+    _session: Any = field(default_factory=_empty_session, repr=False, compare=False)
+
+    def ask(self, prompt: object) -> Any:
+        """Resolve a declared prompt — the single door (design §6, Q3).
+
+        ``prompt`` is a declared prompt *name* (str) or a runtime declaration
+        object. Resolution is memoized by name (a prompt fires at most once) and
+        follows the ladder argv flag → interactive at a TTY → declared default →
+        ``ContractError``. An undeclared name raises ``DeclarationError``.
+        """
+        return self._session.ask(prompt)
 
     @property
     def zoom(self) -> Zoom:
@@ -219,15 +262,40 @@ def detect_context(
     force_plain: bool = False,
     default_mode: OutputMode = OutputMode.LIVE,
     args: ArgsView | None = None,
+    prompts: Sequence[Prompt[Any]] | None = None,
+    parked: Mapping[str, object] | None = None,
+    no_input: bool = False,
+    plain_requested: bool | None = None,
 ) -> CliContext:
     """Detect and resolve full runtime context.
 
     JSON is not a context concern — callers handle it before reaching here.
-    ``force_plain`` suppresses ANSI when the user passes ``--plain``.
-    ``args`` carries the consumer's parsed args onto ``ctx.args``.
+    ``force_plain`` suppresses ANSI on *stdout* (the rendered output) when the
+    resolved format is PLAIN. ``args`` carries the consumer's parsed args onto
+    ``ctx.args``.
+
+    ``prompts``/``parked``/``no_input`` seed the prompt session behind
+    ``ctx.ask`` (design §6, §8): stdin's TTY-ness is the gate (never stdout's),
+    stderr's is the prompt render fidelity, and ``no_input`` makes every prompt
+    behave as if stdin were not a TTY. Omitted, the context still carries an
+    empty session — a runtime ``ctx.ask(Select(...))`` always sees the stream
+    policy.
+
+    ``plain_requested`` is the prompt UI's plainness — the ``--plain`` *request*
+    itself, a different plane from ``force_plain`` (§8: stdout is data, stderr is
+    where prompts draw). It must not derive from the resolved format, because
+    ``--json --plain`` resolves fmt=JSON (so ``force_plain`` is False) yet the
+    user still asked for a plain prompt UI. Defaults to ``force_plain`` when
+    unset, so direct callers that pass only the one flag keep today's behavior.
     """
+    if plain_requested is None:
+        plain_requested = force_plain
     stdout = sys.stdout
+    stdin = sys.stdin
+    stderr = sys.stderr
     is_tty = hasattr(stdout, "isatty") and stdout.isatty()
+    stdin_is_tty = hasattr(stdin, "isatty") and stdin.isatty()
+    stderr_is_tty = hasattr(stderr, "isatty") and stderr.isatty()
 
     if mode == OutputMode.AUTO:
         resolved_mode = default_mode if is_tty else OutputMode.STATIC
@@ -242,6 +310,18 @@ def detect_context(
     else:
         width, height = size
 
+    from .prompts import PromptSession
+
+    session = PromptSession(
+        tuple(prompts or ()),
+        parked or {},
+        stdin_tty=stdin_is_tty,
+        stderr_tty=stderr_is_tty,
+        no_input=no_input,
+        force_plain=plain_requested,
+        stdin=stdin,
+    )
+
     return CliContext(
         fidelity=fidelity,
         mode=resolved_mode,
@@ -250,6 +330,9 @@ def detect_context(
         width=width,
         height=height,
         args=args if args is not None else ArgsView(),
+        stdin_is_tty=stdin_is_tty,
+        stderr_is_tty=stderr_is_tty,
+        _session=session,
     )
 
 
@@ -291,8 +374,37 @@ _FRAMEWORK_FLAG_NAMES = frozenset(
         "live",
         "json",
         "plain",
+        "no-input",
         "max-chars",
         "max-lines",
+    }
+)
+
+# Every flag *spelling* the framework itself may register — long forms plus the
+# short flags argparse would otherwise let a declared prompt shadow. The prompt
+# collision check (a fourth-reflection declaration, docs/PROMPTS_DESIGN.md §6)
+# compares generated ``--flag`` spellings against this set so ``Confirm("input")``
+# → ``--no-input`` is a DeclarationError at construction, not an argparse
+# conflict at runtime. Tag/alias collisions stay name-based (they generate a
+# single ``--{name}``); prompts generate spelling *pairs*, so they check
+# spellings.
+_RESERVED_FLAG_SPELLINGS = frozenset(
+    {
+        "-h",
+        "--help",
+        "-q",
+        "--quiet",
+        "-v",
+        "--verbose",
+        "-i",
+        "--interactive",
+        "--static",
+        "--live",
+        "--json",
+        "--plain",
+        "--no-input",
+        "--max-chars",
+        "--max-lines",
     }
 )
 
@@ -313,12 +425,21 @@ def _dest(name: str) -> str:
 def check_declarations(
     tags: Sequence[Tag] | None,
     depth_aliases: Mapping[str, int] | None,
+    prompts: Sequence[Prompt[Any]] | None = None,
 ) -> None:
     """Validate declarations at parser construction.
 
     Declarations are promises: a malformed name, a colliding name, or an
     out-of-domain alias depth raises here, not at runtime. Collisions are
     checked tag↔framework, alias↔framework, tag↔tag, and tag↔alias.
+
+    ``prompts`` (the fourth reflection, docs/PROMPTS_DESIGN.md §6) generate flag
+    *spellings*, not a single ``--{name}``, so they are checked against the
+    reserved-spelling registry and against every tag/alias/prompt spelling
+    claimed so far — ``Confirm("input")`` → ``--no-input`` collides with the
+    framework flag here, not as an argparse conflict at dispatch. Prompt name
+    discipline itself is enforced at ``Prompt`` construction; this is purely the
+    cross-declaration collision half.
     """
     seen: set[str] = set()
     declared = [t.name for t in tags or ()] + list(depth_aliases or ())
@@ -340,6 +461,19 @@ def check_declarations(
                 "non-negative int (0=minimal; open above 3)"
             )
 
+    if prompts:
+        claimed: set[str] = set(_RESERVED_FLAG_SPELLINGS)
+        claimed.update(f"--{t.name}" for t in tags or ())
+        claimed.update(f"--{a}" for a in depth_aliases or {})
+        for prompt in prompts:
+            for spelling in prompt.flag_spellings():
+                if spelling in claimed:
+                    raise DeclarationError(
+                        f"Prompt {prompt.name!r} generates {spelling!r}, which "
+                        "collides with a framework flag or another declaration"
+                    )
+                claimed.add(spelling)
+
 
 def implied_visible(tags: Sequence[Tag] | None, depth: int) -> frozenset[str]:
     """The tags a depth turns on implicitly — the implication half of
@@ -353,13 +487,21 @@ def implied_visible(tags: Sequence[Tag] | None, depth: int) -> frozenset[str]:
 def declared_dests(
     tags: Sequence[Tag] | None,
     depth_aliases: Mapping[str, int] | None,
+    prompts: Sequence[Prompt[Any]] | None = None,
 ) -> frozenset[str]:
     """The argparse dests the declarations own — what compilation reads back
     off the namespace. Exposed so the runner can keep add_args from landing
-    a custom arg on a declared dest."""
-    return frozenset(_dest(t.name) for t in tags or ()) | frozenset(
+    a custom arg on a declared dest.
+
+    Prompt dests are owned too: a prompt's answer rides ``ctx.ask``, never
+    ``ctx.args``, so its dest(s) are stripped from the consumer view (a HARD
+    Confirm owns two — the value-carrying yes and the bare no)."""
+    owned = frozenset(_dest(t.name) for t in tags or ()) | frozenset(
         _dest(a) for a in depth_aliases or ()
     )
+    for prompt in prompts or ():
+        owned |= frozenset(prompt.dests())
+    return owned
 
 
 def depth_alias_help(depth: int) -> str:
@@ -390,6 +532,7 @@ _FRAMEWORK_DESTS = frozenset(
         "live",
         "json",
         "plain",
+        "no_input",
         "max_chars",
         "max_lines",
     }
@@ -400,22 +543,24 @@ def _check_add_args_dests(
     added: Sequence[argparse.Action],
     tags: Sequence[Tag] | None,
     depth_aliases: Mapping[str, int] | None,
+    prompts: Sequence[Prompt[Any]] | None = None,
 ) -> None:
-    """Custom args must not land on a declared tag/alias dest.
+    """Custom args must not land on a declared tag/alias/prompt dest.
 
     argparse raises only on duplicate option strings, not duplicate dests — a
     custom arg (or positional) whose dest matches a declared name would
-    silently turn the tag on or override depth at compile time. Same promise as
-    the name collision check, extended to the escape hatch.
+    silently turn the tag on, override depth, or shadow a prompt's parked answer
+    at compile time. Same promise as the name collision check, extended to the
+    escape hatch.
     """
-    declared = declared_dests(tags, depth_aliases)
+    declared = declared_dests(tags, depth_aliases, prompts)
     if not declared:
         return
     for action in added:
         if action.dest in declared:
             raise DeclarationError(
                 f"add_args registers dest {action.dest!r}, which collides "
-                "with a declared tag or depth alias"
+                "with a declared tag, depth alias, or prompt"
             )
 
 
@@ -425,6 +570,7 @@ def build_parser(
     tags: Sequence[Tag] | None = None,
     depth_aliases: Mapping[str, int] | None = None,
     budgets: bool = False,
+    prompts: Sequence[Prompt[Any]] | None = None,
     modes: set[OutputMode] | None = None,
     prog: str | None = None,
     description: str | None = None,
@@ -445,12 +591,19 @@ def build_parser(
     # Re-add -h/--help so argparse still recognizes it for error messages.
     parser.add_argument("-h", "--help", action="help", help=argparse.SUPPRESS)
 
-    add_cli_args(parser, modes=modes, tags=tags, depth_aliases=depth_aliases, budgets=budgets)
+    add_cli_args(
+        parser,
+        modes=modes,
+        tags=tags,
+        depth_aliases=depth_aliases,
+        budgets=budgets,
+        prompts=prompts,
+    )
 
     if add_args is not None:
         framework_actions = len(parser._actions)
         add_args(parser)
-        _check_add_args_dests(parser._actions[framework_actions:], tags, depth_aliases)
+        _check_add_args_dests(parser._actions[framework_actions:], tags, depth_aliases, prompts)
 
     return parser
 
@@ -459,14 +612,17 @@ def consumer_args(
     parsed: argparse.Namespace,
     tags: Sequence[Tag] | None = None,
     depth_aliases: Mapping[str, int] | None = None,
+    prompts: Sequence[Prompt[Any]] | None = None,
 ) -> ArgsView:
     """The add_args-declared args on a parsed namespace, as a read-only view.
 
-    Framework flags and declared tag/alias dests are the framework's own
-    carriers (compiled into fidelity); everything else came from the consumer's
-    add_args, and that is what ``ctx.args`` exposes.
+    Framework flags and declared tag/alias/prompt dests are the framework's own
+    carriers (tags/aliases compile into fidelity; prompt answers ride
+    ``ctx.ask``); everything else came from the consumer's add_args, and that is
+    what ``ctx.args`` exposes. A prompt's dest never appears in ``ctx.args`` —
+    one door for a prompt's answer (design Q3).
     """
-    owned = _FRAMEWORK_DESTS | declared_dests(tags, depth_aliases)
+    owned = _FRAMEWORK_DESTS | declared_dests(tags, depth_aliases, prompts)
     return ArgsView({k: v for k, v in vars(parsed).items() if k not in owned})
 
 
@@ -477,6 +633,7 @@ def add_cli_args(
     tags: Sequence[Tag] | None = None,
     depth_aliases: Mapping[str, int] | None = None,
     budgets: bool = False,
+    prompts: Sequence[Prompt[Any]] | None = None,
 ) -> None:
     """Add standard zoom/mode/format arguments.
 
@@ -493,8 +650,12 @@ def add_cli_args(
             ``--max-chars``/``--max-lines`` exist — a flag exists only because
             a capability was declared, and a declared capability must change
             output (the honesty rule).
+        prompts: Declared inline prompts (docs/PROMPTS_DESIGN.md §6). Each
+            generates its flag(s) — a Confirm's boolean (or HARD value-carrying)
+            pair, a Select's choices-validated flag, an Input's typed value —
+            grouped under "Prompts".
     """
-    check_declarations(tags, depth_aliases)
+    check_declarations(tags, depth_aliases, prompts)
 
     # Zoom group — depth aliases join -q/-v, mutually exclusive spellings of
     # the same axis
@@ -569,6 +730,16 @@ def add_cli_args(
         help="Plain text, no ANSI codes",
     )
 
+    # Interactivity — clig-standard --no-input: disable every prompt (design
+    # §6, Q4). Orthogonal to --plain's no *style*; this is no *interactivity*.
+    # Wired like every other framework flag so a future framework-flag opt-out
+    # suppresses it with the rest (thread/framework-flags-optout).
+    parser.add_argument(
+        "--no-input",
+        action="store_true",
+        help="Never prompt; resolve inline prompts by flag/default or fail",
+    )
+
     # Density — only when the app declared it honors budgets
     if budgets:
         parser.add_argument(
@@ -585,6 +756,14 @@ def add_cli_args(
             metavar="N",
             help="Max items to show for collections",
         )
+
+    # Prompts — declared inline prompts each register their own flag(s). Added
+    # last so the "Prompts" group trails the framework flags in bare-argparse
+    # help; run_cli intercepts -h, so the rendered doc is what users see.
+    if prompts:
+        prompt_group = parser.add_argument_group("Prompts")
+        for prompt in prompts:
+            prompt.add_to_parser(prompt_group)
 
 
 def parse_zoom(args: argparse.Namespace, default: Zoom = Zoom.SUMMARY) -> Zoom:
