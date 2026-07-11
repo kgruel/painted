@@ -232,3 +232,35 @@ class TestLaw6EvidencePins:
         exact = budget_fields(["ab", "cd"], 20)
         assert exact.dropped == 0, "no loss must report zero (false evidence)"
         assert exact.text == "ab · cd"
+
+    def test_inplace_oversized_frame_marks_the_cut(self, monkeypatch):
+        """The §7 Q2b resolution (0.10): InPlaceRenderer clips an oversized
+        live frame with a named-loss marker — delivery-owned evidence per the
+        ownership rule; silent tearing was the one answer the model forbade.
+        (Full behavioral coverage: tests/unit/test_inplace_renderer.py.)
+        """
+        import io
+        import os
+
+        from painted import Block, Style
+        from painted.core.compose import join_vertical
+        from painted.inplace import InPlaceRenderer
+
+        class _Tty(io.StringIO):
+            def isatty(self) -> bool:
+                return True
+
+        monkeypatch.setattr(
+            "shutil.get_terminal_size", lambda fallback=(80, 24): os.terminal_size((80, 4))
+        )
+        tall = join_vertical(*(Block.text(f"r{i}", Style()) for i in range(8)), gap=0)
+        stream = _Tty()
+        with InPlaceRenderer(stream) as renderer:
+            renderer.render(tall)
+        assert "… +5 rows" in stream.getvalue(), "oversized-frame clip left no evidence"
+
+        fitting = join_vertical(*(Block.text(f"r{i}", Style()) for i in range(3)), gap=0)
+        stream = _Tty()
+        with InPlaceRenderer(stream) as renderer:
+            renderer.render(fitting)
+        assert "rows" not in stream.getvalue(), "a mark without loss is false evidence"

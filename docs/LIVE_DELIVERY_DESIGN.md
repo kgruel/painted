@@ -228,3 +228,37 @@ delivery layer extraction puts both translators in one package with a
 forcing function), or InPlace growing sustained-composition ambitions
 (multi-region dashboards on the normal screen), where per-cell damage
 starts paying. Neither is on the roadmap.
+
+## 10. Oversized frames — the declared behavior (0.10, ratified)
+
+The render-model audit's tearing finding (RENDER_MODEL §7 Q2b): relative
+cursor addressing cannot repaint rows already released to scrollback, so a
+live frame taller than the viewport tears on the next redraw — and tearing
+*silently* is the one answer the model forbids. The declaration, ratified
+2026-07-11 (Kyle, rode roadmap Milestone 2):
+
+**`InPlaceRenderer` clips with evidence.** On a TTY, `render()` fits each
+frame to the viewport: the top `rows − 1` frame rows survive and a dim
+evidence row — `… +N rows` (ambient icon set, so it degrades to ASCII) —
+takes the last line. The loss is marked, never silent, and a mid-run resize
+degrades gracefully instead of tearing or crashing. Law-6 ownership holds:
+the delivery is viewporting natural-height content, so the delivery owns the
+evidence (primitives stay silent by contract).
+
+Boundaries of the declaration:
+
+- **`finalize()` deposits full height.** The final frame belongs to terminal
+  history and nothing repaints after it, so there is no tearing hazard and no
+  reason to lose content — the deposit is the point of this tier.
+- **Pipes are never clipped.** A non-TTY stream has no viewport and no
+  repaint, so there is nothing to tear; the frame passes through whole.
+- **Clipping keeps the head, evidence takes the tail** — reading-order loss,
+  the same tail-drop every budget in painted applies (`capped`, `lines`).
+
+Rejected alternatives, for the record: *upgrade to `StreamSurface`* is
+structurally unavailable at this layer (`inplace.py` sits below the framework
+and may not import `painted.cli` — the law-8 gate; a framework-level upgrade
+would be a separate `run_cli` behavior and would swap delivery worlds
+mid-run); *refuse* turns a terminal resize into a crash in exactly the
+progress/spinner domain this tier exists for; *frame-must-fit as documented
+contract* is the forbidden silence wearing prose.
