@@ -2,6 +2,11 @@
 
 Data-flow reference for painted — a semantic renderer for the terminal, built on cell buffers.
 
+Subordinate to [RENDER_MODEL.md](RENDER_MODEL.md), the ratified conceptual
+model (the semantic-renderer ladder, the dual allocation contract, the eight
+laws). This page describes implementation structure and data flow; where
+vocabulary differs, the model's glossary governs.
+
 ## The Stack
 
 ```
