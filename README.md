@@ -131,8 +131,11 @@ flag surface itself all derive from what you declared the output to mean.
 
 ## Explore first
 
-Zero declarations also works. `show()` is **exploration mode** — it guesses
-a lens from the data's shape and adapts to context:
+Zero declarations also works. `paint()` is **transcription** — it renders
+what a value already declares (dict → key/value, list → items, a
+dataclass/Enum → its fields) and never invents a shape a value didn't
+declare (a bare list is items, not a chart; that claim needs
+`lens=chart_lens`):
 
 ```python
 from painted import paint
@@ -140,11 +143,11 @@ from painted import paint
 paint({"cpu": 67, "mem": 82, "disk": 45})
 ```
 
-A TTY gets a styled sparkline summary; a pipe gets a plain one-liner
-(`[3 values, 45–82]`); `show(data, format="json")` exports JSON. The guess
-is a starting point for poking at data, not the API — when output matters,
-you stop guessing: compose the Block yourself, or declare the CLI's
-capabilities and let the surfaces derive.
+A TTY gets styled key/value lines; a pipe gets plain text. Same data, same
+function — and it's the same verb every layer up the stack renders through.
+The transcript is a starting point for poking at data, not the API — when
+output matters, declare more: compose the Block yourself, or declare the
+CLI's capabilities and let the surfaces derive.
 
 ## Enter anywhere
 
