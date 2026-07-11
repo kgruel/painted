@@ -1,9 +1,15 @@
 # Doc-IR — a document intermediate representation
 
-**Status**: validated (2026-06-05). The node vocabulary lives in `core/doc.py`
-(a document compositor — see the boundary section) and has been proven against
-*both* help and a real guide. Node types stay out of `painted.core.__all__` until
-the remaining authoring seams (Inline union, `Code(ref)` resolution) settle.
+**Status**: validated (2026-06-05); **amended 2026-07-11 for 0.10** (roadmap
+Milestone 2 — *proposed, awaiting ratification*). The node vocabulary lives in
+`core/doc.py` (a document compositor — see the boundary section) and has been
+proven against *both* help and a real guide. The 0.10 amendment promotes what
+the trifecta evidence earned — two worlds (painted's docs site, loops' inquiry
+article) realize one `Doc` tree as sibling outputs, the second reaching the
+publisher via an `importlib` path hack today: the publisher ships in the
+packaged library (`painted.publish`), the Inline union settles with `Link` as
+its first rich member, and the node vocabulary exports through the one-way
+door. `Code(src)` docgen resolution and `to_markdown` remain deferred.
 
 ## Thesis
 
@@ -120,9 +126,9 @@ class Items:                   # flat bullet/number list (Defs is term+desc)
 @dataclass(frozen=True)
 class Code:
     text: str | None = None
-    ref: str | None = None    # docgen snippet id, e.g. "py:painted.cell:Style#definition"
-    lang: str = "python"      # projector resolves `ref` via docgen (deferred seam)
-    min_depth: int = 0
+    src: str | None = None    # docgen snippet id, e.g. "py:painted.cell:Style#definition"
+    lang: str = "python"      # projector resolves `src` via docgen (deferred seam)
+    min_depth: int = 0        # (Code(ref=) is a deprecated alias for src, removed at 1.0)
     tag: str | None = None
 
 @dataclass(frozen=True)
@@ -138,18 +144,42 @@ Node = Section | Prose | Defs | Items | Code | Figure
 `Rule` (horizontal rule) is intentionally omitted — it dissolves into `Section`
 boundaries.
 
-### Inline (deferred)
+### Inline — settled at 0.10, `Link` first
 
 Help descriptions are plain strings; guide prose has `**bold**`, `` `code` ``,
-`[links]`. To keep the contract guide-complete without over-building, `Inline` is
-specified now but the first implementation accepts only plain `str`:
+`[links]`. The union was specified early but shipped `str`-only; the evidence
+that settles it is the refs-as-plain-text friction in the article lens — a
+`fact:01J…` ref authored into prose reaches both projectors as inert text.
+The settled shape:
 
 ```python
-Inline = str | tuple[InlineSpan, ...]
-# InlineSpan = Text(str) | Emphasis(Inline, kind) | CodeSpan(str) | Link(Inline, target)
+Inline = str | tuple[str | Link, ...]
+
+@dataclass(frozen=True)
+class Link:
+    text: str        # what the reader sees
+    target: str      # a ref — "scheme:value", resolved via the declared RefScheme
 ```
 
-Help exercises only the `str` arm. The union lands when guides come into scope.
+- The plain-`str` arm stays: it is a single text span (help exercises only
+  this arm, unchanged). Inside the tuple, `str` *is* the text span — the
+  sketched `Text(str)` wrapper dissolved into `str` itself.
+- **`Link` rides the existing denotation channel** (REFS_DESIGN), not a new
+  one. `doc_lens` renders `Link.text` with `ref=target` stamped on its cells —
+  the writer's OSC 8 emission and `render_html`'s `<a href>` wrapping already
+  honor it. `to_html` resolves `target` through the same `resolve_ref` for its
+  chrome anchors. One resolver seam, two projectors, identical inertness: an
+  undeclared scheme renders `text` as plain content in *both* worlds — painted
+  never invents URIs. (An absolute web URL is just a ref whose scheme the page
+  declares; no special case until a consumer demonstrates the need.)
+- `Emphasis` / `CodeSpan` remain unminted future members — added when a
+  consumer demonstrates need, never speculatively. Adding a union member is
+  additive; this is why `Link` alone can settle the door.
+
+`Inline` positions: `Prose.content`, `Def.summary`/`detail`, `Items.entries`.
+Both projectors walk spans through one shared helper (the `visible_body`
+pattern applied to inline content) so the two sinks cannot render a span
+differently.
 
 ## Projector contracts
 
@@ -157,9 +187,11 @@ Help exercises only the `str` arm. The union lands when guides come into scope.
 # core/doc.py — LIBRARY (the document compositor, peer of compose.py); exported as doc_lens
 def doc_lens(doc: Doc, *, fidelity: Fidelity = Fidelity(), width: int | None = None) -> Block
 
-# tools/doc_publish.py — SITE GENERATION (not in the wheel; consumes the same tree)
-def to_html(doc: Doc, *, fidelity: Fidelity | None = None) -> str       # SEMANTIC html
-def to_markdown(doc: Doc, *, fidelity: Fidelity = Fidelity()) -> str    # deferred
+# painted/publish.py — LIBRARY (the publisher namespace, root module beside display.py;
+# 0.10 — previously tools/doc_publish.py, which dissolves)
+def to_html(doc: Doc, *, fidelity: Fidelity | None = None) -> str        # SEMANTIC html
+def published_fidelity(doc: Doc) -> Fidelity                             # full depth + every authored tag
+def to_markdown(doc: Doc, *, fidelity: Fidelity = Fidelity()) -> str     # still deferred; joins publish.py if it lands
 ```
 
 All pure functions of `(tree, fidelity)` (render-is-a-pure-function invariant).
@@ -189,7 +221,7 @@ is a `Block`*:
 | **Block sink** (Format) | `Block → substrate` | ANSI writer, `core/html.py` | library |
 | **Compositor** | `tree → Block` | `compose`, **`doc_lens`** (`core/doc.py`) | library (core) |
 | **Lens** | `data → Block` | `shape_lens`, `tree_lens` | library (views) |
-| **Publisher** | `tree → foreign semantics` | `to_html(doc)`, `to_markdown(doc)` | tools |
+| **Publisher** | `tree → foreign semantics` | `to_html(doc)`, `to_markdown(doc)` | library (`publish.py`, 0.10 — was tools) |
 
 `to_block`/`doc_lens` lands in the renderer's own type (`Block`). **It was first filed
 as a "lens" beside `shape_lens`/`tree_lens` — but those interpret *arbitrary domain
@@ -202,13 +234,35 @@ both. `doc.py` imports only `core` and nothing under `views` imported it, so the
 was edge-free and the "it's a lens" identity was conceptual, not structural.
 
 `to_html` emits web semantics the renderer has no type for → it leaves the renderer's
-world → publisher → tooling (beside `build_site`/`outputgen`).
+world → publisher. **Home (amended 0.10):** the category boundary is the *codomain*,
+and that is unchanged — a publisher is not core; it emits foreign semantics. What the
+original filing conflated was "not core" with "not shipped": the taxonomy placed
+publishers in `tools/` when the only consumer was painted's own site build. The
+trifecta evidence broke that assumption — loops' inquiry article realizes the same
+`Doc` tree and could reach `to_html` only via an `importlib` path hack against a repo
+checkout. A second *world* consuming the publisher makes it library surface:
+`painted/publish.py`, a root module beside `display.py` (the terminal-side entry and
+the foreign-semantics side, siblings), part of the semver-stable set. `tools/
+doc_publish.py` dissolves, its residue swept in the same change (`build_site`/
+`outputgen`/`./dev panels` import `painted.publish`). Law 8's allowlisted exception is
+untouched: the disclosure walk stays in `core/doc.py`; `publish.py` consumes it from
+above, exactly as `doc_lens` does.
 
-`core/html.py` is **not** a counterexample to "HTML-gen is tooling": it's a *Block
+`core/html.py` is **not** a counterexample to the codomain rule: it's a *Block
 sink*, peer to the ANSI writer — `Block → HTML` renders cells faithfully ("the browser
 as another terminal"), it does not publish documents. The publisher `to_html` *calls*
-it for `Figure` islands. Tools depends on library, never the reverse. The node types
-stay out of `views.__all__` until validated.
+it for `Figure` islands.
+
+**Export (amended 0.10 — the one-way door opens):** the authoring seam that held the
+vocabulary back (the Inline union) settles above, so the node vocabulary — `Doc`,
+`Section`, `Prose`, `Def`, `Defs`, `Items`, `Code`, `Figure`, `Link` — and `doc_lens`
+graduate into `painted.core.__all__` under the semver guard
+(`tests/unit/test_public_api.py`); `to_html` + `published_fidelity` export via
+`painted.publish`. The disclosure walk (`visible_body`/`capped`) stays *unexported*:
+it is the mechanism that guarantees the sinks disclose identically, and painted's two
+projectors are its only sanctioned readers — a second out-of-package publisher is the
+evidence that would export it, not this amendment. `Code(ref=)`'s deprecated alias
+keeps its 1.0 removal clock; exporting `Code` does not reset it.
 
 ## How help dissolves (the proof of (a))
 
@@ -244,8 +298,15 @@ dissolve into primitives that already ship.
    `outputgen --check`) — the semantic sink, proven. Authored pages moved to
    `painted/_doc_pages.py` (neutral module: the CLI front door and the publisher
    are two consumers of one registry).
-6. *Later/maybe*: Inline union, `Code(ref)` docgen resolution, `to_markdown`,
-   whether prose guides migrate off hand-markdown at all, graduating the node
-   vocabulary into `core.__all__` (rides whichever branch settles Inline —
-   export is a one-way door), promoting `/docs/primitives` into the site's
+6. **0.10** (this amendment, roadmap Milestone 2): `to_html` +
+   `published_fidelity` move into `painted/publish.py` (`tools/doc_publish.py`
+   dissolves, residue swept); the Inline union settles with `Link` riding the
+   ref channel through both projectors; the node vocabulary + `doc_lens`
+   graduate into `core.__all__` under the semver guard. Exit criteria (from
+   the roadmap): the article publisher runs against *installed* painted — no
+   repo checkout, no `PAINTED_REPO`; both realizations of one `Doc` disclose
+   identically (the shared `visible_body` walk, now pinned).
+7. *Later/maybe*: `Emphasis`/`CodeSpan` Inline members (evidence-gated),
+   `Code(src)` docgen resolution, `to_markdown`, whether prose guides migrate
+   off hand-markdown at all, promoting `/docs/primitives` into the site's
    "guides" lane.
