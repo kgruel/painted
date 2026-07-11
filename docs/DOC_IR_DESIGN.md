@@ -1,7 +1,7 @@
 # Doc-IR — a document intermediate representation
 
 **Status**: validated (2026-06-05); **amended 2026-07-11 for 0.10** (roadmap
-Milestone 2 — *proposed, awaiting ratification*). The node vocabulary lives in
+Milestone 2 — ratified by Kyle 2026-07-11). The node vocabulary lives in
 `core/doc.py` (a document compositor — see the boundary section) and has been
 proven against *both* help and a real guide. The 0.10 amendment promotes what
 the trifecta evidence earned — two worlds (painted's docs site, loops' inquiry
