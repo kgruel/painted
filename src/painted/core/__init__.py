@@ -55,6 +55,19 @@ __all__ = [
     "display_width",
     # Rendering constraint
     "Zoom",
+    # Doc-IR: node vocabulary + the document compositor (exported at 0.10;
+    # the disclosure walk visible_body/capped stays unexported — painted's two
+    # projectors are its only sanctioned readers)
+    "Doc",
+    "Section",
+    "Prose",
+    "Def",
+    "Defs",
+    "Items",
+    "Code",
+    "Figure",
+    "Link",
+    "doc_lens",
     # Output
     "Writer",
     "ColorDepth",
@@ -100,6 +113,16 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "Line": (".span", "Line"),
     "display_width": ("._text_width", "display_width"),
     "Zoom": (".zoom", "Zoom"),
+    "Doc": (".doc", "Doc"),
+    "Section": (".doc", "Section"),
+    "Prose": (".doc", "Prose"),
+    "Def": (".doc", "Def"),
+    "Defs": (".doc", "Defs"),
+    "Items": (".doc", "Items"),
+    "Code": (".doc", "Code"),
+    "Figure": (".doc", "Figure"),
+    "Link": (".doc", "Link"),
+    "doc_lens": (".doc", "doc_lens"),
     "Writer": (".writer", "Writer"),
     "ColorDepth": (".writer", "ColorDepth"),
     "print_block": (".writer", "print_block"),

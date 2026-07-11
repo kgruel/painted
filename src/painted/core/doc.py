@@ -37,9 +37,13 @@ and ``Section`` headings are binary (shown whenever ``eff >= 0``); only the list
 density and the ``Section.hint`` subhead are tiered.
 
 Status: validated against both help and a real guide (the primitives page, in
-terminal and site form). The names stay out of ``painted.core.__all__`` until
-the remaining authoring seams settle — the Inline union and ``Code(src)``
-docgen resolution — since export is a one-way door under the semver guard.
+terminal and site form). At 0.10 the authoring seam settled (the Inline union,
+``Link`` first) and the node vocabulary + ``doc_lens`` graduated into
+``painted.core.__all__`` under the semver guard. The disclosure walk
+(``visible_body``/``capped``) stays unexported: it is the mechanism that
+guarantees the sinks disclose identically, and painted's two projectors are
+its only sanctioned readers — a second out-of-package publisher is the
+evidence that would export it.
 """
 
 from __future__ import annotations

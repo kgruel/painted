@@ -141,7 +141,7 @@ See `tui/CLAUDE.md` for the interactive app subsystem.
 
 - **Frozen types**: all types are immutable. Create new instances, don't mutate.
 <!-- docgen:begin frag:stability-tiers#summary -->
-`painted.core` + `painted.views` + `painted.display` are the **semver-stable** library surface (removing or renaming an `__all__` name is semver-MAJOR, guarded by `tests/unit/test_public_api.py`); `painted.cli` + `painted.tui` are the **evolving** framework surface that may change across minor versions.
+`painted.core` + `painted.views` + `painted.display` + `painted.publish` are the **semver-stable** library surface (removing or renaming an `__all__` name is semver-MAJOR, guarded by `tests/unit/test_public_api.py`); `painted.cli` + `painted.tui` are the **evolving** framework surface that may change across minor versions.
 <!-- docgen:end -->
 <!-- docgen:begin frag:width-contract#summary -->
 width is a two-part contract: *width-aware* — wcwidth counts display columns, so a block's display width is not `len()`; and *honors-width* — a passed `width` is *exact*, clipping or padding by default (pass `wrap=Wrap.CHAR`/`Wrap.WORD` to reflow), omitted for natural sizing.

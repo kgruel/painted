@@ -3,13 +3,16 @@
 painted is one package with two stability tiers (see CLAUDE.md "Stability
 tiers"):
 
-  * ``painted.core`` + ``painted.views`` + ``painted.display`` — the
-    **semver-stable** library. A renderer is a thing you *call*; its surface
-    should be maximally stable. ``painted.display`` is the entry-point module:
-    ``paint()``'s closed kwarg surface is a public ABI, and ``show`` — though
-    deprecated — carries a documented 1.0 removal horizon, so its presence is a
-    commitment until then. loops imports from ``painted.display`` directly (the
-    submodule path), so this surface is load-bearing for a real consumer.
+  * ``painted.core`` + ``painted.views`` + ``painted.display`` +
+    ``painted.publish`` — the **semver-stable** library. A renderer is a thing
+    you *call*; its surface should be maximally stable. ``painted.display`` is
+    the entry-point module: ``paint()``'s closed kwarg surface is a public ABI,
+    and ``show`` — though deprecated — carries a documented 1.0 removal
+    horizon, so its presence is a commitment until then. loops imports from
+    ``painted.display`` directly (the submodule path), so this surface is
+    load-bearing for a real consumer. ``painted.publish`` is its
+    foreign-semantics sibling (the doc-IR publisher, 0.10): loops' article
+    publisher is the second world that made it library surface.
   * ``painted.cli`` + ``painted.tui`` — the **evolving** frameworks. They *call
     you*, and churn as apps' needs change.
 
@@ -100,6 +103,18 @@ STABLE_CORE_SURFACE = frozenset(
         "CellWrite",
         # Rendering constraint
         "Zoom",
+        # Doc-IR (node vocabulary + doc_lens, the one-way door opened at 0.10;
+        # visible_body/capped deliberately unexported — see DOC_IR_DESIGN.md)
+        "Doc",
+        "Section",
+        "Prose",
+        "Def",
+        "Defs",
+        "Items",
+        "Code",
+        "Figure",
+        "Link",
+        "doc_lens",
         # Output
         "Writer",
         "ColorDepth",
@@ -231,6 +246,17 @@ STABLE_DISPLAY_SURFACE = frozenset(
 )
 
 
+STABLE_PUBLISH_SURFACE = frozenset(
+    {
+        # The doc-IR publisher (0.10): a root module beside display.py — the
+        # terminal-side entry and the foreign-semantics side, siblings.
+        # to_markdown joins here if it ever lands (DOC_IR_DESIGN.md).
+        "to_html",
+        "published_fidelity",
+    }
+)
+
+
 def _removed(snapshot: frozenset[str], current: list[str]) -> set[str]:
     return set(snapshot - set(current))
 
@@ -357,6 +383,51 @@ class TestStableDisplaySurface:
             except (AttributeError, ImportError) as exc:
                 unresolved.append(f"{name}: {exc}")
         assert not unresolved, "painted.display stable names that do not resolve:\n" + "\n".join(
+            unresolved
+        )
+
+
+class TestStablePublishSurface:
+    """``painted.publish`` — the doc-IR publisher module — is semver-stable.
+
+    Same bidirectional guard as core/views/display: ``to_html``/
+    ``published_fidelity`` may not be dropped, renamed, or joined by an
+    unsnapshotted public name."""
+
+    def test_no_removals_or_renames(self) -> None:
+        """Every snapshotted publish name is still published in ``publish.__all__``."""
+        import painted.publish
+
+        removed = _removed(STABLE_PUBLISH_SURFACE, painted.publish.__all__)
+        assert not removed, (
+            "semver-MAJOR break: painted.publish dropped/renamed stable names "
+            f"{sorted(removed)}. If intentional, this is a major-version change — "
+            "update the snapshot in this test deliberately."
+        )
+
+    def test_no_unsnapshotted_additions(self) -> None:
+        """Every name published in ``publish.__all__`` is in the snapshot."""
+        import painted.publish
+
+        extra = _unsnapshotted(STABLE_PUBLISH_SURFACE, painted.publish.__all__)
+        assert not extra, (
+            "painted.publish publishes stable names not in the snapshot: "
+            f"{sorted(extra)}. Add them to STABLE_PUBLISH_SURFACE — a name in the "
+            "stable module's __all__ is a permanent public commitment and must be "
+            "guarded against future rename/removal."
+        )
+
+    def test_every_stable_name_resolves(self) -> None:
+        """Every snapshotted publish name resolves on the module."""
+        import painted.publish
+
+        unresolved = []
+        for name in sorted(STABLE_PUBLISH_SURFACE):
+            try:
+                getattr(painted.publish, name)
+            except (AttributeError, ImportError) as exc:
+                unresolved.append(f"{name}: {exc}")
+        assert not unresolved, "painted.publish stable names that do not resolve:\n" + "\n".join(
             unresolved
         )
 
