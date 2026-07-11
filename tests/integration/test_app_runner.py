@@ -638,3 +638,39 @@ class TestAddArgsDeclaration:
         assert "--since" in opts
         assert "--dry-run" in opts
         assert {"-q", "--json"} <= opts  # framework flags present too
+
+
+class TestTagsOnlyIntercept:
+    """The last asymmetric mirror, closed at 0.10: a tags-only AppCommand
+    intercepts -h like every other declaration mirror — the declared layers
+    are exactly the surface -h exists to show, and the mirror exists for the
+    surfaces that never run the handler."""
+
+    def _make_runner(self):
+        from painted.cli import Tag
+
+        called = []
+        handler = lambda argv: (called.append(argv), 0)[1]
+        commands = (
+            AppCommand(
+                "trace",
+                "Show the trace",
+                handler,
+                tags=[Tag("thinking", "Show reasoning steps")],
+            ),
+        )
+        return AppRunner(commands=commands, prog="app"), called
+
+    def test_tags_only_command_intercepts_help(self, capsys):
+        runner, called = self._make_runner()
+        rc = runner.run(["trace", "-h", "--plain"])
+        assert rc == 0
+        assert called == []  # handler not reached — -h intercepted
+        out = capsys.readouterr().out
+        assert "Show the trace" in out
+        assert "--thinking" in out  # the declared layer reaches -h
+
+    def test_tags_only_command_runs_normally(self):
+        runner, called = self._make_runner()
+        assert runner.run(["trace", "go"]) == 0
+        assert called == [["go"]]
