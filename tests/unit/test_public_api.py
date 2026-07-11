@@ -253,6 +253,11 @@ STABLE_PUBLISH_SURFACE = frozenset(
         # to_markdown joins here if it ever lands (DOC_IR_DESIGN.md).
         "to_html",
         "published_fidelity",
+        # Section anchors (0.10.1): headed sections are addressable; the map is
+        # public so a consumer's outline walk uses the SAME ids to_html stamps
+        # (the loops article regexed painted's HTML to inject these — the
+        # workaround this seam dissolves).
+        "section_anchors",
     }
 )
 
