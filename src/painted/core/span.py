@@ -114,15 +114,19 @@ class Line:
         ]
         return _wrap_styled(chars, width, wrap=wrap, pad_style=self.style)
 
-    def to_block(self, width: int) -> Block:
+    def to_block(self, width: int | None) -> Block:
         """Convert this Line to a Block of the given width.
 
         Builds cells directly from spans, merging Line style onto each span.
         Pads with empty cells if Line is shorter than width.
         Truncates if Line is longer than width.
+        ``width=None`` sizes naturally (the width contract: absent is natural) —
+        the Block takes the Line's own display width.
         """
         from .block import Block
 
+        if width is None:
+            width = self.width
         if width <= 0:
             return Block([[]], 0)
 

@@ -386,3 +386,34 @@ class TestTakeWordPrefix:
         # Can't fit the wide char; returns empty
         assert prefix == ""
         assert consumed == 0
+
+
+# --- Block.empty() natural width ---
+
+
+class TestBlockEmptyNaturalWidth:
+    """width=None sizes naturally — empty content has no width. Closes the
+    Block.text('', Style()) spacer workaround (consumer-hit twice in loops)."""
+
+    def test_none_width_is_zero_width(self):
+        b = Block.empty(None, 2)
+        assert b.width == 0
+        assert b.height == 2
+
+    def test_none_width_zero_height(self):
+        b = Block.empty(None, 0)
+        assert b.width == 0
+        assert b.height == 0
+
+    def test_spacer_idiom_composes(self):
+        from painted import join_vertical
+
+        stack = join_vertical(Block.text("a", S), Block.empty(None, 1), Block.text("b", S))
+        assert stack.height == 3
+        assert stack.width == 1
+
+    def test_int_width_unchanged(self):
+        b = Block.empty(3, 2)
+        assert b.width == 3
+        assert b.height == 2
+        assert b.row(0)[0].char == " "

@@ -290,15 +290,22 @@ class Block:
 
     @staticmethod
     def empty(
-        width: int,
+        width: int | None,
         height: int,
         style: Style = Style(),
         *,
         ref: str | None = None,
         id: object = _ALIAS_UNSET,
     ) -> Block:
-        """Create a block filled with space cells."""
+        """Create a block filled with space cells.
+
+        ``width=None`` sizes naturally (the width contract: absent is natural) —
+        empty content has no width, so the rows are zero-width. The idiom for
+        vertical spacing in width-None lens paths: ``Block.empty(None, 1)``.
+        """
         ref = _resolve_ref_alias(ref, id, spelling="Block.empty(id=)")
+        if width is None:
+            width = 0
         space = Cell(" ", style)
         rows = [[space] * width for _ in range(height)]
         return Block(rows, width, ref=ref)
