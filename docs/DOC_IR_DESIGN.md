@@ -192,6 +192,7 @@ def doc_lens(doc: Doc, *, fidelity: Fidelity = Fidelity(), width: int | None = N
 # 0.10 — previously tools/doc_publish.py, which dissolves)
 def to_html(doc: Doc, *, fidelity: Fidelity | None = None) -> str        # SEMANTIC html
 def published_fidelity(doc: Doc) -> Fidelity                             # full depth + every authored tag
+def section_anchors(doc: Doc) -> dict[int, str]                          # anchor id per headed Section, by node identity (0.10.1)
 def to_markdown(doc: Doc, *, fidelity: Fidelity = Fidelity()) -> str     # still deferred; joins publish.py if it lands
 ```
 
@@ -264,6 +265,27 @@ it is the mechanism that guarantees the sinks disclose identically, and painted'
 projectors are its only sanctioned readers — a second out-of-package publisher is the
 evidence that would export it, not this amendment. `Code(ref=)`'s deprecated alias
 keeps its 1.0 removal clock; exporting `Code` does not reset it.
+
+**Section anchors (amended 0.10.1):** a headed `Section` is *addressable* —
+`to_html` stamps `<section id="…">` so published pages can be deep-linked and
+consumers can build outlines. The id derives from the **declared tree only**:
+the heading text (lowercased, non-alphanumeric runs collapsed to hyphens — the
+familiar heading-slug convention), deduplicated in document order by suffixing
+`-2`, `-3`, …. Neither the hint (a tier-1 *reveal*, so disclosure-dependent)
+nor fidelity participates — an anchor is identical at every fidelity its
+section is visible at, and a hidden duplicate still reserves its number, so a
+deep link survives the reader turning detail up or down. Unnamed sections
+declare no identity and get no id (the honesty rule: an addressable surface
+element exists only because a heading was declared). `section_anchors(doc)` is
+the public half of the seam — a consumer's outline walk reads the SAME map
+`to_html` stamps from, so the ids cannot drift between the page and a table of
+contents built beside it. Evidence: the loops inquiry article regexed painted's
+emitted HTML to inject exactly these ids (`_anchor_sections`), coupling itself
+to the serialization's whitespace — the loops-adoption-spike finding this
+amendment dissolves. A *declared* anchor (an explicit per-section override)
+stays unbuilt: the derived id serves the one consumer, and the field would ride
+the renderer-contract discussion (0.11) if a second world demands authored
+identity.
 
 ## How help dissolves (the proof of (a))
 
