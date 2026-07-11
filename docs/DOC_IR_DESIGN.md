@@ -1,7 +1,8 @@
 # Doc-IR — a document intermediate representation
 
 **Status**: validated (2026-06-05); **amended 2026-07-11 for 0.10** (roadmap
-Milestone 2 — ratified by Kyle 2026-07-11). The node vocabulary lives in
+Milestone 2 — ratified by Kyle 2026-07-11, **built same day** on
+`semantic-tree-0.10`). The node vocabulary lives in
 `core/doc.py` (a document compositor — see the boundary section) and has been
 proven against *both* help and a real guide. The 0.10 amendment promotes what
 the trifecta evidence earned — two worlds (painted's docs site, loops' inquiry
@@ -298,14 +299,17 @@ dissolve into primitives that already ship.
    `outputgen --check`) — the semantic sink, proven. Authored pages moved to
    `painted/_doc_pages.py` (neutral module: the CLI front door and the publisher
    are two consumers of one registry).
-6. **0.10** (this amendment, roadmap Milestone 2): `to_html` +
-   `published_fidelity` move into `painted/publish.py` (`tools/doc_publish.py`
-   dissolves, residue swept); the Inline union settles with `Link` riding the
-   ref channel through both projectors; the node vocabulary + `doc_lens`
-   graduate into `core.__all__` under the semver guard. Exit criteria (from
-   the roadmap): the article publisher runs against *installed* painted — no
-   repo checkout, no `PAINTED_REPO`; both realizations of one `Doc` disclose
-   identically (the shared `visible_body` walk, now pinned).
+6. ✅ **0.10** (this amendment, roadmap Milestone 2 — built 2026-07-11):
+   `to_html` + `published_fidelity` moved into `painted/publish.py`
+   (`tools/doc_publish.py` dissolved, residue swept); the Inline union settled
+   with `Link` riding the ref channel through both projectors (`Span.ref`
+   underneath, so a wrapped link keeps its denotation on every fragment); the
+   node vocabulary + `doc_lens` graduated into `core.__all__` under the
+   semver guard (`painted.publish` pinned by its own snapshot). Exit criteria
+   (from the roadmap): the article publisher runs against *installed*
+   painted — no repo checkout, no `PAINTED_REPO`; both realizations of one
+   `Doc` disclose identically (the shared `visible_body` walk, pinned in
+   `TestDisclosureParity` + the link-parity test).
 7. *Later/maybe*: `Emphasis`/`CodeSpan` Inline members (evidence-gated),
    `Code(src)` docgen resolution, `to_markdown`, whether prose guides migrate
    off hand-markdown at all, promoting `/docs/primitives` into the site's

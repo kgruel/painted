@@ -454,8 +454,8 @@ The following do not block 1.0 without additional consumer evidence:
 
 ```text
 ratify render model            (done — merge residue)
-    -> gate the laws                    ┐
-    -> ship the semantic tree           ┴ 0.10
+    -> gate the laws                    ┐ (done)
+    -> ship the semantic tree           ┴ 0.10 (built, on branch)
     -> loops adoption spike             (evidence)
     -> semantic renderer contract       0.11
     -> capability vocabulary            0.12
