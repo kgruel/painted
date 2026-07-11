@@ -18,7 +18,7 @@
 <dd>One framework flag: every prompt resolves as if stdin were not a terminal.</dd>
 <dd class="detail">CI scripts declare their nature instead of relying on TTY detection.</dd>
 </dl>
-<section>
+<section id="what-you-get-for-free">
 <h2>What you get for free</h2>
 <p>Declare a prompt beside your tags and it generates its own flag, its own -h entry, and completion of its answer values — with zero prompt-specific code in any of the three. At a TTY, the same declaration renders and reads an answer; everywhere else, it resolves from the flag or the declared default and leaves one line of proof.</p>
 <figure>
@@ -28,7 +28,7 @@
 <figcaption>Real record lines from a non-interactive run: a declared default resolving for Confirm and Select, each marked (default) — the transcript&#x27;s proof that nobody was asked.</figcaption>
 </figure>
 </section>
-<section>
+<section id="the-resolution-ladder">
 <h2>The resolution ladder</h2>
 <p>Every prompt resolves the same four-step ladder, declared or asked at runtime: the argv flag first (it&#x27;s already visible in the invocation), then an interactive prompt at a TTY, then the declared default, then an honest refusal. A script without a flag or a default never hangs and never invents an answer — it gets a ContractError naming the exact flag that would resolve it.</p>
 <figure>
@@ -37,7 +37,7 @@
 <figcaption>The real refusal text: no flag, no default, stdin not a terminal — the error names the flag, because the flag provably exists.</figcaption>
 </figure>
 </section>
-<section>
+<section id="danger-tiers">
 <h2>Danger tiers</h2>
 <dl>
 <dt>Danger.NONE</dt>
@@ -51,11 +51,11 @@
 <dd class="detail">&quot;Do you know what you&#x27;re aiming at?&quot; — Confirm-only; anything but an exact match resolves False, fail-closed.</dd>
 </dl>
 </section>
-<section>
+<section id="why-this-matters">
 <h2>Why this matters</h2>
 <p>The prompt UI draws on stderr, never stdout, so `tool --json | jq` stays parseable even when the tool asked a question mid-run. And a prompt never forces an environment rewrite: it renders at whatever rung the terminal supports — a raw-mode cursor at a real TTY, a cooked-mode y/n on a dumb terminal or screen reader, or no interaction at all in a script — and every rung answers the same question the same way.</p>
 </section>
-<section>
+<section id="design-note">
 <h2>Design note</h2>
 <p>clig.dev names &#x27;conversation as the norm&#x27; as a tenet no standalone prompt library can fully honor, because an honest refusal must name the flag that answers the question — and the flag lives in the application&#x27;s parser. painted is a prompt library and a CLI framework in one package, so it holds both ends.</p>
 <p>default= fires on absence of a terminal, not on EOF — a deliberate break from the ecosystem, where &#x27;the value on bare Enter&#x27; and &#x27;the value when nobody answers&#x27; are conflated. EOF (Ctrl-D) and Ctrl-C take the identical abort path at every rung: never an answer, never a silent fall-through to the default.</p>

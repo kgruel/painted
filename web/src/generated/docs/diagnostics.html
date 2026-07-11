@@ -12,7 +12,7 @@
 <dd>An exception (live or a captured TracebackException) as a Block: frames on a gutter rail, chains and groups as a tree.</dd>
 <dd class="detail">The gutter encodes one dimension — frame origin (app vs suppressed/library). suppress folds matching frames; redact masks sensitive local names at FULL zoom.</dd>
 </dl>
-<section>
+<section id="install">
 <h2>Install</h2>
 <p>Two independent opt-ins. Add PaintedHandler to a logger to render its records; call install() to catch what escapes. Neither is on by default — painted renders diagnostics only when you declare it should.</p>
 <pre><code class="language-python">import logging, painted
@@ -20,7 +20,7 @@
 logging.getLogger().addHandler(painted.PaintedHandler())
 painted.install()          # uncaught tracebacks render too</code></pre>
 </section>
-<section>
+<section id="log-levels-are-declared-severities">
 <h2>Log levels are declared severities</h2>
 <p>A record&#x27;s levelno resolves to the Severity of the greatest threshold floor it clears, and Severity drives the palette role the row is styled in. The default mapping mutes DEBUG onto INFO (the journalctl principle — routine noise stays quiet) and folds CRITICAL onto ERROR (the palette&#x27;s loudest role). Pass your own thresholds to change where the lines fall — a custom mapping changes the output, or it wouldn&#x27;t be worth declaring.</p>
 <pre><code class="language-python">from painted import PaintedHandler
@@ -32,7 +32,7 @@ handler = PaintedHandler(thresholds={
     logging.ERROR: Severity.ERROR,
 })</code></pre>
 </section>
-<section>
+<section id="tracebacks-are-record-trees">
 <h2>Tracebacks are record trees</h2>
 <p>render_traceback captures a live exception (or renders a TracebackException you already captured) and projects it at a zoom level: MINIMAL is type + message + the innermost frame on one line; SUMMARY adds the frame stack with chains summarized; DETAILED adds source with a caret; FULL adds wider source, redacted locals, and fully expanded groups. suppress folds the frames you didn&#x27;t write to a single muted line.</p>
 <figure>
@@ -46,11 +46,11 @@ handler = PaintedHandler(thresholds={
 <figcaption>Live render_traceback output at SUMMARY: a RuntimeError caused by a ValueError, the chain connective between them.</figcaption>
 </figure>
 </section>
-<section>
+<section id="why-this-matters">
 <h2>Why this matters</h2>
 <p>The default traceback is a wall of text you scan by eye; a log line is a format string you re-invent per project. painted renders both from the structure already in the data — the frame tree, the level, the extra fields — so severity reads at a glance, the failing line carries a caret, and a worker thread&#x27;s log looks like the main thread&#x27;s. Nothing is invented; the rendering derives from what was declared.</p>
 </section>
-<section>
+<section id="design-note">
 <h2>Design note</h2>
 <p>The delivery glue lives at the package root, not in painted.cli. A log handler and an excepthook are not argv-driven, and the CLI layer holds a frozen tripwire — nothing in cli/ may import the renderer. Root modules may (the precedent is inplace.py), so diagnostics mounts render_traceback there without touching the CLI seam. Full design: docs/DIAGNOSTICS_DESIGN.md.</p>
 <p>The three surfaces share one substrate. render_traceback&#x27;s locals route through the same shape_lens the inferring path uses — hardened here to be cycle-safe and schema-aware, so a cyclic local can&#x27;t crash the error renderer. PaintedHandler composes render_traceback for exc_info rather than re-deriving frame structure. One hardening, two deliverers.</p>

@@ -7,7 +7,7 @@
 <dt>Rectangles</dt>
 <dd>Block</dd>
 </dl>
-<section>
+<section id="style">
 <h2>Style</h2>
 <p>Style is an immutable bundle of attributes — colors plus bold/italic/underline/reverse/dim. Styles combine via merge(), where the overlay wins.</p>
 <pre><code class="language-python">base = Style(fg=&#x27;blue&#x27;, bold=True)
@@ -23,19 +23,19 @@ merged = base.merge(Style(italic=True))</code></pre>
 <figcaption>Style attributes, rendered live</figcaption>
 </figure>
 </section>
-<section>
+<section id="cell">
 <h2>Cell</h2>
 <p>Cell is the atom: one character plus one Style. Most code manipulates Blocks rather than individual cells.</p>
 </section>
-<section>
+<section id="span-and-line">
 <h2>Span and Line</h2>
 <p>Span is text plus Style, measured in display columns (wide-char aware). A Line is a tuple of spans that paints into a buffer or converts to a Block.</p>
 </section>
-<section>
+<section id="why-this-matters">
 <h2>Why this matters</h2>
 <p>painted pushes complexity up the stack: these immutable values are safe to share and cache, so higher-level systems treat rendering as a pure transformation — state to blocks.</p>
 </section>
-<section>
+<section id="design-note">
 <h2>Design note</h2>
 <p>This page is itself a doc-IR node tree. The terminal you are reading it in and the docs site render the same tree through different projectors — so the docs cannot drift from the code.</p>
 </section>
