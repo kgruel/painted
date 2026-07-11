@@ -26,16 +26,20 @@ from .core.doc import (
     Defs,
     Doc,
     Figure,
+    Inline,
     Items,
+    Link,
     Node,
     Prose,
     Section,
     capped,
+    inline_spans,
     visible_body,
 )
 from .core.fidelity import Fidelity
 from .core.html import render_html
 from .core.zoom import Zoom
+from .refs import resolve_ref
 
 __all__ = ["to_html", "published_fidelity"]
 
@@ -90,7 +94,7 @@ def _emit_node(out: list[str], node: Node, eff: int, fidelity: Fidelity, level: 
         case Section():
             _emit_section(out, node, eff, fidelity, level)
         case Prose():
-            out.append(f"<p>{_esc(node.content)}</p>\n")
+            out.append(f"<p>{_emit_inline(node.content)}</p>\n")
         case Defs():
             _emit_defs(out, node, eff, fidelity)
         case Items():
@@ -128,9 +132,9 @@ def _emit_defs(out: list[str], defs: Defs, eff: int, fidelity: Fidelity) -> None
     out.append("<dl>\n")
     for d in items:
         out.append(f"<dt>{_esc(d.term)}</dt>\n")
-        out.append(f"<dd>{_esc(d.summary)}</dd>\n")
+        out.append(f"<dd>{_emit_inline(d.summary)}</dd>\n")
         if eff >= 2 and d.detail:
-            out.append(f'<dd class="detail">{_esc(d.detail)}</dd>\n')
+            out.append(f'<dd class="detail">{_emit_inline(d.detail)}</dd>\n')
     out.append("</dl>\n")
 
 
@@ -141,7 +145,7 @@ def _emit_items(out: list[str], items: Items, fidelity: Fidelity) -> None:
     tag = "ol" if items.ordered else "ul"
     out.append(f"<{tag}>\n")
     for entry in entries:
-        out.append(f"<li>{_esc(entry)}</li>\n")
+        out.append(f"<li>{_emit_inline(entry)}</li>\n")
     out.append(f"</{tag}>\n")
 
 
@@ -160,6 +164,29 @@ def _emit_figure(out: list[str], fig: Figure) -> None:
     if fig.caption:
         out.append(f"<figcaption>{_esc(fig.caption)}</figcaption>\n")
     out.append("</figure>\n")
+
+
+def _emit_inline(content: Inline) -> str:
+    """Inline content as escaped HTML — the publisher half of the shared walk.
+
+    Every span comes through ``inline_spans`` (``core/doc.py``), the same
+    normalization ``doc_lens`` renders from, so the two sinks cannot render a
+    span differently. A ``Link`` resolves its target through the SAME
+    ``resolve_ref`` choke point the cell deliveries use: a declared scheme
+    yields ``<a href>``, an undeclared one renders the text as plain content —
+    identical inertness in both worlds (painted never invents URIs).
+    """
+    parts: list[str] = []
+    for span in inline_spans(content):
+        if isinstance(span, Link):
+            uri = resolve_ref(span.target)
+            if uri:
+                parts.append(f'<a href="{_esc(uri)}">{_esc(span.text)}</a>')
+            else:
+                parts.append(_esc(span.text))
+        else:
+            parts.append(_esc(span))
+    return "".join(parts)
 
 
 def _esc(text: str) -> str:

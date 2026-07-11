@@ -17,6 +17,7 @@ from painted.core.doc import (
     Doc,
     Figure,
     Items,
+    Link,
     Prose,
     Section,
     doc_lens,
@@ -27,6 +28,7 @@ from painted.core.zoom import Zoom
 from painted._doc_pages import DOCS
 from tests.helpers import block_to_text
 from painted.publish import published_fidelity, to_html
+from painted.refs import RefScheme, use_refs
 from tools.outputgen import emit_doc_pages
 
 
@@ -248,3 +250,54 @@ class TestPromptsPage:
         html = to_html(DOCS["prompts"].build())
         assert "<figure>" in html  # the live resolver galleries routed through render_html
         assert "Design note" in html  # the tag="rationale" section
+
+
+class TestInlineLink:
+    """Link in the publisher: resolved through the SAME resolve_ref choke
+    point the cell deliveries use — identical inertness in both worlds."""
+
+    DOC = Doc(None, (Prose(("see ", Link("the docs", "docs:primitives"), " first")),))
+
+    def test_undeclared_scheme_is_inert_plain_text(self):
+        html = _full(self.DOC)
+        assert "<p>see the docs first</p>" in html
+        assert "<a " not in html  # painted never invents URIs
+
+    def test_declared_scheme_becomes_an_anchor(self):
+        with use_refs(RefScheme("docs", lambda v: f"https://painted.dev/docs/{v}")):
+            html = _full(self.DOC)
+        assert '<a href="https://painted.dev/docs/primitives">the docs</a>' in html
+
+    def test_resolver_declining_with_none_is_inert(self):
+        with use_refs(RefScheme("docs", lambda v: None)):
+            html = _full(self.DOC)
+        assert "<a " not in html
+        assert "see the docs first" in html
+
+    def test_link_text_and_uri_are_escaped(self):
+        doc = Doc(None, (Prose((Link("a <b> & c", "docs:x"),)),))
+        with use_refs(RefScheme("docs", lambda v: 'https://x/?q="1"')):
+            html = _full(doc)
+        assert "a &lt;b&gt; &amp; c" in html
+        assert "&quot;1&quot;" in html
+        assert "<b>" not in html
+
+    def test_def_summary_and_items_entries_take_inline(self):
+        doc = Doc(
+            None,
+            (
+                Defs((Def("-v", ("more, ", Link("docs", "docs:v"))),)),
+                Items(((Link("entry", "docs:e"),),)),
+            ),
+        )
+        with use_refs(RefScheme("docs", lambda v: f"https://x/{v}")):
+            html = _full(doc)
+        assert '<dd>more, <a href="https://x/v">docs</a></dd>' in html
+        assert '<li><a href="https://x/e">entry</a></li>' in html
+
+    def test_disclosure_parity_holds_for_links(self):
+        """A hidden node's links are hidden in both sinks — the shared walk."""
+        doc = Doc(None, (Prose((Link("deep", "docs:d"),), min_depth=Zoom.DETAILED),))
+        fid = Fidelity(depth=Zoom.SUMMARY)
+        assert "deep" not in to_html(doc, fidelity=fid)
+        assert "deep" not in block_to_text(doc_lens(doc, fidelity=fid, width=40))

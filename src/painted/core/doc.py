@@ -54,12 +54,48 @@ from .cell import Cell, Style
 from .compose import join_vertical, pad
 from .errors import ContractError
 from .fidelity import Fidelity
+from .span import Line, Span
 
-# Inline content. The first cut accepts only plain ``str``; the rich union
-# (Text / Emphasis / CodeSpan / Link) lands when prose guides come into scope.
-Inline = str
+
+@dataclass(frozen=True, slots=True)
+class Link:
+    """An inline link: what the reader sees, and a ref naming what it denotes.
+
+    ``target`` is a ref — ``"scheme:value"``, resolved through the declared
+    ``RefScheme`` (docs/REFS_DESIGN.md). A ``Link`` rides the existing
+    denotation channel, not a new one: ``doc_lens`` stamps ``target`` on the
+    text's cells (the writer's OSC 8 emission and ``render_html``'s
+    ``<a href>`` wrapping already honor it), and the ``to_html`` publisher
+    resolves it through the same ``resolve_ref``. Identical inertness in both
+    worlds: an undeclared scheme renders ``text`` as plain content — painted
+    never invents URIs. (An absolute web URL is just a ref whose scheme the
+    page declares.)
+    """
+
+    text: str
+    target: str
+
+
+# Inline content — settled at 0.10 (DOC_IR_DESIGN.md): a single text span, or
+# a sequence of spans where plain ``str`` IS the text span and ``Link`` is the
+# first rich member. ``Emphasis``/``CodeSpan`` stay unminted until a consumer
+# demonstrates need; adding a union member is additive.
+Inline = str | tuple[str | Link, ...]
 
 _T = TypeVar("_T")
+
+
+def inline_spans(content: Inline) -> tuple[str | Link, ...]:
+    """Normalize ``Inline`` to its span sequence — THE shared inline walk.
+
+    Both projectors (``doc_lens`` here, the ``to_html`` publisher) iterate
+    inline content through this one function, the ``visible_body`` pattern
+    applied to spans: written once, so two sinks cannot render a span
+    differently.
+    """
+    if isinstance(content, str):
+        return (content,)
+    return content
 
 
 # =============================================================================
@@ -203,7 +239,7 @@ def visible_body(
     """The visible nodes of a body, each paired with its effective tier.
 
     THE shared disclosure walk: every projector — ``doc_lens`` here, the
-    ``to_html`` publisher in ``tools/`` — iterates bodies through this one
+    ``to_html`` publisher in ``painted/publish.py`` — iterates bodies through this one
     function, so the cascade is written exactly once and two sinks cannot
     disclose differently. The cascade rule for callers: when a ``Section``
     renders its body, pass the Section's own ``eff`` as the body's ``depth``.
@@ -329,7 +365,7 @@ def _render_defs(defs: Defs, eff: int, fidelity: Fidelity, width: int | None) ->
     rows: list[Block] = []
     for d in items:
         term = d.term + " " * (col - display_width(d.term))
-        rows.append(_line(f"{term}{d.summary}", Style(), width))
+        rows.append(_line(d.summary, Style(), width, lead=term))
         if show_detail and d.detail:
             detail_width = None if width is None else max(0, width - col)
             rows.append(
@@ -374,18 +410,51 @@ def _render_figure(fig: Figure, width: int | None) -> Block:
 # =============================================================================
 
 
-def _line(text: str, style: Style, width: int | None, *, wrap: Wrap = Wrap.NONE) -> Block:
-    """A text block: natural when width is None, else honoring width exactly."""
+def _spans(content: Inline, style: Style) -> tuple[Span, ...]:
+    """Inline content as styled Spans — a Link's target rides as the span ref.
+
+    The lens half of the shared walk: every span comes through
+    ``inline_spans``, and a ``Link`` renders its ``text`` with ``ref=target``
+    stamped on the cells (the delivery layers resolve it — OSC 8 in ANSI,
+    ``<a href>`` in ``render_html``). No styling: link color is the
+    delivery's concern (REFS_DESIGN §4).
+    """
+    return tuple(
+        Span(s.text, style, ref=s.target) if isinstance(s, Link) else Span(s, style)
+        for s in inline_spans(content)
+    )
+
+
+def _line(
+    content: Inline, style: Style, width: int | None, *, wrap: Wrap = Wrap.NONE, lead: str = ""
+) -> Block:
+    """A text block: natural when width is None, else honoring width exactly.
+
+    ``content`` is any Inline; ``lead`` is a same-style prefix (the Defs term
+    column) that participates in the width budget like the content itself.
+    Plain ``str`` keeps the single-style ``Block.text`` path; a span tuple
+    renders through ``Line`` so each span's ref rides its cells.
+    """
+    if isinstance(content, str):
+        text = lead + content
+        if width is None:
+            return Block.text(text, style)
+        return Block.text(text, style, width=width, wrap=wrap)
+    spans = (Span(lead, style),) if lead else ()
+    line = Line(spans + _spans(content, style))
     if width is None:
-        return Block.text(text, style)
-    return Block.text(text, style, width=width, wrap=wrap)
+        return line.to_block(line.width)
+    return line.wrap(width, wrap=wrap)
 
 
 def _with_marker(block: Block, marker: str) -> Block:
-    """Stamp a list marker onto the first row of an already-indented block."""
+    """Stamp a list marker onto the first row of an already-indented block.
+
+    The ref channel rides through: the marker lands on left-pad cells (which
+    denote nothing), and every content cell keeps its ref."""
     cells = list(block.row(0))
     for i, ch in enumerate(marker):
         if i < len(cells):
             cells[i] = Cell(ch, cells[i].style)
     rows = [tuple(cells), *(block.row(r) for r in range(1, block.height))]
-    return Block(rows, block.width)
+    return Block(rows, block.width, ref=block.ref, refs=block._refs)

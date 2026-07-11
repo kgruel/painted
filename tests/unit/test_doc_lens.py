@@ -15,6 +15,7 @@ from painted.core.doc import (
     Doc,
     Figure,
     Items,
+    Link,
     Prose,
     Section,
     doc_lens,
@@ -205,3 +206,51 @@ class TestFigure:
         text = _render(Doc(None, (fig,)), width=70)
         # The whole caption survives (word-wrapped), not truncated to ~1 col.
         assert "wider than the tiny embedded block" in text
+
+
+class TestInlineLink:
+    """The Inline union's first rich member: Link rides the denotation channel.
+
+    ``doc_lens`` renders ``Link.text`` with ``ref=target`` stamped on its
+    cells — the same per-cell channel the writer's OSC 8 emission and
+    ``render_html``'s anchor wrapping already resolve at delivery. The tuple
+    arm's plain ``str`` IS the text span; it stamps nothing.
+    """
+
+    @staticmethod
+    def _refs(block):
+        return {block.cell_ref(x, y) for y in range(block.height) for x in range(block.width)} - {
+            None
+        }
+
+    def test_link_cells_carry_target_str_spans_do_not(self):
+        doc = Doc(None, (Prose(("see ", Link("docs", "fact:1"), " now")),))
+        block = doc_lens(doc, fidelity=Fidelity(depth=Zoom.FULL))
+        assert block_to_text(block).strip() == "see docs now"
+        assert [block.cell_ref(x, 0) for x in range(4, 8)] == ["fact:1"] * 4
+        assert block.cell_ref(0, 0) is None
+        assert block.cell_ref(9, 0) is None
+
+    def test_link_ref_survives_word_wrap(self):
+        doc = Doc(None, (Prose((Link("linked words", "fact:1"),)),))
+        block = doc_lens(doc, fidelity=Fidelity(depth=Zoom.FULL), width=6)
+        assert block.height >= 2
+        assert block.cell_ref(0, 0) == "fact:1"
+        assert block.cell_ref(0, 1) == "fact:1"
+
+    def test_def_summary_takes_inline(self):
+        doc = Doc(None, (Defs((Def("-v", ("verbose, ", Link("docs", "fact:2"))),)),))
+        block = doc_lens(doc, fidelity=Fidelity(depth=Zoom.DETAILED), width=40)
+        assert "verbose, docs" in block_to_text(block)
+        assert self._refs(block) == {"fact:2"}
+
+    def test_items_entry_takes_inline(self):
+        doc = Doc(None, (Items(((Link("a link", "fact:3"),), "plain")),))
+        block = doc_lens(doc, fidelity=Fidelity(depth=Zoom.FULL), width=30)
+        assert "a link" in block_to_text(block)
+        assert self._refs(block) == {"fact:3"}
+
+    def test_plain_str_prose_stamps_nothing(self):
+        doc = Doc(None, (Prose("no links here"),))
+        block = doc_lens(doc, fidelity=Fidelity(depth=Zoom.FULL), width=20)
+        assert self._refs(block) == set()
