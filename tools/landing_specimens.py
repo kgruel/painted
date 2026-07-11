@@ -120,12 +120,12 @@ def _door(
 
 
 def _door_walkthrough() -> Block:
-    """Cyan door → the no-cliffs walkthrough."""
+    """Cyan door → the monotonic-enhancement walkthrough."""
     return _door(
         "▸",
         "walkthrough",
         "one dataset, every surface",
-        "print → live → TUI, no cliffs",
+        "print → live → TUI, monotonic",
         _series_hue(3),  # cyan
     )
 

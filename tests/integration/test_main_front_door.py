@@ -15,7 +15,7 @@ def test_no_args_shows_help(capsys):
     rc = main([])
     assert rc == 0
     out = capsys.readouterr().out
-    assert "painted — Terminal UI framework" in out
+    assert "painted — a semantic renderer for the terminal" in out
     # The command table renders, with the alias riding the demos row.
     assert "demos (alias: demo)" in out
     assert "docs" in out
@@ -33,7 +33,7 @@ def test_help_short_flag_shows_help(capsys):
     rc = main(["-h"])
     assert rc == 0
     out = capsys.readouterr().out
-    assert "painted — Terminal UI framework" in out
+    assert "painted — a semantic renderer for the terminal" in out
 
 
 def test_unknown_command_returns_1(capsys):

@@ -1,4 +1,4 @@
-"""Cell-buffer rendering system.
+"""A semantic renderer for the terminal, built on cell buffers.
 
 CLI core: styled output primitives for dressing up scripts.
 

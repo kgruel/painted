@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-07T17:50:01+00:00",
+  "generated_at": "2026-07-11T03:12:03+00:00",
   "snippets": {
     "frag:abstraction-chain#fragment": {
       "id": "frag:abstraction-chain#fragment",
@@ -10,7 +10,7 @@
         "path": "docs/_fragments/abstraction-chain.md",
         "start_line": 1
       },
-      "source": "```\natoms (data)  \u2192  engine (runtime)  \u2192  painted (surface)  \u2192  apps (CLI)\nFact, Spec        Tick, Vertex         Block, Lens          loops/hlab/strange-loops\n```\n\nBelow painted in the monorepo: `libs/atoms/` defines Facts and Specs; `libs/engine/` produces Ticks and stores. Above: `apps/loops/`, `apps/hlab/`, and `apps/strange-loops/` use painted's entry points and lenses for all display. painted renders whatever comes out \u2014 it doesn't know about loops concepts, just data shapes, zoom levels, and terminal cells.\n",
+      "source": "```\natoms (data)  \u2192  engine (runtime)  \u2192  painted (surface)  \u2192  apps (CLI)\nFact, Spec        Tick, Vertex         Block, Lens          loops/hlab/strange-loops\n```\n\nBelow painted in the monorepo: `libs/atoms/` defines Facts and Specs; `libs/engine/` produces Ticks and stores. Above: `apps/loops/`, `apps/hlab/`, and `apps/strange-loops/` use painted's entry points and lenses for all display. painted renders whatever comes out \u2014 it doesn't know about loops concepts, just declared meaning (roles, tags, severities), zoom levels, and terminal cells.\n",
       "title": "abstraction-chain"
     },
     "frag:frozen-state#full#fragment": {

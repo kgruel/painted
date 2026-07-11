@@ -1,6 +1,141 @@
 # painted
 
-One library. Print to TUI. One dependency.
+A semantic renderer for the terminal. You declare what your output *means* —
+which fields matter at a glance, which are detail, which facets a reader
+would ask for by name — and painted derives how to show it: how much detail,
+what format, styled or plain, and which CLI flags exist at all. One dependency.
+
+## What "semantic" means, concretely
+
+Here's a deploy-status tool. The render function declares meaning in three
+places: each service's *state* maps to a severity style, per-service latency
+is a named facet called `timings`, and error detail belongs to zoom level 2.
+It never mentions flags, pipes, JSON, or help text.
+
+```python
+import sys
+from painted import Block, Style, Tag, join_vertical, run_cli
+from painted.cli import CliContext
+
+STATE_STYLE = {
+    "ok": Style(fg="green"),
+    "degraded": Style(fg="yellow"),
+    "down": Style(fg="red", bold=True),
+}
+
+def fetch() -> dict:
+    return {"services": [
+        {"name": "api-gateway", "state": "ok", "replicas": "3/3", "ms": 12},
+        {"name": "billing", "state": "degraded", "replicas": "2/3", "ms": 340},
+        {"name": "search", "state": "ok", "replicas": "2/2", "ms": 28},
+    ]}
+
+def render(ctx: CliContext, data: dict) -> Block:
+    rows = []
+    for svc in data["services"]:
+        line = f"{svc['state']:<9} {svc['name']:<14} {svc['replicas']}"
+        if ctx.fidelity.shows("timings"):                # a named facet
+            line += f"  {svc['ms']:>4}ms"
+        rows.append(Block.text(line, STATE_STYLE[svc["state"]]))
+        if ctx.zoom >= 2 and svc["state"] != "ok":       # detail level
+            rows.append(Block.text("          last error: upstream timeout (2m ago)", Style(dim=True)))
+    return join_vertical(*rows)
+
+run_cli(
+    sys.argv[1:], render=render, fetch=fetch,
+    prog="deploys", description="Deployment status",
+    tags=[Tag("timings", "Show per-service latency", implied_at=2)],
+)
+```
+
+That's the whole program. Now watch the rendering decisions derive — every
+output below is real captured output of the code above.
+
+The default view shows what you declared to matter at a glance (on a TTY,
+`ok` is green and `degraded` is yellow — the severity styles):
+
+```console
+$ deploys
+ok        api-gateway    3/3
+degraded  billing        2/3
+ok        search         2/2
+```
+
+`-v` means zoom 2 — so the error detail you gated appears, and `timings`
+switches on because you declared it implied at that depth:
+
+```console
+$ deploys -v
+ok        api-gateway    3/3    12ms
+degraded  billing        2/3   340ms
+          last error: upstream timeout (2m ago)
+ok        search         2/2    28ms
+```
+
+`--timings` exists as a flag *because* the Tag was declared — a reader can
+ask for that one facet by name without the rest of the verbosity:
+
+```console
+$ deploys --timings
+ok        api-gateway    3/3    12ms
+degraded  billing        2/3   340ms
+ok        search         2/2    28ms
+```
+
+The same declaration serializes — `render` isn't even called for this:
+
+```console
+$ deploys --json
+{"services": [{"name": "api-gateway", "state": "ok", "replicas": "3/3", "ms": 12}, ...]}
+```
+
+A pipe gets plain text automatically — no ANSI garbage in `grep`:
+
+```console
+$ deploys | grep degraded
+degraded  billing        2/3
+```
+
+And the help documents the surface you declared — nothing more:
+
+```console
+$ deploys -h
+deploys
+
+Deployment status
+
+Layers (named facets)
+  --timings  Show per-service latency
+
+Zoom (what to show)
+  -q, --quiet    Minimal output
+  -v, --verbose  Detailed (-v) or full (-vv)
+
+Format (serialization)
+  --json   JSON output
+  --plain  Plain text, no ANSI codes
+...
+```
+
+Nothing was written twice, and none of it can drift: parsing, help, and TAB
+completion are three reflections of the one declared parser — the flag under
+`-h` is the flag that parses is the flag that completes (multi-command apps
+get the zsh/bash glue from `run_app`'s auto-injected `completion` command).
+That's the library's governing rule — the **honesty rule**: a flag exists
+only because a capability was declared, and a declared capability must
+change output. Nothing invented, nothing dead.
+
+Styling toolkits make output beautiful; app frameworks compose widgets.
+painted's job is the layer between: zoom, format, delivery mode, and the
+flag surface itself all derive from what you declared the output to mean.
+
+## Explore first
+
+Zero declarations also works. `paint()` is **transcription** — it renders
+what a value already declares (dict → key/value, list → items, a
+dataclass/Enum → its fields) and never invents a shape a value didn't
+declare (a bare list is items, not a chart; that claim needs
+`lens=chart_lens`):
 
 ```python
 from painted import paint
@@ -8,16 +143,18 @@ from painted import paint
 paint({"cpu": 67, "mem": 82, "disk": 45})
 ```
 
-TTY gets styled output. Pipe gets plain text. Same data, same function —
-`paint()` transcribes what the value declares, and it's the same verb every
-layer up the stack renders through.
-
-<!-- TODO: tapes/hero.gif — paint() in TTY and pipe contexts -->
+A TTY gets styled key/value lines; a pipe gets plain text. Same data, same
+function — and it's the same verb every layer up the stack renders through.
+The transcript is a starting point for poking at data, not the API — when
+output matters, declare more: compose the Block yourself, or declare the
+CLI's capabilities and let the surfaces derive.
 
 ## Enter anywhere
 
-Every entry point uses the same building blocks. Pick the one that fits your problem —
-you never hand over control, and there's no cliff between them.
+Every entry point uses the same building blocks. Pick the rung that fits
+your problem — each rung is additive, and climbing never rewrites the rung
+below. (The invariant is *monotonic enhancement*: day-one code stays
+load-bearing forever.)
 
 ### Print styled output
 
@@ -78,8 +215,7 @@ myapp | grep ok    # plain text, no ANSI
 
 <!-- TODO: tapes/zoom.gif — quiet/default/verbose spectrum -->
 
-The flag surface grows only as you declare capabilities — a flag exists only
-because the app declared it, and a declared capability must change output:
+The flag surface grows only as you declare — the honesty rule again:
 
 ```python
 run_cli(
@@ -95,7 +231,8 @@ for budgets. Add `fetch_stream=` for live updates (`--live` appears), and
 `live_delivery="surface"` to upgrade sustained streams to an alt-screen
 render loop (`-i` appears, converging with `--live`). Each rung is additive —
 climbing never rewrites the rung below. For multi-command apps, `run_app`
-routes subcommands through the same harness. The full consumer guide lives in
+routes subcommands through the same harness and injects a `completion`
+command that emits the zsh/bash glue. The full consumer guide lives in
 [`src/painted/README.md`](src/painted/README.md).
 
 ### Full TUI
