@@ -221,9 +221,13 @@ class AppRunner:
                 # a declared prompt's flag must reach the intercepted -h even
                 # when it is the command's only declaration (§12 step 4 — the
                 # mirror exists exactly for the surfaces that never run the
-                # handler).
+                # handler). tags joined at 0.10 (the last asymmetric mirror):
+                # a tags-only command's declared layers reach -h the same way.
                 intercepts = (
-                    cmd.help_args is not None or cmd.add_args is not None or cmd.prompts is not None
+                    cmd.help_args is not None
+                    or cmd.add_args is not None
+                    or cmd.prompts is not None
+                    or cmd.tags is not None
                 )
                 if intercepts and ("-h" in rest or "--help" in rest):
                     return self._handle_subcommand_help(cmd, rest)
@@ -301,13 +305,19 @@ class AppRunner:
         Args come from either declaration mirror: ``help_args`` (re-described)
         or ``add_args`` (introspected). command_defs merges both, so a command
         migrating help_args → add_args renders the same arg list throughout.
-        A prompt-only command has no cmd_defs at all — its help is the Prompts
-        group (rendered at MINIMAL regardless of depth) plus Help.
+        A prompt-only (or tags-only) command has no cmd_defs at all — its help
+        is the Prompts (or Layers) group, rendered at MINIMAL regardless of
+        depth, plus Help.
         """
         from ..core.doc import Defs, Doc, Prose
         from .help import command_defs, framework_sections
 
-        assert cmd.help_args is not None or cmd.add_args is not None or cmd.prompts is not None
+        assert (
+            cmd.help_args is not None
+            or cmd.add_args is not None
+            or cmd.prompts is not None
+            or cmd.tags is not None
+        )
 
         cmd_defs = command_defs(cmd.help_args, cmd.add_args)
         # Help subordinates only when the command has its own args to lead with.
@@ -362,10 +372,11 @@ def run_app(
     code; the expected shape is a function that calls ``run_cli`` with that
     argv, so every subcommand gets the framework flags (zoom, format, mode,
     declared tags). Per-subcommand ``-h`` is intercepted when the AppCommand
-    sets ``help_args`` *or* ``add_args`` (and ``tags``, mirroring the handler's
-    own declarations) — without any of them, ``-h`` falls through to the
-    handler. Prefer ``add_args`` (the same callback the handler passes to
-    ``run_cli``): one declaration introspected for help and completion alike.
+    sets any declaration mirror — ``help_args``, ``add_args``, ``prompts``, or
+    ``tags``, each mirroring the handler's own declarations — without any of
+    them, ``-h`` falls through to the handler. Prefer ``add_args`` (the same
+    callback the handler passes to ``run_cli``): one declaration introspected
+    for help and completion alike.
 
     Args:
         argv: Command-line arguments (sys.argv[1:])

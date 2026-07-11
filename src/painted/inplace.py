@@ -9,6 +9,14 @@ is structurally fragile under viewport disturbance: scrolling during a
 render lands writes on the wrong visual rows (tearing, reprinted frames).
 Sustained animation belongs on the alt screen (Surface), which is immune.
 
+OVERSIZED FRAMES (declared behavior — LIVE_DELIVERY_DESIGN §10, ratified
+0.10): a live frame taller than the viewport cannot be repainted (its top
+rows are already released to scrollback), so on a TTY ``render()`` **clips
+with evidence** — the top rows survive and a dim ``… +N rows`` marker takes
+the last line. ``finalize()``'s deposit writes full height (nothing repaints
+after it; history keeps everything), and a non-TTY stream has no viewport,
+so it is never clipped.
+
 Each frame is emitted as ONE atomic write: cursor up, every line
 overwritten in place (erase-to-EOL trims old residue), leftover lines
 blanked only if the frame shrank — the screen always holds the old frame
@@ -46,6 +54,25 @@ if TYPE_CHECKING:
 # everything between begin/end and composites it as one update.
 _SYNC_BEGIN = "\x1b[?2026h"
 _SYNC_END = "\x1b[?2026l"
+
+
+def _viewport_rows(stream: TextIO) -> int | None:
+    """The stream's viewport height, or ``None`` when it has none.
+
+    Only a TTY has a viewport to tear against; a pipe/StringIO frame is
+    never clipped. Geometry is ambient (``shutil.get_terminal_size``), the
+    same source the framework's ``detect_context`` reads — reading it here
+    is delivery-layer territory, not fidelity resolution (law 4 constrains
+    the latter).
+    """
+    try:
+        if not stream.isatty():
+            return None
+    except (AttributeError, ValueError):
+        return None
+    import shutil
+
+    return shutil.get_terminal_size().lines
 
 
 def _ref_row(block: Block, y: int):
@@ -96,9 +123,32 @@ class InPlaceRenderer:
         the write shrinks to the churn, not the frame. Either way the frame
         goes out as one write wrapped in synchronized-update markers, so a
         line-buffered TTY can't expose a partially drawn state.
+
+        A frame taller than the viewport is clipped with evidence (module
+        contract): the top rows survive and a dim ``… +N rows`` marker takes
+        the last line — the alternative is silent tearing on the next redraw.
         """
         if not self._active:
             raise LifecycleError("InPlaceRenderer.render() called outside of a context manager")
+        self._render_frame(self._fit_viewport(block))
+
+    def _fit_viewport(self, block: Block) -> Block:
+        """Clip a frame taller than the viewport, marking the cut."""
+        rows = _viewport_rows(self._stream)
+        if rows is None or block.height <= rows:
+            return block
+        from .core.block import Block as _Block
+        from .core.cell import Style
+        from .core.compose import join_vertical, vslice
+        from .icon_set import current_icons
+
+        kept = max(0, rows - 1)
+        marker = f"{current_icons().ellipsis} +{block.height - kept} rows"
+        evidence = _Block.text(marker, Style(dim=True))
+        return join_vertical(vslice(block, 0, kept), evidence, gap=0)
+
+    def _render_frame(self, block: Block) -> None:
+        """Write a frame as-is — the shared body behind render/finalize."""
         parts: list[str] = [_SYNC_BEGIN]
         if self._prev is not None and self._prev.height == block.height:
             parts.append(f"\x1b[{self._height}A")
@@ -149,10 +199,16 @@ class InPlaceRenderer:
         """Finalize output: clear, optionally print final block, show cursor.
 
         Call this to "lock in" a final state. The cursor is shown and
-        positioned after the output.
+        positioned after the output. The deposit writes FULL height — it
+        belongs to terminal history and nothing repaints after it, so the
+        oversized-frame clip does not apply (LIVE_DELIVERY_DESIGN §10).
         """
         if block is not None:
-            self.render(block)
+            if not self._active:
+                raise LifecycleError(
+                    "InPlaceRenderer.finalize() called outside of a context manager"
+                )
+            self._render_frame(block)
 
         if self._active:
             self._writer.show_cursor()

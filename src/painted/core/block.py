@@ -524,47 +524,66 @@ def _cells_from_text(text: str, style: Style, *, max_width: int | None = None) -
 
 # --- Styled wrap engine -----------------------------------------------------
 #
-# The wrap algorithms operate on a *styled-char stream* — one (char, Style)
-# entry per source character. Single-style text (`str`) is the degenerate case
-# where every entry shares one style, so the `str` entry points below are thin
-# adapters over these cores. This is the one wrap engine; there is no parallel
-# str/styled logic to keep in sync.
+# The wrap algorithms operate on a *styled-char stream* — one (char, Style,
+# ref) entry per source character. Single-style text (`str`) is the degenerate
+# case where every entry shares one style and no ref, so the `str` entry
+# points below are thin adapters over these cores. This is the one wrap
+# engine; there is no parallel str/styled logic to keep in sync. The ref lane
+# is what lets a `Span`'s denotation survive reflow: a wrapped link keeps its
+# ref on every fragment, the same way its style rides its characters.
 
-_StyledChars = list[tuple[str, Style]]
+_StyledChars = list[tuple[str, Style, str | None]]
 
 
 def _styled_from_text(text: str, style: Style) -> _StyledChars:
     """Expand a single-style string into a styled-char stream."""
-    return [(ch, style) for ch in text]
+    return [(ch, style, None) for ch in text]
 
 
-def _cells_from_styled(chars: _StyledChars, *, max_width: int | None = None) -> list[Cell]:
-    """Materialize a styled-char stream into cells, expanding wide chars.
+def _cells_from_styled(
+    chars: _StyledChars, *, max_width: int | None = None
+) -> tuple[list[Cell], list[str | None] | None]:
+    """Materialize a styled-char stream into cells plus a parallel ref lane.
 
-    Each character carries its own style; a space placeholder follows a wide
-    char and inherits that char's style. Mirrors `_cells_from_text` but
-    per-char rather than per-string.
+    Each character carries its own style and ref; a space placeholder follows
+    a wide char and inherits both. Mirrors `_cells_from_text` but per-char
+    rather than per-string. The ref lane is ``None`` (not a list of ``None``)
+    when no character carries a ref — the common case allocates nothing.
     """
     cells: list[Cell] = []
+    refs: list[str | None] | None = None
     used = 0
-    for ch, st in chars:
+    for ch, st, ref in chars:
         w = char_width(ch)
         if w == 0:
             continue
         if max_width is not None and used + w > max_width:
             break
+        if ref is not None and refs is None:
+            refs = cast("list[str | None]", [None] * len(cells))
         cells.append(Cell(ch, st))
+        if refs is not None:
+            refs.append(ref)
         if w == 2:
             cells.append(Cell(" ", st))
+            if refs is not None:
+                refs.append(ref)
         used += w
         if max_width is not None and used >= max_width:
             break
-    return cells
+    return cells, refs
+
+
+def _pad_refs(refs: list[str | None], width: int) -> list[str | None]:
+    """Pad a ref lane to width — pad cells denote nothing."""
+    if len(refs) < width:
+        return refs + [None] * (width - len(refs))
+    return refs
 
 
 def _styled_width(chars: _StyledChars) -> int:
     """Display width of a styled-char stream."""
-    return sum(w for w in (char_width(ch) for ch, _ in chars) if w > 0)
+    return sum(w for w in (char_width(entry[0]) for entry in chars) if w > 0)
 
 
 def _take_styled_prefix(seg: _StyledChars, width: int) -> tuple[_StyledChars, int]:
@@ -572,17 +591,17 @@ def _take_styled_prefix(seg: _StyledChars, width: int) -> tuple[_StyledChars, in
     used = 0
     out: _StyledChars = []
     consumed = 0
-    for i, (ch, st) in enumerate(seg):
-        w = char_width(ch)
+    for i, entry in enumerate(seg):
+        w = char_width(entry[0])
         if w == 0:
-            out.append((ch, st))
+            out.append(entry)
             consumed = i + 1
             continue
         if w > width:
             break
         if used + w > width:
             break
-        out.append((ch, st))
+        out.append(entry)
         used += w
         consumed = i + 1
         if used == width:
@@ -590,16 +609,25 @@ def _take_styled_prefix(seg: _StyledChars, width: int) -> tuple[_StyledChars, in
     return out, consumed
 
 
-def _char_wrap_styled(chars: _StyledChars, width: int, pad_style: Style) -> list[list[Cell]]:
-    """Wrap a styled-char stream at any character boundary by display width."""
-    if not chars:
-        return [_pad_row([], width, pad_style)]
+def _char_wrap_styled(
+    chars: _StyledChars, width: int, pad_style: Style
+) -> tuple[list[list[Cell]], list[list[str | None]] | None]:
+    """Wrap a styled-char stream at any character boundary by display width.
 
+    Returns the cell rows plus a parallel grid of ref rows — ``None`` when no
+    character carries a ref, so the common case allocates nothing.
+    """
+    if not chars:
+        return [_pad_row([], width, pad_style)], None
+
+    has_refs = any(entry[2] is not None for entry in chars)
     rows: list[list[Cell]] = []
+    ref_rows: list[list[str | None]] = []
     current: list[Cell] = []
+    current_refs: list[str | None] = []
     used = 0
 
-    for ch, st in chars:
+    for ch, st, ref in chars:
         w = char_width(ch)
         if w == 0:
             continue
@@ -609,26 +637,36 @@ def _char_wrap_styled(chars: _StyledChars, width: int, pad_style: Style) -> list
 
         if used + w > width and current:
             rows.append(_pad_row(current, width, pad_style))
+            if has_refs:
+                ref_rows.append(_pad_refs(current_refs, width))
             current = []
+            current_refs = []
             used = 0
 
         if used + w > width:
             continue
 
         current.append(Cell(ch, st))
+        current_refs.append(ref)
         if w == 2:
             current.append(Cell(" ", st))
+            current_refs.append(ref)
         used += w
 
         if used == width:
             rows.append(current)
+            if has_refs:
+                ref_rows.append(current_refs)
             current = []
+            current_refs = []
             used = 0
 
     if current or not rows:
         rows.append(_pad_row(current, width, pad_style))
+        if has_refs:
+            ref_rows.append(_pad_refs(current_refs, width))
 
-    return rows
+    return rows, ref_rows if has_refs else None
 
 
 def _word_wrap_styled(chars: _StyledChars, width: int) -> list[_StyledChars]:
@@ -642,16 +680,16 @@ def _word_wrap_styled(chars: _StyledChars, width: int) -> list[_StyledChars]:
     if width <= 0 or not chars:
         return [[]]
 
-    # Group into alternating space / non-space segments, style preserved.
+    # Group into alternating space / non-space segments, style + ref preserved.
     segments: list[tuple[bool, _StyledChars]] = []
     cur: _StyledChars = []
     cur_sp: bool | None = None
-    for ch, st in chars:
-        sp = ch == " "
+    for entry in chars:
+        sp = entry[0] == " "
         if cur and sp != cur_sp:
             segments.append((cast(bool, cur_sp), cur))
             cur = []
-        cur.append((ch, st))
+        cur.append(entry)
         cur_sp = sp
     if cur:
         segments.append((cast(bool, cur_sp), cur))
@@ -713,7 +751,8 @@ def _word_wrap_styled(chars: _StyledChars, width: int) -> list[_StyledChars]:
 
 def _char_wrap(text: str, width: int, style: Style) -> list[list[Cell]]:
     """Wrap a single-style string at any character boundary."""
-    return _char_wrap_styled(_styled_from_text(text, style), width, style)
+    rows, _ = _char_wrap_styled(_styled_from_text(text, style), width, style)
+    return rows
 
 
 def _word_wrap(text: str, width: int) -> list[str]:
@@ -721,13 +760,13 @@ def _word_wrap(text: str, width: int) -> list[str]:
     if width <= 0 or not text:
         return [""]
     lines = _word_wrap_styled(_styled_from_text(text, Style()), width)
-    return ["".join(ch for ch, _ in ln) for ln in lines] or [""]
+    return ["".join(entry[0] for entry in ln) for ln in lines] or [""]
 
 
 def _take_word_prefix(word: str, width: int) -> tuple[str, int]:
     """Take a word prefix within width columns; returns (prefix, consumed)."""
     out, consumed = _take_styled_prefix(_styled_from_text(word, Style()), width)
-    return "".join(ch for ch, _ in out), consumed
+    return "".join(entry[0] for entry in out), consumed
 
 
 def _wrap_styled(
@@ -747,23 +786,32 @@ def _wrap_styled(
         return Block([[]], 0)
 
     if wrap == Wrap.CHAR:
-        rows = _char_wrap_styled(chars, width, pad_style)
-        return Block(rows, width)
+        rows, ref_rows = _char_wrap_styled(chars, width, pad_style)
+        return Block(rows, width, refs=ref_rows)
 
     if wrap == Wrap.WORD:
         lines = _word_wrap_styled(chars, width)
-        rows = [
-            _pad_row(_cells_from_styled(line, max_width=width), width, pad_style) for line in lines
-        ]
+        rows = []
+        line_refs: list[list[str | None] | None] = []
+        for line in lines:
+            cells, refs = _cells_from_styled(line, max_width=width)
+            rows.append(_pad_row(cells, width, pad_style))
+            line_refs.append(_pad_refs(refs, width) if refs is not None else None)
+        if any(r is not None for r in line_refs):
+            ref_rows = [r if r is not None else [None] * width for r in line_refs]
+            return Block(rows, width, refs=ref_rows)
         return Block(rows, width)
 
     if wrap == Wrap.NONE:
-        cells = _pad_row(_cells_from_styled(chars, max_width=width), width, pad_style)
+        cells, refs = _cells_from_styled(chars, max_width=width)
+        cells = _pad_row(cells, width, pad_style)
+        if refs is not None:
+            return Block([cells], width, refs=[_pad_refs(refs, width)])
         return Block([cells], width)
 
     if wrap == Wrap.ELLIPSIS:
         if _styled_width(chars) <= width:
-            cells = _cells_from_styled(chars, max_width=width)
+            cells, refs = _cells_from_styled(chars, max_width=width)
         else:
             from ..icon_set import current_icons
 
@@ -771,11 +819,17 @@ def _wrap_styled(
             ell_w = display_width(ellipsis)
             ell_chars = _styled_from_text(ellipsis, pad_style)
             if ell_w >= width:
-                cells = _cells_from_styled(ell_chars, max_width=width)
+                cells, refs = _cells_from_styled(ell_chars, max_width=width)
             else:
-                cells = _cells_from_styled(chars, max_width=width - ell_w)
-                cells.extend(_cells_from_styled(ell_chars))
+                cells, refs = _cells_from_styled(chars, max_width=width - ell_w)
+                ell_cells, _ = _cells_from_styled(ell_chars)
+                if refs is not None:
+                    # The marker denotes nothing — it is loss evidence, not content.
+                    refs.extend([None] * len(ell_cells))
+                cells.extend(ell_cells)
         cells = _pad_row(cells, width, pad_style)
+        if refs is not None:
+            return Block([cells], width, refs=[_pad_refs(refs, width)])
         return Block([cells], width)
 
     raise ContractError(f"Unknown wrap mode: {wrap}")

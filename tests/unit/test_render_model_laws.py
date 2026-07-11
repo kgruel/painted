@@ -1,0 +1,266 @@
+"""Executable gates for the render model's laws (docs/RENDER_MODEL.md §4).
+
+Milestone 1 of ROADMAP_1.0.0.md: the laws the 2026-07-10 audit verified by
+*reading* are pinned here by *test*, so every later milestone is measured
+against pinned law rather than discipline. Gate specs come from
+RENDER_MODEL.md §8 ("Gates specified by the audit"); the full evidence
+tables live in docs/RENDER_MODEL_AUDIT.md and serve as the regression
+reference for what each pin covers.
+
+Pinned here:
+- Law 4 (destination independence) — behavioral + static gates.
+- Law 6 (omission evidence) — pins for the *existing* marked truncation
+  paths, so the evidence cannot rot while remediation is designed (§7 Q2).
+- Law 8 (no downstream policy) — import gate over the delivery modules,
+  with ``core/doc.py`` as the one named exception.
+
+Law 1's cross-host harness is integration-tier:
+tests/integration/test_cross_host_content.py. Laws 2/3 are editorial /
+per-app by design (RENDER_MODEL §4) and deliberately have no universal
+gate. Law 5's height arm and law 7's signature wait on their milestones.
+"""
+
+from __future__ import annotations
+
+import ast
+
+from tests.helpers import PAINTED_SRC, _assert_no_imports, _iter_imported_modules, row_text
+
+_PAINTED = PAINTED_SRC / "painted"
+
+
+# =============================================================================
+# Law 4 — Destination independence
+#
+# No destination capability or terminal geometry participates in fidelity
+# resolution. The audit confirmed this by reading every Fidelity construction
+# site; these two tests make the reading a regression gate.
+# =============================================================================
+
+
+def test_law4_fidelity_compiles_identically_across_destinations(monkeypatch, capsys):
+    """Identical declarations + argv → identical Fidelity, whatever the terminal.
+
+    Runs the full run_cli compile path (parse → parse_fidelity →
+    detect_context) under opposed destination conditions. ctx.width MUST
+    differ (proof the environment change was real, and that geometry lives in
+    CliContext); ctx.fidelity MUST NOT.
+    """
+    from painted import Block, Style, Tag
+    from painted.cli import CliContext, run_cli
+
+    argv = ["-v", "--thinking", "--max-chars", "40"]
+    declarations = dict(
+        tags=[Tag("thinking", "Show reasoning", implied_at=3)],
+        depth_aliases={"brief": 0, "full": 3},
+        budgets=True,
+    )
+
+    def run_under(*, isatty: bool, columns: str) -> CliContext:
+        monkeypatch.setattr("sys.stdout.isatty", lambda: isatty)
+        monkeypatch.setenv("COLUMNS", columns)
+        monkeypatch.setenv("LINES", "50" if isatty else "8")
+        seen: dict[str, CliContext] = {}
+
+        def render(ctx: CliContext, data: str) -> Block:
+            seen["ctx"] = ctx
+            return Block.text("x", Style())
+
+        assert run_cli(argv, render=render, fetch=lambda: "d", **declarations) == 0
+        return seen["ctx"]
+
+    tty_ctx = run_under(isatty=True, columns="200")
+    pipe_ctx = run_under(isatty=False, columns="34")
+    capsys.readouterr()  # swallow the two deliveries
+
+    assert tty_ctx.width != pipe_ctx.width, (
+        "test setup failed: the two runs saw the same geometry, so the "
+        "destination-independence assertion below would be vacuous"
+    )
+    assert tty_ctx.fidelity == pipe_ctx.fidelity, (
+        "law 4 violated: fidelity resolution read a destination fact "
+        f"({tty_ctx.fidelity} under a TTY vs {pipe_ctx.fidelity} under a pipe)"
+    )
+
+
+def _destination_reads(node: ast.AST) -> list[str]:
+    """Names/attributes that would read a destination fact."""
+    forbidden = {"environ", "isatty", "get_terminal_size"}
+    hits = []
+    for sub in ast.walk(node):
+        if isinstance(sub, ast.Name) and sub.id in forbidden:
+            hits.append(f"{sub.id} (line {sub.lineno})")
+        elif isinstance(sub, ast.Attribute) and sub.attr in forbidden:
+            hits.append(f".{sub.attr} (line {sub.lineno})")
+    return hits
+
+
+def test_law4_fidelity_compilation_reads_no_destination_facts():
+    """Static arm: core/fidelity.py and parse_fidelity never reference
+    os.environ / isatty / get_terminal_size. detect_context is *supposed* to
+    read those — into CliContext fields, never into a Fidelity — so the scan
+    scopes to the compilation code, not the whole of cli/types.py.
+    """
+    fidelity_hits = _destination_reads(
+        ast.parse((_PAINTED / "core" / "fidelity.py").read_text(encoding="utf-8"))
+    )
+    assert not fidelity_hits, f"core/fidelity.py reads destination facts: {fidelity_hits}"
+
+    types_tree = ast.parse((_PAINTED / "cli" / "types.py").read_text(encoding="utf-8"))
+    parse_fidelity_def = next(
+        node
+        for node in ast.walk(types_tree)
+        if isinstance(node, ast.FunctionDef) and node.name == "parse_fidelity"
+    )
+    compile_hits = _destination_reads(parse_fidelity_def)
+    assert not compile_hits, f"parse_fidelity reads destination facts: {compile_hits}"
+
+
+# =============================================================================
+# Law 8 — No downstream policy
+#
+# Block, composition, Buffer, Writer, and the delivery surfaces carry no
+# disclosure policy. The audit found this held by discipline, not
+# construction; this gate is the construction. core/doc.py is the ONE
+# sanctioned exception (the shared disclosure walk lives there for
+# import-order reasons — see its docstring and DOC_IR_DESIGN.md); like
+# _CLI_SEAMS, the exception is named, not a relaxation: it is asserted
+# *real* below, so a stale allowlist fails too.
+# =============================================================================
+
+_LAW8_DOWNSTREAM_FILES = (
+    "core/cell.py",
+    "core/span.py",
+    "core/block.py",
+    "core/compose.py",
+    "core/buffer.py",
+    "core/writer.py",
+    "inplace.py",
+    "tui/surface.py",
+    "tui/layer.py",
+)
+_DISCLOSURE_POLICY_PREFIXES = {"painted.core.fidelity", "painted.cli"}
+
+
+def test_law8_downstream_modules_carry_no_disclosure_policy():
+    for rel in _LAW8_DOWNSTREAM_FILES:
+        _assert_no_imports(_PAINTED / rel, _DISCLOSURE_POLICY_PREFIXES)
+
+
+def test_law8_named_exception_is_real():
+    """core/doc.py must actually import the disclosure spec it is exempted
+    for — if the disclosure walk ever moves out, the exemption comment in
+    this file and the law-8 status note in RENDER_MODEL.md are stale and
+    should be swept in the same change.
+    """
+    imported = _iter_imported_modules(PAINTED_SRC, _PAINTED / "core" / "doc.py")
+    assert any(mod.startswith("painted.core.fidelity") for mod in sorted(imported)), (
+        "core/doc.py no longer imports core.fidelity — remove its law-8 "
+        "exemption here and update RENDER_MODEL.md §4"
+    )
+
+
+# =============================================================================
+# Law 6 — Omission evidence: pins for the paths that mark today
+#
+# The audit's finding: marked/silent tracks the layer, and today's marked
+# paths (lens/compose width loss) have NO test asserting the mark itself —
+# only width bounds. These pins stop the existing evidence from disappearing
+# silently while the remediation (§7 Q2) is designed. The inventory of
+# silent paths is docs/RENDER_MODEL_AUDIT.md — deliberately NOT pinned:
+# they are targets, not contracts.
+# =============================================================================
+
+
+class TestLaw6EvidencePins:
+    def test_truncate_ellipsis_marks_the_cut(self):
+        from painted.core._text_width import display_width, truncate_ellipsis
+
+        marked = truncate_ellipsis("abcdefghij", 5, ellipsis="…")
+        assert marked.endswith("…"), "width clipping left no mark"
+        assert display_width(marked) <= 5
+        # untouched when it fits — a mark without loss would be false evidence
+        assert truncate_ellipsis("abc", 5, ellipsis="…") == "abc"
+
+    def test_compose_truncate_marks_the_cut(self):
+        from painted import Block, Style
+        from painted.core.compose import truncate
+
+        out = truncate(Block.text("abcdefghij", Style()), 5)
+        assert out.width == 5
+        assert row_text(out, 0) == "abcd…", "compose.truncate dropped its ambient mark"
+
+    def test_compose_truncate_mark_degrades_with_ascii_icons(self):
+        from painted import ASCII_ICONS, Block, Style, use_icons
+        from painted.core.compose import truncate
+
+        with use_icons(ASCII_ICONS):
+            out = truncate(Block.text("abcdefghij", Style()), 7)
+        assert row_text(out, 0).endswith(ASCII_ICONS.ellipsis)
+
+    def test_fit_to_width_marks_narrowing(self):
+        from painted import Block, Style
+        from painted.core.compose import fit_to_width
+
+        out = fit_to_width(Block.text("abcdefghij", Style()), 5)
+        assert out.width == 5
+        assert "…" in row_text(out, 0)
+
+    def test_scalar_chars_budget_leaves_length_evidence(self):
+        """The fidelity-chars marker: a string cut by the chars budget names
+        what was lost ("... [N chars]") rather than pretending the value was
+        short. (The audit's boundary-blur note — this marker and the width
+        ellipsis can both fire — is a design question, not this pin's.)
+        """
+        from painted.core.fidelity import Fidelity
+        from painted.views import shape_lens
+
+        long_value = "x" * 300
+        out = shape_lens(long_value, zoom=2, width=400, fidelity=Fidelity(depth=2, chars=50))
+        text = row_text(out, 0)
+        assert "[300 chars]" in text, "chars-budget loss left no length evidence"
+        # default cap (no fidelity passed) leaves the same evidence
+        out_default = shape_lens(long_value, zoom=2, width=400)
+        assert "[300 chars]" in row_text(out_default, 0)
+
+    def test_budget_fields_reports_dropped_columns(self):
+        from painted.core.compose import budget_fields
+
+        fit = budget_fields(["a" * 20, "b" * 20], 25)
+        assert fit.dropped > 0, "whole-field drop reported no loss"
+
+        exact = budget_fields(["ab", "cd"], 20)
+        assert exact.dropped == 0, "no loss must report zero (false evidence)"
+        assert exact.text == "ab · cd"
+
+    def test_inplace_oversized_frame_marks_the_cut(self, monkeypatch):
+        """The §7 Q2b resolution (0.10): InPlaceRenderer clips an oversized
+        live frame with a named-loss marker — delivery-owned evidence per the
+        ownership rule; silent tearing was the one answer the model forbade.
+        (Full behavioral coverage: tests/unit/test_inplace_renderer.py.)
+        """
+        import io
+        import os
+
+        from painted import Block, Style
+        from painted.core.compose import join_vertical
+        from painted.inplace import InPlaceRenderer
+
+        class _Tty(io.StringIO):
+            def isatty(self) -> bool:
+                return True
+
+        monkeypatch.setattr(
+            "shutil.get_terminal_size", lambda fallback=(80, 24): os.terminal_size((80, 4))
+        )
+        tall = join_vertical(*(Block.text(f"r{i}", Style()) for i in range(8)), gap=0)
+        stream = _Tty()
+        with InPlaceRenderer(stream) as renderer:
+            renderer.render(tall)
+        assert "… +5 rows" in stream.getvalue(), "oversized-frame clip left no evidence"
+
+        fitting = join_vertical(*(Block.text(f"r{i}", Style()) for i in range(3)), gap=0)
+        stream = _Tty()
+        with InPlaceRenderer(stream) as renderer:
+            renderer.render(fitting)
+        assert "rows" not in stream.getvalue(), "a mark without loss is false evidence"

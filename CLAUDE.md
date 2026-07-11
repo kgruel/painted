@@ -85,7 +85,9 @@ Surface + Layer             # alt-screen TUI with keyboard + diff rendering
 | Renderer | `core/span.py` | Span, Line |
 | Renderer | `core/block.py` | Block, Wrap |
 | Renderer | `core/compose.py` | join, pad, border, truncate, Align |
+| Renderer | `core/doc.py` | Doc-IR node vocabulary (Doc, Section, Def, Link, …) + doc_lens (the document compositor) |
 | Renderer | `core/writer.py` | Writer, ColorDepth, print_block |
+| Renderer | `publish.py` | to_html, published_fidelity — the doc-IR publisher (root, beside display.py) |
 | Renderer | `inplace.py` | InPlaceRenderer |
 | Diagnostics | `diagnostics.py` | PaintedHandler, install, DEFAULT_THRESHOLDS (logging + excepthook glue; root, imports views) |
 | Renderer | `keyboard.py` | KeyboardInput, cbreak_supported, read_key — the delivery layer's key-reading primitive (root; `tui/` re-exports) |
@@ -163,7 +165,7 @@ Key patterns:
 All state types are frozen; update with `dataclasses.replace()` (which returns new state), and render is a pure function `render_fn(state, ...) → Block`.
 <!-- docgen:end -->
 <!-- docgen:begin frag:stability-tiers#summary -->
-`painted.core` + `painted.views` + `painted.display` are the **semver-stable** library surface (removing or renaming an `__all__` name is semver-MAJOR, guarded by `tests/unit/test_public_api.py`); `painted.cli` + `painted.tui` are the **evolving** framework surface that may change across minor versions.
+`painted.core` + `painted.views` + `painted.display` + `painted.publish` are the **semver-stable** library surface (removing or renaming an `__all__` name is semver-MAJOR, guarded by `tests/unit/test_public_api.py`); `painted.cli` + `painted.tui` are the **evolving** framework surface that may change across minor versions.
 <!-- docgen:end -->
 - **Semantic renderer**: rendering decisions (fidelity, delivery, format, the flag surface) derive from declared meaning. The honesty rule is its enforcement: a surface element (flag, candidate, mode) exists only because a capability was declared, and a declared capability must change output. Inference (`shape_lens`; `show()` is its deprecated wrapper, removed at 1.0) is the exploration fallback, never the spine. The umbrella design of record is docs/RENDER_MODEL.md — don't state unshipped selection behavior (lens choice from declared meaning) as present tense.
 - Surface diff-renders: only changed cells written to terminal.

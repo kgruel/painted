@@ -85,10 +85,18 @@ class Buffer:
         )
         self.put_ref(x, y, char, style, id)
 
-    def put_text(self, x: int, y: int, text: str, style: Style) -> None:
-        """Write a string horizontally, respecting wide characters."""
+    def put_text(self, x: int, y: int, text: str, style: Style, ref: str | None = None) -> None:
+        """Write a string horizontally, respecting wide characters.
+
+        ``ref`` stamps the denotation channel on every cell the text covers
+        (a wide glyph's placeholder included); ``None`` clears it — a write
+        always wins, so a ref-less write over a linked cell un-links it.
+        """
         col = x
         blank = blank_cell(style)
+        # A None ref only needs clearing where a grid already exists; a real
+        # ref must allocate one.
+        refs = self._ensure_refs() if ref is not None else self._refs
         for ch in text:
             w = wcwidth(ch)
             if w < 0:
@@ -101,8 +109,8 @@ class Buffer:
                 idx = self._index(col, y)
                 if idx is not None:
                     self._cells[idx] = Cell(ch, style)
-                    if self._refs is not None:
-                        self._refs[idx] = None
+                    if refs is not None:
+                        refs[idx] = ref
                 col += w
                 continue
 
@@ -112,21 +120,23 @@ class Buffer:
                 idx = self._index(col, y)
                 if idx is not None:
                     self._cells[idx] = Cell(ch, style)
-                    if self._refs is not None:
-                        self._refs[idx] = None
+                    if refs is not None:
+                        refs[idx] = ref
                 for dx in range(1, w):
                     next_idx = self._index(col + dx, y)
                     if next_idx is not None:
                         self._cells[next_idx] = blank
-                        if self._refs is not None:
-                            self._refs[next_idx] = None
+                        if refs is not None:
+                            refs[next_idx] = ref
             else:
                 for dx in range(w):
                     idx = self._index(col + dx, y)
                     if idx is not None:
                         self._cells[idx] = blank
-                        if self._refs is not None:
-                            self._refs[idx] = None
+                        if refs is not None:
+                            # A blanked overlap is not the glyph — it denotes
+                            # nothing, whatever ref the write carried.
+                            refs[idx] = None
             col += w
 
     def fill(self, x: int, y: int, w: int, h: int, char: str, style: Style) -> None:
@@ -351,8 +361,18 @@ class BufferView:
         )
         self.put_ref(x, y, char, style, id)
 
-    def put_text(self, x: int, y: int, text: str, style: Style) -> None:
-        """Write text, clipping characters that fall outside the view."""
+    def put_text(self, x: int, y: int, text: str, style: Style, ref: str | None = None) -> None:
+        """Write text, clipping characters that fall outside the view.
+
+        ``ref`` mirrors ``Buffer.put_text``: stamped on every covered cell,
+        cleared by a ref-less write."""
+
+        def _put(px: int, py: int, ch: str, st: Style) -> None:
+            if ref is not None:
+                self._buffer.put_ref(px, py, ch, st, ref)
+            else:
+                self._buffer.put(px, py, ch, st)
+
         col = x
         blank = blank_cell(style)
         for ch in text:
@@ -362,18 +382,19 @@ class BufferView:
 
             if w == 1:
                 if 0 <= col < self._w and 0 <= y < self._h:
-                    self._buffer.put(self._ox + col, self._oy + y, ch, style)
+                    _put(self._ox + col, self._oy + y, ch, style)
                 col += w
                 continue
 
             if 0 <= col and col + w <= self._w and 0 <= y < self._h:
-                self._buffer.put(self._ox + col, self._oy + y, ch, style)
+                _put(self._ox + col, self._oy + y, ch, style)
                 for dx in range(1, w):
-                    self._buffer.put(self._ox + col + dx, self._oy + y, " ", style)
+                    _put(self._ox + col + dx, self._oy + y, " ", style)
             else:
                 for dx in range(w):
                     px = col + dx
                     if 0 <= px < self._w and 0 <= y < self._h:
+                        # A blanked overlap denotes nothing — always ref-less.
                         self._buffer.put(self._ox + px, self._oy + y, blank.char, blank.style)
             col += w
 

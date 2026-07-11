@@ -1,4 +1,5 @@
 import io
+import os
 
 import pytest
 
@@ -244,3 +245,78 @@ class TestInPlaceRenderer:
 
         with pytest.raises(LifecycleError, match="outside of a context manager"):
             renderer.clear()
+
+
+class _TtyStream(io.StringIO):
+    """A StringIO that claims a viewport — the oversized-frame gate opens."""
+
+    def isatty(self) -> bool:
+        return True
+
+
+class TestOversizedFrames:
+    """The declared oversized-frame behavior: clip with evidence
+    (LIVE_DELIVERY_DESIGN §10, RENDER_MODEL §7 Q2b). A live frame taller
+    than the viewport cannot be repainted — its top rows are already in
+    scrollback — so render() keeps the head and marks the cut; the
+    finalize() deposit and non-TTY streams pass through whole."""
+
+    def _tall_block(self, height: int) -> Block:
+        s = Style()
+        return _block([[Cell(str(i % 10), s)] for i in range(height)])
+
+    def test_render_clips_to_viewport_with_evidence(self, monkeypatch):
+        monkeypatch.setattr(
+            "shutil.get_terminal_size", lambda fallback=(80, 24): os.terminal_size((80, 5))
+        )
+        stream = _TtyStream()
+        with InPlaceRenderer(stream) as renderer:
+            renderer.render(self._tall_block(9))
+            assert renderer._height == 5  # 4 content rows + the evidence row
+        out = stream.getvalue()
+        assert "… +5 rows" in out  # 9 authored - 4 kept, named exactly
+
+    def test_fitting_frame_is_untouched(self, monkeypatch):
+        monkeypatch.setattr(
+            "shutil.get_terminal_size", lambda fallback=(80, 24): os.terminal_size((80, 5))
+        )
+        stream = _TtyStream()
+        with InPlaceRenderer(stream) as renderer:
+            renderer.render(self._tall_block(5))
+            assert renderer._height == 5
+        assert "rows" not in stream.getvalue()  # no false evidence without loss
+
+    def test_non_tty_stream_is_never_clipped(self, monkeypatch):
+        monkeypatch.setattr(
+            "shutil.get_terminal_size", lambda fallback=(80, 24): os.terminal_size((80, 5))
+        )
+        stream = io.StringIO()  # no viewport, nothing to tear
+        with InPlaceRenderer(stream) as renderer:
+            renderer.render(self._tall_block(9))
+            assert renderer._height == 9
+        assert "rows" not in stream.getvalue()
+
+    def test_finalize_deposit_writes_full_height(self, monkeypatch):
+        monkeypatch.setattr(
+            "shutil.get_terminal_size", lambda fallback=(80, 24): os.terminal_size((80, 5))
+        )
+        stream = _TtyStream()
+        with InPlaceRenderer(stream) as renderer:
+            renderer.render(self._tall_block(9))
+            renderer.finalize(self._tall_block(9))
+        out = stream.getvalue()
+        # The deposit is history: all 9 rows land, after the clipped live frame.
+        assert renderer._height == 9
+        assert out.count("… +5 rows") == 1  # only the live frame carried evidence
+
+    def test_evidence_marker_degrades_with_ascii_icons(self, monkeypatch):
+        from painted import ASCII_ICONS, use_icons
+
+        monkeypatch.setattr(
+            "shutil.get_terminal_size", lambda fallback=(80, 24): os.terminal_size((80, 3))
+        )
+        stream = _TtyStream()
+        with use_icons(ASCII_ICONS), InPlaceRenderer(stream) as renderer:
+            renderer.render(self._tall_block(6))
+        out = stream.getvalue()
+        assert f"{ASCII_ICONS.ellipsis} +4 rows" in out

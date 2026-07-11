@@ -28,7 +28,7 @@ from painted._doc_pages import DOCS as _DOC_PAGES_CATALOG
 
 from tools.capture import capture_demo, import_module_by_path
 from tools.disclosure_specimens import DISCLOSURE as _DISCLOSURE_CATALOG
-from tools.doc_publish import to_html
+from painted.publish import to_html
 from tools.landing_specimens import LANDING as _LANDING_CATALOG
 from tools.reference_specimens import CATALOG as _REFERENCE_CATALOG
 
@@ -233,7 +233,7 @@ def _repo_root() -> Path:
 # render, so a renderer change that forgets `./dev panels` fails the gate.
 PANELS_DIR = Path("web/src/generated/panels")
 
-# Committed doc-IR pages (tools/doc_publish.to_html over painted._doc_pages.DOCS):
+# Committed doc-IR pages (painted.publish.to_html over painted._doc_pages.DOCS):
 # the SEMANTIC sink — chrome as <section>/<p>/<dl>, Figure islands via render_html.
 # Same regen/check lifecycle as PANELS; the registry IS the `painted docs` registry,
 # so the site cannot list a page the terminal doesn't have (or vice versa).

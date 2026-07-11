@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from wcwidth import wcswidth
 
@@ -17,10 +17,17 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True, slots=True)
 class Span:
-    """A run of text with a single style."""
+    """A run of text with a single style — and optionally a single denotation.
+
+    ``ref`` is the per-cell denotation channel (see ``docs/REFS_DESIGN.md``)
+    stamped at the text-primitive rung: every cell this span's characters
+    produce carries it, through ``to_block``, ``wrap`` (across line breaks),
+    and ``paint`` alike — the same way the span's style rides its characters.
+    """
 
     text: str
     style: Style = Style()
+    ref: str | None = None
 
     @property
     def width(self) -> int:
@@ -50,11 +57,14 @@ class Line:
         return sum(s.width for s in self.spans)
 
     def paint(self, view: BufferView, x: int, y: int) -> None:
-        """Render spans into a BufferView, merging base style onto each span."""
+        """Render spans into a BufferView, merging base style onto each span.
+
+        A span's ``ref`` is stamped on every cell it writes (and cleared where
+        a ref-less span overwrites)."""
         col = x
         for span in self.spans:
             merged = self.style.merge(span.style)
-            view.put_text(col, y, span.text, merged)
+            view.put_text(col, y, span.text, merged, ref=span.ref)
             col += span.width
 
     def truncate(self, max_width: int) -> Line:
@@ -79,7 +89,7 @@ class Line:
                     chars.append(ch)
                     used += cw
                 if chars:
-                    kept.append(Span("".join(chars), span.style))
+                    kept.append(Span("".join(chars), span.style, span.ref))
                 break
         return Line(spans=tuple(kept), style=self.style)
 
@@ -99,7 +109,9 @@ class Line:
         if wrap is None:
             wrap = Wrap.WORD
 
-        chars = [(ch, self.style.merge(span.style)) for span in self.spans for ch in span.text]
+        chars = [
+            (ch, self.style.merge(span.style), span.ref) for span in self.spans for ch in span.text
+        ]
         return _wrap_styled(chars, width, wrap=wrap, pad_style=self.style)
 
     def to_block(self, width: int) -> Block:
@@ -115,10 +127,13 @@ class Line:
             return Block([[]], 0)
 
         cells: list[Cell] = []
+        refs: list[str | None] | None = None
         used = 0
         done = False
         for span in self.spans:
             merged = self.style.merge(span.style)
+            if span.ref is not None and refs is None:
+                refs = cast("list[str | None]", [None] * len(cells))
             for ch in span.text:
                 w = char_width(ch)
                 if w == 0:
@@ -128,13 +143,19 @@ class Line:
                     done = True
                     break
                 cells.append(Cell(ch, merged))
+                if refs is not None:
+                    refs.append(span.ref)
                 if w == 2:
                     # Placeholder cell for wide characters.
                     if used + 2 > width:
                         cells.pop()
+                        if refs is not None:
+                            refs.pop()
                         done = True
                         break
                     cells.append(Cell(" ", merged))
+                    if refs is not None:
+                        refs.append(span.ref)
                 used += w
                 if used >= width:
                     done = True
@@ -147,4 +168,7 @@ class Line:
             pad = Cell(" ", self.style)
             cells.extend([pad] * (width - used))
 
+        if refs is not None:
+            refs.extend([None] * (width - len(refs)))
+            return Block([cells], width, refs=[refs])
         return Block([cells], width)

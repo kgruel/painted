@@ -424,7 +424,9 @@ former optional-render question: they turned out to be the same question.)*
    scrollback (the audit's tearing finding), so it picks one: frame must
    fit / clip with evidence / refuse / upgrade delivery to
    `StreamSurface`. Today's answer — tear silently — is the only one the
-   model forbids.
+   model forbids. *(b resolved 0.10, ratified 2026-07-11: clip with
+   evidence — LIVE_DELIVERY_DESIGN §10; pinned with the law-6 evidence
+   gates.)*
 3. **The capability vocabulary** — what replaces the `use_ansi` proxy:
    color / glyph / link facets? And where exactly the fence sits against
    the two existing capability mechanisms (ambient `IconSet` fallback,

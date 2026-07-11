@@ -7,68 +7,16 @@ from pathlib import Path
 
 import pytest
 
+from tests.helpers import (
+    _assert_no_imports,
+    _iter_imported_modules,
+    _module_name_for_file,
+    _resolve_relative_module,
+)
+
 
 def _painted_root() -> Path:
     return Path(__file__).resolve().parents[2] / "src" / "painted"
-
-
-def _module_name_for_file(src_root: Path, py_file: Path) -> str:
-    rel = py_file.relative_to(src_root).with_suffix("")
-    return ".".join(rel.parts)
-
-
-def _resolve_relative_module(current_pkg: str, *, level: int, module: str | None) -> str:
-    """Resolve an ast.ImportFrom into an absolute module path.
-
-    Examples (current_pkg="painted.views"):
-      - from ._components import x      => painted.views._components
-      - from ..app import Surface       => painted.app
-    """
-    if level <= 0:
-        return module or ""
-
-    pkg_parts = current_pkg.split(".") if current_pkg else []
-    up = level - 1
-    base_parts = pkg_parts[: max(0, len(pkg_parts) - up)]
-    base = ".".join(base_parts)
-    if not module:
-        return base
-    return f"{base}.{module}" if base else module
-
-
-def _iter_imported_modules(src_root: Path, py_file: Path) -> set[str]:
-    tree = ast.parse(py_file.read_text(encoding="utf-8"), filename=str(py_file))
-    current_mod = _module_name_for_file(src_root, py_file)
-    current_pkg = current_mod.rsplit(".", 1)[0] if "." in current_mod else current_mod
-
-    imported: set[str] = set()
-
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
-            for alias in node.names:
-                imported.add(alias.name)
-        elif isinstance(node, ast.ImportFrom):
-            base = _resolve_relative_module(current_pkg, level=node.level, module=node.module)
-            if node.module is not None:
-                imported.add(base)
-            else:
-                # from .. import foo, bar
-                for alias in node.names:
-                    imported.add(f"{base}.{alias.name}" if base else alias.name)
-
-    return imported
-
-
-def _assert_no_imports(py_file: Path, forbidden_prefixes: set[str]) -> None:
-    painted_src = Path(__file__).resolve().parents[2] / "src"
-    imported = _iter_imported_modules(painted_src, py_file)
-
-    forbidden = []
-    for mod in sorted(imported):
-        if any(mod == p or mod.startswith(f"{p}.") for p in forbidden_prefixes):
-            forbidden.append(mod)
-
-    assert not forbidden, f"{py_file} imports forbidden modules: {forbidden}"
 
 
 def test_block_defensively_freezes_rows() -> None:
