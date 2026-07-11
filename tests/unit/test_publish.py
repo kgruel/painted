@@ -50,7 +50,7 @@ class TestSemanticChrome:
         html = _full(Doc(None, (outer,)))
         assert "<h2>Outer</h2>" in html
         assert "<h3>Inner</h3>" in html
-        assert "<section>" in html
+        assert '<section id="outer">' in html  # headed sections are addressable
 
     def test_prose_is_paragraph(self):
         html = _full(Doc(None, (Prose("a paragraph"),)))
@@ -301,3 +301,78 @@ class TestInlineLink:
         fid = Fidelity(depth=Zoom.SUMMARY)
         assert "deep" not in to_html(doc, fidelity=fid)
         assert "deep" not in block_to_text(doc_lens(doc, fidelity=fid, width=40))
+
+
+class TestSectionAnchors:
+    """Headed sections are addressable: ids derive from the DECLARED heading,
+    never from hint or disclosure state (0.10.1; the loops article regexed
+    these into painted's output before the seam existed)."""
+
+    def test_headed_section_gets_slug_id(self):
+        html = _full(Doc(None, (Section("The Trifecta", body=(Prose("x"),)),)))
+        assert '<section id="the-trifecta">' in html
+
+    def test_slug_collapses_nonalnum_runs(self):
+        html = _full(Doc(None, (Section("Refs — denotation & links!", body=()),)))
+        assert '<section id="refs-denotation-links">' in html
+
+    def test_unnamed_section_gets_no_id(self):
+        html = _full(Doc(None, (Section(None, body=(Prose("x"),)),)))
+        assert "<section>" in html
+        assert "<section id=" not in html
+
+    def test_duplicate_headings_dedupe_in_document_order(self):
+        doc = Doc(
+            None,
+            (
+                Section("Setup", body=()),
+                Section("Setup", body=()),
+                Section("Setup", body=()),
+            ),
+        )
+        html = _full(doc)
+        assert '<section id="setup">' in html
+        assert '<section id="setup-2">' in html
+        assert '<section id="setup-3">' in html
+
+    def test_nested_sections_share_one_namespace(self):
+        inner = Section("Setup", body=())
+        outer = Section("Setup", body=(inner,))
+        html = _full(Doc(None, (outer,)))
+        assert '<section id="setup">' in html
+        assert '<section id="setup-2">' in html
+
+    def test_hint_does_not_participate(self):
+        with_hint = Section("Modes", body=(), hint="what to show")
+        html = _full(Doc(None, (with_hint,)))
+        assert '<section id="modes">' in html
+
+    def test_anchor_is_fidelity_stable(self):
+        # The second "Setup" hides below depth 2; its sibling's anchor must not
+        # shift to reclaim the bare slug — numbering derives from the declared
+        # tree, not the disclosed one.
+        first = Section("Setup", body=(), min_depth=2)
+        second = Section("Setup", body=(Prose("x"),))
+        doc = Doc(None, (first, second))
+        low = to_html(doc, fidelity=Fidelity(depth=0))
+        full = _full(doc)
+        assert '<section id="setup-2">' in low
+        assert '<section id="setup-2">' in full
+        assert '<section id="setup">' not in low.replace('id="setup-2"', "")
+
+    def test_section_anchors_map_matches_emitted_ids(self):
+        from painted.publish import section_anchors
+
+        inner = Section("Inner", body=())
+        outer = Section("Outer", body=(inner,))
+        doc = Doc(None, (outer, Section("Outer", body=())))
+        anchors = section_anchors(doc)
+        assert anchors[id(outer)] == "outer"
+        assert anchors[id(inner)] == "inner"
+        html = _full(doc)
+        for anchor in anchors.values():
+            assert f'<section id="{anchor}">' in html
+
+    def test_non_ascii_heading_falls_back_to_section(self):
+        html = _full(Doc(None, (Section("世界", body=()),)))
+        assert '<section id="section">' in html

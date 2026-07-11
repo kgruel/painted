@@ -395,3 +395,40 @@ class TestSpanRef:
         assert buf.hit(2, 0) is None
         Line(spans=(Span("cd"),)).paint(view, 0, 0)
         assert buf.hit(0, 0) is None  # a ref-less write un-links
+
+
+class TestLineToBlockNaturalWidth:
+    """width=None sizes naturally — the width contract's 'absent is natural'
+    applied to Line.to_block (previously a crash; consumer-hit in loops)."""
+
+    def test_none_width_takes_line_display_width(self):
+        line = Line(spans=(Span("hello"),))
+        block = line.to_block(None)
+        assert block.width == 5
+        assert block.height == 1
+        assert [c.char for c in block.row(0)] == list("hello")
+
+    def test_none_width_counts_wide_chars(self):
+        line = Line(spans=(Span("世"),))  # "世" (2 columns)
+        block = line.to_block(None)
+        assert block.width == 2
+        assert block.row(0)[0].char == "世"
+        assert block.row(0)[1].char == " "  # placeholder cell
+
+    def test_none_width_multiple_spans(self):
+        line = Line(spans=(Span("ab", Style(fg="red")), Span("cd", Style(fg="blue"))))
+        block = line.to_block(None)
+        assert block.width == 4
+        assert block.row(0)[0].style.fg == "red"
+        assert block.row(0)[2].style.fg == "blue"
+
+    def test_none_width_empty_line_is_zero_width(self):
+        block = Line().to_block(None)
+        assert block.width == 0
+        assert block.height == 1
+
+    def test_none_width_preserves_refs(self):
+        line = Line(spans=(Span("ab", ref="fact:01X"),))
+        block = line.to_block(None)
+        assert block.cell_ref(0, 0) == "fact:01X"
+        assert block.cell_ref(1, 0) == "fact:01X"

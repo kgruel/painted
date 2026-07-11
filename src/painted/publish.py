@@ -20,6 +20,7 @@ is sketched in the design doc, not built; it joins this module if it lands.
 from __future__ import annotations
 
 import html as _html
+import re as _re
 
 from .core.doc import (
     Code,
@@ -41,7 +42,7 @@ from .core.html import render_html
 from .core.zoom import Zoom
 from .refs import resolve_ref
 
-__all__ = ["to_html", "published_fidelity"]
+__all__ = ["to_html", "published_fidelity", "section_anchors"]
 
 _MAX_HEADING = 6
 
@@ -77,22 +78,65 @@ def to_html(doc: Doc, *, fidelity: Fidelity | None = None) -> str:
     out: list[str] = ['<article class="painted-doc">\n']
     if doc.title:
         out.append(f"<h1>{_esc(doc.title)}</h1>\n")
-    _emit_body(out, doc.body, depth=fid.depth, fidelity=fid, level=2)
+    _emit_body(out, doc.body, depth=fid.depth, fidelity=fid, level=2, anchors=section_anchors(doc))
     out.append("</article>\n")
     return "".join(out)
 
 
+def section_anchors(doc: Doc) -> dict[int, str]:
+    """The anchor id of every headed ``Section``, keyed by node identity.
+
+    A headed section is addressable: ``to_html`` stamps these ids on its
+    ``<section>`` elements, so consumers can deep-link (``#the-trifecta``) and
+    build outlines by walking their own ``Doc`` tree — no post-processing of
+    the emitted HTML. Unnamed sections declare no identity and get no anchor.
+
+    Derivation is from the DECLARED tree only: the heading text (lowercased,
+    non-alphanumeric runs collapsed to hyphens — the familiar heading-slug
+    convention), deduplicated in document order by suffixing ``-2``, ``-3``, ….
+    Neither the hint (a tier-1 reveal) nor disclosure state participates, so a
+    section's anchor is identical at every fidelity it is visible at — a
+    deep link survives the reader turning detail up or down.
+    """
+    anchors: dict[int, str] = {}
+    used: set[str] = set()
+
+    def walk(nodes: tuple[Node, ...]) -> None:
+        for node in nodes:
+            if isinstance(node, Section):
+                if node.heading:
+                    slug = _re.sub(r"[^a-z0-9]+", "-", node.heading.lower()).strip("-") or "section"
+                    anchor, n = slug, 2
+                    while anchor in used:
+                        anchor = f"{slug}-{n}"
+                        n += 1
+                    used.add(anchor)
+                    anchors[id(node)] = anchor
+                walk(node.body)
+
+    walk(doc.body)
+    return anchors
+
+
 def _emit_body(
-    out: list[str], nodes: tuple[Node, ...], *, depth: int, fidelity: Fidelity, level: int
+    out: list[str],
+    nodes: tuple[Node, ...],
+    *,
+    depth: int,
+    fidelity: Fidelity,
+    level: int,
+    anchors: dict[int, str],
 ) -> None:
     for node, eff in visible_body(nodes, depth, fidelity):
-        _emit_node(out, node, eff, fidelity, level)
+        _emit_node(out, node, eff, fidelity, level, anchors)
 
 
-def _emit_node(out: list[str], node: Node, eff: int, fidelity: Fidelity, level: int) -> None:
+def _emit_node(
+    out: list[str], node: Node, eff: int, fidelity: Fidelity, level: int, anchors: dict[int, str]
+) -> None:
     match node:
         case Section():
-            _emit_section(out, node, eff, fidelity, level)
+            _emit_section(out, node, eff, fidelity, level, anchors)
         case Prose():
             out.append(f"<p>{_emit_inline(node.content)}</p>\n")
         case Defs():
@@ -106,9 +150,18 @@ def _emit_node(out: list[str], node: Node, eff: int, fidelity: Fidelity, level: 
 
 
 def _emit_section(
-    out: list[str], section: Section, eff: int, fidelity: Fidelity, level: int
+    out: list[str],
+    section: Section,
+    eff: int,
+    fidelity: Fidelity,
+    level: int,
+    anchors: dict[int, str],
 ) -> None:
-    out.append("<section>\n")
+    anchor = anchors.get(id(section))
+    if anchor is not None:
+        out.append(f'<section id="{_esc(anchor)}">\n')
+    else:
+        out.append("<section>\n")
     heading = _esc(section.heading or "")
     if section.hint and eff >= 1:  # the subhead is a tier-1 reveal, like the lens
         hint = f'<span class="hint">{_esc(section.hint)}</span>'
@@ -117,7 +170,7 @@ def _emit_section(
         h = min(level, _MAX_HEADING)
         out.append(f"<h{h}>{heading}</h{h}>\n")
     # Cascade: the section's own eff becomes its body's local depth (same as the lens).
-    _emit_body(out, section.body, depth=eff, fidelity=fidelity, level=level + 1)
+    _emit_body(out, section.body, depth=eff, fidelity=fidelity, level=level + 1, anchors=anchors)
     out.append("</section>\n")
 
 

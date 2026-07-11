@@ -4,6 +4,18 @@ All notable changes to painted are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/); pre-1.0, minor versions may carry
 breaking changes.
 
+## [0.10.1] — 2026-07-11
+
+A patch cut from the first loops-adoption-spike evidence (roadmap M3): two consumer-recorded workarounds dissolve. Both changes derive from declarations that already existed — the width contract applied uniformly, and section identity read off the declared tree.
+
+### Added
+
+- **Headed sections are addressable** (`docs/DOC_IR_DESIGN.md`, the 0.10.1 anchors amendment). `to_html` stamps `<section id="…">` on every headed section: heading-slug ids (lowercased, non-alphanumeric runs collapsed to hyphens), deduplicated in document order. Ids derive from the **declared tree only** — neither the hint (a tier-1 reveal) nor disclosure state participates, and a hidden duplicate still reserves its number, so a deep link survives the reader turning fidelity up or down. Unnamed sections declare no identity and get no id. `section_anchors(doc)` joins `painted.publish` (semver-guarded) so a consumer's outline walk reads the SAME map `to_html` stamps from — the loops inquiry article regexed painted's emitted HTML to inject exactly these ids, coupling itself to the serialization's whitespace; that post-pass now deletes.
+
+### Fixed
+
+- **`width=None` is natural in `Block.empty` and `Line.to_block`** — the width contract ("absent is natural") applied to the two constructors that refused it while their sibling `Block.text` accepted it. `Block.empty(None, h)` sizes naturally (zero-width rows — the vertical-spacer idiom for width-None lens paths, closing the `Block.text('', Style())` workaround); `Line.to_block(None)` takes the Line's own display width instead of raising `TypeError`. Consumer-recorded: hit twice in loops' store lens.
+
 ## [0.10.0] — 2026-07-11
 
 This release ships **the semantic tree** — the ratified 0.10 amendment to `docs/DOC_IR_DESIGN.md`, earned by trifecta evidence: two worlds (painted's docs site and loops' inquiry article) realize one `Doc` tree as sibling outputs, and the second could reach the publisher only through an `importlib` path hack against a repo checkout. The publisher now ships in the wheel (`painted.publish`), the Inline union settles with `Link` riding the existing ref channel through both projectors, and the node vocabulary graduates through the one-way semver door. Riding along: the render-model laws became executable gates (Milestone 1), `InPlaceRenderer` declares its oversized-frame behavior (RENDER_MODEL §7 Q2b — silent tearing was the one answer the model forbade), and the last `-h` interception asymmetry closes.
