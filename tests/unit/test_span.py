@@ -325,3 +325,73 @@ class TestLineWrap:
     def test_zero_width(self):
         block = Line(spans=(Span("hi"),)).wrap(0)
         assert block.width == 0
+
+
+class TestSpanRef:
+    """Span.ref — the denotation channel at the text-primitive rung.
+
+    A span's ref rides its characters through every Line sink exactly as its
+    style does: ``to_block`` stamps it per cell (a wide glyph's placeholder
+    included), ``wrap`` keeps it on every fragment across line breaks,
+    ``truncate`` keeps it on the cut span, and ``paint`` writes it through the
+    BufferView — where a ref-less span overwrites, the cell un-links.
+    """
+
+    def test_to_block_stamps_ref_on_span_cells_only(self):
+        line = Line(spans=(Span("a "), Span("link", ref="doc:x"), Span(" b")))
+        block = line.to_block(10)
+        assert block.cell_ref(0, 0) is None
+        assert [block.cell_ref(x, 0) for x in range(2, 6)] == ["doc:x"] * 4
+        assert block.cell_ref(6, 0) is None
+        assert block.cell_ref(9, 0) is None  # pad cells denote nothing
+
+    def test_to_block_wide_char_placeholder_carries_ref(self):
+        line = Line(spans=(Span("你", ref="doc:x"),))
+        block = line.to_block(4)
+        assert block.cell_ref(0, 0) == "doc:x"
+        assert block.cell_ref(1, 0) == "doc:x"  # the placeholder cell
+        assert block.cell_ref(2, 0) is None
+
+    def test_to_block_without_refs_allocates_no_grid(self):
+        block = Line(spans=(Span("plain"),)).to_block(5)
+        assert block._refs is None
+
+    def test_wrap_keeps_ref_on_every_fragment(self):
+        # The linked span reflows across two rows; both fragments stay linked.
+        line = Line(spans=(Span("go "), Span("linked words", ref="doc:x")))
+        block = line.wrap(8)
+        assert block.height == 3
+        assert block.cell_ref(0, 0) is None  # "go"
+        assert block.cell_ref(0, 1) == "doc:x"  # "linked"
+        assert block.cell_ref(0, 2) == "doc:x"  # "words"
+        assert block.cell_ref(7, 1) is None  # pad cells denote nothing
+
+    def test_wrap_without_refs_allocates_no_grid(self):
+        block = Line(spans=(Span("hello world"),)).wrap(5)
+        assert block._refs is None
+
+    def test_wrap_ellipsis_marker_denotes_nothing(self):
+        from painted import Wrap
+
+        line = Line(spans=(Span("linked text", ref="doc:x"),))
+        block = line.wrap(6, wrap=Wrap.ELLIPSIS)
+        assert block.height == 1
+        assert block.cell_ref(0, 0) == "doc:x"
+        # The marker is loss evidence, not content: its cell carries no ref.
+        assert block.cell_ref(5, 0) is None
+
+    def test_truncate_keeps_ref_on_cut_span(self):
+        line = Line(spans=(Span("abcdef", ref="doc:x"),))
+        cut = line.truncate(3)
+        assert cut.spans[0].text == "abc"
+        assert cut.spans[0].ref == "doc:x"
+
+    def test_paint_stamps_and_clears(self):
+        buf = Buffer(6, 1)
+        view = buf.region(0, 0, 6, 1)
+        Line(spans=(Span("ab", ref="doc:x"),)).paint(view, 0, 0)
+        assert buf.hit(0, 0) == "doc:x"
+        assert buf.hit(1, 0) == "doc:x"
+        assert buf.hit(2, 0) is None
+        Line(spans=(Span("cd"),)).paint(view, 0, 0)
+        assert buf.hit(0, 0) is None  # a ref-less write un-links
