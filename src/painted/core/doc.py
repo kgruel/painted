@@ -11,7 +11,7 @@ framework (help) and the ``painted docs`` front door both consume it without
 
 This is the *terminal* projector of the doc-IR (`to_block` in the taxonomy of
 ``docs/DOC_IR_DESIGN.md``). The same node tree is also read by the *publisher*
-``to_html`` (``tools/doc_publish.py``) — it emits foreign (web) semantics, while
+``to_html`` (``painted/publish.py``) — it emits foreign (web) semantics, while
 this one lands in painted's own ``Block`` type. Both projectors iterate bodies
 through the one ``visible_body`` walk below, so they cannot disclose
 differently. (``to_markdown`` is sketched in the design doc, not built.)

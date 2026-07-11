@@ -26,7 +26,7 @@ from painted.core.zoom import Zoom
 
 from painted._doc_pages import DOCS
 from tests.helpers import block_to_text
-from tools.doc_publish import published_fidelity, to_html
+from painted.publish import published_fidelity, to_html
 from tools.outputgen import emit_doc_pages
 
 

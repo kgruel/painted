@@ -1,25 +1,27 @@
 """The doc-IR publisher: ``to_html`` — a doc node tree to SEMANTIC html.
 
-The web counterpart of ``doc_lens`` (``painted/core/doc.py``), per the taxonomy
-in ``docs/DOC_IR_DESIGN.md``: a *publisher* emits foreign semantics the renderer
-has no type for (``<section>``/``<h2>``/``<dl>``), so it lives in ``tools/``
-beside ``build_site``/``outputgen``, never in the library. It reads the node
-tree DIRECTLY — rendering chrome to a Block and then Block → HTML would flatten
-an ``<h1>`` into a bold span (the OCR trap). The one node that legitimately
+The web counterpart of ``doc_lens`` (``core/doc.py``), per the taxonomy in
+``docs/DOC_IR_DESIGN.md``: a *publisher* emits foreign semantics the renderer
+has no type for (``<section>``/``<h2>``/``<dl>``). It lives at the package
+root beside ``display.py`` — the terminal-side entry and the foreign-semantics
+side, siblings — because a second world (a consumer publishing its own ``Doc``
+trees) makes the publisher library surface, not site tooling (the 0.10
+amendment; previously ``tools/doc_publish.py``). It reads the node tree
+DIRECTLY — rendering chrome to a Block and then Block → HTML would flatten an
+``<h1>`` into a bold span (the OCR trap). The one node that legitimately
 routes through ``Block → HTML`` (``core/html.py``) is ``Figure``: a
 terminal-faithful island inside a semantic page.
 
 Disclosure is the SAME walk the lens uses — ``visible_body`` / ``capped`` from
 ``core/doc.py`` — so the two sinks cannot disclose differently. ``to_markdown``
-is sketched in the design doc, not built.
+is sketched in the design doc, not built; it joins this module if it lands.
 """
 
 from __future__ import annotations
 
 import html as _html
 
-from painted import render_html
-from painted.core.doc import (
+from .core.doc import (
     Code,
     Defs,
     Doc,
@@ -31,8 +33,11 @@ from painted.core.doc import (
     capped,
     visible_body,
 )
-from painted.core.fidelity import Fidelity
-from painted.core.zoom import Zoom
+from .core.fidelity import Fidelity
+from .core.html import render_html
+from .core.zoom import Zoom
+
+__all__ = ["to_html", "published_fidelity"]
 
 _MAX_HEADING = 6
 

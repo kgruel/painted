@@ -110,8 +110,9 @@ content *locator*, not a render-time denotation (`code-ref-reconcile`,
 resolved 2026-07-05). If the channel takes the word `ref`, leaving
 `Code.ref` in place would recreate the exact two-concepts-one-word
 collision this pass exists to clear — dissolution isn't done until the
-residue is swept, in the same change. Usage is four sites (field,
-`doc_publish.py` reader, two tests), zero consumers. Same alias law:
+residue is swept, in the same change. Usage is four sites (field, the
+publisher reader — now `painted/publish.py` — and two tests), zero
+consumers. Same alias law:
 `ref=` kwarg accepted with a warning through 0.x, removed at 1.0.
 
 ## 4. Ref syntax and the resolver seam

@@ -2,14 +2,15 @@
 
 Content lives here — a neutral module — rather than in the CLI dispatch
 (``_docs_cli.py``) because TWO consumers read the same trees: the terminal front
-door (``painted docs <name>`` via ``doc_lens``) and the site publisher
-(``tools/doc_publish.py`` via ``to_html``). That shared readership is the doc-IR
+door (``painted docs <name>`` via ``doc_lens``) and the publisher
+(``painted/publish.py`` via ``to_html``). That shared readership is the doc-IR
 thesis (``docs/DOC_IR_DESIGN.md``): one tree, projected per medium, so the docs
 cannot drift from the code. A page is authored as code on purpose — its
 ``Figure`` nodes embed live-rendered Blocks from the real API (doc == demo).
 
-Private module: the node vocabulary is still provisional (not in
-``core.__all__``), so the pages that use it stay out of the public surface too.
+Private module: the pages are painted's own documentation content, not API —
+the vocabulary they are written in is public (``core.__all__``, 0.10), the
+authored registry is not.
 """
 
 from __future__ import annotations
