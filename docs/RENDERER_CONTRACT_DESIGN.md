@@ -8,6 +8,12 @@ five refinements); this document is the contract of record for them,
 pending ratification. Evidence base: the loops adoption spike
 (`trace/loops-adoption-spike`, concluded 2026-07-11 — two rounds against
 a real consumer, 9 loops-side audit facts, one round-trip migration).
+Design review 2026-07-12 (codex gpt-5.6-sol, medium): HOLD with 10
+findings, all triaged and amended in place — headline: the offer rule
+collapsed to TTY-or-`None` once the runner's real LIVE-on-pipe behavior
+was checked; the `run_cli` signature mechanics (`fetch=None` +
+`DeclarationError` + `@overload`s) and the capability-fence honesty
+clause (§9) ratified by Kyle in the same round.
 
 Subordinate to `docs/RENDER_MODEL.md` (RATIFIED 2026-07-10), the design of
 record for the render model: this document realizes the model's §3
@@ -118,9 +124,20 @@ run_cli(args, fetch=fetch)                         # neither → transcription (
   deprecation window. It moves from required-positional to
   optional-positional (`render=None`), so existing positional call sites —
   `run_cli(args, render, fetch)` — keep working verbatim. Passing a legacy
-  renderer emits `DeprecationWarning`; `render=` joins `show()` and the
-  0.7 id→ref aliases on the 0.17 pre-declared removal list
-  (`roadmap/api-freeze`).
+  renderer emits `DeprecationWarning`; `render=` joins the pre-declared
+  1.0 removals (`show()`, the 0.7 id→ref aliases), executed in the
+  0.17 → 1.0.0rc freeze window and landing as of 1.0, the semver-MAJOR
+  event (`roadmap/api-freeze`; consistent with PAINT_DESIGN §"removed at
+  1.0").
+- **Signature mechanics.** An optional positional cannot precede a
+  required one, so making `render` optional forces `fetch` to
+  `fetch=None` *at the signature*, with the requiredness moved to
+  construction time: a missing `fetch` raises `DeclarationError`, the
+  established boundary for declaration faults. Published `@overload`s
+  carry the truth for type checkers — one overload per call form
+  (legacy positional `render`; keyword `renderer=`; neither), each with
+  `fetch` required — so no caller sees `fetch` as optional in their
+  IDE even though the runtime signature says `None`.
 - **Passing both raises `DeclarationError`** at parser construction, the
   established collision behavior (Tag collisions, prompt-flag collisions).
 - **No signature inspection.** run_cli never guesses which contract a
@@ -173,11 +190,16 @@ any renderer.
 
 Consequences:
 
-- `transcribe` (today `(subject, zoom, width)`, `views/lens/shape.py`)
-  grows fidelity awareness — the budget facets must be honored, not just
-  depth. `shape_lens` already took this step (`fidelity=` kwarg);
-  whether `transcribe` grows the same kwarg or a thin contract-shaped
-  wrapper adapts it is implementation detail.
+- **A contract-shaped wrapper is mandatory, not optional plumbing.**
+  `transcribe` today is `(subject, zoom, width)` with an *integer* width
+  compared numerically (`views/lens/shape.py`) — it cannot receive the
+  contract's `width=None` directly. The wrapper the default renderer
+  actually is must: map `fidelity.depth` to the zoom argument, thread
+  the budget facets (the machinery already consumes
+  `fidelity.chars`/`fidelity.lines` when given), and render **natural
+  at `width=None`** — so the most basic promised call,
+  `run_cli(args, fetch=fetch)` under a pipe, produces natural-width
+  transcription rather than an error or a fabricated width.
 - The transcription renderer stays **private**. A named public "reference
   renderer" is teachable, but the §6 concept filter applies: it earns a
   public name when a real consumer wants to compose with it — wrap it,
@@ -207,14 +229,21 @@ So normalization lives **at the offer, not at detection**:
   frozen public field's type under every legacy consumer at once.
 - **The offer is computed once at the dispatch seam** — a single private
   `_offered_width(ctx)` (or equivalent computed once in `_dispatch`),
-  never re-derived per delivery path:
+  never re-derived per delivery path — and the rule is **one line**:
 
-| Mode | Offer |
-|------|-------|
-| STATIC, stdout is a TTY | `ctx.width` — the geometry is real |
-| STATIC, piped / file | `None` — natural width; a fallback is not an offer |
-| LIVE (in-place or alt-screen) | `ctx.width` — a live viewport is real by construction |
-| INTERACTIVE | host-managed — outside the static contract; height joins at the 0.13 host rung |
+  > stdout is a TTY → offer `ctx.width`; otherwise → offer `None`.
+  > (INTERACTIVE is host-managed — outside the static contract; height
+  > joins at the 0.13 host rung.)
+
+  The rule is mode-independent because the *delivery reality* is
+  TTY-determined, not mode-determined. STATIC piped prints once, natural.
+  And LIVE forced onto a pipe is **already** a no-viewport path in the
+  runner: the non-ANSI live branch retains only the last Block and prints
+  it once at the end — a cadence choice, not a width allocation. Offering
+  the fallback width there would be exactly the "resolved fallback
+  masquerading as an offer" the model warns against; it offers `None`
+  like every other viewportless delivery. Only a real viewport — a TTY —
+  offers geometry.
 
 This is what "run_cli owns the invariant" cashes out to: no renderer ever
 consults TTY state. The pipe case arrives as `width=None`, blocks render
@@ -222,18 +251,11 @@ natural (the 0.10.1 half of the invariant), and loops' `piped` parameter
 and Spine-1 closure glue delete outright
 (`thread/cli-context-piped-width-none`, resolved 2026-07-12).
 
-Edges, decided without new machinery:
-
-- **`COLUMNS` on a pipe is not an offer.** By the model's provenance rule
-  width is environment-imposed capacity, never intent — env vars don't
-  smuggle a width through a pipe. Real demand for fixed-width piped output
-  would be a declared `--width` flag (user-imposed allocation, a separate
-  future design), not `COLUMNS`.
-- **`--live` forced onto a pipe** is degenerate today (cursor codes into a
-  pipe) and stays out of scope: LIVE offers `ctx.width` unconditionally
-  because the mode's contract *is* "there is a viewport"; forcing it
-  somewhere viewportless is the user's explicit call, and the fallback
-  width is the best available answer.
+One edge, decided without new machinery: **`COLUMNS` on a pipe is not an
+offer.** By the model's provenance rule width is environment-imposed
+capacity, never intent — env vars don't smuggle a width through a pipe.
+Real demand for fixed-width piped output would be a declared `--width`
+flag (user-imposed allocation, a separate future design), not `COLUMNS`.
 
 ## 6. The contract across delivery paths
 
@@ -246,11 +268,24 @@ The same renderer, uninvoked differently:
   LIVE_DELIVERY §10).
 - **LIVE, alt-screen** — `StreamSurface` receives an internally adapted
   closure; the renderer itself stays pure and signature-identical. The
-  adaptation is runner-internal plumbing, never consumer-visible.
-- **INTERACTIVE** — handlers own the mode, as today. A handler may call
-  the renderer directly; the framework does not. Offered *height* — the
-  dual allocation contract's second half — is deliberately absent from
-  this document and joins at the 0.13 host rung.
+  adaptation is runner-internal plumbing, never consumer-visible — with
+  one obligation the current code does not yet meet: the adapter offers
+  the surface's **current buffer width at each frame**, not the
+  once-captured `ctx.width`. `detect_context` runs once; the alt screen
+  resizes. Passing stale width would let `Block.paint` clip silently —
+  the model's resize rule is that a width change re-enters the renderer
+  as changed input, so the offer must track the live geometry.
+- **INTERACTIVE** — handlers own the mode, as today: they receive only
+  `CliContext`, are dispatched before any fetch, and bypass the render
+  path entirely. This document **does not deliver renderer reuse on the
+  interactive rung** — an app that wants its renderer inside a Surface
+  today still captures renderer and fetch itself. That is deliberate
+  deferral, not oversight: "one reference renderer works through
+  `print_block`, `InPlaceRenderer`, `StreamSurface`, *and interactive
+  `Surface`*" is the 0.13 host rung's exit criterion
+  (`roadmap/host-rung`), designed against the streaming consumer app.
+  Offered *height* — the dual allocation contract's second half — is
+  absent from this document for the same reason.
 - **`--json`** — unchanged: the structured fork serializes domain data and
   never invokes the semantic renderer (the Format exception,
   RENDER_MODEL §3). The renderer contract does not touch it.
@@ -286,6 +321,29 @@ run_cli(args, fetch=fetch, renderer=view,
   shape `render` has always had with respect to state.
 - The framework installs the declared schemes (via `use_refs`) around
   render *and* serialization. The timing bug becomes unwritable.
+- **Lifecycle, precisely** — because "around render and serialization" is
+  a per-frame bracket, not a per-process one, and ContextVars do not flow
+  backward between tasks: the framework evaluates the callable against
+  each fetched state and installs the resulting schemes **in the task
+  that renders and serializes**, bracketing that frame's render through
+  its flush. `StreamSurface` fetches in a consumer task and renders in
+  the Surface task; setting the ContextVar at fetch time would never
+  reach the render task, so the schemes travel *with the state* to the
+  rendering side and are installed there. Each new state's schemes
+  replace the previous frame's at its bracket; the final deposit (the
+  scrollback frame a live run leaves behind) serializes under the last
+  state's schemes. States that arrive faster than frames are coalesced
+  exactly as the frames themselves are — schemes belong to the state
+  that actually renders.
+- **Handler paths are excluded, explicitly.** A custom mode handler owns
+  its lifecycle; the framework neither fetches nor renders there, so a
+  callable `refs=` has no state boundary to evaluate against and is
+  **not evaluated** on handler-dispatched modes — the handler owns its
+  own `use_refs` scope, like any direct library user. Static scheme
+  sequences, which need no state, are installed around the handler
+  invocation. The declaration covers the fetch → render → deliver cycle
+  *where the framework owns it* — which is every path except the one a
+  handler explicitly took over.
 - **`use_refs` survives unchanged** as the library seam. Direct users
   (`paint`, `print_block`) own their delivery timing, so context-manager
   scope already works for them. The declaration is sugar-plus-correctness
@@ -315,9 +373,14 @@ def renderer(state: State, fidelity: Fidelity, width: int | None) -> Block:
 ```
 
 The mapping for renderers that consumed decomposed facets: `ctx.zoom` →
-`fidelity.depth` (via the same clamp `ctx.zoom` applies today, if the enum
-is wanted), `visible`/`chars`/`lines` kwargs → the corresponding
+`fidelity.depth`, `visible`/`chars`/`lines` kwargs → the corresponding
 `Fidelity` fields, `piped` → `width is None`, TTY consultation → delete.
+One ownership rule rides the depth mapping: `Fidelity.depth` is an open
+int (a `build_fidelity` hook can hand back any value), while `Zoom` is
+bounded — so **the migrating consumer clamps** when feeding a
+bounded-`Zoom` view, using the same two-sided clamp `ctx.zoom` applies
+today (`Zoom(min(max(fidelity.depth, 0), 3))`). The framework passes
+`fidelity` through untouched; no silent clamping happens at the boundary.
 
 **Declaration grammar over shared parsing** — recorded as a position: the
 spike found `cli/fidelity.py`'s claimed siftd mirror drifted on every axis
@@ -347,10 +410,21 @@ subsystem.
 What this document commits to now, so 0.12 composes instead of amending:
 
 - **The signature stays closed at three positionals.** Capabilities arrive
-  non-positionally — ambiently, or by a mechanism 0.12 decides — never as
-  a fourth parameter. The spike found zero lenses consuming capability
-  facts positionally; the two real consumers (`raymarch`, `starmap`) read
-  ambient state.
+  non-positionally — by a mechanism 0.12 decides; every existing
+  presentation channel (palette, icons, borders, vocabularies) is
+  ambient, so ambient is the natural landing — never as a fourth
+  parameter. The spike found zero lenses consuming capability facts
+  positionally.
+- **The sequencing consequence, stated plainly:** the two real capability
+  consumers (`raymarch`, `starmap`) read `ctx.use_ansi` — legacy-context
+  state that today's ambient mechanisms cannot express (color carrier,
+  link delivery). They therefore **cannot migrate to the three-parameter
+  contract in 0.11 and stay on legacy `render=` until 0.12 ships the
+  vocabulary.** This is deliberate: migrating them through a closure over
+  host context would re-create the adapter glue this contract exists to
+  dissolve. If 0.12's design finds a non-positional mechanism
+  insufficient, that is an **explicit amendment against this section** —
+  not silent drift.
 - **The fences hold** (per `roadmap/capability-vocabulary`): the
   vocabulary covers only what the two existing consumers demand, and it
   must not swallow the two existing capability *mechanisms* — ambient
@@ -369,5 +443,6 @@ What this document commits to now, so 0.12 composes instead of amending:
   consumer app.
 - **`InPlaceRenderer` rename** — §3; recorded on the 0.17 removal list,
   name decided at rename time.
-- **`render=` removal** — 0.17, alongside `show()` and the id→ref aliases;
-  pre-declared here.
+- **`render=` removal** — pre-declared here; executed in the 0.17 → rc
+  freeze window alongside `show()` and the id→ref aliases, landing as of
+  1.0 (the semver-MAJOR event).
