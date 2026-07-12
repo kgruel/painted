@@ -13,7 +13,15 @@ findings, all triaged and amended in place — headline: the offer rule
 collapsed to TTY-or-`None` once the runner's real LIVE-on-pipe behavior
 was checked; the `run_cli` signature mechanics (`fetch=None` +
 `DeclarationError` + `@overload`s) and the capability-fence honesty
-clause (§9) ratified by Kyle in the same round.
+clause (§9) ratified by Kyle in the same round. Review round 2, same
+day: 2 P1 + 1 P2 plus a challenge to the signature itself
+(`renderer(data, RenderRequest)`) — the challenge was argued down on the
+concept filter, the accretion dynamic, and declared-acceptance grounds
+(the reviewer conceded and moved HOLD → APPROVE; the rejection is
+recorded in §3); the findings resolved as: callable `refs=` evaluation
+after fetch / before render, faulting `ContractError` on the render path
+(§7); `transcribe` helpers adopt `width: int | None` (§4); the Surface
+frame loop owns one ref scope spanning render through flush (§7).
 
 Subordinate to `docs/RENDER_MODEL.md` (RATIFIED 2026-07-10), the design of
 record for the render model: this document realizes the model's §3
@@ -164,6 +172,31 @@ the spike's evidence points the other way: the adapters *dissolve* under
 the three-parameter contract; there is nothing left for a context object
 to carry.
 
+**Rejected: `renderer(data, RenderRequest)`** — recorded with its
+strongest case, because it is the alternative every future reader will
+reach for. A narrow frozen request object (`fidelity` + `allocation` +
+`capabilities`) would give future renderer inputs an additive home, spare
+the contract a signature transition when height or capabilities arrive,
+and make renderer inputs explicit to construct in tests. It is rejected
+on three grounds. *The concept filter*: the spike found no repeated
+request-object adaptation across real consumers — existing adapters
+dissolve into the three explicit inputs; admitting the type now would be
+speculative, the exact case §6 was ratified to refuse. *The accretion
+dynamic*: a carrier object at a boundary is where renderer inputs widen
+through silently ignorable field additions — `CliContext` is this
+document's own cautionary tale. At this boundary, new inputs require
+visible amendment, and offered dimensions require **declared acceptance**:
+a renderer that silently ignores `request.allocation.height` while the
+host believes it accepted H is the masquerade law 6 forbids, so the
+request object's extensibility is specifically the dishonest kind.
+*The lifecycle misdiagnosis*: the ambient-state risk cited against
+capabilities belongs to refs (serialization-time, crossing a boundary the
+renderer cannot bracket — §7), not to render-time ambient inputs, which
+are the shipped, law-1-pinned pattern (palette, icons, borders,
+vocabularies). If repeated adaptation in multiple real consumers later
+meets the concept filter, a request type may be admitted through the
+normal deprecation process — the option is gated, not foreclosed.
+
 ## 4. The default — transcription is a renderer
 
 With neither `render=` nor `renderer=`, run_cli renders by
@@ -190,15 +223,20 @@ any renderer.
 
 Consequences:
 
-- **A contract-shaped wrapper is mandatory, not optional plumbing.**
+- **A contract-shaped wrapper is mandatory — and it is not sufficient.**
   `transcribe` today is `(subject, zoom, width)` with an *integer* width
-  compared numerically (`views/lens/shape.py`) — it cannot receive the
-  contract's `width=None` directly. The wrapper the default renderer
-  actually is must: map `fidelity.depth` to the zoom argument, thread
-  the budget facets (the machinery already consumes
-  `fidelity.chars`/`fidelity.lines` when given), and render **natural
-  at `width=None`** — so the most basic promised call,
-  `run_cli(args, fetch=fetch)` under a pipe, produces natural-width
+  compared numerically throughout its recursive helpers
+  (`views/lens/shape.py`) — no wrapper can synthesize natural sizing
+  around an implementation that requires a number. Two changes, with
+  distinct owners: **the implementation change** — `transcribe` and its
+  recursive helpers adopt `width: int | None`, propagating `None` as
+  unconstrained natural sizing (not new contract: the 0.10.1
+  width-`None`-natural contract extended to one more implementation);
+  **the wrapper** — performs fidelity adaptation only: maps
+  `fidelity.depth` to the zoom argument and threads the budget facets
+  (the machinery already consumes `fidelity.chars`/`fidelity.lines` when
+  given). Together they make the most basic promised call,
+  `run_cli(args, fetch=fetch)` under a pipe, produce natural-width
   transcription rather than an error or a fabricated width.
 - The transcription renderer stays **private**. A named public "reference
   renderer" is teachable, but the §6 concept filter applies: it earns a
@@ -329,12 +367,30 @@ run_cli(args, fetch=fetch, renderer=view,
   its flush. `StreamSurface` fetches in a consumer task and renders in
   the Surface task; setting the ContextVar at fetch time would never
   reach the render task, so the schemes travel *with the state* to the
-  rendering side and are installed there. Each new state's schemes
-  replace the previous frame's at its bracket; the final deposit (the
-  scrollback frame a live run leaves behind) serializes under the last
-  state's schemes. States that arrive faster than frames are coalesced
-  exactly as the frames themselves are — schemes belong to the state
-  that actually renders.
+  rendering side and are installed there. And because render and flush
+  are *separate callbacks* on the Surface, a `with use_refs(...)` inside
+  the render callback closes too early — **the frame loop owns one scope
+  per frame**, entered before render, exited after flush, with guaranteed
+  release on success, exception, cancellation, resize, and quit. Each new
+  state's schemes replace the previous frame's at its bracket; the final
+  deposit (the scrollback frame a live run leaves behind) serializes
+  under the last state's schemes. States that arrive faster than frames
+  are coalesced exactly as the frames themselves are — schemes belong to
+  the state that actually renders.
+- **Evaluation timing and fault classification.** The static sequence
+  form is validated at parser construction and faults as
+  `DeclarationError` — the starts-clean-never-fires contract
+  (ERRORS_DESIGN). The callable form *cannot* start clean: it is
+  evaluated **after a successful fetch and before the renderer is
+  invoked**, and that evaluation stage **belongs to the render phase** —
+  a failing evaluation (or an invalid result, e.g. duplicate schemes)
+  raises `ContractError` and follows the render-error path: rendered
+  error block, render exit code. Never the fetch path — an
+  implementation that evaluates schemes inside `_do_fetch` and reports a
+  fetch failure has misclassified an app-declaration fault as a data
+  fault. This is the same rule that pulled `resolve(NaN)` and
+  undeclared-vocabulary lookups to `ContractError`: faults that fire
+  mid-cycle are contract-time, not declaration-time.
 - **Handler paths are excluded, explicitly.** A custom mode handler owns
   its lifecycle; the framework neither fetches nor renders there, so a
   callable `refs=` has no state boundary to evaluate against and is
