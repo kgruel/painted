@@ -197,6 +197,7 @@ docs/
   REFS_DESIGN.md      # Refs: the denotation channel's readers — id→ref naming, RefScheme resolver seam, OSC 8 + HTML anchors (implemented)
   PAINT_DESIGN.md     # paint(): the single entry, transcription base case (declared-not-invented, recursive + wide), closed kwarg surface, show() warn-and-narrow alias (implemented)
   PROMPTS_DESIGN.md   # Inline prompts: the parser's fourth reflection — stdin-TTY gate, /dev/tty refusal, prompt fidelity ladder, declared answers (implemented)
+  RENDERER_CONTRACT_DESIGN.md  # The framework-seam renderer boundary: (data, fidelity, width) → Block, renderer= seam, transcription default, width-at-the-offer, refs declaration (DRAFT — 0.11/M4)
   RENDER_MODEL.md     # The umbrella: semantic-renderer ladder, dual allocation contract, the eight laws, the interaction boundary (RATIFIED 2026-07-10 — design of record; amendments go against its laws)
   RENDER_MODEL_AUDIT.md  # Full evidence tables for the render-model law audit — commit-pinned, reproducible (companion to RENDER_MODEL.md §8)
 ```
