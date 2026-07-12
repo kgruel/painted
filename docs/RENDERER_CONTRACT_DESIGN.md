@@ -8,37 +8,12 @@ five refinements); this document is the contract of record for them,
 pending ratification. Evidence base: the loops adoption spike
 (`trace/loops-adoption-spike`, concluded 2026-07-11 — two rounds against
 a real consumer, 9 loops-side audit facts, one round-trip migration).
-Design review 2026-07-12 (codex gpt-5.6-sol, medium): HOLD with 10
-findings, all triaged and amended in place — headline: the offer rule
-collapsed to TTY-or-`None` once the runner's real LIVE-on-pipe behavior
-was checked; the `run_cli` signature mechanics (`fetch=None` +
-`DeclarationError` + `@overload`s) and the capability-fence honesty
-clause (§9) ratified by Kyle in the same round. Review round 2, same
-day: 2 P1 + 1 P2 plus a challenge to the signature itself
-(`renderer(data, RenderRequest)`) — the challenge was argued down on the
-concept filter, the accretion dynamic, and declared-acceptance grounds
-(the reviewer conceded and moved HOLD → APPROVE; the rejection is
-recorded in §3); the findings resolved as: callable `refs=` evaluation
-after fetch / before render, faulting `ContractError` on the render path
-(§7); `transcribe` helpers adopt `width: int | None` (§4); the Surface
-frame loop owns one ref scope spanning render through flush (§7).
-Review round 3, 2026-07-12 (multi-agent adversarial pass — six
-dimensions, three-lens verification per finding, 27 confirmed): HOLD →
-amended in place, Kyle's rulings. Headline: the declaration is spelled
-**`ref_schemes=`** (the `refs=` spelling collided with `Block(refs=)` —
-§7); all render-path declaration validation moves to **runner
-construction** (the empty-argv fast path never builds a parser — §3);
-`tags=` without a renderer faults at construction (transcription cannot
-consume `visible` — §4); the offer is computed **per offer** — live
-hosts re-offer current geometry each frame (§§5–6); round 2's
-`ContractError` ruling splits in two (§7: a raising callable propagates
-unwrapped down the render-error path; an invalid result faults
-`ContractError` *before* `use_refs`); the `render=` `DeprecationWarning`
-is deferred to 0.12 (§3); `Renderer` lands in `painted.core` (§3);
-`shape_lens` widens with the shared core (§4); tests-and-gates and
-compatibility close-outs join the document (§§11–12); and a
-citation-precision pass realigned every RENDER_MODEL pointer with the
-ratified text.
+Reviewed four times on 2026-07-12 — two codex rounds, a multi-agent
+adversarial pass (six dimensions, three-lens verification per finding,
+27 confirmed findings), and a close-out — every finding ruled by Kyle
+and amended in place; final verdict **APPROVE with minor edits**
+(applied same day). The round-by-round record, including each round's
+headline rulings, is the appendix.
 
 Subordinate to `docs/RENDER_MODEL.md` (RATIFIED 2026-07-10), the design of
 record for the render model: this document realizes the model's §2
@@ -447,7 +422,8 @@ the **declaration surface**:
 
 ```python
 run_cli(args, fetch=fetch, renderer=view,
-        ref_schemes=[FactScheme(...), TickScheme(...)])  # static schemes
+        ref_schemes=[RefScheme("fact", resolve_fact),
+                     RefScheme("tick", resolve_tick)])   # static schemes
 run_cli(args, fetch=fetch, renderer=view,
         ref_schemes=lambda state: schemes_for(state))    # schemes built from state
 ```
@@ -500,11 +476,11 @@ run_cli(args, fetch=fetch, renderer=view,
   evaluated **after a successful fetch and before the renderer is
   invoked**, and that evaluation stage **belongs to the render phase**.
   Two distinct fault rules, because two different parties fault. If
-  **the callable itself raises**, the application exception propagates
-  *unwrapped*, classified through the render-error path — wrapping
-  would misattribute an app fault as painted's (REFS_DESIGN's
-  misattribution principle for the resolver seam, applied to its
-  sibling). If the callable **returns an invalid collection** — a
+  **the callable itself raises**, its application exception enters the
+  render-error path *unchanged* — painted does not wrap it in
+  `ContractError`; wrapping would misattribute an app fault as painted's
+  (REFS_DESIGN's misattribution principle for the resolver seam, applied
+  to its sibling). If the callable **returns an invalid collection** — a
   non-`RefScheme` element, duplicate names, any registry-shape
   violation — **the framework validates the result itself, before any
   `use_refs` call, and raises `ContractError`**: `use_refs`'s internal
@@ -717,10 +693,10 @@ prose alone will not secure them. The 0.11 cut lands with:
 - **Ref schemes** — static and callable forms; ambient preservation when
   undeclared; `ref_schemes=[]` disables ambient resolution within the
   cycle; the prior ambient state restored at bracket exit.
-- **Fault classification** — a raising callable propagates the app
-  exception unwrapped down the render-error path; an invalid result
-  raises `ContractError`, with no `use_refs` `DeclarationError` escaping
-  mid-cycle.
+- **Fault classification** — a raising callable's app exception enters
+  the render-error path unchanged (never wrapped in `ContractError`); an
+  invalid result raises `ContractError`, with no `use_refs`
+  `DeclarationError` escaping mid-cycle.
 - **Delivery paths** — static, in-place live, alt-screen live (the final
   deposit serializes under the last state's schemes), handler-dispatched
   (static schemes installed, callable not evaluated), and `--json`
@@ -757,12 +733,60 @@ internal docs, demos, and tests in the change that lands the new word):
 - REFS_DESIGN §4 gains a pointer to the framework-tier `ref_schemes=`
   declaration (this document, §7).
 
-**Build sequence.** S1 — signature, overloads, construction validation
-(the seam alone, no behavior change). S2 — the offer seam
-(`_offered_width`, per-frame offers in both live hosts). S3 — the
-transcription default (the `width: int | None` widening through the
-shared core, the wrapper, the `tags=` fence). S4 — `ref_schemes=`
-(replace semantics, fault classification, the frame bracket). S5 — the
-internal flip and docs residue. Each slice lands green through the full
-gate; S3 verifies the appearance and outputgen panels stay byte-stable
-(the widening adds an arm; existing `int` calls are untouched).
+**Build sequence.** S1 — the runtime signature mechanics and
+construction validation, with the `@overload`s for the two
+authored-renderer forms (legacy positional; keyword `renderer=`) — no
+behavior change; the *neither* form stays unpublished until its
+behavior exists. S2 — the offer seam (`_offered_width`, per-frame
+offers in both live hosts). S3 — the transcription default (the
+`width: int | None` widening through the shared core, the wrapper, the
+`tags=` fence), landing together with the *neither* overload — the call
+form is published the moment it behaves. S4 — `ref_schemes=` (replace
+semantics, fault classification, the frame bracket). S5 — the internal
+flip and docs residue. Each slice lands green through the full gate; S3
+verifies the appearance and outputgen panels stay byte-stable (the
+widening adds an arm; existing `int` calls are untouched).
+
+## Appendix — review record
+
+Four passes, all 2026-07-12, each triaged and amended in place:
+
+**Round 1 (codex gpt-5.6-sol, medium): HOLD, 10 findings.** Headline:
+the offer rule collapsed to TTY-or-`None` once the runner's real
+LIVE-on-pipe behavior was checked; the `run_cli` signature mechanics
+(`fetch=None` + `DeclarationError` + `@overload`s) and the
+capability-fence honesty clause (§9) ratified by Kyle in the same round.
+
+**Round 2 (same reviewer): 2 P1 + 1 P2, plus a challenge to the
+signature itself** (`renderer(data, RenderRequest)`) — the challenge
+was argued down on the concept filter, the accretion dynamic, and
+declared-acceptance grounds (the reviewer conceded and moved HOLD →
+APPROVE; the rejection is recorded in §3). The findings resolved as:
+callable scheme evaluation after fetch / before render, faulting on the
+render path (§7); `transcribe` helpers adopt `width: int | None` (§4);
+the Surface frame loop owns one ref scope spanning render through flush
+(§7).
+
+**Round 3 (multi-agent adversarial pass — six dimensions, three-lens
+verification per finding, 27 confirmed findings): HOLD → amended,
+Kyle's rulings.** Headline: the declaration is spelled `ref_schemes=`
+(the `refs=` spelling collided with `Block(refs=)` — §7); all
+render-path declaration validation moves to runner construction (the
+empty-argv fast path never builds a parser — §3); `tags=` without a
+renderer faults at construction (transcription cannot consume
+`visible` — §4); the offer is computed per offer — live hosts re-offer
+current geometry each frame (§§5–6); round 2's fault ruling splits in
+two (§7: a raising callable's exception enters the render-error path
+unchanged; an invalid result faults `ContractError` *before*
+`use_refs`); the `render=` `DeprecationWarning` is deferred to 0.12
+(§3); `Renderer` lands in `painted.core` (§3); `shape_lens` widens with
+the shared core (§4); tests-and-gates and compatibility close-outs
+joined the document (§§11–12); a citation-precision pass realigned
+every RENDER_MODEL pointer with the ratified text; and the loops
+delete-test evidence was commit-pinned (`afe82c5`) after surviving
+direct adversarial attack.
+
+**Close-out (Kyle): APPROVE with minor edits, applied.** The S1/S3
+overload sequencing (§12), the render-error wording for a raising
+callable (§7), this ledger's compression out of the header, and the §7
+example switched to the public `RefScheme` constructor.
