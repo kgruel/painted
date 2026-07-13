@@ -1,11 +1,10 @@
 # The renderer contract — one boundary, every delivery
 
-**Status: DRAFT 2026-07-12, proposed** — the 0.11 milestone (M4), the first
+**Status: RATIFIED 2026-07-12 (Kyle)** — the 0.11 milestone (M4), the first
 design produced through the full trace → design pipeline
 (`practice/work-pipeline-kinds`). Five sub-decisions were ratified in
 deliberation 2026-07-11/12 (store: `design/rendering/renderer-contract`,
-five refinements); this document is the contract of record for them,
-pending ratification. Evidence base: the loops adoption spike
+five refinements); this document is the contract of record for them. Evidence base: the loops adoption spike
 (`trace/loops-adoption-spike`, concluded 2026-07-11 — two rounds against
 a real consumer, 9 loops-side audit facts, one round-trip migration).
 Reviewed four times on 2026-07-12 — two codex rounds, a multi-agent
