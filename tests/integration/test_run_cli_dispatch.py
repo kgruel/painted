@@ -287,11 +287,12 @@ class TestRendererContractDispatch:
         assert "data=HELLO" in out
         assert "depth=1" in out
 
-    def test_renderer_receives_fidelity_and_width_intact(self):
+    def test_renderer_receives_fidelity_intact_and_offered_width_forwarded(self):
         """The compiled Fidelity is passed *whole* — the same object, never
-        decomposed and rebuilt — and the offered width by value. Driven through
-        the internal ``_render`` seam so both are asserted against the exact
-        ``ctx`` the host built."""
+        decomposed and rebuilt — and the ``_render`` seam forwards whatever
+        ``offered`` width the caller resolved, by value. The offer *rule*
+        (TTY-vs-None) is ``_offered_width``'s job, tested separately; this
+        pins that the seam does not re-derive it."""
         seen: dict = {}
 
         def rnd(data, fidelity, width):
@@ -308,9 +309,9 @@ class TestRendererContractDispatch:
             width=73,
             height=24,
         )
-        runner._render(ctx, "d")
+        runner._render(ctx, "d", 51)  # an explicit offer, distinct from ctx.width
         assert seen["fidelity"] is ctx.fidelity  # intact — the same object, not a copy
-        assert seen["width"] == ctx.width == 73  # offered width, by value (S1: ctx.width)
+        assert seen["width"] == 51  # forwarded verbatim, not re-derived from ctx
 
     def test_legacy_positional_form_unchanged(self, capsys, monkeypatch):
         monkeypatch.setattr("sys.stdout.isatty", lambda: False)
@@ -341,6 +342,125 @@ class TestRendererContractDispatch:
         monkeypatch.setattr("sys.stdout.isatty", lambda: False)
         run_cli(["--plain"], render=_legacy, fetch=lambda: "x")
         assert not [w for w in recwarn.list if issubclass(w.category, DeprecationWarning)]
+
+
+def _ctx(
+    *,
+    is_tty: bool,
+    width: int,
+    use_ansi: bool | None = None,
+    mode: OutputMode = OutputMode.STATIC,
+) -> CliContext:
+    return CliContext(
+        fidelity=Fidelity(depth=int(Zoom.SUMMARY)),
+        mode=mode,
+        use_ansi=is_tty if use_ansi is None else use_ansi,
+        is_tty=is_tty,
+        width=width,
+        height=24,
+    )
+
+
+class TestOfferSeam:
+    """The width offer rule (§5–6, S2). ``_offered_width`` is the one place the
+    rule lives: stdout is a real viewport (a TTY) → offer geometry; any
+    viewportless destination → offer None (natural). The live hosts re-offer
+    *current* geometry per frame, so a mid-run resize re-enters the renderer as
+    changed input."""
+
+    def test_offered_width_offers_geometry_on_a_tty(self):
+        ctx = _ctx(is_tty=True, width=80)
+        # Default geometry is ctx.width (one-shot dispatch)…
+        assert CliRunner._offered_width(ctx) == 80
+        # …and a live path may override with the frame's current width.
+        assert CliRunner._offered_width(ctx, 120) == 120
+
+    def test_offered_width_offers_none_off_a_tty(self):
+        ctx = _ctx(is_tty=False, width=80)
+        assert CliRunner._offered_width(ctx) is None
+        # The rule gates on the TTY, not the geometry: an offered frame width
+        # is still discarded for None under a pipe.
+        assert CliRunner._offered_width(ctx, 120) is None
+
+    def test_plain_at_a_tty_still_offers_geometry(self):
+        """Format is orthogonal to the offer: --plain drops ANSI, not the
+        viewport. A real TTY's columns are real, so geometry is still offered
+        (the gate is is_tty, not use_ansi) — end to end through static."""
+        forced_plain_tty = _ctx(is_tty=True, width=88, use_ansi=False)
+        assert CliRunner._offered_width(forced_plain_tty) == 88
+
+        seen: dict = {}
+
+        def rnd(data, fidelity, width):
+            seen["width"] = width
+            return Block.text("x", Style())
+
+        CliRunner(renderer=rnd, fetch=lambda: "d")._run_static(forced_plain_tty)
+        assert seen["width"] == 88
+
+    def test_static_pipe_offers_none_to_the_renderer(self):
+        """The pipe case arrives as width=None — natural sizing, no fabricated
+        fallback. Driven through the real static delivery path."""
+        seen: dict = {}
+
+        def rnd(data, fidelity, width):
+            seen["width"] = width
+            return Block.text("x", Style())
+
+        CliRunner(renderer=rnd, fetch=lambda: "d")._run_static(_ctx(is_tty=False, width=80))
+        assert seen["width"] is None
+
+    def test_static_tty_offers_ctx_width_to_the_renderer(self):
+        seen: dict = {}
+
+        def rnd(data, fidelity, width):
+            seen["width"] = width
+            return Block.text("x", Style())
+
+        CliRunner(renderer=rnd, fetch=lambda: "d")._run_static(_ctx(is_tty=True, width=97))
+        assert seen["width"] == 97
+
+    def test_inplace_live_reoffers_current_geometry_per_frame(self, monkeypatch):
+        """The in-place host owns a live viewport: each frame re-reads terminal
+        geometry, so a mid-run resize changes the next offer (§6)."""
+
+        class StubRenderer:
+            def __init__(self, *args, **kwargs): ...
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return None
+
+            def render(self, block: Block) -> None: ...
+            def finalize(self) -> None: ...
+
+        import painted.inplace as inplace_mod
+
+        monkeypatch.setattr(inplace_mod, "InPlaceRenderer", StubRenderer)
+        # Terminal resizes between the two frames: 30 cols, then 50.
+        cols = iter([30, 50])
+        import os
+
+        monkeypatch.setattr(
+            "shutil.get_terminal_size",
+            lambda *a, **k: os.terminal_size((next(cols), 24)),
+        )
+
+        offered: list[int | None] = []
+
+        def rnd(data, fidelity, width):
+            offered.append(width)
+            return Block.text(str(data), Style())
+
+        async def fake_stream():
+            yield "a"
+            yield "b"
+
+        runner = CliRunner(renderer=rnd, fetch=lambda: "unused", fetch_stream=fake_stream)
+        # LIVE on a TTY viewport (use_ansi True, is_tty True) → in-place ANSI branch.
+        runner._dispatch(_ctx(is_tty=True, width=999, use_ansi=True, mode=OutputMode.LIVE))
+        assert offered == [30, 50]  # the resize re-entered as a changed offer
 
 
 class TestRunCliHelp:

@@ -352,25 +352,60 @@ class CliRunner(Generic[T]):
         assert self.fetch is not None  # construction guarantees fetch is present
         return self.fetch(ctx) if self._wants_ctx(self.fetch) else self.fetch()
 
-    def _render(self, ctx: CliContext, state: T) -> Block:
+    @staticmethod
+    def _offered_width(ctx: CliContext, geometry: int | None = None) -> int | None:
+        """The offered allocation (§5) — the single place the offer rule lives.
+
+        The rule is one line, and gates on the *viewport*, not on ANSI-ness:
+        stdout is a real viewport (a TTY) → offer its geometry; a viewportless
+        destination (a pipe, a file redirect) → offer ``None``, so blocks
+        render at natural width (the 0.10.1 half of the invariant). Format is
+        orthogonal — ``--plain`` at a real TTY still offers geometry (the
+        terminal's columns are real; the user only asked to drop ANSI); only
+        losing the viewport yields ``None``. No renderer ever consults TTY
+        state — the pipe case arrives as ``width=None``, not a fabricated
+        fallback.
+
+        ``geometry`` is *which* width is current at the moment of the offer,
+        never *whether* a TTY gets one: it defaults to ``ctx.width`` (the
+        known geometry at one-shot dispatch) and the live paths pass the
+        frame's current width instead — the freshly-read terminal columns
+        in-place, the surface buffer's width on the alt screen. A mid-run
+        resize therefore changes the next offer without re-implementing the
+        rule per delivery path (§6).
+        """
+        known = ctx.width if geometry is None else geometry
+        return known if ctx.is_tty else None
+
+    @staticmethod
+    def _current_columns() -> int:
+        """The terminal's current column count, re-read per live frame.
+
+        The width sibling of ``InPlaceRenderer._viewport_rows``: both re-read
+        ambient geometry (``shutil.get_terminal_size``) each frame so a
+        mid-run resize re-enters the renderer as changed input (§6). Gated by
+        the offer rule — on a non-TTY the read is discarded for ``None``.
+        """
+        return shutil.get_terminal_size().columns
+
+    def _render(self, ctx: CliContext, state: T, offered: int | None) -> Block:
         """Produce the content Block, dispatching the declared render contract.
 
         The one seam both delivery-path renders funnel through, so the two
         contracts differ in exactly one place. ``renderer=`` gets the three
-        inputs (§1) — state, the compiled Fidelity intact, and the offered
-        width; ``render=`` gets the legacy whole context. Construction
+        inputs (§1) — state, the compiled Fidelity intact, and the ``offered``
+        width the caller resolved through ``_offered_width``; ``render=`` gets
+        the legacy whole context and reads ``ctx.width`` itself (the known
+        geometry stays ``int`` through the migration window, §5). Construction
         guarantees exactly one is set.
 
-        The width offered here is ``ctx.width`` today. S2 introduces the offer
-        rule (``None`` under a pipe): for the static and in-place paths — where
-        the offer derives from the one-shot ``ctx`` — it lands as a single
-        ``_offered_width(ctx)`` computed at this seam. The alt-screen path is not
-        that: its per-frame width lives in ``StreamSurface``'s buffer, not
-        ``ctx``, so ``_offered_width(ctx)`` cannot supply it — that offer is S2
-        adapter plumbing inside the surface, not a swap here.
+        The offer is computed *per offer* at the caller, not here: static and
+        non-streaming callers pass ``_offered_width(ctx)``; the in-place live
+        loop re-reads geometry each frame; the alt-screen adapter passes the
+        surface buffer's current width (§6). This seam only forwards it.
         """
         if self.renderer is not None:
-            return self.renderer(state, ctx.fidelity, ctx.width)
+            return self.renderer(state, ctx.fidelity, offered)
         assert self.render is not None  # exactly one of render/renderer, per construction
         return self.render(ctx, state)
 
@@ -450,7 +485,7 @@ class CliRunner(Generic[T]):
             return 1
 
         try:
-            block = self._render(ctx, state)
+            block = self._render(ctx, state, self._offered_width(ctx))
         except Exception as exc:
             self._emit_error(ctx, self._render_error_block(ctx, exc), exc)
             return 2
@@ -482,7 +517,12 @@ class CliRunner(Generic[T]):
                     try:
                         async for state in self._stream_iter(ctx):
                             try:
-                                last_block = self._render(ctx, state)
+                                # Viewportless: this branch retains only the
+                                # last Block and prints it once at the end — a
+                                # cadence choice, not a per-frame viewport. On a
+                                # pipe the offer is None; on a forced-plain TTY
+                                # it is the known geometry, like static (§5).
+                                last_block = self._render(ctx, state, self._offered_width(ctx))
                             except Exception as exc:
                                 self._emit_error(
                                     ctx, self._render_error_block(ctx, exc), exc, use_ansi=False
@@ -516,7 +556,13 @@ class CliRunner(Generic[T]):
                             if meter is not None:
                                 meter.start()
                             try:
-                                block = self._render(ctx, state)
+                                # Re-offer current geometry each frame: the
+                                # in-place host owns a live viewport, so a
+                                # mid-run resize re-enters the renderer as
+                                # changed input (§6).
+                                block = self._render(
+                                    ctx, state, self._offered_width(ctx, self._current_columns())
+                                )
                             except PromptContractError:
                                 # A refusal never renders into the live region —
                                 # propagate to the outer finalize + the seam.
@@ -564,7 +610,7 @@ class CliRunner(Generic[T]):
             return 1
 
         try:
-            block = self._render(ctx, state)
+            block = self._render(ctx, state, self._offered_width(ctx))
         except Exception as exc:
             self._emit_error(ctx, self._render_error_block(ctx, exc), exc)
             return 2
@@ -587,9 +633,18 @@ class CliRunner(Generic[T]):
         from .stream_surface import StreamSurface
 
         assert self.fetch_stream is not None  # guarded by the caller
+
+        # The surface's per-frame width lives in its buffer, not ``ctx`` —
+        # ``detect_context`` ran once, the alt screen resizes. The adapter is
+        # runner-internal plumbing (§6): it applies the one offer rule to the
+        # buffer's *current* geometry each frame, so the renderer itself stays
+        # pure and signature-identical. Stale ``ctx.width`` would let
+        # ``Block.paint`` clip silently after a resize.
+        def offer_frame(state: T, geometry: int) -> Block:
+            return self._render(ctx, state, self._offered_width(ctx, geometry))
+
         surface = StreamSurface(
-            ctx=ctx,
-            render=self._render,
+            render=offer_frame,
             fetch_stream=lambda: self._stream_iter(ctx),
             live_meter=self.live_meter,
         )
@@ -621,7 +676,14 @@ class CliRunner(Generic[T]):
 
         if surface.last_state is not None:
             try:
-                block = self._render(ctx, surface.last_state)
+                # The deposit is itself an offer — the runner's final print to
+                # the normal screen (a TTY; the surface path was gated on it).
+                # It re-reads *current* columns like every other offer (§§5–6):
+                # a resize during the alt-screen session moved the geometry, so
+                # detection-time ctx.width would deposit at a stale width.
+                block = self._render(
+                    ctx, surface.last_state, self._offered_width(ctx, self._current_columns())
+                )
             except PromptContractError:
                 raise
             except Exception as exc:

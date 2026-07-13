@@ -9,7 +9,10 @@ relative addressing suffers when the viewport moves.
 
 It hosts the app's ``fetch_stream()`` as a task alongside the ``Surface``
 render loop: each yielded state is stored and triggers a repaint of
-``render(ctx, state)`` at (0, 0). The *stream* paces state (it already
+``render(state, buffer_width)`` at (0, 0) — the render callback is a
+runner-internal adapted closure that offers the buffer's *current* width
+each frame (the renderer contract's per-frame offer, RENDERER_CONTRACT
+§6), never a once-captured context width. The *stream* paces state (it already
 sleeps); ``fps_cap`` only bounds repaint. The final frame is deposited to
 the normal screen by the caller (``CliRunner._run_live``) after the alt
 screen is torn down — smoothness of the alt screen, scrollback persistence
@@ -30,7 +33,6 @@ if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Callable
 
     from ..core.block import Block
-    from .types import CliContext
 
 T = TypeVar("T")
 
@@ -50,14 +52,15 @@ class StreamSurface(Surface, Generic[T]):
     def __init__(
         self,
         *,
-        ctx: CliContext,
-        render: Callable[[CliContext, T], Block],
+        render: Callable[[T, int], Block],
         fetch_stream: Callable[[], AsyncIterator[T]],
         fps_cap: int = 60,
         live_meter: bool = False,
     ) -> None:
         super().__init__(fps_cap=fps_cap, on_start=self._spawn, on_stop=self._stop)
-        self._ctx = ctx
+        # The render callback is a runner-adapted closure taking the frame's
+        # current width (§6), not (ctx, state): the offer rule and the app
+        # renderer both live behind it, so the surface only supplies geometry.
         self._render = render
         self._fetch_stream = fetch_stream
         self._state: T | None = None
@@ -133,7 +136,9 @@ class StreamSurface(Surface, Generic[T]):
         if self._live_meter:
             self.meter.start()
         try:
-            block = self._render(self._ctx, self._state)
+            # Offer the buffer's current width — a resize re-created _buf at the
+            # new geometry, so this frame's offer tracks it (§6).
+            block = self._render(self._state, self._buf.width)
         except Exception as exc:
             self.error = exc
             self.error_kind = "render"

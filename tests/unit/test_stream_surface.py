@@ -22,6 +22,7 @@ exercised directly via asyncio.run, mirroring tests/unit/test_live_stream.py.
 from __future__ import annotations
 
 import asyncio
+import os
 
 import pytest
 
@@ -38,7 +39,17 @@ from tests.helpers import static_ctx
 # --- Fixtures: a trivial render and parameterizable streams ---
 
 
-def _render_text(ctx: CliContext, state: object) -> Block:
+def _surface_render(state: object, width: int) -> Block:
+    """The StreamSurface render callback shape (§6): (state, buffer_width) →
+    Block. In production this is the runner's adapted closure; here a stand-in
+    that ignores width, so a plain frame is captured."""
+    return Block.text(str(state), Style())
+
+
+def _legacy_render(ctx: CliContext, state: object) -> Block:
+    """The CliRunner ``render=`` legacy shape (ctx, state) — used by the
+    _run_live_surface deposit tests, which drive the runner, not the surface
+    callback."""
     return Block.text(str(state), Style())
 
 
@@ -55,10 +66,9 @@ def _stream_of(states, *, fail_after=None):
 
 
 def _make_surface(
-    states, *, fail_after=None, render=_render_text, live_meter=False
+    states, *, fail_after=None, render=_surface_render, live_meter=False
 ) -> StreamSurface:
     return StreamSurface(
-        ctx=static_ctx(Zoom.SUMMARY),
         render=render,
         fetch_stream=_stream_of(states, fail_after=fail_after),
         live_meter=live_meter,
@@ -97,7 +107,7 @@ def test_paused_consumer_stops_consuming_then_resumes():
             pulls.append(s)
             yield s
 
-    surf = StreamSurface(ctx=static_ctx(Zoom.SUMMARY), render=_render_text, fetch_stream=gen)
+    surf = StreamSurface(render=_surface_render, fetch_stream=gen)
 
     async def drive() -> int:
         surf._running = True
@@ -127,7 +137,7 @@ def test_render_paints_current_state():
 
 
 def test_render_exception_is_captured_as_render():
-    def boom(ctx, state):
+    def boom(state, width):
         raise ValueError("render boom")
 
     surf = _make_surface(["x"], render=boom)
@@ -145,6 +155,25 @@ def test_render_without_state_is_blank():
     surf._buf = Buffer(5, 1)
     surf.render()  # _state is still None
     assert buffer_to_lines(surf._buf) == ["     "]
+
+
+def test_render_offers_buffer_width_per_frame():
+    """The surface offers its buffer's *current* width each frame (§6): a
+    resize re-creates _buf at the new geometry, so the next frame's offer
+    tracks it rather than a once-captured context width."""
+    offered: list[int] = []
+
+    def capture(state, width):
+        offered.append(width)
+        return Block.text(str(state), Style())
+
+    surf = _make_surface(["x"], render=capture)
+    surf._state = "x"
+    surf._buf = Buffer(30, 1)
+    surf.render()
+    surf._buf = Buffer(52, 1)  # the alt screen resized
+    surf.render()
+    assert offered == [30, 52]
 
 
 # --- The delivery gauge ---
@@ -212,7 +241,7 @@ def test_space_toggles_pause():
 # --- _run_live_surface: deposit + exit codes ---
 
 
-def _runner(render=_render_text, **kwargs) -> CliRunner:
+def _runner(render=_legacy_render, **kwargs) -> CliRunner:
     return CliRunner(render=render, fetch=lambda: None, fetch_stream=_stream_of([]), **kwargs)
 
 
@@ -224,6 +253,33 @@ def test_deposits_last_frame_on_success(monkeypatch, capsys):
     code = _runner()._run_live_surface(static_ctx(Zoom.SUMMARY))
     assert code == 0
     assert "final" in capsys.readouterr().out  # last frame left in scrollback
+
+
+def test_deposit_offers_current_geometry_after_resize(monkeypatch):
+    """The final deposited frame is itself an offer (§§5–6): it re-reads
+    *current* columns, so a resize during the alt-screen session tracks
+    through to the deposit rather than depositing at detection-time
+    ctx.width."""
+
+    async def fake_run(self):
+        self.last_state = "final"
+
+    monkeypatch.setattr(StreamSurface, "run", fake_run)
+    # The terminal resized to 120 cols during the (faked) session.
+    monkeypatch.setattr("shutil.get_terminal_size", lambda *a, **k: os.terminal_size((120, 24)))
+
+    offered: list[int | None] = []
+
+    def rnd(data, fidelity, width):
+        offered.append(width)
+        return Block.text(str(data), Style())
+
+    # _tty_ctx is is_tty=True, width=80 at detection — the deposit must ignore
+    # that 80 and offer the current 120.
+    runner = CliRunner(renderer=rnd, fetch=lambda: None, fetch_stream=_stream_of([]))
+    code = runner._run_live_surface(_tty_ctx())
+    assert code == 0
+    assert offered == [120]  # deposit tracked the resize, not ctx.width=80
 
 
 def test_deposit_carries_the_final_gauge(monkeypatch, capsys):
@@ -289,7 +345,7 @@ def test_surface_delivery_taken_on_tty(monkeypatch):
 
     monkeypatch.setattr(CliRunner, "_run_live_surface", fake)
     runner = CliRunner(
-        render=_render_text,
+        render=_legacy_render,
         fetch=lambda: None,
         fetch_stream=_stream_of(["x"]),
         live_delivery="surface",
@@ -302,7 +358,7 @@ def test_surface_delivery_falls_back_to_inplace_when_not_tty(capsys):
     """Not a TTY → the alt screen can't be taken; the in-place non-ANSI branch
     deposits the final frame instead (static_ctx is is_tty=False, use_ansi=False)."""
     runner = CliRunner(
-        render=_render_text,
+        render=_legacy_render,
         fetch=lambda: None,
         fetch_stream=_stream_of(["only"]),
         live_delivery="surface",
