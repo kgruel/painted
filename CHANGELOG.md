@@ -24,6 +24,16 @@ Landing in slices; this section accumulates until the cut.
   `tests/unit/test_public_api.py`), beside the `Fidelity` spec it references — so
   the 0.13 host rung can run the same renderer through `Surface` without a
   `tui`→`cli` import. `painted.cli` re-exports it for convenience.
+- **The transcription default — `run_cli` with neither `render=` nor
+  `renderer=`** (S3, `docs/RENDERER_CONTRACT_DESIGN.md` §4). The framework renders
+  by **transcription**: the fetched data is transcribed (declared-not-invented,
+  recursive + wide) through the same `(data, fidelity, width)` contract as any
+  authored renderer — "optional renderer" dissolves, there is always a renderer.
+  It is a default *renderer*, not a `paint()` call: the compiled `Fidelity` and
+  the offered width flow through intact, so `-q`/`-v` and declared budgets visibly
+  change the default output. `depth_aliases` and `budgets=True` stay valid on this
+  form. The *neither* `@overload` is published (with `fetch` required), so the
+  call form is spelled the moment it behaves.
 
 ### Changed
 
@@ -31,9 +41,22 @@ Landing in slices; this section accumulates until the cut.
   (`CliRunner.__post_init__`), not parser construction. The empty-argv fast path
   never builds a parser, and neither `render`/`renderer`/`fetch` mints a flag, so
   a parser-time check would never fire on the bare `tool` invocation. Declaring
-  **both** `render=` and `renderer=`, **neither**, or a missing `fetch=` each
-  raises `DeclarationError` at construction. (The *neither* form becomes the
-  transcription default in a later slice; until then a renderer is required.)
+  **both** `render=` and `renderer=`, or a missing `fetch=`, each raises
+  `DeclarationError` at construction. Declaring **neither** installs the
+  transcription default (§4).
+- **`tags=` without a renderer faults at construction** (S3, §4). Transcription
+  cannot consume `fidelity.visible` — it has no way to map app-domain facet names
+  onto arbitrary data — so a declared `Tag` under the default renderer would mint
+  a dead `--{name}` flag, the honesty violation `FIDELITY_DESIGN` §1 calls
+  structurally impossible. `tags=` with neither `render=` nor `renderer=`
+  therefore raises `DeclarationError`, taking the old *neither* fault's place.
+- **`transcribe` and `shape_lens` widen to `width: int | None`** (S3, §4) — the
+  0.10.1 width law ("absent is natural") reaching the transcription core and the
+  exploration entry. `None` propagates through the shared recursive core as
+  unconstrained natural sizing; every existing `int` call is byte-identical.
+  Inference needs a column budget (chart bars, tree indents are width-consuming),
+  so `shape_lens` under a `None` width transcribes the declared shape rather than
+  guessing a chart/tree — the guess resumes the moment a width is offered.
 
 ## [0.10.1] — 2026-07-11
 

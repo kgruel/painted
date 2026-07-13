@@ -49,11 +49,12 @@ def _typecheck() -> None:
     # Renderer is a usable alias for the contract shape.
     typed_renderer: Renderer[str] = _renderer
 
-    # positive: both published forms type-check and return int
+    # positive: all published forms type-check and return int
     assert_type(run_cli([], renderer=_renderer, fetch=_fetch), int)  # keyword renderer=
     assert_type(run_cli([], _legacy, _fetch), int)  # legacy positional
     assert_type(run_cli([], render=_legacy, fetch=_fetch), int)  # legacy keyword
     assert_type(run_cli([], renderer=typed_renderer, fetch=_fetch), int)  # via Renderer alias
+    assert_type(run_cli([], fetch=_fetch), int)  # neither → transcription default (§4)
 
     # negative: fetch is required; omitting it matches no overload. The ignore is
     # load-bearing — it suppresses a real no-matching-overload error.

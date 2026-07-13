@@ -88,6 +88,7 @@ Surface + Layer             # alt-screen TUI with keyboard + diff rendering
 | Renderer | `core/doc.py` | Doc-IR node vocabulary (Doc, Section, Def, Link, …) + doc_lens (the document compositor) |
 | Renderer | `core/writer.py` | Writer, ColorDepth, print_block |
 | Renderer | `publish.py` | to_html, published_fidelity — the doc-IR publisher (root, beside display.py) |
+| Framework | `_transcription.py` | transcription_renderer — run_cli's default renderer (the `(data, fidelity, width)` contract over `transcribe`); at root so `cli` needn't import `views` (§4) |
 | Renderer | `inplace.py` | InPlaceRenderer |
 | Diagnostics | `diagnostics.py` | PaintedHandler, install, DEFAULT_THRESHOLDS (logging + excepthook glue; root, imports views) |
 | Renderer | `keyboard.py` | KeyboardInput, cbreak_supported, read_key — the delivery layer's key-reading primitive (root; `tui/` re-exports) |

@@ -257,11 +257,32 @@ class TestRendererContractConstruction:
         with pytest.raises(DeclarationError, match="not both"):
             run_cli([], _legacy, lambda: "x", renderer=_renderer)
 
-    def test_neither_render_nor_renderer_raises_at_construction(self):
-        # The *neither* form is the transcription default (§4), unpublished
-        # until its behavior lands (S3); until then a renderer is required.
-        with pytest.raises(DeclarationError, match="requires a renderer"):
-            CliRunner(fetch=lambda: "x")
+    def test_neither_installs_a_default_renderer(self):
+        # S3: neither render= nor renderer= no longer faults — the framework
+        # installs its transcription default, so there is always exactly one
+        # renderer at dispatch (§4). We assert only the structural fact and that
+        # the private default does not leak; *behavior* (that it transcribes) is
+        # pinned by TestTranscriptionDefault, not by the callable's identity.
+        runner = CliRunner(fetch=lambda: "x")
+        assert runner.render is None
+        assert runner.renderer is not None  # a renderer was installed
+        # field(repr=False): the private default never surfaces through the repr.
+        assert "renderer=" not in repr(runner)
+
+    def test_tags_without_a_renderer_faults_at_construction(self):
+        # The fence (§4): transcription cannot consume fidelity.visible, so a
+        # declared Tag would mint a dead --{name} flag. tags= with neither
+        # render= nor renderer= faults — taking the old *neither* fault's place.
+        from painted.cli import Tag
+
+        with pytest.raises(DeclarationError, match="tags= requires"):
+            CliRunner(fetch=lambda: "x", tags=[Tag("thinking", "Show reasoning")])
+
+    def test_tags_with_a_renderer_is_allowed(self):
+        # The fence is scoped to the *neither* form: a declared renderer can
+        # consume fidelity.visible, so tags= stays valid alongside one.
+        runner = CliRunner(renderer=_renderer, fetch=lambda: "x", tags=[])
+        assert runner.renderer is _renderer
 
     def test_faults_bypass_the_parser(self, monkeypatch):
         """The fault fires before any parser is built (empty argv, no flags)."""
@@ -342,6 +363,77 @@ class TestRendererContractDispatch:
         monkeypatch.setattr("sys.stdout.isatty", lambda: False)
         run_cli(["--plain"], render=_legacy, fetch=lambda: "x")
         assert not [w for w in recwarn.list if issubclass(w.category, DeprecationWarning)]
+
+
+class TestTranscriptionDefault:
+    """The *neither* form renders by transcription (§4) — the no-lens graduate
+    invoked through the contract, not a paint() call."""
+
+    def test_transcription_default_renders_fetched_data(self, capsys, monkeypatch):
+        # No render=, no renderer=: the framework transcribes the fetched data.
+        monkeypatch.setattr("sys.stdout.isatty", lambda: False)
+        rc = run_cli(["--plain"], fetch=lambda: {"status": "ok", "items": 42})
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert "status" in out and "ok" in out
+        assert "items" in out and "42" in out
+
+    def test_verbosity_visibly_changes_default_output(self, capsys, monkeypatch):
+        # The honesty half that holds (§4): -q/-v arrive through fidelity.depth and
+        # visibly change transcription output — depth is a facet it consumes.
+        monkeypatch.setattr("sys.stdout.isatty", lambda: False)
+        run_cli(["--plain", "-q"], fetch=lambda: {"a": 1, "b": 2})
+        quiet = capsys.readouterr().out
+        run_cli(["--plain", "-vv"], fetch=lambda: {"a": 1, "b": 2})
+        verbose = capsys.readouterr().out
+        assert quiet != verbose
+        assert "dict[2]" in quiet  # minimal depth transcribes the shape's count
+
+    def test_pipe_transcribes_natural_width(self, capsys, monkeypatch):
+        # On a pipe the offer is None (§5), so transcription renders natural: the
+        # fabricated fallback width never reaches the renderer. A long value is not
+        # clipped to a terminal column count it was never offered.
+        monkeypatch.setattr("sys.stdout.isatty", lambda: False)
+        long_value = "x" * 120
+        rc = run_cli(["--plain"], fetch=lambda: {"k": long_value})
+        assert rc == 0
+        assert long_value in capsys.readouterr().out
+
+    def test_max_lines_visibly_truncates_default_output(self, capsys, monkeypatch):
+        # The other honesty half (§4/§11): declared budgets consumed by
+        # transcription visibly change output. --max-lines only exists because
+        # budgets=True was declared; it samples the key-value table to N rows.
+        monkeypatch.setattr("sys.stdout.isatty", lambda: False)
+
+        def data():
+            return {f"k{i}": i for i in range(10)}
+
+        run_cli(["--plain", "-v"], fetch=data, budgets=True)
+        unbudgeted = capsys.readouterr().out
+        run_cli(["--plain", "-v", "--max-lines", "3"], fetch=data, budgets=True)
+        budgeted = capsys.readouterr().out
+        assert budgeted != unbudgeted
+        assert "k9: 9" in unbudgeted  # all ten rows before the budget
+        assert "k9: 9" not in budgeted  # sampled away by --max-lines 3
+        assert "+7 more" in budgeted  # 10 - 3, with the honest overflow footer
+
+    def test_max_chars_visibly_truncates_default_output(self, capsys, monkeypatch):
+        # --max-chars caps a string value's display width; it exists only because
+        # budgets=True was declared. Compared unbudgeted vs budgeted at the same
+        # depth, the value is visibly shortened with an honest length indicator.
+        monkeypatch.setattr("sys.stdout.isatty", lambda: False)
+
+        def data():
+            return {"k": "y" * 100}
+
+        run_cli(["--plain", "-vv"], fetch=data, budgets=True)
+        unbudgeted = capsys.readouterr().out
+        run_cli(["--plain", "-vv", "--max-chars", "20"], fetch=data, budgets=True)
+        budgeted = capsys.readouterr().out
+        assert budgeted != unbudgeted
+        assert "y" * 100 in unbudgeted  # full value at natural width, unbudgeted
+        assert "y" * 100 not in budgeted  # capped
+        assert "[100 chars]" in budgeted  # the honest truncation indicator
 
 
 def _ctx(

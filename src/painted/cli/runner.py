@@ -63,15 +63,20 @@ class CliRunner(Generic[T]):
     #
     # Both default None at the signature so `render` can move from required- to
     # optional-positional (existing `run_cli(args, render, fetch)` call sites keep
-    # working) and `renderer` can be keyword-only; requiredness moves to
-    # construction (__post_init__: exactly one, and fetch present). `render=` is
-    # documented legacy through a deprecation window — no runtime warning yet, that
-    # gate opens at 0.12 (docs/RENDERER_CONTRACT_DESIGN.md §3).
+    # working) and `renderer` can be keyword-only. Requiredness moves to
+    # construction (__post_init__): at most one — declaring both faults; declaring
+    # neither installs the transcription default (§4), so there is always exactly
+    # one renderer at dispatch. `render=` is documented legacy through a
+    # deprecation window — no runtime warning yet, that gate opens at 0.12
+    # (docs/RENDERER_CONTRACT_DESIGN.md §3).
     render: Callable[[CliContext, T], Block] | None = None
     # kw_only so the legacy positional layout is byte-for-byte preserved:
     # `CliRunner(render, fetch)` still binds render then fetch, and `renderer`
     # is keyword-only at the dataclass exactly as it is at the run_cli surface.
-    renderer: Renderer[T] | None = field(default=None, kw_only=True)
+    # repr=False so the transcription default the *neither* form self-installs
+    # (§4) never leaks through the generated repr — the default renderer stays
+    # private; its callable identity is not API.
+    renderer: Renderer[T] | None = field(default=None, kw_only=True, repr=False)
 
     # How to fetch state (sync). Arity-polymorphic via the run() shim: declared
     # nullary it's called fetch(), declared with a parameter it receives ctx —
@@ -150,15 +155,33 @@ class CliRunner(Generic[T]):
                 "declare either render= (legacy (ctx, data)) or renderer= (the "
                 "(data, fidelity, width) contract), not both"
             )
-        if self.render is None and self.renderer is None:
-            # The *neither* form is the transcription default (§4), unpublished
-            # until its behavior lands in S3 — until then a renderer is required.
-            raise DeclarationError(
-                "run_cli requires a renderer: pass renderer= (the (data, fidelity, "
-                "width) contract) or the legacy render= callback"
-            )
         if self.fetch is None:
             raise DeclarationError("run_cli requires fetch= (how to fetch state)")
+        if self.render is None and self.renderer is None:
+            # Neither declared: render by transcription (§4). The *neither* form
+            # is a real call form now — install painted's default renderer so
+            # dispatch has always exactly one renderer, no special no-render branch.
+            #
+            # The fence: transcription cannot consume fidelity.visible (no way to
+            # map app-domain facet names onto arbitrary data), yet every declared
+            # Tag mints a --{name} flag — so tags= under the default renderer
+            # would be a dead public flag, the honesty violation FIDELITY_DESIGN §1
+            # calls structurally impossible. tags= with neither renderer therefore
+            # faults here, taking the old *neither* fault's place (§4).
+            if self.tags:
+                raise DeclarationError(
+                    "tags= requires render= or renderer=: the transcription default "
+                    "cannot consume declared facets (fidelity.visible), so each "
+                    "--{tag} flag would be dead "
+                    "(docs/RENDERER_CONTRACT_DESIGN.md §4)"
+                )
+            # The default renderer lives at the root, not here: cli may not import
+            # views (the layer tripwire), so the bridge to the transcription lens
+            # is a root module the runner references (docs/…§4). Import is lazy —
+            # `import painted.cli` stays views-free until a bare tool actually runs.
+            from .._transcription import transcription_renderer
+
+            self.renderer = transcription_renderer
 
         if self.live_delivery not in ("inplace", "surface"):
             raise DeclarationError(
@@ -397,7 +420,9 @@ class CliRunner(Generic[T]):
         width the caller resolved through ``_offered_width``; ``render=`` gets
         the legacy whole context and reads ``ctx.width`` itself (the known
         geometry stays ``int`` through the migration window, §5). Construction
-        guarantees exactly one is set.
+        guarantees a renderer is present — the app's, or the transcription
+        default installed when neither was declared (§4), which travels the
+        ``renderer`` branch like any other.
 
         The offer is computed *per offer* at the caller, not here: static and
         non-streaming callers pass ``_offered_width(ctx)``; the in-place live
@@ -768,11 +793,13 @@ class CliRunner(Generic[T]):
         return Block.text(text.replace("\n", " "), Style(), width=width, wrap=Wrap.WORD)
 
 
-# Two published call forms, one per authored-renderer contract — the truth type
-# checkers carry, so no caller ever sees `fetch` as optional even though the
-# runtime signature says None (the requiredness lives in construction). The
-# *neither* form (transcription default, §4) is deliberately absent: it stays
-# unpublished until its behavior lands (S3). See RENDERER_CONTRACT_DESIGN.md §3.
+# Three published call forms — the truth type checkers carry, so no caller ever
+# sees `fetch` as optional even though the runtime signature says None (the
+# requiredness lives in construction). One overload per call form: the two
+# authored-renderer contracts (legacy positional `render`; keyword `renderer=`)
+# and the *neither* form (the transcription default, §4) — published now that its
+# behavior lands in S3, the call form spelled the moment it behaves. Each requires
+# `fetch`. See RENDERER_CONTRACT_DESIGN.md §§3, 12.
 @overload
 def run_cli(
     args: list[str],
@@ -821,6 +848,32 @@ def run_cli(
 ) -> int: ...
 
 
+# The *neither* form — no render=, no renderer=: the framework transcribes the
+# fetched data through the (data, fidelity, width) contract (§4). `fetch` stays
+# required, keyword-only like every other input on this form.
+@overload
+def run_cli(
+    args: list[str],
+    *,
+    fetch: Callable[..., T],
+    fetch_stream: Callable[..., AsyncIterator[T]] | None = ...,
+    handlers: dict[OutputMode, Callable[[CliContext], R]] | None = ...,
+    default_zoom: Zoom = ...,
+    default_mode: OutputMode = ...,
+    live_delivery: str = ...,
+    live_meter: bool = ...,
+    description: str | None = ...,
+    prog: str | None = ...,
+    add_args: Callable[[argparse.ArgumentParser], None] | None = ...,
+    help_args: list[HelpArg] | None = ...,
+    tags: list[Tag] | None = ...,
+    depth_aliases: dict[str, int] | None = ...,
+    prompts: list[Prompt] | None = ...,
+    budgets: bool = ...,
+    build_fidelity: Callable[[argparse.Namespace, Fidelity], Fidelity] | None = ...,
+) -> int: ...
+
+
 def run_cli(
     args: list[str],
     render: Callable[[CliContext, T], Block] | None = None,
@@ -845,16 +898,20 @@ def run_cli(
 ) -> int:
     """Run a CLI tool with zoom/mode/format handling.
 
-    Declare exactly one renderer contract:
+    Declare at most one renderer contract:
 
       * ``renderer=`` — the contract (§1): ``(data, fidelity, width) → Block``,
         the semantic renderer given only its three inputs. Keyword-only.
       * ``render=`` — legacy ``(ctx, data) → Block``, optional-positional so
         existing ``run_cli(args, render, fetch)`` call sites keep working. Kept
         through a deprecation window; no runtime warning until 0.12 (§3).
+      * *neither* — the framework renders by **transcription** (§4): the fetched
+        data is transcribed through the same contract. ``tags=`` is unavailable
+        on this form (transcription cannot consume declared facets), and
+        declaring it raises ``DeclarationError``.
 
-    Passing both, or neither, raises ``DeclarationError`` at construction — as
-    does a missing ``fetch``.
+    Passing both renderers raises ``DeclarationError`` at construction — as does
+    a missing ``fetch``.
 
     Args:
         args: Command-line arguments (sys.argv[1:])

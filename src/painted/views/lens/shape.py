@@ -35,12 +35,13 @@ def _is_namedtuple(x: Any) -> bool:
     return isinstance(x, tuple) and hasattr(x, "_fields") and hasattr(x, "_asdict")
 
 
-def _muted_marker(text: str, width: int) -> Block:
-    """A width-exact marker in the palette's muted role (cycle/depth sentinels)."""
+def _muted_marker(text: str, width: int | None) -> Block:
+    """A marker in the palette's muted role (cycle/depth sentinels), width-exact
+    when a width is offered and natural when it is ``None``."""
     from ...palette import current_palette
 
     style = current_palette().muted
-    if display_width(text) > width:
+    if width is not None and display_width(text) > width:
         text = truncate_ellipsis(text, width) if width > 1 else truncate(text, width)
     return Block.text(text, style, width=width)
 
@@ -52,7 +53,9 @@ def _is_numeric_sequence(data: Any) -> bool:
     return all(isinstance(x, (int, float)) and not isinstance(x, bool) for x in data)
 
 
-def shape_lens(content: Any, zoom: int, width: int, *, fidelity: Fidelity | None = None) -> Block:
+def shape_lens(
+    content: Any, zoom: int, width: int | None, *, fidelity: Fidelity | None = None
+) -> Block:
     """Auto-dispatching renderer: picks the best strategy based on data shape.
 
     Dispatch rules:
@@ -68,6 +71,13 @@ def shape_lens(content: Any, zoom: int, width: int, *, fidelity: Fidelity | None
 
     For nested structures, each nesting level reduces effective zoom by 1.
 
+    ``width`` follows the library-wide contract: an ``int`` is exact, ``None`` is
+    natural (unconstrained) sizing (the 0.10.1 width law, RENDERER_CONTRACT §4).
+    Inference needs a column budget — chart bars and tree indents are
+    width-consuming arrangements — so a ``None`` width renders the built-in
+    transcription of the declared shape rather than a guessed chart/tree; the
+    guess resumes the moment a width is offered.
+
     This is the *interpreting* renderer: it infers arrangement (chart/tree) from
     shape. paint() takes it only via an explicit ``lens=shape_lens``; paint()'s
     no-lens default is ``transcribe`` (below), which never infers.
@@ -75,16 +85,24 @@ def shape_lens(content: Any, zoom: int, width: int, *, fidelity: Fidelity | None
     return _shape_lens(content, zoom, width, fidelity, frozenset(), 0, infer=True)
 
 
-def transcribe(content: Any, zoom: int, width: int, *, fidelity: Fidelity | None = None) -> Block:
+def transcribe(
+    content: Any, zoom: int, width: int | None, *, fidelity: Fidelity | None = None
+) -> Block:
     """Transcribe a subject by the shape it *declares* — never inferring one.
 
-    paint()'s no-lens default (PAINT_DESIGN §3). Identical to ``shape_lens``
-    except the three inference stanzas are dropped: a numeric sequence stays
-    items (not a chart), a numeric or nested dict stays a key/value table (not a
-    chart or tree). Declared schemas still transcribe their declared structure
-    (dataclass / NamedTuple -> fields, Enum -> ``Type.MEMBER``). The refusal is
-    recursive: nested values transcribe as transcription, so inference never
-    re-enters at depth.
+    paint()'s no-lens default (PAINT_DESIGN §3) and run_cli's default renderer
+    (RENDERER_CONTRACT §4). Identical to ``shape_lens`` except the three
+    inference stanzas are dropped: a numeric sequence stays items (not a chart),
+    a numeric or nested dict stays a key/value table (not a chart or tree).
+    Declared schemas still transcribe their declared structure (dataclass /
+    NamedTuple -> fields, Enum -> ``Type.MEMBER``). The refusal is recursive:
+    nested values transcribe as transcription, so inference never re-enters at
+    depth.
+
+    ``width`` follows the library-wide contract: an ``int`` is exact, ``None`` is
+    natural (unconstrained) sizing (the 0.10.1 width law reaching the transcription
+    core, RENDERER_CONTRACT §4) — ``None`` propagates recursively so nested values
+    size to content too.
     """
     return _shape_lens(content, zoom, width, fidelity, frozenset(), 0, infer=False)
 
@@ -92,7 +110,7 @@ def transcribe(content: Any, zoom: int, width: int, *, fidelity: Fidelity | None
 def _shape_lens(
     content: Any,
     zoom: int,
-    width: int,
+    width: int | None,
     fidelity: Fidelity | None,
     seen: frozenset[int],
     depth: int,
@@ -106,8 +124,13 @@ def _shape_lens(
     stanzas (dict->chart, dict->tree, numeric-seq->chart) are skipped and `infer`
     is threaded into the container helpers so nested values transcribe too.
     Scalars are leaves and skip the guards; every container is guarded before it
-    descends."""
-    if width <= 0:
+    descends.
+
+    `width` is `int | None`: an int is exact, `None` is natural sizing, threaded
+    unchanged into every recursive call so nested values size to content. The
+    zero-width fast path is an int-only concern — a `None` width has no budget to
+    exhaust, so it skips the guard entirely."""
+    if width is not None and width <= 0:
         return Block.empty(0, 1)
 
     if content is None:
@@ -135,10 +158,12 @@ def _shape_lens(
     seen = seen | {id(content)}
     depth += 1
 
-    # Dict: infer chart (all-numeric) / tree (nested) only when inferring;
-    # otherwise transcribe straight to the key/value table.
+    # Dict: infer chart (all-numeric) / tree (nested) only when inferring AND a
+    # width is offered — chart_lens/tree_lens are int-only, width-consuming
+    # arrangements (§4); a None width falls through to the key/value transcription.
+    # Otherwise transcribe straight to the key/value table.
     if isinstance(content, dict):
-        if content and infer:
+        if content and infer and width is not None:
             values = content.values()
             all_numeric = True
             any_nested = False
@@ -176,8 +201,9 @@ def _shape_lens(
             dict(content._asdict()), zoom, width, fidelity, seen, depth, infer=infer
         )
 
-    # Auto-dispatch: numeric sequences -> chart (only when inferring)
-    if infer and _is_numeric_sequence(content):
+    # Auto-dispatch: numeric sequences -> chart (only when inferring and a width
+    # is offered — see the dict stanza above; a None width transcribes as items).
+    if infer and width is not None and _is_numeric_sequence(content):
         from .chart import chart_lens
 
         return chart_lens(content, zoom, width, fidelity=fidelity)
@@ -200,8 +226,9 @@ def _shape_lens(
     return _render_scalar(str(content), zoom, width, fidelity)
 
 
-def _render_enum(value: Enum, width: int) -> Block:
-    """Render an Enum member as the scalar `TypeName.MEMBER`, width-exact.
+def _render_enum(value: Enum, width: int | None) -> Block:
+    """Render an Enum member as the scalar `TypeName.MEMBER`, width-exact when a
+    width is offered and natural when it is ``None``.
 
     A composite/zero Flag value has `.name is None` (no single declared member);
     fall back to the enum's own str() — `Perm(0)`, `Perm.R|W`, `0` — never the
@@ -210,12 +237,14 @@ def _render_enum(value: Enum, width: int) -> Block:
     name = value.name
     label = f"{type(value).__name__}.{name}" if name is not None else str(value)
     style = Style()
-    if display_width(label) > width:
+    if width is not None and display_width(label) > width:
         label = truncate_ellipsis(label, width) if width > 1 else truncate(label, width)
     return Block.text(label, style, width=width)
 
 
-def _render_scalar(value: Any, zoom: int, width: int, fidelity: Fidelity | None = None) -> Block:
+def _render_scalar(
+    value: Any, zoom: int, width: int | None, fidelity: Fidelity | None = None
+) -> Block:
     """Render scalar values (str, int, float, bool, None) at zoom levels."""
     style = Style()
 
@@ -227,17 +256,19 @@ def _render_scalar(value: Any, zoom: int, width: int, fidelity: Fidelity | None 
     if zoom == 1:
         # Truncated value
         text = _format_value(value)
-        if display_width(text) > width:
+        if width is not None and display_width(text) > width:
             text = truncate_ellipsis(text, width) if width > 1 else truncate(text, width)
         return Block.text(text, style, width=width)
 
-    # zoom >= 2: full value (with length indicator for long strings)
+    # zoom >= 2: full value (with length indicator for long strings). The
+    # `max_str` cap is a char budget (fidelity.chars), not a width — it applies
+    # under natural sizing too; only the final display-width clip is width-gated.
     max_str = fidelity.chars if fidelity and fidelity.chars > 0 else _MAX_STR_DISPLAY
     text = _format_value(value)
     if isinstance(value, str) and display_width(text) > max_str:
         original_chars = len(value)
         text = truncate(text, max_str) + f"... [{original_chars} chars]"
-    if display_width(text) > width:
+    if width is not None and display_width(text) > width:
         text = truncate_ellipsis(text, width) if width > 1 else truncate(text, width)
     return Block.text(text, style, width=width)
 
@@ -256,7 +287,7 @@ def _format_value(value: Any) -> str:
 def _render_dict(
     d: dict,
     zoom: int,
-    width: int,
+    width: int | None,
     fidelity: Fidelity | None,
     seen: frozenset[int],
     depth: int,
@@ -264,7 +295,9 @@ def _render_dict(
     infer: bool,
 ) -> Block:
     """Render dict at zoom levels. `infer` is threaded to the recursive value
-    render so nested values follow the same transcribe/interpret discipline."""
+    render so nested values follow the same transcribe/interpret discipline.
+    `width` is `int | None`: an int splits into exact key/value columns, `None`
+    sizes each column to its content (natural key column + natural values)."""
     style = Style()
 
     if zoom <= 0:
@@ -278,7 +311,7 @@ def _render_dict(
             text = "{}"
         else:
             pairs = ", ".join(f"{k}: {v}" for k, v in d.items())
-            if display_width(pairs) > width:
+            if width is not None and display_width(pairs) > width:
                 pairs = truncate_ellipsis(pairs, width) if width > 1 else truncate(pairs, width)
             text = pairs
         return Block.text(text, style, width=width)
@@ -291,14 +324,20 @@ def _render_dict(
         ((key, value),) = d.items()
         key_style = Style(bold=True)
         key_text = f"{key}:"
-        key_col_width = min(display_width(key_text) + 1, width // 2)
+        # Natural sizing: the key column is its own content plus the single gap
+        # column; the value renders natural (None). An int budget splits in half.
+        key_col_width = (
+            display_width(key_text) + 1
+            if width is None
+            else min(display_width(key_text) + 1, width // 2)
+        )
         if display_width(key_text) > key_col_width:
             key_text = (
                 truncate_ellipsis(key_text, key_col_width)
                 if key_col_width > 1
                 else truncate(key_text, key_col_width)
             )
-        val_col_width = max(1, width - key_col_width)
+        val_col_width = None if width is None else max(1, width - key_col_width)
         key_block = Block.text(key_text, key_style, width=key_col_width)
         val_block = _shape_lens(
             value, max(0, zoom - 1), val_col_width, fidelity, seen, depth, infer=infer
@@ -315,10 +354,11 @@ def _render_dict(
     if truncated:
         items = items[:max_items]
 
-    # Calculate key column width (max key length + 2 for ": ")
+    # Calculate key column width (max key length + 2 for ": "). Natural sizing
+    # keeps the whole key column (no half-budget cap) and renders values natural.
     max_key_len = max((display_width(str(k)) for k, _ in items), default=0)
-    key_col_width = min(max_key_len + 2, width // 2)
-    val_col_width = max(1, width - key_col_width)
+    key_col_width = max_key_len + 2 if width is None else min(max_key_len + 2, width // 2)
+    val_col_width = None if width is None else max(1, width - key_col_width)
 
     for key, value in items:
         key_text = str(key) + ":"
@@ -352,7 +392,7 @@ def _render_dict(
 def _render_list(
     lst: list,
     zoom: int,
-    width: int,
+    width: int | None,
     fidelity: Fidelity | None,
     seen: frozenset[int],
     depth: int,
@@ -363,7 +403,9 @@ def _render_list(
     """Render list at zoom levels. `infer` is threaded to the recursive item
     render so nested items follow the same transcribe/interpret discipline.
     `label` names the sequence type for the zoom<=0 count (bare tuples pass
-    "tuple" so the count doesn't misreport them as a list)."""
+    "tuple" so the count doesn't misreport them as a list). `width` is
+    `int | None`: natural sizing (None) renders every item to its own width and
+    skips the exact-width fit."""
     style = Style()
 
     if zoom <= 0:
@@ -380,11 +422,12 @@ def _render_list(
             total_len = 0
             for item in lst:
                 item_str = _summarize_item(item)
-                # Check if adding this item would exceed width
+                # Check if adding this item would exceed width. Natural sizing
+                # (width None) has no budget to exceed — every item is kept.
                 sep_len = 2 if items else 0  # ", "
                 item_w = display_width(item_str)
-                if total_len + sep_len + item_w > width - 3:  # reserve for "..."
-                    items.append("...")
+                if width is not None and total_len + sep_len + item_w > width - 3:
+                    items.append("...")  # reserve for "..."
                     break
                 items.append(item_str)
                 total_len += sep_len + item_w
@@ -402,7 +445,7 @@ def _render_list(
 
     rows: list[Block] = []
     prefix_width = 2  # "- "
-    item_width = max(1, width - prefix_width)
+    item_width = None if width is None else max(1, width - prefix_width)
 
     for item in visible:
         # Render item recursively with reduced zoom
@@ -434,12 +477,16 @@ def _render_list(
         rows.append(footer)
 
     # Fit to exact width: the "- " prefix can push a row past its budget at narrow
-    # widths; this clamps every row (and, via recursion, nested lists) to the contract.
-    return fit_to_width(join_vertical(*rows), width)
+    # widths; this clamps every row (and, via recursion, nested lists) to the
+    # contract. Natural sizing has no width to fit to — rows already size to
+    # content, so join and return them as-is.
+    joined = join_vertical(*rows)
+    return joined if width is None else fit_to_width(joined, width)
 
 
-def _render_set(s: set | frozenset, zoom: int, width: int) -> Block:
-    """Render set/frozenset at zoom levels."""
+def _render_set(s: set | frozenset, zoom: int, width: int | None) -> Block:
+    """Render set/frozenset at zoom levels. Natural sizing (width None) keeps
+    every tag; an int width stops once the budget is spent."""
     style = Style()
 
     if zoom <= 0:
@@ -457,7 +504,7 @@ def _render_set(s: set | frozenset, zoom: int, width: int) -> Block:
     for item in sorted(s, key=str):
         tag = f"[{item}]"
         sep_len = 1 if tags else 0  # space separator
-        if total_len + sep_len + display_width(tag) > width:
+        if width is not None and total_len + sep_len + display_width(tag) > width:
             break
         tags.append(tag)
         total_len += sep_len + display_width(tag)
