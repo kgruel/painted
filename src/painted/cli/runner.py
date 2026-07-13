@@ -12,7 +12,7 @@ import shutil
 import sys
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
-from typing import TYPE_CHECKING, Generic, TypeVar
+from typing import TYPE_CHECKING, Generic, TypeVar, overload
 
 from contextlib import nullcontext
 
@@ -38,6 +38,7 @@ if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
     from ..core.block import Block
+    from ..core.renderer import Renderer
     from .help import HelpArg
     from .prompts import Prompt
 
@@ -53,13 +54,30 @@ R = TypeVar("R")  # Return type
 class CliRunner(Generic[T]):
     """CLI runner with sensible defaults and explicit overrides."""
 
-    # Required: how to render state to Block
-    render: Callable[[CliContext, T], Block]
+    # How to render state to a Block — two contracts, exactly one declared.
+    #
+    #   render=    legacy (ctx, data) → Block; the host hands the whole context.
+    #   renderer=  the contract (data, fidelity, width) → Block (§1): the semantic
+    #              renderer, given only its three inputs. Keyword-only at the
+    #              run_cli surface, the RENDER_MODEL glossary's exact term.
+    #
+    # Both default None at the signature so `render` can move from required- to
+    # optional-positional (existing `run_cli(args, render, fetch)` call sites keep
+    # working) and `renderer` can be keyword-only; requiredness moves to
+    # construction (__post_init__: exactly one, and fetch present). `render=` is
+    # documented legacy through a deprecation window — no runtime warning yet, that
+    # gate opens at 0.12 (docs/RENDERER_CONTRACT_DESIGN.md §3).
+    render: Callable[[CliContext, T], Block] | None = None
+    # kw_only so the legacy positional layout is byte-for-byte preserved:
+    # `CliRunner(render, fetch)` still binds render then fetch, and `renderer`
+    # is keyword-only at the dataclass exactly as it is at the run_cli surface.
+    renderer: Renderer[T] | None = field(default=None, kw_only=True)
 
-    # Required: how to fetch state (sync). Arity-polymorphic via the run()
-    # shim: declared nullary it's called fetch(), declared with a parameter it
-    # receives ctx — hence Callable[..., T] rather than a fixed arity.
-    fetch: Callable[..., T]
+    # How to fetch state (sync). Arity-polymorphic via the run() shim: declared
+    # nullary it's called fetch(), declared with a parameter it receives ctx —
+    # hence Callable[..., T] rather than a fixed arity. Optional at the signature
+    # (see above); a missing fetch is a DeclarationError at construction.
+    fetch: Callable[..., T] | None = None
 
     # Optional: streaming fetch for live mode (same arity shim as fetch)
     fetch_stream: Callable[..., AsyncIterator[T]] | None = None
@@ -120,6 +138,28 @@ class CliRunner(Generic[T]):
     def __post_init__(self) -> None:
         # Same promise as the declaration collision checks: misconfiguration
         # raises at construction, never degrades silently at dispatch.
+        #
+        # Construction is the render-path validation seam, not parser
+        # construction: the runner's empty-argv fast path never builds a parser,
+        # and neither render/renderer/fetch mints a flag, so a parser-time check
+        # would provably never fire on bare `tool` — the most common invocation
+        # (docs/RENDERER_CONTRACT_DESIGN.md §3). These checks therefore live here,
+        # asserted on empty argv by the tests.
+        if self.render is not None and self.renderer is not None:
+            raise DeclarationError(
+                "declare either render= (legacy (ctx, data)) or renderer= (the "
+                "(data, fidelity, width) contract), not both"
+            )
+        if self.render is None and self.renderer is None:
+            # The *neither* form is the transcription default (§4), unpublished
+            # until its behavior lands in S3 — until then a renderer is required.
+            raise DeclarationError(
+                "run_cli requires a renderer: pass renderer= (the (data, fidelity, "
+                "width) contract) or the legacy render= callback"
+            )
+        if self.fetch is None:
+            raise DeclarationError("run_cli requires fetch= (how to fetch state)")
+
         if self.live_delivery not in ("inplace", "surface"):
             raise DeclarationError(
                 f"live_delivery must be 'inplace' or 'surface', got {self.live_delivery!r}"
@@ -309,7 +349,30 @@ class CliRunner(Generic[T]):
 
     def _do_fetch(self, ctx: CliContext) -> T:
         """Call fetch through the arity shim."""
+        assert self.fetch is not None  # construction guarantees fetch is present
         return self.fetch(ctx) if self._wants_ctx(self.fetch) else self.fetch()
+
+    def _render(self, ctx: CliContext, state: T) -> Block:
+        """Produce the content Block, dispatching the declared render contract.
+
+        The one seam both delivery-path renders funnel through, so the two
+        contracts differ in exactly one place. ``renderer=`` gets the three
+        inputs (§1) — state, the compiled Fidelity intact, and the offered
+        width; ``render=`` gets the legacy whole context. Construction
+        guarantees exactly one is set.
+
+        The width offered here is ``ctx.width`` today. S2 introduces the offer
+        rule (``None`` under a pipe): for the static and in-place paths — where
+        the offer derives from the one-shot ``ctx`` — it lands as a single
+        ``_offered_width(ctx)`` computed at this seam. The alt-screen path is not
+        that: its per-frame width lives in ``StreamSurface``'s buffer, not
+        ``ctx``, so ``_offered_width(ctx)`` cannot supply it — that offer is S2
+        adapter plumbing inside the surface, not a swap here.
+        """
+        if self.renderer is not None:
+            return self.renderer(state, ctx.fidelity, ctx.width)
+        assert self.render is not None  # exactly one of render/renderer, per construction
+        return self.render(ctx, state)
 
     def _stream_iter(self, ctx: CliContext) -> AsyncIterator[T]:
         """Open the fetch_stream async iterator through the arity shim."""
@@ -387,7 +450,7 @@ class CliRunner(Generic[T]):
             return 1
 
         try:
-            block = self.render(ctx, state)
+            block = self._render(ctx, state)
         except Exception as exc:
             self._emit_error(ctx, self._render_error_block(ctx, exc), exc)
             return 2
@@ -419,7 +482,7 @@ class CliRunner(Generic[T]):
                     try:
                         async for state in self._stream_iter(ctx):
                             try:
-                                last_block = self.render(ctx, state)
+                                last_block = self._render(ctx, state)
                             except Exception as exc:
                                 self._emit_error(
                                     ctx, self._render_error_block(ctx, exc), exc, use_ansi=False
@@ -453,7 +516,7 @@ class CliRunner(Generic[T]):
                             if meter is not None:
                                 meter.start()
                             try:
-                                block = self.render(ctx, state)
+                                block = self._render(ctx, state)
                             except PromptContractError:
                                 # A refusal never renders into the live region —
                                 # propagate to the outer finalize + the seam.
@@ -501,7 +564,7 @@ class CliRunner(Generic[T]):
             return 1
 
         try:
-            block = self.render(ctx, state)
+            block = self._render(ctx, state)
         except Exception as exc:
             self._emit_error(ctx, self._render_error_block(ctx, exc), exc)
             return 2
@@ -526,7 +589,7 @@ class CliRunner(Generic[T]):
         assert self.fetch_stream is not None  # guarded by the caller
         surface = StreamSurface(
             ctx=ctx,
-            render=self.render,
+            render=self._render,
             fetch_stream=lambda: self._stream_iter(ctx),
             live_meter=self.live_meter,
         )
@@ -558,7 +621,7 @@ class CliRunner(Generic[T]):
 
         if surface.last_state is not None:
             try:
-                block = self.render(ctx, surface.last_state)
+                block = self._render(ctx, surface.last_state)
             except PromptContractError:
                 raise
             except Exception as exc:
@@ -643,11 +706,65 @@ class CliRunner(Generic[T]):
         return Block.text(text.replace("\n", " "), Style(), width=width, wrap=Wrap.WORD)
 
 
+# Two published call forms, one per authored-renderer contract — the truth type
+# checkers carry, so no caller ever sees `fetch` as optional even though the
+# runtime signature says None (the requiredness lives in construction). The
+# *neither* form (transcription default, §4) is deliberately absent: it stays
+# unpublished until its behavior lands (S3). See RENDERER_CONTRACT_DESIGN.md §3.
+@overload
 def run_cli(
     args: list[str],
     render: Callable[[CliContext, T], Block],
     fetch: Callable[..., T],
     *,
+    fetch_stream: Callable[..., AsyncIterator[T]] | None = ...,
+    handlers: dict[OutputMode, Callable[[CliContext], R]] | None = ...,
+    default_zoom: Zoom = ...,
+    default_mode: OutputMode = ...,
+    live_delivery: str = ...,
+    live_meter: bool = ...,
+    description: str | None = ...,
+    prog: str | None = ...,
+    add_args: Callable[[argparse.ArgumentParser], None] | None = ...,
+    help_args: list[HelpArg] | None = ...,
+    tags: list[Tag] | None = ...,
+    depth_aliases: dict[str, int] | None = ...,
+    prompts: list[Prompt] | None = ...,
+    budgets: bool = ...,
+    build_fidelity: Callable[[argparse.Namespace, Fidelity], Fidelity] | None = ...,
+) -> int: ...
+
+
+@overload
+def run_cli(
+    args: list[str],
+    *,
+    renderer: Renderer[T],
+    fetch: Callable[..., T],
+    fetch_stream: Callable[..., AsyncIterator[T]] | None = ...,
+    handlers: dict[OutputMode, Callable[[CliContext], R]] | None = ...,
+    default_zoom: Zoom = ...,
+    default_mode: OutputMode = ...,
+    live_delivery: str = ...,
+    live_meter: bool = ...,
+    description: str | None = ...,
+    prog: str | None = ...,
+    add_args: Callable[[argparse.ArgumentParser], None] | None = ...,
+    help_args: list[HelpArg] | None = ...,
+    tags: list[Tag] | None = ...,
+    depth_aliases: dict[str, int] | None = ...,
+    prompts: list[Prompt] | None = ...,
+    budgets: bool = ...,
+    build_fidelity: Callable[[argparse.Namespace, Fidelity], Fidelity] | None = ...,
+) -> int: ...
+
+
+def run_cli(
+    args: list[str],
+    render: Callable[[CliContext, T], Block] | None = None,
+    fetch: Callable[..., T] | None = None,
+    *,
+    renderer: Renderer[T] | None = None,
     fetch_stream: Callable[..., AsyncIterator[T]] | None = None,
     handlers: dict[OutputMode, Callable[[CliContext], R]] | None = None,
     default_zoom: Zoom = Zoom.SUMMARY,
@@ -666,9 +783,21 @@ def run_cli(
 ) -> int:
     """Run a CLI tool with zoom/mode/format handling.
 
+    Declare exactly one renderer contract:
+
+      * ``renderer=`` — the contract (§1): ``(data, fidelity, width) → Block``,
+        the semantic renderer given only its three inputs. Keyword-only.
+      * ``render=`` — legacy ``(ctx, data) → Block``, optional-positional so
+        existing ``run_cli(args, render, fetch)`` call sites keep working. Kept
+        through a deprecation window; no runtime warning until 0.12 (§3).
+
+    Passing both, or neither, raises ``DeclarationError`` at construction — as
+    does a missing ``fetch``.
+
     Args:
         args: Command-line arguments (sys.argv[1:])
-        render: Function to render state to Block
+        render: Legacy render callback ``(ctx, data) → Block`` (deprecation window)
+        renderer: The renderer contract ``(data, fidelity, width) → Block`` (§1)
         fetch: Function to fetch state (sync)
         fetch_stream: Optional async iterator for streaming updates
         handlers: Custom handlers for specific output modes
@@ -694,6 +823,7 @@ def run_cli(
     """
     return CliRunner(
         render=render,
+        renderer=renderer,
         fetch=fetch,
         fetch_stream=fetch_stream,
         handlers=handlers,  # type: ignore[arg-type]

@@ -230,6 +230,119 @@ class TestCliRunner:
         assert "Traceback" not in captured.out
 
 
+def _renderer(data, fidelity, width):
+    """A (data, fidelity, width) → Block renderer — the §1 contract shape."""
+    return Block.text(f"data={data} depth={fidelity.depth} width={width}", Style())
+
+
+def _legacy(ctx: CliContext, data) -> Block:
+    return Block.text(f"legacy {data}", Style())
+
+
+class TestRendererContractConstruction:
+    """S1 of the renderer contract (docs/RENDERER_CONTRACT_DESIGN.md §3).
+
+    All render-path declaration validation lives at runner construction, not
+    parser construction: the empty-argv fast path never builds a parser, and
+    neither render/renderer/fetch mints a flag, so a parser-time check would
+    never fire on bare ``tool``. Each fault is therefore asserted on **empty
+    argv** — the path that skips the parser entirely.
+    """
+
+    def test_missing_fetch_raises_at_construction(self):
+        with pytest.raises(DeclarationError, match="fetch"):
+            run_cli([], renderer=_renderer)
+
+    def test_both_render_and_renderer_raises_at_construction(self):
+        with pytest.raises(DeclarationError, match="not both"):
+            run_cli([], _legacy, lambda: "x", renderer=_renderer)
+
+    def test_neither_render_nor_renderer_raises_at_construction(self):
+        # The *neither* form is the transcription default (§4), unpublished
+        # until its behavior lands (S3); until then a renderer is required.
+        with pytest.raises(DeclarationError, match="requires a renderer"):
+            CliRunner(fetch=lambda: "x")
+
+    def test_faults_bypass_the_parser(self, monkeypatch):
+        """The fault fires before any parser is built (empty argv, no flags)."""
+        import painted.cli.runner as runner_mod
+
+        def _boom(*a, **k):  # a parser build here would mean the check ran too late
+            raise AssertionError("build_parser must not be reached for a render-path fault")
+
+        monkeypatch.setattr(runner_mod, "build_parser", _boom)
+        with pytest.raises(DeclarationError):
+            run_cli([], render=_legacy, renderer=_renderer, fetch=lambda: "x")
+
+
+class TestRendererContractDispatch:
+    """Every published call form dispatches correctly (§11)."""
+
+    def test_renderer_keyword_form_dispatches(self, capsys, monkeypatch):
+        monkeypatch.setattr("sys.stdout.isatty", lambda: False)
+        rc = run_cli(["--plain"], renderer=_renderer, fetch=lambda: "HELLO")
+        assert rc == 0
+        out = capsys.readouterr().out
+        # renderer receives the compiled Fidelity intact (depth=1 for SUMMARY).
+        assert "data=HELLO" in out
+        assert "depth=1" in out
+
+    def test_renderer_receives_fidelity_and_width_intact(self):
+        """The compiled Fidelity is passed *whole* — the same object, never
+        decomposed and rebuilt — and the offered width by value. Driven through
+        the internal ``_render`` seam so both are asserted against the exact
+        ``ctx`` the host built."""
+        seen: dict = {}
+
+        def rnd(data, fidelity, width):
+            seen["fidelity"] = fidelity
+            seen["width"] = width
+            return Block.text("x", Style())
+
+        runner = CliRunner(renderer=rnd, fetch=lambda: "d")
+        ctx = CliContext(
+            fidelity=Fidelity(depth=2, visible=frozenset({"thinking"})),
+            mode=OutputMode.STATIC,
+            use_ansi=False,
+            is_tty=False,
+            width=73,
+            height=24,
+        )
+        runner._render(ctx, "d")
+        assert seen["fidelity"] is ctx.fidelity  # intact — the same object, not a copy
+        assert seen["width"] == ctx.width == 73  # offered width, by value (S1: ctx.width)
+
+    def test_legacy_positional_form_unchanged(self, capsys, monkeypatch):
+        monkeypatch.setattr("sys.stdout.isatty", lambda: False)
+        rc = run_cli(["--plain"], _legacy, lambda: "WORLD")
+        assert rc == 0
+        assert "legacy WORLD" in capsys.readouterr().out
+
+    def test_legacy_keyword_form_unchanged(self, capsys, monkeypatch):
+        monkeypatch.setattr("sys.stdout.isatty", lambda: False)
+        rc = run_cli(["--plain"], render=_legacy, fetch=lambda: "WORLD")
+        assert rc == 0
+        assert "legacy WORLD" in capsys.readouterr().out
+
+    def test_legacy_positional_construction_preserved(self, capsys, monkeypatch):
+        """``CliRunner(render, fetch)`` — the legacy positional layout — still
+        binds render then fetch. ``renderer`` is kw_only, so it never steals the
+        second positional slot (which would fault as a 'both' declaration)."""
+        monkeypatch.setattr("sys.stdout.isatty", lambda: False)
+        runner = CliRunner(_legacy, lambda: "POS")  # positional render, positional fetch
+        assert runner.render is _legacy
+        assert runner.renderer is None
+        rc = runner.run(["--plain"])
+        assert rc == 0
+        assert "legacy POS" in capsys.readouterr().out
+
+    def test_render_emits_no_deprecation_warning(self, monkeypatch, recwarn):
+        """0.11 keeps render= silent — the DeprecationWarning gate opens at 0.12 (§3)."""
+        monkeypatch.setattr("sys.stdout.isatty", lambda: False)
+        run_cli(["--plain"], render=_legacy, fetch=lambda: "x")
+        assert not [w for w in recwarn.list if issubclass(w.category, DeprecationWarning)]
+
+
 class TestRunCliHelp:
     """Integration tests for --help with command args."""
 

@@ -7,6 +7,14 @@ beyond wcwidth. Import from here when you just want the renderer.
 """
 
 from importlib import import_module as _import_module
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    # Names resolve lazily through __getattr__ at runtime, which types them as
+    # Any — erasing, for instance, the ``Renderer`` alias's generic shape. Re-
+    # import the type-bearing symbols here so ``from painted.core import Renderer``
+    # carries the real type to checkers while runtime stays fully lazy.
+    from .renderer import Renderer as Renderer
 
 __all__ = [
     # Errors
@@ -55,6 +63,8 @@ __all__ = [
     "display_width",
     # Rendering constraint
     "Zoom",
+    # The framework-seam renderer contract (0.11) — (data, fidelity, width) → Block
+    "Renderer",
     # Doc-IR: node vocabulary + the document compositor (exported at 0.10;
     # the disclosure walk visible_body/capped stays unexported — painted's two
     # projectors are its only sanctioned readers)
@@ -113,6 +123,7 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "Line": (".span", "Line"),
     "display_width": ("._text_width", "display_width"),
     "Zoom": (".zoom", "Zoom"),
+    "Renderer": (".renderer", "Renderer"),
     "Doc": (".doc", "Doc"),
     "Section": (".doc", "Section"),
     "Prose": (".doc", "Prose"),

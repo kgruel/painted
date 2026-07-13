@@ -50,7 +50,7 @@ main() {
         run_uv pytest tests/unit/test_architecture_invariants.py -v --tb=short
         echo ""
         echo -e "${BOLD}=== Lint ===${NC}"
-        run_uv ty check src/
+        run_uv ty check src/ tests/typing/
         run_uv ruff format --check src/ tests/
         echo ""
         echo -e "${BOLD}=== Smoke ===${NC}"
@@ -81,7 +81,7 @@ main() {
         run_uv pytest tests/unit/test_architecture_invariants.py -q --tb=line > /dev/null 2>&1 && ok || { fail; run_uv pytest tests/unit/test_architecture_invariants.py -v --tb=short; exit 1; }
 
         step "Lint"
-        run_uv ty check src/ > /dev/null 2>&1 && run_uv ruff format --check src/ tests/ > /dev/null 2>&1 && ok || { fail; run_uv ty check src/; run_uv ruff format --check src/ tests/; exit 1; }
+        run_uv ty check src/ tests/typing/ > /dev/null 2>&1 && run_uv ruff format --check src/ tests/ > /dev/null 2>&1 && ok || { fail; run_uv ty check src/ tests/typing/; run_uv ruff format --check src/ tests/; exit 1; }
 
         step "Smoke"
         run_uv pytest tests/smoke/ -q --tb=line > /dev/null 2>&1 && ok || { fail; run_uv pytest tests/smoke/ -q --tb=short; exit 1; }

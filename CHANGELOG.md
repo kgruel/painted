@@ -4,6 +4,37 @@ All notable changes to painted are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/); pre-1.0, minor versions may carry
 breaking changes.
 
+## [Unreleased]
+
+The **renderer contract** (0.11, M4) — the framework-seam renderer boundary
+`(data, fidelity, width) → Block`, ratified in `docs/RENDERER_CONTRACT_DESIGN.md`.
+Landing in slices; this section accumulates until the cut.
+
+### Added
+
+- **`renderer=` — the renderer contract arrives at `run_cli`/`CliRunner`** (S1,
+  `docs/RENDERER_CONTRACT_DESIGN.md` §§1, 3). A keyword-only parameter taking the
+  `(data, fidelity, width) → Block` callable: the semantic renderer given only
+  its three inputs — the domain state, the compiled `Fidelity` **intact** (never
+  decomposed into loose kwargs), and the offered width. It sits beside legacy
+  `render=` (the `(ctx, data)` callback), which keeps working unchanged through a
+  deprecation window — no runtime warning in 0.11 (that gate opens at 0.12).
+- **`Renderer` — the contract as a published type, in `painted.core`.** The
+  render model's central unit joins the semver-stable core surface (guarded by
+  `tests/unit/test_public_api.py`), beside the `Fidelity` spec it references — so
+  the 0.13 host rung can run the same renderer through `Surface` without a
+  `tui`→`cli` import. `painted.cli` re-exports it for convenience.
+
+### Changed
+
+- **Render-path declaration validation moves to runner construction**
+  (`CliRunner.__post_init__`), not parser construction. The empty-argv fast path
+  never builds a parser, and neither `render`/`renderer`/`fetch` mints a flag, so
+  a parser-time check would never fire on the bare `tool` invocation. Declaring
+  **both** `render=` and `renderer=`, **neither**, or a missing `fetch=` each
+  raises `DeclarationError` at construction. (The *neither* form becomes the
+  transcription default in a later slice; until then a renderer is required.)
+
 ## [0.10.1] — 2026-07-11
 
 A patch cut from the first loops-adoption-spike evidence (roadmap M3): two consumer-recorded workarounds dissolve. Both changes derive from declarations that already existed — the width contract applied uniformly, and section identity read off the declared tree.
