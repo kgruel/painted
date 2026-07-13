@@ -71,30 +71,42 @@ All immutable. All return new Blocks. Still just printing — no state, no frame
 **Trigger**: I need `-v`/`-q`, `--json`, pipe detection, help text. This is where you cross from the rendering library into the CLI framework.
 
 ```python
-from painted import run_cli, CliContext, Block
+from painted import run_cli, Fidelity, Block
 
-def render(ctx: CliContext, data: dict) -> Block:
-    return status_view(data, zoom=ctx.zoom, width=ctx.width)
+def renderer(data: dict, fidelity: Fidelity, width: int | None) -> Block:
+    return status_view(data, zoom=fidelity.depth, width=width)
 
 def fetch() -> dict:
     return {"status": "ok"}
 
-run_cli(sys.argv[1:], render=render, fetch=fetch)
+run_cli(sys.argv[1:], renderer=renderer, fetch=fetch)
 ```
 
-You provide `render(ctx, data) → Block` and `fetch() → data`. The framework handles zoom/format/mode automatically.
+You provide `renderer(data, fidelity, width) → Block` — the renderer contract
+(docs/RENDERER_CONTRACT_DESIGN.md): given only the fetched data, the compiled
+disclosure spec, and the width offered at delivery time (`None` off a TTY —
+natural sizing, never a fabricated column count) — and `fetch() → data`. The
+framework handles zoom/format/mode automatically. Declaring neither `renderer=`
+nor `render=` installs the framework's own transcription default, so
+`run_cli(argv, fetch=fetch)` alone still renders something honest. The older
+`render(ctx, data) → Block` shape (reading `ctx.width`/`ctx.zoom` off a full
+`CliContext`) is still accepted as `render=` — a compatibility window, not a
+capability tier: mode, TTY state, and lifecycle are host-selection material
+that a semantic renderer never consumes (behavior that varies by destination
+belongs in handlers and hosts, not the renderer). New code should reach for
+`renderer=` first.
 
 **The disclosure ladder** (`docs/FIDELITY_DESIGN.md`) — each rung additive; climbing never rewrites the rung below:
 
 | Rung | You need | You write |
 |------|----------|-----------|
-| 0 | decent defaults | `paint(data)` — no ctx at all |
-| 1 | detail levels | `if ctx.zoom >= Zoom.DETAILED:` — `-q`/`-v`/`-vv` come free |
-| 2 | a named facet | declare `tags=[Tag("thinking", "Show reasoning", implied_at=3)]`; gate with `ctx.fidelity.shows("thinking")` — the `--thinking` flag, its help entry, and the depth implication are generated |
+| 0 | decent defaults | `paint(data)` — no fidelity at all |
+| 1 | detail levels | `if fidelity.depth >= Zoom.DETAILED:` — `-q`/`-v`/`-vv` come free |
+| 2 | a named facet | declare `tags=[Tag("thinking", "Show reasoning", implied_at=3)]`; gate with `fidelity.shows("thinking")` — the `--thinking` flag, its help entry, and the depth implication are generated |
 | 3 | density control | pass `budgets=True`; read `fidelity.chars`/`fidelity.lines` — only now do `--max-chars`/`--max-lines` exist |
 | 4 | structural disclosure | build a `Doc`; `doc_lens` applies the whole spec |
 
-Depth is anonymous detail (the user's word is "verbose"); a tag is a named facet a user would ask for at low depth (`--thinking` at `-q`). `ctx.zoom` is the rung-1 view of `ctx.fidelity` — not a compat shim, blessed permanently. `depth_aliases={"brief": 0, "full": 3}` adds app-local depth spellings. The honesty rule: a flag exists only because a capability was declared, and a declared capability must change output.
+Depth is anonymous detail (the user's word is "verbose"); a tag is a named facet a user would ask for at low depth (`--thinking` at `-q`). `ctx.zoom` (on the legacy `render=` shape) is the rung-1 view of `ctx.fidelity` — not a compat shim, blessed permanently; under `renderer=` the same view is `fidelity.depth`. `depth_aliases={"brief": 0, "full": 3}` adds app-local depth spellings. The honesty rule: a flag exists only because a capability was declared, and a declared capability must change output.
 
 The other two axes:
 - **Format** (`--json`/`--plain`): ANSI (TTY default), PLAIN (pipe default), JSON

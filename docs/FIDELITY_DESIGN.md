@@ -147,7 +147,7 @@ semver-stable one.
 ```python
 run_cli(
     argv,
-    render=render,
+    renderer=renderer,
     fetch=fetch,
     tags=[
         Tag("thinking", "Show model reasoning", implied_at=3),

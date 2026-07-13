@@ -120,10 +120,10 @@ paint(vitals, lens=vitals_lens)</pre>
           <div class="wt-stage-head"><span class="wt-n">03</span><span class="wt-label">+ argv</span><span class="wt-entry">run_cli · -q / -vv · | cat · --json</span></div>
           <h2 class="wt-title">Grow into a tool. The paint() call is gone — the lens is unchanged.</h2>
           <pre class="code"><span class="code-dim"># run_cli is paint() wearing argv. Same lens, new trigger.</span>
-def render(ctx, data):
-    return vitals_lens(data, ctx.zoom, ctx.width)
+def renderer(data, fidelity, width):
+    return vitals_lens(data, fidelity.depth, width)
 
-run_cli(sys.argv[1:], render=render, fetch=get_vitals)</pre>
+run_cli(sys.argv[1:], renderer=renderer, fetch=get_vitals)</pre>
           <div class="shell">
             <div class="shell-bar"><span class="shell-title">bash</span><span class="shell-tty">-q · quiet</span></div>
             <div class="shell-body">

@@ -16,7 +16,7 @@ align: center
 
 [spacer]
 
-you provide `fetch` and `render(ctx, data) -> Block` — painted chooses delivery
+you provide `fetch` and `renderer(data, fidelity, width) -> Block` — painted chooses delivery
 
 [spacer]
 
@@ -37,10 +37,10 @@ zoom is a first-class input: `Zoom.MINIMAL → Zoom.FULL`
 [spacer]
 
 ```python
-def render(ctx: CliContext, data: T) -> Block: ...
+def renderer(data: T, fidelity: Fidelity, width: int | None) -> Block: ...
 def fetch() -> T: ...
 
-run_cli(args, render=render, fetch=fetch)
+run_cli(args, renderer=renderer, fetch=fetch)
 ```
 
 [spacer]
@@ -50,7 +50,7 @@ optionally:
 ```python
 run_cli(
     args,
-    render=render,
+    renderer=renderer,
     fetch=fetch,
     handlers={OutputMode.INTERACTIVE: lambda ctx: MySurface().run()},
 )

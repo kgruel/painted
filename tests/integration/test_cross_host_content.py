@@ -16,8 +16,7 @@ cross-host pair is ``--static`` (fetch → one Block) vs ``--live``
 
 from __future__ import annotations
 
-from painted import Block, Style
-from painted.cli import CliContext, Zoom
+from painted import Block, Fidelity, Style
 
 from tests.helpers import assert_blocks_equal, capture_content_blocks
 
@@ -28,11 +27,12 @@ _STATES = [
 ]
 
 
-def _render(ctx: CliContext, service: dict) -> Block:
+def _render(service: dict, fidelity: Fidelity, width: int | None) -> Block:
     text = f"{service['name']}: {service['state']}"
-    if ctx.zoom >= Zoom.DETAILED:
+    if fidelity.depth >= 2:
         text += " (detail)"
-    return Block.text(text, Style(), width=min(ctx.width, 40))
+    w = 40 if width is None else min(width, 40)
+    return Block.text(text, Style(), width=w)
 
 
 async def _stream():
@@ -49,10 +49,10 @@ class TestCrossHostContent:
         monkeypatch.setattr("sys.stdout.isatty", lambda: False)
 
         static_code, static_blocks = capture_content_blocks(
-            ["--static"], render=_render, fetch=_fetch, fetch_stream=_stream
+            ["--static"], renderer=_render, fetch=_fetch, fetch_stream=_stream
         )
         live_code, live_blocks = capture_content_blocks(
-            ["--live"], render=_render, fetch=_fetch, fetch_stream=_stream
+            ["--live"], renderer=_render, fetch=_fetch, fetch_stream=_stream
         )
         capsys.readouterr()
 
@@ -67,10 +67,10 @@ class TestCrossHostContent:
         monkeypatch.setattr("sys.stdout.isatty", lambda: False)
 
         _, first = capture_content_blocks(
-            ["--live"], render=_render, fetch=_fetch, fetch_stream=_stream
+            ["--live"], renderer=_render, fetch=_fetch, fetch_stream=_stream
         )
         _, second = capture_content_blocks(
-            ["--live"], render=_render, fetch=_fetch, fetch_stream=_stream
+            ["--live"], renderer=_render, fetch=_fetch, fetch_stream=_stream
         )
         capsys.readouterr()
 
@@ -84,10 +84,10 @@ class TestCrossHostContent:
         monkeypatch.setattr("sys.stdout.isatty", lambda: False)
 
         _, static_blocks = capture_content_blocks(
-            ["-v", "--static"], render=_render, fetch=_fetch, fetch_stream=_stream
+            ["-v", "--static"], renderer=_render, fetch=_fetch, fetch_stream=_stream
         )
         _, live_blocks = capture_content_blocks(
-            ["-v", "--live"], render=_render, fetch=_fetch, fetch_stream=_stream
+            ["-v", "--live"], renderer=_render, fetch=_fetch, fetch_stream=_stream
         )
         capsys.readouterr()
 

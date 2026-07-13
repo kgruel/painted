@@ -4,6 +4,85 @@ All notable changes to painted are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/); pre-1.0, minor versions may carry
 breaking changes.
 
+## [Unreleased]
+
+The **renderer contract** (0.11, M4) — the framework-seam renderer boundary
+`(data, fidelity, width) → Block`, ratified in `docs/RENDERER_CONTRACT_DESIGN.md`.
+Landing in slices; this section accumulates until the cut.
+
+### Added
+
+- **`renderer=` — the renderer contract arrives at `run_cli`/`CliRunner`** (S1,
+  `docs/RENDERER_CONTRACT_DESIGN.md` §§1, 3). A keyword-only parameter taking the
+  `(data, fidelity, width) → Block` callable: the semantic renderer given only
+  its three inputs — the domain state, the compiled `Fidelity` **intact** (never
+  decomposed into loose kwargs), and the offered width. It sits beside legacy
+  `render=` (the `(ctx, data)` callback), which keeps working unchanged through a
+  deprecation window — no runtime warning in 0.11 (that gate opens at 0.12).
+- **`Renderer` — the contract as a published type, in `painted.core`.** The
+  render model's central unit joins the semver-stable core surface (guarded by
+  `tests/unit/test_public_api.py`), beside the `Fidelity` spec it references — so
+  the 0.13 host rung can run the same renderer through `Surface` without a
+  `tui`→`cli` import. `painted.cli` re-exports it for convenience.
+- **The width offer seam — `_offered_width`** (S2, `docs/RENDERER_CONTRACT_DESIGN.md`
+  §§5–6). A `renderer=` is offered `ctx.width` under STATIC+TTY and `None`
+  (natural sizing) under any non-TTY — never a fabricated column count for a
+  pipe. Both live hosts (`InPlaceRenderer`, `StreamSurface`) re-offer the
+  buffer's *current* geometry on every frame, so a mid-run resize re-enters the
+  renderer as changed input rather than a once-captured detection-time width.
+- **`ref_schemes=` — the framework-tier denotation declaration** (S4,
+  `docs/RENDERER_CONTRACT_DESIGN.md` §7). Static (a tuple of `RefScheme`) or
+  callable (`state -> tuple[RefScheme, ...]`, re-evaluated once per fetch
+  event) forms resolve after each fetch and install as a bracket around
+  render through serialization/flush: the
+  prior ambient `use_refs` state is preserved and restored, and
+  `ref_schemes=[]` disables ambient resolution for the run without leaking
+  into the next one. A raising callable's exception enters the render-error
+  path unchanged (never wrapped in `ContractError`); an invalid static
+  sequence faults at `CliRunner` construction, before any cycle starts.
+- **The transcription default — `run_cli` with neither `render=` nor
+  `renderer=`** (S3, `docs/RENDERER_CONTRACT_DESIGN.md` §4). The framework renders
+  by **transcription**: the fetched data is transcribed (declared-not-invented,
+  recursive + wide) through the same `(data, fidelity, width)` contract as any
+  authored renderer — "optional renderer" dissolves, there is always a renderer.
+  It is a default *renderer*, not a `paint()` call: the compiled `Fidelity` and
+  the offered width flow through intact, so `-q`/`-v` and declared budgets visibly
+  change the default output. `depth_aliases` and `budgets=True` stay valid on this
+  form. The *neither* `@overload` is published (with `fetch` required), so the
+  call form is spelled the moment it behaves.
+
+### Changed
+
+- **Render-path declaration validation moves to runner construction**
+  (`CliRunner.__post_init__`), not parser construction. The empty-argv fast path
+  never builds a parser, and neither `render`/`renderer`/`fetch` mints a flag, so
+  a parser-time check would never fire on the bare `tool` invocation. Declaring
+  **both** `render=` and `renderer=`, or a missing `fetch=`, each raises
+  `DeclarationError` at construction. Declaring **neither** installs the
+  transcription default (§4).
+- **`tags=` without a renderer faults at construction** (S3, §4). Transcription
+  cannot consume `fidelity.visible` — it has no way to map app-domain facet names
+  onto arbitrary data — so a declared `Tag` under the default renderer would mint
+  a dead `--{name}` flag, the honesty violation `FIDELITY_DESIGN` §1 calls
+  structurally impossible. `tags=` with neither `render=` nor `renderer=`
+  therefore raises `DeclarationError`, taking the old *neither* fault's place.
+- **`transcribe` and `shape_lens` widen to `width: int | None`** (S3, §4) — the
+  0.10.1 width law ("absent is natural") reaching the transcription core and the
+  exploration entry. `None` propagates through the shared recursive core as
+  unconstrained natural sizing; every existing `int` call is byte-identical.
+  Inference needs a column budget (chart bars, tree indents are width-consuming),
+  so `shape_lens` under a `None` width transcribes the declared shape rather than
+  guessing a chart/tree — the guess resumes the moment a width is offered.
+
+**Compatibility** (`docs/RENDERER_CONTRACT_DESIGN.md` §12). `renderer=` and
+`ref_schemes=` are additive — no existing `run_cli`/`CliRunner` call needs to
+change. `render=` is **documented legacy** as of this release: it keeps
+working unchanged, with no runtime warning; a `DeprecationWarning` is deferred
+to 0.12, and removal rides the 1.0 freeze window alongside `show()`. Internal
+demos and tests were flipped to `renderer=` in the same change that lands
+this section (S5) — `raymarch.py` and `starmap.py` deliberately stay on
+`render=` until 0.12, as the documented reason the warning gate waits.
+
 ## [0.10.1] — 2026-07-11
 
 A patch cut from the first loops-adoption-spike evidence (roadmap M3): two consumer-recorded workarounds dissolve. Both changes derive from declarations that already existed — the width contract applied uniformly, and section identity read off the declared tree.

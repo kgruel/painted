@@ -12,8 +12,8 @@ import importlib.util
 import sys
 from pathlib import Path
 
-from painted import Zoom
-from tests.helpers import block_to_text, static_ctx
+from painted import Fidelity, Zoom
+from tests.helpers import block_to_text
 
 _DEMO = Path(__file__).resolve().parent.parent.parent / "demos" / "showcase" / "fire.py"
 
@@ -83,9 +83,9 @@ def test_the_fire_actually_rises() -> None:
 def test_render_is_pure_at_every_zoom() -> None:
     burning = fire._fetch(7, 50)
     for zoom in Zoom:
-        ctx = static_ctx(zoom)
-        assert block_to_text(fire._render(ctx, burning)) == block_to_text(
-            fire._render(ctx, burning)
+        fid = Fidelity(depth=int(zoom))
+        assert block_to_text(fire._render(burning, fid, 80)) == block_to_text(
+            fire._render(burning, fid, 80)
         )
 
 

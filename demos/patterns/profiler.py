@@ -23,9 +23,8 @@ from dataclasses import dataclass
 
 from painted import (
     Block,
-    CliContext,
+    Fidelity,
     Style,
-    Zoom,
     border,
     join_vertical,
     pad,
@@ -300,19 +299,19 @@ def _fetch() -> ProfileData:
 # --- Zoom 0: one-line summary ---
 
 
-def render_minimal(data: ProfileData, width: int) -> Block:
+def render_minimal(data: ProfileData, width: int | None) -> Block:
     """Single-line profiling summary."""
     result = Block.text(
         f"{data.frame_count} frames, {data.total_writes} writes, avg {data.avg_writes:.0f}/frame",
         Style(),
     )
-    return truncate(result, width)
+    return truncate(result, width) if width is not None else result
 
 
 # --- Zoom 1: emission traces ---
 
 
-def render_summary(data: ProfileData, width: int) -> Block:
+def render_summary(data: ProfileData, width: int | None) -> Block:
     """Scenario overview with emission counts."""
     p = current_palette()
     rows: list[Block] = [
@@ -349,7 +348,8 @@ def render_summary(data: ProfileData, width: int) -> Block:
         style = p.accent if not es.kind.startswith("ui.") else Style(dim=True)
         rows.append(Block.text(f"  {es.count:>3}x  {es.kind}", style))
 
-    return truncate(join_vertical(*rows), width)
+    block = join_vertical(*rows)
+    return truncate(block, width) if width is not None else block
 
 
 # --- Zoom 2: frame chart + flame graph ---
@@ -373,11 +373,14 @@ def _build_emission_tree(emissions_raw: tuple[tuple[str, dict], ...]) -> dict[st
     return tree
 
 
-def render_detailed(data: ProfileData, width: int) -> Block:
+def render_detailed(data: ProfileData, width: int | None) -> Block:
     """Per-frame write chart, emission flame (horizontal + vertical)."""
     p = current_palette()
     sections: list[Block] = []
-    inner_width = min(width - 4, 70)
+    # chart_lens/flame_lens need a concrete column budget — 70 is the demo's
+    # own domain size (the same cap the width-bounded case clamps toward)
+    # when no width is offered.
+    inner_width = 70 if width is None else min(width - 4, 70)
 
     # Frame write counts as bar chart
     frame_data = {f.label: f.write_count for f in data.frames}
@@ -416,11 +419,13 @@ def render_detailed(data: ProfileData, width: int) -> Block:
 # --- Zoom 3: frame-by-frame breakdown ---
 
 
-def render_full(data: ProfileData, width: int) -> Block:
+def render_full(data: ProfileData, width: int | None) -> Block:
     """Frame-by-frame detail with cProfile flame and emission tree."""
     p = current_palette()
     sections: list[Block] = []
-    inner_width = min(width - 4, 70)
+    # Same natural-sizing floor as render_detailed's chart/flame budget.
+    inner_width = 70 if width is None else min(width - 4, 70)
+    frame_panel_w = 50 if width is None else min(50, width - 4)
 
     # Per-frame detail
     for frame in data.frames:
@@ -434,7 +439,7 @@ def render_full(data: ProfileData, width: int) -> Block:
         inner = join_vertical(header, label_line)
         sections.append(
             border(
-                pad(inner, right=max(0, min(50, width - 4) - inner.width)),
+                pad(inner, right=max(0, frame_panel_w - inner.width)),
                 title=f"Frame {frame.index}",
                 chars=ROUNDED,
             )
@@ -473,20 +478,21 @@ def render_full(data: ProfileData, width: int) -> Block:
 # --- run_cli integration ---
 
 
-def _render(ctx: CliContext, data: ProfileData) -> Block:
-    if ctx.zoom >= Zoom.FULL:
-        return render_full(data, ctx.width)
-    if ctx.zoom >= Zoom.DETAILED:
-        return render_detailed(data, ctx.width)
-    if ctx.zoom >= Zoom.SUMMARY:
-        return render_summary(data, ctx.width)
-    return render_minimal(data, ctx.width)
+def _render(data: ProfileData, fidelity: Fidelity, width: int | None) -> Block:
+    depth = fidelity.depth
+    if depth >= 3:
+        return render_full(data, width)
+    if depth >= 2:
+        return render_detailed(data, width)
+    if depth >= 1:
+        return render_summary(data, width)
+    return render_minimal(data, width)
 
 
 def main() -> int:
     return run_cli(
         sys.argv[1:],
-        render=_render,
+        renderer=_render,
         fetch=_fetch,
         description=__doc__,
         prog="profiler.py",

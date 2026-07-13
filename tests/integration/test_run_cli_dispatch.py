@@ -15,7 +15,7 @@ import json
 
 import pytest
 
-from painted import Block, Style
+from painted import Block, RefScheme, Style, current_ref_schemes, use_refs
 from painted.cli import (
     CliContext,
     CliRunner,
@@ -25,7 +25,7 @@ from painted.cli import (
     Zoom,
     run_cli,
 )
-from painted.core.errors import DeclarationError
+from painted.core.errors import ContractError, DeclarationError
 
 
 # =============================================================================
@@ -228,6 +228,672 @@ class TestCliRunner:
         assert "KeyError" in captured.out
         assert "kaboom" in captured.out
         assert "Traceback" not in captured.out
+
+
+def _renderer(data, fidelity, width):
+    """A (data, fidelity, width) → Block renderer — the §1 contract shape."""
+    return Block.text(f"data={data} depth={fidelity.depth} width={width}", Style())
+
+
+def _legacy(ctx: CliContext, data) -> Block:
+    return Block.text(f"legacy {data}", Style())
+
+
+class TestRendererContractConstruction:
+    """S1 of the renderer contract (docs/RENDERER_CONTRACT_DESIGN.md §3).
+
+    All render-path declaration validation lives at runner construction, not
+    parser construction: the empty-argv fast path never builds a parser, and
+    neither render/renderer/fetch mints a flag, so a parser-time check would
+    never fire on bare ``tool``. Each fault is therefore asserted on **empty
+    argv** — the path that skips the parser entirely.
+    """
+
+    def test_missing_fetch_raises_at_construction(self):
+        with pytest.raises(DeclarationError, match="fetch"):
+            run_cli([], renderer=_renderer)
+
+    def test_both_render_and_renderer_raises_at_construction(self):
+        with pytest.raises(DeclarationError, match="not both"):
+            run_cli([], _legacy, lambda: "x", renderer=_renderer)
+
+    def test_neither_installs_a_default_renderer(self):
+        # S3: neither render= nor renderer= no longer faults — the framework
+        # installs its transcription default, so there is always exactly one
+        # renderer at dispatch (§4). We assert only the structural fact and that
+        # the private default does not leak; *behavior* (that it transcribes) is
+        # pinned by TestTranscriptionDefault, not by the callable's identity.
+        runner = CliRunner(fetch=lambda: "x")
+        assert runner.render is None
+        assert runner.renderer is not None  # a renderer was installed
+        # field(repr=False): the private default never surfaces through the repr.
+        assert "renderer=" not in repr(runner)
+
+    def test_tags_without_a_renderer_faults_at_construction(self):
+        # The fence (§4): transcription cannot consume fidelity.visible, so a
+        # declared Tag would mint a dead --{name} flag. tags= with neither
+        # render= nor renderer= faults — taking the old *neither* fault's place.
+        from painted.cli import Tag
+
+        with pytest.raises(DeclarationError, match="tags= requires"):
+            CliRunner(fetch=lambda: "x", tags=[Tag("thinking", "Show reasoning")])
+
+    def test_tags_with_a_renderer_is_allowed(self):
+        # The fence is scoped to the *neither* form: a declared renderer can
+        # consume fidelity.visible, so tags= stays valid alongside one.
+        runner = CliRunner(renderer=_renderer, fetch=lambda: "x", tags=[])
+        assert runner.renderer is _renderer
+
+    def test_faults_bypass_the_parser(self, monkeypatch):
+        """The fault fires before any parser is built (empty argv, no flags)."""
+        import painted.cli.runner as runner_mod
+
+        def _boom(*a, **k):  # a parser build here would mean the check ran too late
+            raise AssertionError("build_parser must not be reached for a render-path fault")
+
+        monkeypatch.setattr(runner_mod, "build_parser", _boom)
+        with pytest.raises(DeclarationError):
+            run_cli([], render=_legacy, renderer=_renderer, fetch=lambda: "x")
+
+
+class TestRendererContractDispatch:
+    """Every published call form dispatches correctly (§11)."""
+
+    def test_renderer_keyword_form_dispatches(self, capsys, monkeypatch):
+        monkeypatch.setattr("sys.stdout.isatty", lambda: False)
+        rc = run_cli(["--plain"], renderer=_renderer, fetch=lambda: "HELLO")
+        assert rc == 0
+        out = capsys.readouterr().out
+        # renderer receives the compiled Fidelity intact (depth=1 for SUMMARY).
+        assert "data=HELLO" in out
+        assert "depth=1" in out
+
+    def test_renderer_receives_fidelity_intact_and_offered_width_forwarded(self):
+        """The compiled Fidelity is passed *whole* — the same object, never
+        decomposed and rebuilt — and the ``_render`` seam forwards whatever
+        ``offered`` width the caller resolved, by value. The offer *rule*
+        (TTY-vs-None) is ``_offered_width``'s job, tested separately; this
+        pins that the seam does not re-derive it."""
+        seen: dict = {}
+
+        def rnd(data, fidelity, width):
+            seen["fidelity"] = fidelity
+            seen["width"] = width
+            return Block.text("x", Style())
+
+        runner = CliRunner(renderer=rnd, fetch=lambda: "d")
+        ctx = CliContext(
+            fidelity=Fidelity(depth=2, visible=frozenset({"thinking"})),
+            mode=OutputMode.STATIC,
+            use_ansi=False,
+            is_tty=False,
+            width=73,
+            height=24,
+        )
+        runner._render(ctx, "d", 51)  # an explicit offer, distinct from ctx.width
+        assert seen["fidelity"] is ctx.fidelity  # intact — the same object, not a copy
+        assert seen["width"] == 51  # forwarded verbatim, not re-derived from ctx
+
+    def test_legacy_positional_form_unchanged(self, capsys, monkeypatch):
+        monkeypatch.setattr("sys.stdout.isatty", lambda: False)
+        rc = run_cli(["--plain"], _legacy, lambda: "WORLD")
+        assert rc == 0
+        assert "legacy WORLD" in capsys.readouterr().out
+
+    def test_legacy_keyword_form_unchanged(self, capsys, monkeypatch):
+        monkeypatch.setattr("sys.stdout.isatty", lambda: False)
+        rc = run_cli(["--plain"], render=_legacy, fetch=lambda: "WORLD")
+        assert rc == 0
+        assert "legacy WORLD" in capsys.readouterr().out
+
+    def test_legacy_positional_construction_preserved(self, capsys, monkeypatch):
+        """``CliRunner(render, fetch)`` — the legacy positional layout — still
+        binds render then fetch. ``renderer`` is kw_only, so it never steals the
+        second positional slot (which would fault as a 'both' declaration)."""
+        monkeypatch.setattr("sys.stdout.isatty", lambda: False)
+        runner = CliRunner(_legacy, lambda: "POS")  # positional render, positional fetch
+        assert runner.render is _legacy
+        assert runner.renderer is None
+        rc = runner.run(["--plain"])
+        assert rc == 0
+        assert "legacy POS" in capsys.readouterr().out
+
+    def test_render_emits_no_deprecation_warning(self, monkeypatch, recwarn):
+        """0.11 keeps render= silent — the DeprecationWarning gate opens at 0.12 (§3)."""
+        monkeypatch.setattr("sys.stdout.isatty", lambda: False)
+        run_cli(["--plain"], render=_legacy, fetch=lambda: "x")
+        assert not [w for w in recwarn.list if issubclass(w.category, DeprecationWarning)]
+
+
+class TestTranscriptionDefault:
+    """The *neither* form renders by transcription (§4) — the no-lens graduate
+    invoked through the contract, not a paint() call."""
+
+    def test_transcription_default_renders_fetched_data(self, capsys, monkeypatch):
+        # No render=, no renderer=: the framework transcribes the fetched data.
+        monkeypatch.setattr("sys.stdout.isatty", lambda: False)
+        rc = run_cli(["--plain"], fetch=lambda: {"status": "ok", "items": 42})
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert "status" in out and "ok" in out
+        assert "items" in out and "42" in out
+
+    def test_verbosity_visibly_changes_default_output(self, capsys, monkeypatch):
+        # The honesty half that holds (§4): -q/-v arrive through fidelity.depth and
+        # visibly change transcription output — depth is a facet it consumes.
+        monkeypatch.setattr("sys.stdout.isatty", lambda: False)
+        run_cli(["--plain", "-q"], fetch=lambda: {"a": 1, "b": 2})
+        quiet = capsys.readouterr().out
+        run_cli(["--plain", "-vv"], fetch=lambda: {"a": 1, "b": 2})
+        verbose = capsys.readouterr().out
+        assert quiet != verbose
+        assert "dict[2]" in quiet  # minimal depth transcribes the shape's count
+
+    def test_pipe_transcribes_natural_width(self, capsys, monkeypatch):
+        # On a pipe the offer is None (§5), so transcription renders natural: the
+        # fabricated fallback width never reaches the renderer. A long value is not
+        # clipped to a terminal column count it was never offered.
+        monkeypatch.setattr("sys.stdout.isatty", lambda: False)
+        long_value = "x" * 120
+        rc = run_cli(["--plain"], fetch=lambda: {"k": long_value})
+        assert rc == 0
+        assert long_value in capsys.readouterr().out
+
+    def test_max_lines_visibly_truncates_default_output(self, capsys, monkeypatch):
+        # The other honesty half (§4/§11): declared budgets consumed by
+        # transcription visibly change output. --max-lines only exists because
+        # budgets=True was declared; it samples the key-value table to N rows.
+        monkeypatch.setattr("sys.stdout.isatty", lambda: False)
+
+        def data():
+            return {f"k{i}": i for i in range(10)}
+
+        run_cli(["--plain", "-v"], fetch=data, budgets=True)
+        unbudgeted = capsys.readouterr().out
+        run_cli(["--plain", "-v", "--max-lines", "3"], fetch=data, budgets=True)
+        budgeted = capsys.readouterr().out
+        assert budgeted != unbudgeted
+        assert "k9: 9" in unbudgeted  # all ten rows before the budget
+        assert "k9: 9" not in budgeted  # sampled away by --max-lines 3
+        assert "+7 more" in budgeted  # 10 - 3, with the honest overflow footer
+
+    def test_max_chars_visibly_truncates_default_output(self, capsys, monkeypatch):
+        # --max-chars caps a string value's display width; it exists only because
+        # budgets=True was declared. Compared unbudgeted vs budgeted at the same
+        # depth, the value is visibly shortened with an honest length indicator.
+        monkeypatch.setattr("sys.stdout.isatty", lambda: False)
+
+        def data():
+            return {"k": "y" * 100}
+
+        run_cli(["--plain", "-vv"], fetch=data, budgets=True)
+        unbudgeted = capsys.readouterr().out
+        run_cli(["--plain", "-vv", "--max-chars", "20"], fetch=data, budgets=True)
+        budgeted = capsys.readouterr().out
+        assert budgeted != unbudgeted
+        assert "y" * 100 in unbudgeted  # full value at natural width, unbudgeted
+        assert "y" * 100 not in budgeted  # capped
+        assert "[100 chars]" in budgeted  # the honest truncation indicator
+
+
+def _ctx(
+    *,
+    is_tty: bool,
+    width: int,
+    use_ansi: bool | None = None,
+    mode: OutputMode = OutputMode.STATIC,
+) -> CliContext:
+    return CliContext(
+        fidelity=Fidelity(depth=int(Zoom.SUMMARY)),
+        mode=mode,
+        use_ansi=is_tty if use_ansi is None else use_ansi,
+        is_tty=is_tty,
+        width=width,
+        height=24,
+    )
+
+
+class TestOfferSeam:
+    """The width offer rule (§5–6, S2). ``_offered_width`` is the one place the
+    rule lives: stdout is a real viewport (a TTY) → offer geometry; any
+    viewportless destination → offer None (natural). The live hosts re-offer
+    *current* geometry per frame, so a mid-run resize re-enters the renderer as
+    changed input."""
+
+    def test_offered_width_offers_geometry_on_a_tty(self):
+        ctx = _ctx(is_tty=True, width=80)
+        # Default geometry is ctx.width (one-shot dispatch)…
+        assert CliRunner._offered_width(ctx) == 80
+        # …and a live path may override with the frame's current width.
+        assert CliRunner._offered_width(ctx, 120) == 120
+
+    def test_offered_width_offers_none_off_a_tty(self):
+        ctx = _ctx(is_tty=False, width=80)
+        assert CliRunner._offered_width(ctx) is None
+        # The rule gates on the TTY, not the geometry: an offered frame width
+        # is still discarded for None under a pipe.
+        assert CliRunner._offered_width(ctx, 120) is None
+
+    def test_plain_at_a_tty_still_offers_geometry(self):
+        """Format is orthogonal to the offer: --plain drops ANSI, not the
+        viewport. A real TTY's columns are real, so geometry is still offered
+        (the gate is is_tty, not use_ansi) — end to end through static."""
+        forced_plain_tty = _ctx(is_tty=True, width=88, use_ansi=False)
+        assert CliRunner._offered_width(forced_plain_tty) == 88
+
+        seen: dict = {}
+
+        def rnd(data, fidelity, width):
+            seen["width"] = width
+            return Block.text("x", Style())
+
+        CliRunner(renderer=rnd, fetch=lambda: "d")._run_static(forced_plain_tty)
+        assert seen["width"] == 88
+
+    def test_static_pipe_offers_none_to_the_renderer(self):
+        """The pipe case arrives as width=None — natural sizing, no fabricated
+        fallback. Driven through the real static delivery path."""
+        seen: dict = {}
+
+        def rnd(data, fidelity, width):
+            seen["width"] = width
+            return Block.text("x", Style())
+
+        CliRunner(renderer=rnd, fetch=lambda: "d")._run_static(_ctx(is_tty=False, width=80))
+        assert seen["width"] is None
+
+    def test_static_tty_offers_ctx_width_to_the_renderer(self):
+        seen: dict = {}
+
+        def rnd(data, fidelity, width):
+            seen["width"] = width
+            return Block.text("x", Style())
+
+        CliRunner(renderer=rnd, fetch=lambda: "d")._run_static(_ctx(is_tty=True, width=97))
+        assert seen["width"] == 97
+
+    def test_inplace_live_reoffers_current_geometry_per_frame(self, monkeypatch):
+        """The in-place host owns a live viewport: each frame re-reads terminal
+        geometry, so a mid-run resize changes the next offer (§6)."""
+
+        class StubRenderer:
+            def __init__(self, *args, **kwargs): ...
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return None
+
+            def render(self, block: Block) -> None: ...
+            def finalize(self) -> None: ...
+
+        import painted.inplace as inplace_mod
+
+        monkeypatch.setattr(inplace_mod, "InPlaceRenderer", StubRenderer)
+        # Terminal resizes between the two frames: 30 cols, then 50.
+        cols = iter([30, 50])
+        import os
+
+        monkeypatch.setattr(
+            "shutil.get_terminal_size",
+            lambda *a, **k: os.terminal_size((next(cols), 24)),
+        )
+
+        offered: list[int | None] = []
+
+        def rnd(data, fidelity, width):
+            offered.append(width)
+            return Block.text(str(data), Style())
+
+        async def fake_stream():
+            yield "a"
+            yield "b"
+
+        runner = CliRunner(renderer=rnd, fetch=lambda: "unused", fetch_stream=fake_stream)
+        # LIVE on a TTY viewport (use_ansi True, is_tty True) → in-place ANSI branch.
+        runner._dispatch(_ctx(is_tty=True, width=999, use_ansi=True, mode=OutputMode.LIVE))
+        assert offered == [30, 50]  # the resize re-entered as a changed offer
+
+    def test_forced_plain_live_reoffers_current_geometry_per_frame(self, monkeypatch, capsys):
+        """--plain --live at a real TTY takes the non-ANSI cadence branch, but
+        the offer is still per-frame (§6): --plain drops ANSI, not the
+        viewport, so each state's render re-reads current columns — never the
+        detection-time ctx.width."""
+        import os
+
+        cols = iter([30, 50])
+        monkeypatch.setattr(
+            "shutil.get_terminal_size",
+            lambda *a, **k: os.terminal_size((next(cols), 24)),
+        )
+
+        offered: list[int | None] = []
+
+        def rnd(data, fidelity, width):
+            offered.append(width)
+            return Block.text(str(data), Style())
+
+        async def fake_stream():
+            yield "a"
+            yield "b"
+
+        runner = CliRunner(renderer=rnd, fetch=lambda: "unused", fetch_stream=fake_stream)
+        # Forced-plain on a TTY (use_ansi False, is_tty True) → non-ANSI branch.
+        code = runner._dispatch(_ctx(is_tty=True, width=999, use_ansi=False, mode=OutputMode.LIVE))
+        assert code == 0
+        assert offered == [30, 50]  # never the stale detection-time 999
+        assert "b" in capsys.readouterr().out  # the last frame still deposits
+
+    def test_forced_plain_live_pipe_still_offers_none(self, monkeypatch, capsys):
+        """The same branch under a pipe: the re-read geometry is discarded by
+        the offer rule — every frame's offer stays None (natural sizing)."""
+        offered: list[int | None] = []
+
+        def rnd(data, fidelity, width):
+            offered.append(width)
+            return Block.text(str(data), Style())
+
+        async def fake_stream():
+            yield "a"
+            yield "b"
+
+        runner = CliRunner(renderer=rnd, fetch=lambda: "unused", fetch_stream=fake_stream)
+        code = runner._dispatch(_ctx(is_tty=False, width=80, use_ansi=False, mode=OutputMode.LIVE))
+        assert code == 0
+        assert offered == [None, None]
+        capsys.readouterr()
+
+
+def _ansi_ctx(*, width: int = 80) -> CliContext:
+    return CliContext(
+        fidelity=Fidelity(depth=int(Zoom.SUMMARY)),
+        mode=OutputMode.STATIC,
+        use_ansi=True,
+        is_tty=True,
+        width=width,
+        height=24,
+    )
+
+
+class TestRefSchemes:
+    """ref_schemes= (§7): the runner-owned bracket around render +
+    serialization. Static declarations validate at construction
+    (DeclarationError); a callable evaluates per fetch, in the render phase —
+    a raising callable enters the render-error path unchanged, an invalid
+    result faults ContractError. Excluded from handler-dispatched modes
+    (static only) and the --json fork (never, static or callable)."""
+
+    def test_bad_name_validates_at_construction(self):
+        with pytest.raises(DeclarationError, match="kebab-case"):
+            CliRunner(
+                renderer=lambda data, fidelity, width: Block.text("x", Style()),
+                fetch=lambda: "x",
+                ref_schemes=[RefScheme("Bad_Name", lambda v: v)],
+            )
+
+    def test_duplicate_names_validate_at_construction(self):
+        with pytest.raises(DeclarationError, match="declared twice"):
+            CliRunner(
+                renderer=lambda data, fidelity, width: Block.text("x", Style()),
+                fetch=lambda: "x",
+                ref_schemes=[
+                    RefScheme("fact", lambda v: v),
+                    RefScheme("fact", lambda v: v.upper()),
+                ],
+            )
+
+    def test_non_refscheme_element_validates_at_construction(self):
+        with pytest.raises(DeclarationError, match="not a RefScheme"):
+            CliRunner(
+                renderer=lambda data, fidelity, width: Block.text("x", Style()),
+                fetch=lambda: "x",
+                ref_schemes=["not-a-scheme"],  # type: ignore[list-item]
+            )
+
+    def test_non_sequence_non_callable_validates_at_construction(self):
+        """A set (or any object that is neither the declared Sequence shape
+        nor callable) must fault DeclarationError at construction — not be
+        silently misclassified as "callable" and crash with an unrelated
+        TypeError at render time (P2-1)."""
+        with pytest.raises(DeclarationError, match="Sequence of RefScheme"):
+            CliRunner(
+                renderer=lambda data, fidelity, width: Block.text("x", Style()),
+                fetch=lambda: "x",
+                ref_schemes={RefScheme("fact", lambda v: v)},  # type: ignore[arg-type]
+            )
+
+    def test_post_construction_mutation_does_not_reopen_the_declaration(self, capsys):
+        """The static form is frozen at construction: mutating the
+        caller-owned list afterward (e.g. appending a duplicate name) must
+        not detonate a mid-cycle DeclarationError from use_refs (P1-1)."""
+        schemes = [RefScheme("fact", lambda v: f"https://loops.dev/f/{v}")]
+
+        def rnd(data, fidelity, width):
+            return Block.text("deploy", Style(), ref="fact:01")
+
+        runner = CliRunner(renderer=rnd, fetch=lambda: "x", ref_schemes=schemes)
+        schemes.append(RefScheme("fact", lambda v: v))  # a duplicate name, added after construction
+
+        code = runner._run_static(_ansi_ctx())
+        assert code == 0  # not 2 — the mutation never reaches the bracket
+        assert "\x1b]8;;https://loops.dev/f/01" in capsys.readouterr().out
+
+    def test_callable_result_rejects_a_set(self, capsys):
+        """The callable-result route enforces the same Sequence[RefScheme]
+        shape as the static route (P2-1) — a set is not a Sequence, even
+        though it's iterable."""
+
+        def bad(state):
+            return {RefScheme("fact", lambda v: v)}
+
+        runner = CliRunner(
+            renderer=lambda data, fidelity, width: Block.text("x", Style()),
+            fetch=lambda: "x",
+            ref_schemes=bad,
+        )
+        code = runner._run_static(_ansi_ctx())
+        assert code == 2
+        out = capsys.readouterr().out
+        assert "ContractError" in out
+        assert "Sequence of RefScheme" in out
+
+    def test_static_ref_schemes_installs_around_render_and_serialize(self, capsys):
+        def rnd(data, fidelity, width):
+            return Block.text("deploy", Style(), ref="fact:01")
+
+        runner = CliRunner(
+            renderer=rnd,
+            fetch=lambda: "x",
+            ref_schemes=[RefScheme("fact", lambda v: f"https://loops.dev/f/{v}")],
+        )
+        code = runner._run_static(_ansi_ctx())
+        assert code == 0
+        assert "\x1b]8;;https://loops.dev/f/01" in capsys.readouterr().out
+
+    def test_absent_ref_schemes_leaves_ambient_untouched(self, capsys):
+        """No declaration → the framework installs no bracket at all: an
+        app's own ambient use_refs() keeps flowing through the CLI tier."""
+
+        def rnd(data, fidelity, width):
+            return Block.text("deploy", Style(), ref="fact:01")
+
+        with use_refs(RefScheme("fact", lambda v: f"https://ambient/{v}")):
+            runner = CliRunner(renderer=rnd, fetch=lambda: "x")  # ref_schemes absent
+            code = runner._run_static(_ansi_ctx())
+
+        assert code == 0
+        assert "https://ambient/01" in capsys.readouterr().out
+
+    def test_empty_ref_schemes_disables_ambient(self, capsys):
+        """ref_schemes=[] is a valid explicit empty declaration: it disables
+        ambient resolution for the runner-owned cycle, restoring the prior
+        ambient state once the bracket exits."""
+
+        def rnd(data, fidelity, width):
+            return Block.text("deploy", Style(), ref="fact:01")
+
+        with use_refs(RefScheme("fact", lambda v: f"https://ambient/{v}")):
+            runner = CliRunner(renderer=rnd, fetch=lambda: "x", ref_schemes=[])
+            code = runner._run_static(_ansi_ctx())
+            # ambient state is restored once the runner-owned bracket exits
+            assert "fact" in current_ref_schemes()
+
+        assert code == 0
+        out = capsys.readouterr().out
+        assert "\x1b]8;;" not in out  # the ref is inert — no hyperlink at all
+
+    def test_callable_evaluates_against_the_fetched_state(self, capsys):
+        seen: list[object] = []
+
+        def schemes_for(state):
+            seen.append(state)
+            return [RefScheme("fact", lambda v: f"https://x/{state}/{v}")]
+
+        def rnd(data, fidelity, width):
+            return Block.text("deploy", Style(), ref="fact:01")
+
+        runner = CliRunner(renderer=rnd, fetch=lambda: "abc", ref_schemes=schemes_for)
+        code = runner._run_static(_ansi_ctx())
+        assert code == 0
+        assert seen == ["abc"]
+        assert "\x1b]8;;https://x/abc/01" in capsys.readouterr().out
+
+    def test_callable_raising_propagates_unchanged_into_render_error_path(self, capsys):
+        def boom(state):
+            raise RuntimeError("app boom")
+
+        runner = CliRunner(
+            renderer=lambda data, fidelity, width: Block.text("x", Style()),
+            fetch=lambda: "x",
+            ref_schemes=boom,
+        )
+        code = runner._run_static(_ansi_ctx())
+        assert code == 2  # the render-error exit code, not a special one
+        out = capsys.readouterr().out
+        assert "RuntimeError: app boom" in out
+        assert "ContractError" not in out  # unwrapped — an app fault, not painted's
+
+    def test_callable_invalid_element_faults_contracterror(self, capsys):
+        def bad(state):
+            return [object()]  # not a RefScheme
+
+        runner = CliRunner(
+            renderer=lambda data, fidelity, width: Block.text("x", Style()),
+            fetch=lambda: "x",
+            ref_schemes=bad,
+        )
+        code = runner._run_static(_ansi_ctx())
+        assert code == 2  # same render-error path as a renderer fault
+        assert "ContractError" in capsys.readouterr().out
+
+    def test_callable_duplicate_names_faults_contracterror(self, capsys):
+        def bad(state):
+            return [RefScheme("fact", lambda v: v), RefScheme("fact", lambda v: v)]
+
+        runner = CliRunner(
+            renderer=lambda data, fidelity, width: Block.text("x", Style()),
+            fetch=lambda: "x",
+            ref_schemes=bad,
+        )
+        code = runner._run_static(_ansi_ctx())
+        assert code == 2
+        out = capsys.readouterr().out
+        assert "ContractError" in out
+        assert "declared twice" in out
+
+    def test_callable_result_is_validated_before_any_use_refs_call(self):
+        """A bad result faults ContractError directly — never use_refs's own
+        DeclarationError, which must not leak mid-cycle (ERRORS_DESIGN)."""
+
+        def bad(state):
+            return [object()]
+
+        runner = CliRunner(
+            renderer=lambda data, fidelity, width: Block.text("x", Style()),
+            fetch=lambda: "x",
+            ref_schemes=bad,
+        )
+        with pytest.raises(ContractError):
+            runner._resolve_ref_schemes("x")
+
+    def test_render_error_path_never_the_fetch_path(self, capsys):
+        """A resolution fault is a declaration-time fault, not a data fault —
+        it must never be misclassified as a fetch failure (exit 1)."""
+
+        def boom(state):
+            raise RuntimeError("scheme boom")
+
+        runner = CliRunner(
+            renderer=lambda data, fidelity, width: Block.text("x", Style()),
+            fetch=lambda: "x",
+            ref_schemes=boom,
+        )
+        code = runner._run_static(_ansi_ctx())
+        assert code == 2  # not 1 — never the fetch path
+
+    def test_handler_mode_does_not_evaluate_a_callable(self, monkeypatch):
+        """Handler paths are excluded: the framework neither fetches nor
+        renders there, so a callable has no state boundary to evaluate."""
+        monkeypatch.setattr("sys.stdout.isatty", lambda: False)
+        called = {"v": False}
+
+        def never_called(state):
+            called["v"] = True
+            return []
+
+        def handler(ctx: CliContext) -> int:
+            return 0
+
+        result = run_cli(
+            ["-i"],
+            render=lambda ctx, data: Block.text("unused", Style()),
+            fetch=lambda: "data",
+            handlers={OutputMode.INTERACTIVE: handler},
+            ref_schemes=never_called,
+        )
+        assert result == 0
+        assert called["v"] is False
+
+    def test_handler_mode_installs_a_static_declaration(self, monkeypatch):
+        """A static sequence needs no state and installs around the handler
+        invocation like any other declared scope."""
+        monkeypatch.setattr("sys.stdout.isatty", lambda: False)
+        seen: dict[str, set[str]] = {}
+
+        def handler(ctx: CliContext) -> int:
+            seen["schemes"] = set(current_ref_schemes())
+            return 0
+
+        result = run_cli(
+            ["-i"],
+            render=lambda ctx, data: Block.text("unused", Style()),
+            fetch=lambda: "data",
+            handlers={OutputMode.INTERACTIVE: handler},
+            ref_schemes=[RefScheme("fact", lambda v: v)],
+        )
+        assert result == 0
+        assert seen["schemes"] == {"fact"}
+        assert current_ref_schemes() == {}  # released after the bracket exits
+
+    def test_json_export_never_evaluates_ref_schemes(self, capsys, monkeypatch):
+        """--json is excluded absolutely, static and callable alike: data
+        export never renders, never serializes a Block."""
+        monkeypatch.setattr("sys.stdout.isatty", lambda: False)
+        called = {"v": False}
+
+        def never_called(state):
+            called["v"] = True
+            return []
+
+        result = run_cli(
+            ["--json"],
+            render=lambda ctx, data: Block.text("unused", Style()),
+            fetch=lambda: {"a": 1},
+            ref_schemes=never_called,
+        )
+        assert result == 0
+        assert called["v"] is False
+        assert json.loads(capsys.readouterr().out) == {"a": 1}
 
 
 class TestRunCliHelp:

@@ -28,16 +28,18 @@ plus **Showcase** — a *presentation* tier, not a new test shape.
 | Tier | Lesson | State | Test shape |
 |------|--------|-------|------------|
 | **Primitive** | Type API | None | `function() → stdout capture` |
-| **Pattern** | Workflow | Data only | `_render(ctx, data) → Block` |
+| **Pattern** | Workflow | Data only | `_render(data, fidelity, width) → Block` |
 | **App** | Interaction | Mutable (Surface) | `TestSurface(keys) → frames` |
 | **Example** | Real app | Mutable (Surface) | `TestSurface(keys) → frames` |
-| **Showcase** | Spectacle | Data only | `_render(ctx, data) → Block` *(pattern shape)* |
+| **Showcase** | Spectacle | Data only | `_render(data, fidelity, width) → Block` *(pattern shape)* |
 
 **Primitives** teach a single type or composition. No `main()`, no CLI flags.
 Output via `print_block` / `paint`. The output is the lesson.
 
 **Patterns** are runnable examples with CLI flags — the invocation IS the lesson.
-They expose `_fetch()` and `_render(ctx, data) → Block`, exercised by the liveness
+They expose `_fetch()` and `_render(data, fidelity, width) → Block` (the renderer
+contract, docs/RENDERER_CONTRACT_DESIGN.md — declared via `renderer=`), exercised
+by the liveness
 smoke (`tests/smoke/test_demo_liveness.py`) — every pattern renders at every zoom
 without raising. Styled/invariant contracts live in the appearance/property tiers,
 not in per-demo snapshots.
@@ -62,9 +64,9 @@ renders them as a distinct fifth column (the finale); the liveness smoke exercis
 them via `test_showcase_demo_renders`, identical assertions to patterns.
 
 The test shape *is* the boundary between primitive / pattern / app. If you can
-test the full lesson by calling `_render(ctx, data)`, it's a pattern (or, if it's
-animated spectacle, a showcase). If you need to send keys and inspect frames,
-it's an app.
+test the full lesson by calling `_render(data, fidelity, width)`, it's a pattern
+(or, if it's animated spectacle, a showcase). If you need to send keys and
+inspect frames, it's an app.
 
 ## Demo Ladder
 

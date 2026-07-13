@@ -14,8 +14,8 @@ import sys
 from dataclasses import replace
 from pathlib import Path
 
-from painted import Zoom
-from tests.helpers import block_to_text, static_ctx
+from painted import Fidelity, Zoom
+from tests.helpers import block_to_text
 
 _DEMO = Path(__file__).resolve().parent.parent.parent / "demos" / "showcase" / "life.py"
 
@@ -96,8 +96,10 @@ def test_fetch_is_deterministic() -> None:
 def test_render_is_pure_at_every_zoom() -> None:
     world = life._fetch("glider", 8)
     for zoom in Zoom:
-        ctx = static_ctx(zoom)
-        assert block_to_text(life._render(ctx, world)) == block_to_text(life._render(ctx, world))
+        fid = Fidelity(depth=int(zoom))
+        assert block_to_text(life._render(world, fid, 80)) == block_to_text(
+            life._render(world, fid, 80)
+        )
 
 
 def test_grid_pairs_rows_into_half_blocks() -> None:

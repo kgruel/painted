@@ -7,7 +7,7 @@ main() {
     cd "$PROJECT_ROOT"
 
     step "Types"
-    run_uv ty check src/ > /dev/null 2>&1 && ok || { fail; run_uv ty check src/; exit 1; }
+    run_uv ty check src/ tests/typing/ > /dev/null 2>&1 && ok || { fail; run_uv ty check src/ tests/typing/; exit 1; }
 
     step "Format"
     run_uv ruff format --check src/ tests/ > /dev/null 2>&1 && ok || { fail; run_uv ruff format --check src/ tests/; exit 1; }

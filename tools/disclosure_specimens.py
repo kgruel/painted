@@ -8,11 +8,11 @@ exactly what the named invocation prints. `tools/outputgen.py` captures them
 through `render_html` into committed fragments consumed by
 `web/src/pages/walkthrough/fidelity.astro`.
 
-Every panel is produced by calling the exemplar's own `_render(ctx, data)` — the
-same entry point the CLI drives — so the renderers, tag implications, and density
-budget are all sourced from one place (the demo), not re-derived here. This tool
-only pins the exemplar's timestamp so the captured panels are deterministic (the
-live `_fetch()` path stamps `now()`).
+Every panel is produced by calling the exemplar's own `_render(data, fidelity,
+width)` — the same entry point the CLI drives — so the renderers, tag
+implications, and density budget are all sourced from one place (the demo), not
+re-derived here. This tool only pins the exemplar's timestamp so the captured
+panels are deterministic (the live `_fetch()` path stamps `now()`).
 
 The ladder the panels walk (docs/FIDELITY_DESIGN.md):
     rung 1  depth          -q / default / -v / -vv          anonymous detail
@@ -41,8 +41,8 @@ import sys
 from dataclasses import replace
 from pathlib import Path
 
-from painted import Block, CliContext, Fidelity
-from painted.cli import OutputMode, implied_visible
+from painted import Block, Fidelity
+from painted.cli import implied_visible
 from painted.core.doc import doc_lens
 
 if __package__ is None:  # invoked as a script: python tools/disclosure_specimens.py
@@ -84,15 +84,7 @@ def _panel(depth: int, *extra: str, chars: int = 0, lines: int = 0) -> Block:
         chars=chars,
         lines=lines,
     )
-    ctx = CliContext(
-        fidelity=fidelity,
-        mode=OutputMode.STATIC,
-        use_ansi=False,
-        is_tty=False,
-        width=_WIDTH,
-        height=24,
-    )
-    return _DEMO._render(ctx, _SAMPLE)
+    return _DEMO._render(_SAMPLE, fidelity, _WIDTH)
 
 
 # --- Rung 1: depth — anonymous detail picks the renderer -----------------------
@@ -134,15 +126,14 @@ DISCLOSURE: dict[str, Block] = {
     "disclosure_doc_d2": DISCLOSURE_DOC_D2,
 }
 
+
 # Invariants the panels assert by construction — a depth alias must be pure
 # spelling, or the depth-alias teaching is a lie. Checked at import so a renderer or
 # compiler change that broke the equality fails `./dev panels` / the gate loudly,
 # at the source, instead of silently diverging on the page. (`Block` is identity-
 # equal, so the meaningful equality is rendered output — the cells the page shows.)
 def _cells(block: Block) -> tuple[tuple[str, ...], ...]:
-    return tuple(
-        tuple(cell.char for cell in block.row(y)) for y in range(block.height)
-    )
+    return tuple(tuple(cell.char for cell in block.row(y)) for y in range(block.height))
 
 
 assert _cells(DISCLOSURE_BRIEF) == _cells(DISCLOSURE_Q), (

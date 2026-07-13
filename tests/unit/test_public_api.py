@@ -103,6 +103,10 @@ STABLE_CORE_SURFACE = frozenset(
         "CellWrite",
         # Rendering constraint
         "Zoom",
+        # The framework-seam renderer contract (0.11): (data, fidelity, width) →
+        # Block, the render model's central unit — in core so the 0.13 host rung
+        # can run it through Surface without a tui→cli import (RENDERER_CONTRACT §3)
+        "Renderer",
         # Doc-IR (node vocabulary + doc_lens, the one-way door opened at 0.10;
         # visible_body/capped deliberately unexported — see DOC_IR_DESIGN.md)
         "Doc",

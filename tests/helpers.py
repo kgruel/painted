@@ -63,13 +63,13 @@ def text_block(lines: list[str], style: Style | None = None, *, ref: str | None 
     return Block(rows, width, ref=ref)
 
 
-def capture_content_blocks(argv, *, render, **run_cli_kwargs):
+def capture_content_blocks(argv, *, renderer, **run_cli_kwargs):
     """Run run_cli, capturing every content Block the renderer returns.
 
     The cross-host harness (RENDER_MODEL.md law 1, Milestone 1): every
     delivery path — static print_block, in-place live, plain streaming —
-    receives its content Block from the declared render fn, so wrapping that
-    fn observes the Block *before* delivery dress (live_meter) and
+    receives its content Block from the declared renderer fn, so wrapping
+    that fn observes the Block *before* delivery dress (live_meter) and
     serialization. This is deliberately test-side plumbing: Milestone 1 adds
     guards without changing public APIs.
 
@@ -79,12 +79,12 @@ def capture_content_blocks(argv, *, render, **run_cli_kwargs):
 
     captured: list[Block] = []
 
-    def recording_render(ctx: CliContext, data):
-        block = render(ctx, data)
+    def recording_renderer(data, fidelity, width):
+        block = renderer(data, fidelity, width)
         captured.append(block)
         return block
 
-    exit_code = run_cli(list(argv), render=recording_render, **run_cli_kwargs)
+    exit_code = run_cli(list(argv), renderer=recording_renderer, **run_cli_kwargs)
     return exit_code, captured
 
 

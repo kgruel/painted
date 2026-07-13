@@ -1,7 +1,7 @@
 """Shared helpers to capture demo output for tests and docs.
 
 Supports two demo shapes (see tests/golden/CLAUDE.md):
-- run_cli demos expose `_fetch()` and `_render(ctx, data)` → returns a Block
+- run_cli demos expose `_fetch()` and `_render(data, fidelity, width)` → returns a Block
 - direct-output demos expose standalone functions that write to stdout → returns text
 """
 
@@ -14,8 +14,7 @@ from io import StringIO
 from pathlib import Path
 from types import ModuleType
 
-from painted import Block, CliContext, Fidelity, Zoom
-from painted.cli import OutputMode
+from painted import Block, Fidelity, Zoom
 
 CaptureResult = Block | str
 
@@ -63,7 +62,7 @@ def capture_demo(
         fetch = getattr(mod, "_fetch", None)
         render = getattr(mod, "_render", None)
         if not callable(render):
-            raise AttributeError(f"{demo_path} is missing callable _render(ctx, data)")
+            raise AttributeError(f"{demo_path} is missing callable _render(data, fidelity, width)")
 
         if data_attr is not None:
             if not hasattr(mod, data_attr):
@@ -83,15 +82,7 @@ def capture_demo(
             depth=int(zoom),
             visible=implied_visible(getattr(mod, "_TAGS", None), int(zoom)),
         )
-        ctx = CliContext(
-            fidelity=fidelity,
-            mode=OutputMode.STATIC,
-            use_ansi=False,
-            is_tty=False,
-            width=width,
-            height=height,
-        )
-        out = render(ctx, data)
+        out = render(data, fidelity, width)
         if not isinstance(out, Block):
             raise TypeError(f"{demo_path}._render returned {type(out).__name__}, expected Block")
         return out

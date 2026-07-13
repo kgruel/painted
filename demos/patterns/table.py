@@ -33,6 +33,7 @@ from painted import (
     Align,
     Block,
     CliContext,
+    Fidelity,
     Line,
     OutputMode,
     Style,
@@ -134,7 +135,9 @@ def render_adaptive(data: list[Service], width: int) -> Block:
     columns = [Column(Line.plain(c.header), width=c.track, align=c.align) for c in active]
     rows = [[Line.plain(c.field(s), _cell_style(c.key, s.status)) for c in active] for s in data]
     state = TableState().with_count(len(rows)).with_visible(len(rows))
-    return table(state, columns, rows, visible_height=len(rows), width=width, selected_style=Style())
+    return table(
+        state, columns, rows, visible_height=len(rows), width=width, selected_style=Style()
+    )
 
 
 # =============================================================================
@@ -142,14 +145,20 @@ def render_adaptive(data: list[Service], width: int) -> Block:
 # =============================================================================
 
 
-def _col(header: str, track, *, align: Align = Align.START, min_width=None, max_width=None) -> Column:
-    return Column(Line.plain(header), width=track, align=align, min_width=min_width, max_width=max_width)
+def _col(
+    header: str, track, *, align: Align = Align.START, min_width=None, max_width=None
+) -> Column:
+    return Column(
+        Line.plain(header), width=track, align=align, min_width=min_width, max_width=max_width
+    )
 
 
 def _grid(columns: list[Column], rows: list[list[str]], *, width: int | None = None) -> Block:
     lines = [[Line.plain(cell) for cell in row] for row in rows]
     state = TableState().with_count(len(lines)).with_visible(len(lines))
-    return table(state, columns, lines, visible_height=len(lines), width=width, selected_style=Style())
+    return table(
+        state, columns, lines, visible_height=len(lines), width=width, selected_style=Style()
+    )
 
 
 _FIELD: dict[str, Callable[[Service], str]] = {
@@ -198,7 +207,12 @@ def _rung_fixed(data: list[Service], width: int) -> Block:
 
 
 def _rung_auto(data: list[Service]) -> Block:
-    cols = [_col("name", AUTO), _col("kind", AUTO), _col("size", AUTO, align=Align.END), _col("notes", AUTO)]
+    cols = [
+        _col("name", AUTO),
+        _col("kind", AUTO),
+        _col("size", AUTO, align=Align.END),
+        _col("notes", AUTO),
+    ]
     return _section(
         "1 · AUTO",
         "each column hugs its content — nothing clipped, but notes makes the whole table wide",
@@ -207,7 +221,12 @@ def _rung_auto(data: list[Service]) -> Block:
 
 
 def _rung_fill(data: list[Service], width: int) -> Block:
-    cols = [_col("name", AUTO), _col("kind", AUTO), _col("size", AUTO, align=Align.END), _col("notes", Fill())]
+    cols = [
+        _col("name", AUTO),
+        _col("kind", AUTO),
+        _col("size", AUTO, align=Align.END),
+        _col("notes", Fill()),
+    ]
     return _section(
         "2 · Fill",
         f"notes = Fill() takes exactly the leftover — the table fits the {width}-col budget",
@@ -269,9 +288,16 @@ def _fetch() -> list[Service]:
     return SAMPLE
 
 
-def _render(ctx: CliContext, data: list[Service]) -> Block:
-    z = int(ctx.zoom)
-    budget = min(64, max(24, ctx.width))
+#  The demo's own domain size: the "current viewport" the width ladder
+# demonstrates against when no width is offered (a pipe's natural sizing) —
+# not a resurrected terminal-fallback guess. The ladder's other rungs (48,
+# 36, 24) are fixed demonstration points regardless of the offered width.
+_NATURAL_BUDGET = 64
+
+
+def _render(data: list[Service], fidelity: Fidelity, width: int | None) -> Block:
+    z = fidelity.depth
+    budget = _NATURAL_BUDGET if width is None else min(64, max(24, width))
     narrow = 34
 
     blocks: list[Block] = []
@@ -284,7 +310,12 @@ def _render(ctx: CliContext, data: list[Service]) -> Block:
                 f"both at width {narrow} — fixed clips its right columns, responsive drops + sheds",
                 _caption("fixed"),
                 _grid(
-                    [_col("name", 18), _col("kind", 8), _col("size", 7, align=Align.END), _col("notes", 24)],
+                    [
+                        _col("name", 18),
+                        _col("kind", 8),
+                        _col("size", 7, align=Align.END),
+                        _col("notes", 24),
+                    ],
                     _rows_for(data, _VOCAB),
                     width=narrow,
                 ),
@@ -294,13 +325,20 @@ def _render(ctx: CliContext, data: list[Service]) -> Block:
             )
         ]
     else:
-        sections = [_rung_fixed(data, narrow), _rung_auto(data), _rung_fill(data, budget), _rung_responsive(data, budget, narrow)]
+        sections = [
+            _rung_fixed(data, narrow),
+            _rung_auto(data),
+            _rung_fill(data, budget),
+            _rung_responsive(data, budget, narrow),
+        ]
         if z >= 2:
-            sections.append(_section(
-                "the width ladder",
-                "the responsive table across a range of budgets — watch columns drop, then name shed",
-                *_width_ladder(data, (budget, 48, 36, 24)),
-            ))
+            sections.append(
+                _section(
+                    "the width ladder",
+                    "the responsive table across a range of budgets — watch columns drop, then name shed",
+                    *_width_ladder(data, (budget, 48, 36, 24)),
+                )
+            )
         if z >= 3:
             sections += [_ref_clamps(data), _ref_weights(), _ref_wcwidth()]
         blocks = _interleave(sections)
@@ -366,7 +404,9 @@ class TableSurface(Surface):
         self._buf.fill(0, 0, self._term_w, self._term_h, " ", Style())
         active = "  ".join(c.key for c in _active(self._sim_w))
         body = join_vertical(
-            Block.text(" table widths — resize live ", current_palette().accent.merge(Style(bold=True))),
+            Block.text(
+                " table widths — resize live ", current_palette().accent.merge(Style(bold=True))
+            ),
             _spacer(),
             self._ruler(),
             Block.text(f"  columns: {active}", Style(dim=True)),
@@ -397,7 +437,7 @@ class TableSurface(Surface):
 def _handle_interactive(ctx: CliContext) -> int:
     data = SAMPLE
     if not ctx.is_tty:
-        print_block(_render(ctx, data), use_ansi=ctx.use_ansi)
+        print_block(_render(data, ctx.fidelity, None), use_ansi=ctx.use_ansi)
         return 0
     asyncio.run(TableSurface(data).run())
     return 0
@@ -406,7 +446,7 @@ def _handle_interactive(ctx: CliContext) -> int:
 def main() -> int:
     return run_cli(
         sys.argv[1:],
-        render=_render,
+        renderer=_render,
         fetch=_fetch,
         handlers={OutputMode.INTERACTIVE: _handle_interactive},
         description=__doc__,

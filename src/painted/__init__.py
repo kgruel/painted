@@ -85,6 +85,7 @@ __all__ = [
     "Tag",
     "CliContext",
     "CliRunner",
+    "Renderer",
     "HelpArg",
     "run_cli",
     "AppCommand",
@@ -134,6 +135,15 @@ __all__ = [
 ]
 
 from importlib import import_module as _import_module
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    # The root facade resolves names lazily through __getattr__, which types them
+    # as Any — erasing run_cli's published @overloads (so `fetch` would look
+    # optional) and the Renderer alias's shape. src/painted/CLAUDE.md Level 2
+    # teaches `from painted import run_cli`, so this taught path must carry the
+    # real types to checkers; re-import them here, runtime staying lazy.
+    from .cli import CliRunner as CliRunner, Renderer as Renderer, run_cli as run_cli
 
 _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     # Errors
@@ -181,6 +191,7 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     # CLI
     "CliContext": (".cli", "CliContext"),
     "CliRunner": (".cli", "CliRunner"),
+    "Renderer": (".cli", "Renderer"),
     "Fidelity": (".cli", "Fidelity"),
     "Format": (".cli", "Format"),
     "Tag": (".cli", "Tag"),

@@ -88,6 +88,7 @@ Surface + Layer             # alt-screen TUI with keyboard + diff rendering
 | Renderer | `core/doc.py` | Doc-IR node vocabulary (Doc, Section, Def, Link, …) + doc_lens (the document compositor) |
 | Renderer | `core/writer.py` | Writer, ColorDepth, print_block |
 | Renderer | `publish.py` | to_html, published_fidelity — the doc-IR publisher (root, beside display.py) |
+| Framework | `_transcription.py` | transcription_renderer — run_cli's default renderer (the `(data, fidelity, width)` contract over `transcribe`); at root so `cli` needn't import `views` (§4) |
 | Renderer | `inplace.py` | InPlaceRenderer |
 | Diagnostics | `diagnostics.py` | PaintedHandler, install, DEFAULT_THRESHOLDS (logging + excepthook glue; root, imports views) |
 | Renderer | `keyboard.py` | KeyboardInput, cbreak_supported, read_key — the delivery layer's key-reading primitive (root; `tui/` re-exports) |
@@ -119,12 +120,12 @@ Surface + Layer             # alt-screen TUI with keyboard + diff rendering
 **Trigger**: I need to modify rendering behavior, the CLI harness, or a component.
 
 **`run_cli` flow** (`cli/runner.py`):
-1. Create `CliRunner(render, fetch, ...)` internally
+1. Create `CliRunner(renderer, fetch, ...)` internally — `renderer` is the contract `(data, fidelity, width) → Block`, keyword-only; legacy positional/keyword `render=` (the `(ctx, data) → Block` shape) is accepted too, and declaring neither installs the transcription default (docs/RENDERER_CONTRACT_DESIGN.md)
 2. Intercept `-h`/`--help` → painted help with zoom awareness
 3. Parse framework args (`-q`, `-v`, `-vv`, `--json`, `--plain`, `--static`, `--live`, `-i`) plus declared flags (each `Tag` → `--{name}`, each depth alias, `budgets=True` → `--max-chars`/`--max-lines`); declaration collisions raise at parser construction
 4. Compile flags into `Fidelity` (`parse_fidelity` resolves tag implications at compile time); `build_fidelity` runs last as the residue escape hatch
 5. `detect_context()` resolves Mode/Format from args and TTY state
-6. Dispatch by mode: STATIC (`print_block`) → LIVE (`InPlaceRenderer` or `StreamSurface`) → INTERACTIVE (custom handler)
+6. Dispatch by mode: STATIC (`print_block`) → LIVE (`InPlaceRenderer` or `StreamSurface`) → INTERACTIVE (custom handler); `renderer=` is offered `width` at the point of delivery — `ctx.width` on a STATIC TTY, `None` (natural sizing) off a TTY, and re-offered per frame under LIVE — never a once-captured context width. `ref_schemes=` declares the denotation channel's resolver for the run (RENDERER_CONTRACT_DESIGN.md §7).
 
 **`record_line` pattern** (`views/record.py`):
 - `record_line()` owns structure, `PayloadLens` interprets domain content
@@ -197,6 +198,7 @@ docs/
   REFS_DESIGN.md      # Refs: the denotation channel's readers — id→ref naming, RefScheme resolver seam, OSC 8 + HTML anchors (implemented)
   PAINT_DESIGN.md     # paint(): the single entry, transcription base case (declared-not-invented, recursive + wide), closed kwarg surface, show() warn-and-narrow alias (implemented)
   PROMPTS_DESIGN.md   # Inline prompts: the parser's fourth reflection — stdin-TTY gate, /dev/tty refusal, prompt fidelity ladder, declared answers (implemented)
+  RENDERER_CONTRACT_DESIGN.md  # The framework-seam renderer boundary: (data, fidelity, width) → Block, renderer= seam, transcription default, width-at-the-offer, ref_schemes declaration (RATIFIED 2026-07-12 — 0.11/M4)
   RENDER_MODEL.md     # The umbrella: semantic-renderer ladder, dual allocation contract, the eight laws, the interaction boundary (RATIFIED 2026-07-10 — design of record; amendments go against its laws)
   RENDER_MODEL_AUDIT.md  # Full evidence tables for the render-model law audit — commit-pinned, reproducible (companion to RENDER_MODEL.md §8)
 ```

@@ -22,14 +22,13 @@ from dataclasses import dataclass
 from painted import (
     ASCII_ICONS,
     Block,
-    CliContext,
     DEFAULT_PALETTE,
+    Fidelity,
     IconSet,
     MONO_PALETTE,
     NORD_PALETTE,
     Style,
     Wrap,
-    Zoom,
     border,
     current_icons,
     current_palette,
@@ -209,8 +208,15 @@ def _fetch() -> Dashboard:
     )
 
 
-def _render_minimal(ctx: CliContext) -> Block:
-    width = max(1, ctx.width)
+# The demo's own domain size: wide enough to lay out three 26-column panels
+# side by side (the layout every rung below wraps toward), used when no
+# width is offered (a pipe's natural sizing) — not a resurrected
+# terminal-fallback guess.
+_NATURAL_WIDTH = 82
+
+
+def _render_minimal(width: int | None) -> Block:
+    width = max(1, _NATURAL_WIDTH if width is None else width)
     return join_vertical(
         _header("palette roles", width=width),
         _spacer(width),
@@ -219,17 +225,17 @@ def _render_minimal(ctx: CliContext) -> Block:
     )
 
 
-def _render_summary(ctx: CliContext, data: Dashboard) -> Block:
+def _render_summary(width: int | None, data: Dashboard) -> Block:
     p = current_palette()
-    width = max(1, ctx.width)
+    width = max(1, _NATURAL_WIDTH if width is None else width)
     inner_width = max(10, width - 2)
     content = _dashboard(data, width=inner_width)
     panel = border(content, chars=ROUNDED, style=p.accent, title="AMBIENT", title_style=p.muted)
     return join_vertical(_spacer(width), panel, gap=0)
 
 
-def _render_detailed(ctx: CliContext, data: Dashboard) -> Block:
-    width = max(1, ctx.width)
+def _render_detailed(width: int | None, data: Dashboard) -> Block:
+    width = max(1, _NATURAL_WIDTH if width is None else width)
     gap = 2
     cols = max(1, min(3, (width + gap) // (26 + gap)))
     panel_w = max(12, min(width, (width - gap * (cols - 1)) // cols))
@@ -250,8 +256,8 @@ def _render_detailed(ctx: CliContext, data: Dashboard) -> Block:
     )
 
 
-def _render_full(ctx: CliContext, data: Dashboard) -> Block:
-    width = max(1, ctx.width)
+def _render_full(width: int | None, data: Dashboard) -> Block:
+    width = max(1, _NATURAL_WIDTH if width is None else width)
     gap = 2
     cols = max(1, min(3, (width + gap) // (26 + gap)))
     panel_w = max(12, min(width, (width - gap * (cols - 1)) // cols))
@@ -291,21 +297,22 @@ def _render_full(ctx: CliContext, data: Dashboard) -> Block:
     )
 
 
-def _render(ctx: CliContext, data: Dashboard) -> Block:
+def _render(data: Dashboard, fidelity: Fidelity, width: int | None) -> Block:
+    depth = fidelity.depth
     with use_palette(DEFAULT_PALETTE):
-        if ctx.zoom >= Zoom.FULL:
-            return _render_full(ctx, data)
-        if ctx.zoom >= Zoom.DETAILED:
-            return _render_detailed(ctx, data)
-        if ctx.zoom >= Zoom.SUMMARY:
-            return _render_summary(ctx, data)
-        return _render_minimal(ctx)
+        if depth >= 3:
+            return _render_full(width, data)
+        if depth >= 2:
+            return _render_detailed(width, data)
+        if depth >= 1:
+            return _render_summary(width, data)
+        return _render_minimal(width)
 
 
 def main() -> int:
     return run_cli(
         sys.argv[1:],
-        render=_render,
+        renderer=_render,
         fetch=_fetch,
         description=__doc__,
         prog="palette_icons.py",

@@ -31,9 +31,8 @@ from dataclasses import dataclass, replace
 
 from painted import (
     Block,
-    CliContext,
+    Fidelity,
     Style,
-    Zoom,
     border,
     join_horizontal,
     join_vertical,
@@ -192,13 +191,16 @@ def _pop_sparkline(world: LifeWorld, width: int) -> Block:
     )
 
 
-def _window(world: LifeWorld, width: int, *extra: Block) -> Block:
+def _window(world: LifeWorld, width: int | None, *extra: Block) -> Block:
     """The dressed viewing frame: grid, census, and any extras.
 
     Inner width pins to the grid — every row is sized against it, so the
-    border never moves no matter what the data rows do.
+    border never moves no matter what the data rows do. The grid is a
+    raster of the world's own domain size (world.cols) — when no width is
+    offered (a pipe's natural sizing), that domain size is the natural
+    inner width, not a resurrected terminal-fallback guess.
     """
-    w = min(width - 4, world.cols)
+    w = world.cols if width is None else min(width - 4, world.cols)
     rows = [_grid(world, w), truncate(_census(world), w)]
     rows += [truncate(b, w) for b in extra]
     return border(join_vertical(*rows), title="Conway's Life", chars=ROUNDED)
@@ -207,21 +209,22 @@ def _window(world: LifeWorld, width: int, *extra: Block) -> Block:
 # --- Zoom renderers ---
 
 
-def _render_minimal(world: LifeWorld, width: int) -> Block:
-    return truncate(_census(world), width)
+def _render_minimal(world: LifeWorld, width: int | None) -> Block:
+    block = _census(world)
+    return truncate(block, width) if width is not None else block
 
 
-def _render_summary(world: LifeWorld, width: int) -> Block:
+def _render_summary(world: LifeWorld, width: int | None) -> Block:
     return _window(world, width)
 
 
-def _render_detailed(world: LifeWorld, width: int) -> Block:
-    w = min(width - 4, world.cols)
+def _render_detailed(world: LifeWorld, width: int | None) -> Block:
+    w = world.cols if width is None else min(width - 4, world.cols)
     return _window(world, width, _pop_sparkline(world, w))
 
 
-def _render_full(world: LifeWorld, width: int) -> Block:
-    w = min(width - 4, world.cols)
+def _render_full(world: LifeWorld, width: int | None) -> Block:
+    w = world.cols if width is None else min(width - 4, world.cols)
     peak = max(world.history)
     density = len(world.cells) / (world.cols * world.rows)
     stats = Block.text(
@@ -232,14 +235,15 @@ def _render_full(world: LifeWorld, width: int) -> Block:
     return _window(world, width, _pop_sparkline(world, w), stats)
 
 
-def _render(ctx: CliContext, world: LifeWorld) -> Block:
-    if ctx.zoom >= Zoom.FULL:
-        return _render_full(world, ctx.width)
-    if ctx.zoom >= Zoom.DETAILED:
-        return _render_detailed(world, ctx.width)
-    if ctx.zoom >= Zoom.SUMMARY:
-        return _render_summary(world, ctx.width)
-    return _render_minimal(world, ctx.width)
+def _render(world: LifeWorld, fidelity: Fidelity, width: int | None) -> Block:
+    depth = fidelity.depth
+    if depth >= 3:
+        return _render_full(world, width)
+    if depth >= 2:
+        return _render_detailed(world, width)
+    if depth >= 1:
+        return _render_summary(world, width)
+    return _render_minimal(world, width)
 
 
 # --- Entry point ---
@@ -255,7 +259,7 @@ def main() -> int:
 
     return run_cli(
         rest,
-        render=_render,
+        renderer=_render,
         fetch=lambda: _fetch(ns.seed, ns.gen),
         fetch_stream=lambda: _fetch_stream(ns.seed),
         live_delivery="surface",
@@ -263,8 +267,14 @@ def main() -> int:
         description=__doc__,
         prog="life.py",
         help_args=[
-            HelpArg("--seed", f"starting pattern: {', '.join(sorted(SEEDS))}", default=DEFAULT_SEED),
-            HelpArg("--gen", "generation shown by static output (live plays from 0)", default=str(DEFAULT_GEN)),
+            HelpArg(
+                "--seed", f"starting pattern: {', '.join(sorted(SEEDS))}", default=DEFAULT_SEED
+            ),
+            HelpArg(
+                "--gen",
+                "generation shown by static output (live plays from 0)",
+                default=str(DEFAULT_GEN),
+            ),
         ],
     )
 

@@ -38,11 +38,10 @@ from dataclasses import dataclass
 
 from painted import (
     Block,
-    CliContext,
+    Fidelity,
     Line,
     Span,
     Style,
-    Zoom,
     border,
     join_horizontal,
     run_cli,
@@ -185,13 +184,16 @@ def _runs_per_row(pose: Plasma) -> float:
     return runs / _H
 
 
-def _window(pose: Plasma, width: int, *extra: Block) -> Block:
+def _window(pose: Plasma, width: int | None, *extra: Block) -> Block:
     """The dressed viewing frame: field, census, and any extras.
 
     Inner width pins to the field grid — every row is sized against it, so
-    the border never moves no matter what the data rows do.
+    the border never moves no matter what the data rows do. The grid is a
+    raster of the field's own domain size (_W) — when no width is offered
+    (a pipe's natural sizing), that domain size is the natural inner width,
+    not a resurrected terminal-fallback guess.
     """
-    w = min(width - 4, _W)
+    w = _W if width is None else min(width - 4, _W)
     rows = [_grid(pose, w), truncate(_census(pose), w)]
     rows += [truncate(b, w) for b in extra]
     return border(join_vertical(*rows), title="plasma", chars=ROUNDED)
@@ -200,19 +202,20 @@ def _window(pose: Plasma, width: int, *extra: Block) -> Block:
 # --- Zoom renderers ---
 
 
-def _render_minimal(pose: Plasma, width: int) -> Block:
-    return truncate(_census(pose), width)
+def _render_minimal(pose: Plasma, width: int | None) -> Block:
+    block = _census(pose)
+    return truncate(block, width) if width is not None else block
 
 
-def _render_summary(pose: Plasma, width: int) -> Block:
+def _render_summary(pose: Plasma, width: int | None) -> Block:
     return _window(pose, width)
 
 
-def _render_detailed(pose: Plasma, width: int) -> Block:
+def _render_detailed(pose: Plasma, width: int | None) -> Block:
     return _window(pose, width, _legend())
 
 
-def _render_full(pose: Plasma, width: int) -> Block:
+def _render_full(pose: Plasma, width: int | None) -> Block:
     field = _sample(pose)
     mean = sum(sum(row) for row in field) / (_W * _H)
     shades = len({_shade_idx(v) for row in field for v in row})
@@ -224,14 +227,15 @@ def _render_full(pose: Plasma, width: int) -> Block:
     return _window(pose, width, _legend(), stats)
 
 
-def _render(ctx: CliContext, pose: Plasma) -> Block:
-    if ctx.zoom >= Zoom.FULL:
-        return _render_full(pose, ctx.width)
-    if ctx.zoom >= Zoom.DETAILED:
-        return _render_detailed(pose, ctx.width)
-    if ctx.zoom >= Zoom.SUMMARY:
-        return _render_summary(pose, ctx.width)
-    return _render_minimal(pose, ctx.width)
+def _render(pose: Plasma, fidelity: Fidelity, width: int | None) -> Block:
+    depth = fidelity.depth
+    if depth >= 3:
+        return _render_full(pose, width)
+    if depth >= 2:
+        return _render_detailed(pose, width)
+    if depth >= 1:
+        return _render_summary(pose, width)
+    return _render_minimal(pose, width)
 
 
 # --- Entry point ---
@@ -244,7 +248,7 @@ def main() -> int:
 
     return run_cli(
         rest,
-        render=_render,
+        renderer=_render,
         fetch=lambda: _fetch(ns.frame),
         fetch_stream=lambda: _fetch_stream(),
         live_delivery="surface",

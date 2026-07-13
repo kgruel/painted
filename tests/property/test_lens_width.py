@@ -10,13 +10,35 @@ the "honors width" half of painted's width contract (see docs/PRIMITIVES.md).
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from hypothesis import example, given
 from hypothesis import strategies as st
 
+from painted.core.block import Block
 from painted.views import chart_lens, flame_lens, shape_lens, tree_lens
 from painted.views.lens.shape import transcribe
 
 from tests.property.strategies import MIXED_ALPHABET, text_st
+
+
+@dataclass
+class _Rec:
+    """A declared schema for the natural-width strategy — transcription routes a
+    dataclass through the dict machinery, so its fields must propagate a None
+    width recursively too (RENDERER_CONTRACT §4)."""
+
+    label: str
+    payload: object
+
+
+def _stripped_rows(block: Block) -> list[str]:
+    """Each row's text with trailing padding removed. Comparing stripped rows
+    isolates *content* from the trailing-space padding a rectangular Block always
+    carries — so natural sizing (None) and a generous explicit width can be held
+    to the same visible content without the padding difference masking a clip."""
+    return ["".join(cell.char for cell in block.row(y)).rstrip() for y in range(block.height)]
+
 
 _numbers = st.one_of(
     st.integers(min_value=-1000, max_value=1000),
@@ -140,3 +162,71 @@ def test_transcribe_honors_width(data, z: int, w: int) -> None:
     # width exactly across every declared shape — including tuples and frozensets,
     # which the inferring shape_lens strategy above does not cover.
     assert transcribe(data, zoom=z, width=w).width == w
+
+
+# The natural-sizing corpus: _transcribe_data's shapes plus declared dataclasses
+# (missing from the width-exact strategies above) so recursion through a
+# dataclass's fields is exercised under a None width — the transcription default's
+# pipe path descends through every container kind.
+_natural_data = st.one_of(
+    st.recursive(
+        st.one_of(st.none(), st.booleans(), text_st(max_size=8), st.integers(), _numbers),
+        lambda children: st.one_of(
+            st.lists(children, max_size=5),
+            st.lists(children, max_size=5).map(tuple),
+            st.dictionaries(text_st(max_size=6), children, max_size=5),
+            st.builds(_Rec, label=text_st(max_size=6), payload=children),
+        ),
+        max_leaves=15,
+    ),
+    st.sets(st.one_of(st.integers(), st.text(alphabet=MIXED_ALPHABET, max_size=5)), max_size=5),
+    st.frozensets(st.integers(), max_size=5),
+)
+
+# A width wide enough that no reasonable payload triggers truncation/sampling — so
+# the only difference from natural sizing is the trailing pad _stripped_rows drops.
+_GENEROUS = 10_000
+
+
+@given(data=_natural_data, z=st.integers(min_value=0, max_value=3))
+def test_transcribe_natural_width_preserves_content(data, z: int) -> None:
+    # width=None → natural sizing (the 0.10.1 width law reaching the transcription
+    # core, §4). The strong invariant: natural output carries the SAME content as
+    # the same data rendered at a generous explicit width — no clip (a helper that
+    # stopped propagating None and fell to an int path would lose or reflow
+    # content) and no fabricated pad (natural sizes to content). Comparing stripped
+    # rows removes only the rectangular trailing pad, so a real divergence in
+    # visible content — at any nesting depth, through dict/list/tuple/set/dataclass
+    # — fails here. This is the transcription default's pipe path.
+    natural = transcribe(data, zoom=z, width=None)
+    generous = transcribe(data, zoom=z, width=_GENEROUS)
+    assert _stripped_rows(natural) == _stripped_rows(generous)
+
+
+@given(data=_natural_data, z=st.integers(min_value=0, max_value=3))
+def test_shape_lens_natural_width_transcribes(data, z: int) -> None:
+    # shape_lens widens to int|None with the shared core (§4). Inference needs a
+    # column budget (chart/tree are width-consuming arrangements), so under a None
+    # width shape_lens does NOT guess — it transcribes the declared shape, i.e. it
+    # equals transcribe() at the same None width. This pins both that the guess is
+    # correctly disabled and that None propagates identically through the shared
+    # recursive core on the infer=True path.
+    assert _stripped_rows(shape_lens(data, zoom=z, width=None)) == _stripped_rows(
+        transcribe(data, zoom=z, width=None)
+    )
+
+
+def test_transcribe_int_width_is_byte_identical() -> None:
+    # Part of the widening's compatibility guarantee (§12): every existing int call
+    # is byte-identical. The honors-width properties above pin the int corpus's
+    # exact widths, and the appearance snapshot (tests/appearance/test_shape_schema)
+    # pins exact int output byte-for-byte; this is a focused, self-contained
+    # regression tripwire on transcribe's int path — a fixed fixture with a pinned
+    # rendering that the `width is None` arms must never perturb.
+    fixture = {"user": "alice", "roles": ["admin", "ops"], "count": 3, "note": "hi"}
+    assert _stripped_rows(transcribe(fixture, zoom=2, width=24)) == [
+        "user:  alice",
+        "roles: admin, ops",
+        "count: 3",
+        "note:  hi",
+    ]

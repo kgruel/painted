@@ -22,9 +22,8 @@ from dataclasses import dataclass
 
 from painted import (
     Block,
-    CliContext,
+    Fidelity,
     Style,
-    Zoom,
     border,
     join_horizontal,
     join_vertical,
@@ -208,7 +207,7 @@ def _check_block(description: str, passed: bool) -> Block:
     return Block.text(f"  {icon} {description}", style)
 
 
-def _render_minimal(results: list[ScenarioResult], width: int) -> Block:
+def _render_minimal(results: list[ScenarioResult], width: int | None) -> Block:
     p = current_palette()
     icons = current_icons()
     total = len(results)
@@ -216,10 +215,11 @@ def _render_minimal(results: list[ScenarioResult], width: int) -> Block:
     all_passed = passed == total
     icon = icons.check if all_passed else icons.cross
     style = p.success if all_passed else p.error
-    return truncate(Block.text(f"{icon} {passed}/{total} scenarios passed", style), width)
+    block = Block.text(f"{icon} {passed}/{total} scenarios passed", style)
+    return truncate(block, width) if width is not None else block
 
 
-def _render_summary(results: list[ScenarioResult], width: int) -> Block:
+def _render_summary(results: list[ScenarioResult], width: int | None) -> Block:
     p = current_palette()
     icons = current_icons()
     sections: list[Block] = []
@@ -253,10 +253,11 @@ def _render_summary(results: list[ScenarioResult], width: int) -> Block:
     passed = sum(1 for r in results if r.passed)
     footer = _render_minimal(results, width)
 
-    return truncate(join_vertical(*sections, footer), width)
+    block = join_vertical(*sections, footer)
+    return truncate(block, width) if width is not None else block
 
 
-def _render_detailed(results: list[ScenarioResult], width: int) -> Block:
+def _render_detailed(results: list[ScenarioResult], width: int | None) -> Block:
     """Summary + frame text snapshots at key moments."""
     p = current_palette()
     icons = current_icons()
@@ -304,14 +305,18 @@ def _render_detailed(results: list[ScenarioResult], width: int) -> Block:
         )
 
     footer = _render_minimal(results, width)
-    return truncate(join_vertical(*sections, footer), width)
+    block = join_vertical(*sections, footer)
+    return truncate(block, width) if width is not None else block
 
 
-def _render_full(results: list[ScenarioResult], width: int) -> Block:
+def _render_full(results: list[ScenarioResult], width: int | None) -> Block:
     """Bordered sections with diff write counts."""
     p = current_palette()
     icons = current_icons()
     sections: list[Block] = []
+    # 60 is the demo's own domain size for its bordered panel — the cap the
+    # width-bounded case already clamps toward — when no width is offered.
+    panel_w = 60 if width is None else min(60, width - 4)
 
     for result in results:
         icon = icons.check if result.passed else icons.cross
@@ -357,7 +362,7 @@ def _render_full(results: list[ScenarioResult], width: int) -> Block:
         title = f"{icon} {result.scenario.name}"
         sections.append(
             border(
-                pad(inner, right=max(0, min(60, width - 4) - inner.width)),
+                pad(inner, right=max(0, panel_w - inner.width)),
                 title=title,
                 chars=ROUNDED,
             )
@@ -371,14 +376,15 @@ def _render_full(results: list[ScenarioResult], width: int) -> Block:
 # --- Main render dispatch ---
 
 
-def _render(ctx: CliContext, results: list[ScenarioResult]) -> Block:
-    if ctx.zoom >= Zoom.FULL:
-        return _render_full(results, ctx.width)
-    if ctx.zoom >= Zoom.DETAILED:
-        return _render_detailed(results, ctx.width)
-    if ctx.zoom >= Zoom.SUMMARY:
-        return _render_summary(results, ctx.width)
-    return _render_minimal(results, ctx.width)
+def _render(results: list[ScenarioResult], fidelity: Fidelity, width: int | None) -> Block:
+    depth = fidelity.depth
+    if depth >= 3:
+        return _render_full(results, width)
+    if depth >= 2:
+        return _render_detailed(results, width)
+    if depth >= 1:
+        return _render_summary(results, width)
+    return _render_minimal(results, width)
 
 
 def _fetch() -> list[ScenarioResult]:
@@ -388,7 +394,7 @@ def _fetch() -> list[ScenarioResult]:
 def main() -> int:
     return run_cli(
         sys.argv[1:],
-        render=_render,
+        renderer=_render,
         fetch=_fetch,
         description=__doc__,
         prog="testing.py",

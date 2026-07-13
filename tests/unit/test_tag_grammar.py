@@ -205,11 +205,11 @@ class TestRunnerIntegration:
     def _capture(self, argv, **kwargs):
         received = {}
 
-        def render(ctx, data):
-            received["fidelity"] = ctx.fidelity
+        def renderer(data, fidelity, width):
+            received["fidelity"] = fidelity
             return Block.text(data, Style())
 
-        result = run_cli(argv, render=render, fetch=lambda: "x", **kwargs)
+        result = run_cli(argv, renderer=renderer, fetch=lambda: "x", **kwargs)
         assert result == 0
         return received["fidelity"]
 
@@ -248,14 +248,17 @@ class TestRunnerIntegration:
         monkeypatch.setattr("sys.stdout.isatty", lambda: True)
         received = {}
 
-        def render(ctx, data):
+        def fetch(ctx):
             received["mode"] = ctx.mode
+            return "x"
+
+        def renderer(data, fidelity, width):
             return Block.text(data, Style())
 
         run_cli(
             ["--brief"],
-            render=render,
-            fetch=lambda: "x",
+            renderer=renderer,
+            fetch=fetch,
             depth_aliases={"brief": 0},
         )
         assert received["mode"] == OutputMode.STATIC
@@ -265,7 +268,7 @@ class TestRunnerIntegration:
         with pytest.raises(DeclarationError, match="framework flag"):
             run_cli(
                 [],
-                render=lambda _ctx, _data: Block.text("x", Style()),
+                renderer=lambda _data, _fidelity, _width: Block.text("x", Style()),
                 fetch=lambda: "x",
                 tags=[Tag("plain", "x")],
             )
@@ -313,7 +316,7 @@ class TestHelpIntegration:
 
     def test_help_doc_carries_declarations(self):
         runner = CliRunner(
-            render=lambda _ctx, _data: Block.text("x", Style()),
+            renderer=lambda _data, _fidelity, _width: Block.text("x", Style()),
             fetch=lambda: "ok",
             prog="test",
             tags=[Tag("thinking", "Show reasoning", implied_at=3)],
@@ -327,7 +330,7 @@ class TestHelpIntegration:
         monkeypatch.setattr("sys.stdout.isatty", lambda: False)
         result = run_cli(
             ["--help", "-v"],
-            render=lambda _ctx, _data: Block.text("x", Style()),
+            renderer=lambda _data, _fidelity, _width: Block.text("x", Style()),
             fetch=lambda: "ok",
             prog="myapp",
             tags=[Tag("thinking", "Show model reasoning")],
@@ -512,7 +515,10 @@ class TestDepthAliasValues:
 class TestAddArgsDestCollision:
     def _run(self, argv, **kwargs):
         return run_cli(
-            argv, render=lambda _ctx, _data: Block.text("x", Style()), fetch=lambda: "x", **kwargs
+            argv,
+            renderer=lambda _data, _fidelity, _width: Block.text("x", Style()),
+            fetch=lambda: "x",
+            **kwargs,
         )
 
     def test_positional_on_tag_dest_raises(self, monkeypatch):
@@ -547,7 +553,7 @@ class TestHelpPathLaws:
         with pytest.raises(DeclarationError, match="framework flag"):
             run_cli(
                 ["-h"],
-                render=lambda _ctx, _data: Block.text("x", Style()),
+                renderer=lambda _data, _fidelity, _width: Block.text("x", Style()),
                 fetch=lambda: "x",
                 tags=[Tag("json", "x")],
             )
@@ -568,7 +574,7 @@ class TestHelpPathLaws:
         def _help(argv):
             run_cli(
                 argv,
-                render=lambda _ctx, _data: Block.text("x", Style()),
+                renderer=lambda _data, _fidelity, _width: Block.text("x", Style()),
                 fetch=lambda: "x",
                 depth_aliases={"full": 3},
             )
@@ -586,7 +592,7 @@ class TestHelpPathLaws:
 
         run_cli(
             ["-h", "-v", "--plain"],
-            render=lambda _ctx, _data: Block.text("x", Style()),
+            renderer=lambda _data, _fidelity, _width: Block.text("x", Style()),
             fetch=lambda: "x",
             fetch_stream=stream,
             live_delivery="surface",
@@ -605,7 +611,7 @@ class TestRunnerEdgePaths:
         monkeypatch.setattr("sys.stdout.isatty", lambda: False)
         result = run_cli(
             ["--json", "--stats"],
-            render=lambda _ctx, _data: Block.text("x", Style()),
+            renderer=lambda _data, _fidelity, _width: Block.text("x", Style()),
             fetch=lambda: {"ok": True},
             tags=[Tag("stats", "x")],
         )
@@ -618,7 +624,9 @@ class TestRunnerEdgePaths:
         seen = []
 
         runner = CliRunner(
-            render=lambda ctx, data: seen.append(ctx.fidelity) or Block.text("x", Style()),
+            renderer=lambda data, fidelity, width: (
+                seen.append(fidelity) or Block.text("x", Style())
+            ),
             fetch=lambda: "x",
             tags=[Tag("stats", "x")],
         )
@@ -651,15 +659,18 @@ class TestFidelityDemoFacet:
     def test_timestamp_facet_changes_output(self):
         """The honesty rule for the harness teaching demo: --timestamp adds
         the stamp at any depth; without the facet no renderer emits it."""
-        from tests.helpers import block_to_text, static_ctx
+        from painted import Fidelity
+        from tests.helpers import block_to_text
 
         fid_demo = _load_demo("fidelity.py")
         data = replace(fid_demo.SAMPLE_DISK, timestamp="2026-06-10T12:00:00")
 
         for zoom in Zoom:
-            base = block_to_text(fid_demo._render(static_ctx(zoom), data))
+            base = block_to_text(fid_demo._render(data, Fidelity(depth=int(zoom)), 80))
             faceted = block_to_text(
-                fid_demo._render(static_ctx(zoom, visible=("timestamp",)), data)
+                fid_demo._render(
+                    data, Fidelity(depth=int(zoom), visible=frozenset({"timestamp"})), 80
+                )
             )
             assert "2026-06-10T12:00:00" not in base, zoom
             assert "2026-06-10T12:00:00" in faceted, zoom
@@ -709,48 +720,49 @@ class TestFidelityDemoBudget:
     site panels (disclosure_budget) now exercise through `_render`."""
 
     def test_no_budget_is_inert(self):
-        from tests.helpers import static_ctx
+        from painted import Fidelity
 
         fid_demo = _load_demo("fidelity.py")
         data = fid_demo.SAMPLE_DISK
         # No ceilings → the data passes through untouched (the same object).
-        assert fid_demo._budgeted(data, static_ctx(Zoom.FULL)) is data
+        assert fid_demo._budgeted(data, Fidelity(depth=int(Zoom.FULL))) is data
 
     def test_line_limit_caps_each_collection_keeping_largest(self):
-        from tests.helpers import static_ctx
+        from painted import Fidelity
 
         fid_demo = _load_demo("fidelity.py")
         data = fid_demo.SAMPLE_DISK
-        out = fid_demo._budgeted(data, static_ctx(Zoom.FULL, lines=2))
+        out = fid_demo._budgeted(data, Fidelity(depth=int(Zoom.FULL), lines=2))
         biggest = sorted(data.entries, key=lambda e: e.size_bytes, reverse=True)[:2]
         assert [e.name for e in out.entries] == [e.name for e in biggest]
 
     def test_line_limit_recurses_into_children(self):
-        from tests.helpers import static_ctx
+        from painted import Fidelity
 
         fid_demo = _load_demo("fidelity.py")
-        out = fid_demo._budgeted(fid_demo.SAMPLE_DISK, static_ctx(Zoom.FULL, lines=2))
+        out = fid_demo._budgeted(fid_demo.SAMPLE_DISK, Fidelity(depth=int(Zoom.FULL), lines=2))
         assert out.entries  # something survived to recurse into
         assert all(len(e.children) <= 2 for e in out.entries)
 
     def test_char_limit_elides_long_names_to_budget(self):
-        from tests.helpers import static_ctx
+        from painted import Fidelity
 
         fid_demo = _load_demo("fidelity.py")
         data = replace(fid_demo.SAMPLE_DISK, mount="a-very-long-mount-name")
-        out = fid_demo._budgeted(data, static_ctx(Zoom.FULL, chars=8))
+        out = fid_demo._budgeted(data, Fidelity(depth=int(Zoom.FULL), chars=8))
         assert out.mount.endswith("…")
         assert len(out.mount) == 8  # cut to chars-1 plus the ellipsis
 
     def test_render_applies_budget_end_to_end(self):
         """`_render` drives `_budgeted`, so a line cap is visible in the rendered
         text — the exact path the committed disclosure_budget panel captures."""
-        from tests.helpers import block_to_text, static_ctx
+        from painted import Fidelity
+        from tests.helpers import block_to_text
 
         fid_demo = _load_demo("fidelity.py")
         data = fid_demo.SAMPLE_DISK
-        capped = block_to_text(fid_demo._render(static_ctx(Zoom.FULL, lines=1), data))
-        full = block_to_text(fid_demo._render(static_ctx(Zoom.FULL), data))
+        capped = block_to_text(fid_demo._render(data, Fidelity(depth=int(Zoom.FULL), lines=1), 80))
+        full = block_to_text(fid_demo._render(data, Fidelity(depth=int(Zoom.FULL)), 80))
         assert len(capped.splitlines()) < len(full.splitlines())
 
 
@@ -820,16 +832,19 @@ class TestFidelityDemoEnvBaseline:
         assert out == base  # an unrecognized name is ignored, not an error
 
     def test_env_baseline_unreached_by_capture_path(self):
-        """Drift safety: captures render _render(ctx, data) directly — they
-        never call _env_baseline. The hook lives in run_cli only, so an env
-        leak in CI can't perturb committed panels/sentinels."""
-        from tests.helpers import block_to_text, static_ctx
+        """Drift safety: captures render _render(data, fidelity, width) directly
+        — they never call _env_baseline. The hook lives in run_cli only, so an
+        env leak in CI can't perturb committed panels/sentinels."""
+        from painted import Fidelity
+        from tests.helpers import block_to_text
 
         fid_demo = _load_demo("fidelity.py")
         with mock.patch.dict("os.environ", {"FIDELITY_DEPTH": "full"}):
-            text = block_to_text(fid_demo._render(static_ctx(Zoom.MINIMAL), fid_demo.SAMPLE_DISK))
+            text = block_to_text(
+                fid_demo._render(fid_demo.SAMPLE_DISK, Fidelity(depth=int(Zoom.MINIMAL)), 80)
+            )
         # MINIMAL stays one line regardless of the env — the capture path is
-        # depth-driven by ctx alone.
+        # depth-driven by the passed fidelity alone.
         assert len(text.rstrip().splitlines()) == 1
 
 

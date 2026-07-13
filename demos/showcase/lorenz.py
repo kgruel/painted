@@ -36,11 +36,10 @@ from dataclasses import dataclass, replace
 
 from painted import (
     Block,
-    CliContext,
+    Fidelity,
     Line,
     Span,
     Style,
-    Zoom,
     border,
     join_horizontal,
     join_vertical,
@@ -107,9 +106,7 @@ def _rk4(p: P3, dt: float) -> P3:
     k2 = _deriv(add(p, k1, dt / 2))
     k3 = _deriv(add(p, k2, dt / 2))
     k4 = _deriv(add(p, k3, dt))
-    return tuple(
-        p[i] + dt / 6 * (k1[i] + 2 * k2[i] + 2 * k3[i] + k4[i]) for i in range(3)
-    )  # type: ignore[return-value]
+    return tuple(p[i] + dt / 6 * (k1[i] + 2 * k2[i] + 2 * k3[i] + k4[i]) for i in range(3))  # type: ignore[return-value]
 
 
 def step(orbit: Orbit) -> Orbit:
@@ -243,13 +240,16 @@ def _separation_sparkline(orbit: Orbit, width: int) -> Block:
     )
 
 
-def _window(orbit: Orbit, width: int, *extra: Block) -> Block:
+def _window(orbit: Orbit, width: int | None, *extra: Block) -> Block:
     """The dressed viewing frame: butterfly, census, and any extras.
 
     Inner width pins to the grid — every row is sized against it, so the
-    border never moves no matter what the data rows do.
+    border never moves no matter what the data rows do. The grid is a raster
+    of the field's own domain size (_W) — when no width is offered (a pipe's
+    natural sizing), that domain size is the natural inner width, not a
+    resurrected terminal-fallback guess.
     """
-    w = min(width - 4, _W)
+    w = _W if width is None else min(width - 4, _W)
     rows = [_grid(orbit, w), truncate(_census(orbit), w)]
     rows += [truncate(b, w) for b in extra]
     return border(join_vertical(*rows), title="lorenz", chars=ROUNDED)
@@ -258,21 +258,22 @@ def _window(orbit: Orbit, width: int, *extra: Block) -> Block:
 # --- Zoom renderers ---
 
 
-def _render_minimal(orbit: Orbit, width: int) -> Block:
-    return truncate(_census(orbit), width)
+def _render_minimal(orbit: Orbit, width: int | None) -> Block:
+    block = _census(orbit)
+    return truncate(block, width) if width is not None else block
 
 
-def _render_summary(orbit: Orbit, width: int) -> Block:
+def _render_summary(orbit: Orbit, width: int | None) -> Block:
     return _window(orbit, width)
 
 
-def _render_detailed(orbit: Orbit, width: int) -> Block:
-    w = min(width - 4, _W)
+def _render_detailed(orbit: Orbit, width: int | None) -> Block:
+    w = _W if width is None else min(width - 4, _W)
     return _window(orbit, width, _separation_sparkline(orbit, w))
 
 
-def _render_full(orbit: Orbit, width: int) -> Block:
-    w = min(width - 4, _W)
+def _render_full(orbit: Orbit, width: int | None) -> Block:
+    w = _W if width is None else min(width - 4, _W)
     head = orbit.tracers[0].pos
     stats = Block.text(
         f"frame {orbit.frame}  ·  head ({head[0]:6.2f}, {head[1]:6.2f}, {head[2]:6.2f})  ·  "
@@ -282,14 +283,15 @@ def _render_full(orbit: Orbit, width: int) -> Block:
     return _window(orbit, width, _separation_sparkline(orbit, w), stats)
 
 
-def _render(ctx: CliContext, orbit: Orbit) -> Block:
-    if ctx.zoom >= Zoom.FULL:
-        return _render_full(orbit, ctx.width)
-    if ctx.zoom >= Zoom.DETAILED:
-        return _render_detailed(orbit, ctx.width)
-    if ctx.zoom >= Zoom.SUMMARY:
-        return _render_summary(orbit, ctx.width)
-    return _render_minimal(orbit, ctx.width)
+def _render(orbit: Orbit, fidelity: Fidelity, width: int | None) -> Block:
+    depth = fidelity.depth
+    if depth >= 3:
+        return _render_full(orbit, width)
+    if depth >= 2:
+        return _render_detailed(orbit, width)
+    if depth >= 1:
+        return _render_summary(orbit, width)
+    return _render_minimal(orbit, width)
 
 
 # --- Entry point ---
@@ -302,7 +304,7 @@ def main() -> int:
 
     return run_cli(
         rest,
-        render=_render,
+        renderer=_render,
         fetch=lambda: _fetch(ns.frame),
         fetch_stream=lambda: _fetch_stream(),
         live_delivery="surface",

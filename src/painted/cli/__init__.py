@@ -16,6 +16,15 @@ actually touch pulls its module.
 from __future__ import annotations
 
 from importlib import import_module as _import_module
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    # __getattr__ resolves these lazily at runtime, which types them as Any —
+    # erasing run_cli's published @overloads (so `fetch` would look optional) and
+    # the Renderer alias's shape. Re-import the type-bearing symbols here so the
+    # public import paths carry the real types to checkers, runtime staying lazy.
+    from ..core.renderer import Renderer as Renderer
+    from .runner import CliRunner as CliRunner, run_cli as run_cli
 
 # name → (submodule, attr). The only place the module-of-record for each public
 # name is declared; __getattr__ imports on demand and caches into globals().
@@ -28,6 +37,9 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "Fidelity": (".types", "Fidelity"),
     "CliContext": (".types", "CliContext"),
     "ArgsView": (".types", "ArgsView"),
+    # The renderer contract type — canonical home is painted.core; re-exported
+    # here for convenience (RENDERER_CONTRACT_DESIGN.md §3).
+    "Renderer": ("..core.renderer", "Renderer"),
     "resolve_mode": (".types", "resolve_mode"),
     "detect_context": (".types", "detect_context"),
     "add_cli_args": (".types", "add_cli_args"),

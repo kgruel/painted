@@ -14,8 +14,7 @@ It never mentions flags, pipes, JSON, or help text.
 
 ```python
 import sys
-from painted import Block, Style, Tag, join_vertical, run_cli
-from painted.cli import CliContext
+from painted import Block, Fidelity, Style, Tag, join_vertical, run_cli
 
 STATE_STYLE = {
     "ok": Style(fg="green"),
@@ -30,19 +29,19 @@ def fetch() -> dict:
         {"name": "search", "state": "ok", "replicas": "2/2", "ms": 28},
     ]}
 
-def render(ctx: CliContext, data: dict) -> Block:
+def renderer(data: dict, fidelity: Fidelity, width: int | None) -> Block:
     rows = []
     for svc in data["services"]:
         line = f"{svc['state']:<9} {svc['name']:<14} {svc['replicas']}"
-        if ctx.fidelity.shows("timings"):                # a named facet
+        if fidelity.shows("timings"):                    # a named facet
             line += f"  {svc['ms']:>4}ms"
         rows.append(Block.text(line, STATE_STYLE[svc["state"]]))
-        if ctx.zoom >= 2 and svc["state"] != "ok":       # detail level
+        if fidelity.depth >= 2 and svc["state"] != "ok": # detail level
             rows.append(Block.text("          last error: upstream timeout (2m ago)", Style(dim=True)))
     return join_vertical(*rows)
 
 run_cli(
-    sys.argv[1:], render=render, fetch=fetch,
+    sys.argv[1:], renderer=renderer, fetch=fetch,
     prog="deploys", description="Deployment status",
     tags=[Tag("timings", "Show per-service latency", implied_at=2)],
 )
@@ -82,7 +81,7 @@ degraded  billing        2/3   340ms
 ok        search         2/2    28ms
 ```
 
-The same declaration serializes — `render` isn't even called for this:
+The same declaration serializes — `renderer` isn't even called for this:
 
 ```console
 $ deploys --json
@@ -193,16 +192,16 @@ One render function, three output modes. Pipe gets static, TTY gets live updates
 `-i` gets full interactive.
 
 ```python
-from painted import run_cli, CliContext, Block
+from painted import run_cli, Fidelity, Block
 
-def render(ctx: CliContext, data: dict) -> Block:
+def renderer(data: dict, fidelity: Fidelity, width: int | None) -> Block:
     # your render logic — returns a Block
     ...
 
 def fetch() -> dict:
     return {"status": "ok", "replicas": 3}
 
-run_cli(sys.argv[1:], render=render, fetch=fetch)
+run_cli(sys.argv[1:], renderer=renderer, fetch=fetch)
 ```
 
 ```bash
@@ -219,14 +218,14 @@ The flag surface grows only as you declare — the honesty rule again:
 
 ```python
 run_cli(
-    sys.argv[1:], render=render, fetch=fetch,
+    sys.argv[1:], renderer=renderer, fetch=fetch,
     tags=[Tag("thinking", "Show reasoning", implied_at=3)],  # generates --thinking
     depth_aliases={"brief": 0, "full": 3},                   # --brief / --full
     budgets=True,                                            # --max-chars / --max-lines
 )
 ```
 
-Gate content with `ctx.fidelity.shows("thinking")`; read `ctx.fidelity.chars`
+Gate content with `fidelity.shows("thinking")`; read `fidelity.chars`
 for budgets. Add `fetch_stream=` for live updates (`--live` appears), and
 `live_delivery="surface"` to upgrade sustained streams to an alt-screen
 render loop (`-i` appears, converging with `--live`). Each rung is additive —
@@ -297,7 +296,7 @@ versions — pre-1.0, pin accordingly.
 |--------|---------|
 | `paint(data)` | Zero-config display; transcribes any value onto the surface |
 | `print_block(block)` | Print a Block to stdout (TTY-aware) |
-| `run_cli(args, render=, fetch=, ...)` | CLI harness: zoom/mode/format, plus declared `tags=`, `depth_aliases=`, `budgets=`, `fetch_stream=`, `live_delivery=` |
+| `run_cli(args, renderer=, fetch=, ...)` | CLI harness: zoom/mode/format, plus declared `tags=`, `depth_aliases=`, `budgets=`, `fetch_stream=`, `live_delivery=` |
 | `run_app(argv, commands)` | Multi-command routing; each `AppCommand` handler calls `run_cli` |
 
 ### Views (`painted.views`)

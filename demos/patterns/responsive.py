@@ -34,6 +34,7 @@ from painted import (
     Align,
     Block,
     CliContext,
+    Fidelity,
     OutputMode,
     Style,
     Wrap,
@@ -235,6 +236,13 @@ SAMPLE = Dashboard(
 # =============================================================================
 # Rendering helpers
 # =============================================================================
+
+
+# The demo's own domain size: the "wide" breakpoint tier, used when no
+# width is offered (a pipe's natural sizing) — deliberately not the old
+# terminal-fallback guess of 80 (which sits in the "medium" tier, and would
+# make piped output indistinguishable from a fixed-80 TTY render).
+_NATURAL_WIDTH = 100
 
 
 def _breakpoint(width: int) -> str:
@@ -468,8 +476,9 @@ def render_alerts_panel(data: Dashboard, *, ctx_width: int, zoom: Zoom, outer_wi
     )
 
 
-def render_dashboard(ctx: CliContext, data: Dashboard) -> Block:
-    width = max(1, ctx.width)
+def render_dashboard(data: Dashboard, fidelity: Fidelity, width: int | None) -> Block:
+    width = max(1, _NATURAL_WIDTH if width is None else width)
+    zoom = Zoom(min(max(fidelity.depth, 0), 3))
     bp = _breakpoint(width)
 
     title_left = Block.text(
@@ -483,7 +492,7 @@ def render_dashboard(ctx: CliContext, data: Dashboard) -> Block:
     title = truncate(join_horizontal(title_left, title_right, gap=0, align=Align.START), width)
 
     meta = Block.text(
-        f" width={ctx.width}  breakpoint={bp}  zoom={int(ctx.zoom)} ",
+        f" width={width}  breakpoint={bp}  zoom={int(zoom)} ",
         Style(dim=True),
         width=width,
         wrap=Wrap.ELLIPSIS,
@@ -492,12 +501,12 @@ def render_dashboard(ctx: CliContext, data: Dashboard) -> Block:
     left_outer = min(56, width)
     right_outer = min(42, width)
 
-    pipeline = render_pipeline_panel(data, ctx_width=width, zoom=ctx.zoom, outer_width=left_outer)
+    pipeline = render_pipeline_panel(data, ctx_width=width, zoom=zoom, outer_width=left_outer)
 
     right_col = join_vertical(
-        render_deploys_panel(data, ctx_width=width, zoom=ctx.zoom, outer_width=right_outer),
+        render_deploys_panel(data, ctx_width=width, zoom=zoom, outer_width=right_outer),
         _spacer(right_outer),
-        render_alerts_panel(data, ctx_width=width, zoom=ctx.zoom, outer_width=right_outer),
+        render_alerts_panel(data, ctx_width=width, zoom=zoom, outer_width=right_outer),
         gap=0,
     )
 
@@ -535,15 +544,7 @@ class ResponsiveSurface(Surface):
         if self._buf is None:
             return
         self._buf.fill(0, 0, self._width, self._height, " ", Style())
-        ctx = CliContext(
-            zoom=self._zoom,
-            mode=OutputMode.INTERACTIVE,
-            use_ansi=True,
-            is_tty=True,
-            width=self._width,
-            height=self._height,
-        )
-        block = render_dashboard(ctx, self._data)
+        block = render_dashboard(self._data, Fidelity(depth=int(self._zoom)), self._width)
         block.paint(self._buf, 0, 0)
         Block.text(
             " 1-4: zoom  q: quit ",
@@ -567,14 +568,14 @@ def _fetch() -> Dashboard:
     return SAMPLE
 
 
-def _render(ctx: CliContext, data: Dashboard) -> Block:
-    return render_dashboard(ctx, data)
+def _render(data: Dashboard, fidelity: Fidelity, width: int | None) -> Block:
+    return render_dashboard(data, fidelity, width)
 
 
 def _handle_interactive(ctx: CliContext) -> int:
     data = SAMPLE
     if not ctx.is_tty:
-        block = _render(ctx, data)
+        block = _render(data, ctx.fidelity, None)
         print_block(block, use_ansi=ctx.use_ansi)
         return 0
     surface = ResponsiveSurface(data, zoom=ctx.zoom)
@@ -585,7 +586,7 @@ def _handle_interactive(ctx: CliContext) -> int:
 def main() -> int:
     return run_cli(
         sys.argv[1:],
-        render=_render,
+        renderer=_render,
         fetch=_fetch,
         handlers={OutputMode.INTERACTIVE: _handle_interactive},
         description=__doc__,

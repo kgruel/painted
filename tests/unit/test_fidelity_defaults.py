@@ -54,7 +54,7 @@ def test_run_cli_plain_does_not_leak_ascii_icons(monkeypatch):
 
     run_cli(
         [],
-        render=lambda ctx, data: Block.text("ok", Style()),
+        renderer=lambda data, fidelity, width: Block.text("ok", Style()),
         fetch=lambda: "data",
     )
 
@@ -69,14 +69,14 @@ def test_run_cli_plain_uses_ascii_icons_during_render(monkeypatch):
     reset_icons()
     captured_icons = None
 
-    def render(ctx, data):
+    def renderer(data, fidelity, width):
         nonlocal captured_icons
         captured_icons = current_icons()
         return Block.text("ok", Style())
 
     run_cli(
         [],
-        render=render,
+        renderer=renderer,
         fetch=lambda: "data",
     )
 

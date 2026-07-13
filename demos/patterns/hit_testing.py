@@ -23,10 +23,9 @@ from dataclasses import dataclass
 from painted import (
     Block,
     Cell,
-    CliContext,
+    Fidelity,
     Style,
     Wrap,
-    Zoom,
     border,
     join_horizontal,
     join_vertical,
@@ -345,54 +344,51 @@ def _composition_trace(data: HitTestData, *, width: int) -> Block:
     return inner
 
 
-def _render_minimal(data: HitTestData, width: int) -> Block:
+def _render_minimal(data: HitTestData, width: int | None) -> Block:
     p = current_palette()
-    return truncate(
-        Block.text(
-            f"grid {data.grid.width}x{data.grid.height}  cells {data.total_cells}  refs {data.cells_with_ref}  unique {len(data.unique_refs)}",
-            p.accent,
-        ),
-        width,
+    block = Block.text(
+        f"grid {data.grid.width}x{data.grid.height}  cells {data.total_cells}  refs {data.cells_with_ref}  unique {len(data.unique_refs)}",
+        p.accent,
     )
+    return truncate(block, width) if width is not None else block
 
 
-def _render_summary(data: HitTestData, width: int) -> Block:
-    return truncate(
-        join_vertical(
-            _spacer(),
-            _header("service dashboard (visual layer)"),
-            _spacer(),
-            data.grid,
-            _spacer(),
-            _header("hit probes: Buffer.hit(x, y)"),
-            _spacer(),
-            _probes_block(data.probes),
-        ),
-        width,
+def _render_summary(data: HitTestData, width: int | None) -> Block:
+    block = join_vertical(
+        _spacer(),
+        _header("service dashboard (visual layer)"),
+        _spacer(),
+        data.grid,
+        _spacer(),
+        _header("hit probes: Buffer.hit(x, y)"),
+        _spacer(),
+        _probes_block(data.probes),
     )
+    return truncate(block, width) if width is not None else block
 
 
-def _render_detailed(data: HitTestData, width: int) -> Block:
+def _render_detailed(data: HitTestData, width: int | None) -> Block:
     p = current_palette()
-    return truncate(
-        join_vertical(
-            _render_summary(data, width),
-            _spacer(),
-            _header("provenance map (ref layer)"),
-            _spacer(),
-            border(_provenance_map(data.grid), chars=ROUNDED, style=p.muted),
-            _spacer(),
-            _legend(),
-        ),
-        width,
+    block = join_vertical(
+        _render_summary(data, width),
+        _spacer(),
+        _header("provenance map (ref layer)"),
+        _spacer(),
+        border(_provenance_map(data.grid), chars=ROUNDED, style=p.muted),
+        _spacer(),
+        _legend(),
     )
+    return truncate(block, width) if width is not None else block
 
 
-def _render_full(data: HitTestData, width: int) -> Block:
+def _render_full(data: HitTestData, width: int | None) -> Block:
     p = current_palette()
     summary = _render_summary(data, width)
     detailed = _render_detailed(data, width)
-    trace_inner = _composition_trace(data, width=width)
+    # The trace's own inner-panel width caps at 80 regardless (a fixed
+    # comparison layout, not a viewport clip) — the same cap the
+    # width-bounded case already clamps toward when no width is offered.
+    trace_inner = _composition_trace(data, width=80 if width is None else width)
 
     dashboard = border(summary, title="zoom 1", chars=ROUNDED, style=p.muted)
     provenance = border(detailed, title="zoom 2", chars=ROUNDED, style=p.muted)
@@ -400,14 +396,15 @@ def _render_full(data: HitTestData, width: int) -> Block:
     return join_vertical(_spacer(), dashboard, _spacer(), provenance, _spacer(), trace)
 
 
-def _render(ctx: CliContext, data: HitTestData) -> Block:
-    if ctx.zoom >= Zoom.FULL:
-        return _render_full(data, ctx.width)
-    if ctx.zoom >= Zoom.DETAILED:
-        return _render_detailed(data, ctx.width)
-    if ctx.zoom >= Zoom.SUMMARY:
-        return _render_summary(data, ctx.width)
-    return _render_minimal(data, ctx.width)
+def _render(data: HitTestData, fidelity: Fidelity, width: int | None) -> Block:
+    depth = fidelity.depth
+    if depth >= 3:
+        return _render_full(data, width)
+    if depth >= 2:
+        return _render_detailed(data, width)
+    if depth >= 1:
+        return _render_summary(data, width)
+    return _render_minimal(data, width)
 
 
 def _fetch() -> HitTestData:
@@ -417,7 +414,7 @@ def _fetch() -> HitTestData:
 def main() -> int:
     return run_cli(
         sys.argv[1:],
-        render=_render,
+        renderer=_render,
         fetch=_fetch,
         description=__doc__,
         prog="hit_testing.py",

@@ -26,7 +26,7 @@ import io
 import sys
 from dataclasses import dataclass
 
-from painted import Block, CliContext, Style, Zoom, join_vertical, run_cli, truncate
+from painted import Block, Fidelity, Style, join_vertical, run_cli, truncate
 from painted.cli import Confirm, Select
 from painted.cli.prompts import PromptSession
 
@@ -80,10 +80,12 @@ def _fetch() -> PromptsData:
 # --- Rendering ---
 
 
-def _render(ctx: CliContext, data: PromptsData) -> Block:
-    if ctx.zoom < Zoom.SUMMARY:
+def _render(data: PromptsData, fidelity: Fidelity, width: int | None) -> Block:
+    depth = fidelity.depth
+    if depth < 1:
         summary = "  ".join(data.record_lines) or "no defaults resolved"
-        return truncate(Block.text(summary, Style(dim=True)), ctx.width)
+        block = Block.text(summary, Style(dim=True))
+        return truncate(block, width) if width is not None else block
 
     rows: list[Block] = [
         Block.text("Declared prompts resolve without a human", Style(bold=True)),
@@ -91,12 +93,12 @@ def _render(ctx: CliContext, data: PromptsData) -> Block:
     ]
     rows.extend(Block.text(f"  {line}", Style()) for line in data.record_lines)
 
-    if ctx.zoom >= Zoom.DETAILED:
+    if depth >= 2:
         rows.append(Block.text("", Style()))
         rows.append(Block.text("No flag, no default, stdin not a terminal:", Style(bold=True)))
         rows.append(Block.text(f"  {data.refusal}", Style(fg="red")))
 
-    if ctx.zoom >= Zoom.FULL:
+    if depth >= 3:
         rows.append(Block.text("", Style()))
         rows.append(
             Block.text(
@@ -106,13 +108,14 @@ def _render(ctx: CliContext, data: PromptsData) -> Block:
             )
         )
 
-    return truncate(join_vertical(*rows), ctx.width)
+    block = join_vertical(*rows)
+    return truncate(block, width) if width is not None else block
 
 
 def main() -> int:
     return run_cli(
         sys.argv[1:],
-        render=_render,
+        renderer=_render,
         fetch=_fetch,
         description=__doc__,
         prog="prompts.py",
