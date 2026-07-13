@@ -701,11 +701,16 @@ class CliRunner(Generic[T]):
                     try:
                         async for state in self._stream_iter(ctx):
                             try:
-                                # Viewportless: this branch retains only the
-                                # last Block and prints it once at the end — a
-                                # cadence choice, not a per-frame viewport. On a
-                                # pipe the offer is None; on a forced-plain TTY
-                                # it is the known geometry, like static (§5).
+                                # Non-ANSI cadence: this branch retains only
+                                # the last Block and prints it once at the
+                                # end — a cadence choice, not a per-frame
+                                # viewport. The offer is still per-frame (§6):
+                                # on a pipe it is None; on a forced-plain TTY
+                                # it is the *current* columns, re-read each
+                                # state like every other live offer — --plain
+                                # drops ANSI, not the viewport, so a mid-run
+                                # resize re-enters here too, never a stale
+                                # detection-time ctx.width.
                                 # ref_schemes evaluates per fetched state (§7)
                                 # even though only the last one is ever
                                 # serialized — the state that actually renders
@@ -713,7 +718,11 @@ class CliRunner(Generic[T]):
                                 # below.
                                 schemes = self._resolve_ref_schemes(state)
                                 with self._ref_scope(schemes):
-                                    last_block = self._render(ctx, state, self._offered_width(ctx))
+                                    last_block = self._render(
+                                        ctx,
+                                        state,
+                                        self._offered_width(ctx, self._current_columns()),
+                                    )
                                 last_schemes = schemes
                             except Exception as exc:
                                 self._emit_error(
@@ -890,17 +899,23 @@ class CliRunner(Generic[T]):
             print_block(self._fetch_error_block(ctx, surface.error), use_ansi=ctx.use_ansi)
             return 1
 
-        if surface.last_state is not None:
+        # Gate on frame *presence*, not the state payload: renderer data is
+        # unconstrained, so a final fetched state of None is a legitimate
+        # frame that still gets its promised scrollback deposit (and its
+        # ref bracket). Only a run where nothing was ever fetched skips it.
+        final_frame = surface.last_frame
+        if final_frame is not None:
+            last_state, last_schemes = final_frame
             # The deposit is itself a separate serialization event, but it
             # reuses the schemes already resolved for the last fetched
             # state — never re-evaluates the callable (§7: "the final
             # deposit serializes under the last state's schemes", not a
-            # fresh evaluation). last_state/last_ref_schemes are two views
-            # of the same atomically-carried pair (StreamSurface), so they
-            # can never desync. A resolution fault would already have
-            # surfaced as surface.error above; by construction there is
-            # nothing left to fail here.
-            with self._ref_scope(surface.last_ref_schemes):
+            # fresh evaluation). The pair is carried atomically
+            # (StreamSurface), so state and schemes can never desync. A
+            # resolution fault would already have surfaced as
+            # surface.error above; by construction there is nothing left
+            # to fail here.
+            with self._ref_scope(last_schemes):
                 try:
                     # The deposit is itself an offer — the runner's final print
                     # to the normal screen (a TTY; the surface path was gated
@@ -910,7 +925,7 @@ class CliRunner(Generic[T]):
                     # deposit at a stale width.
                     block = self._render(
                         ctx,
-                        surface.last_state,
+                        last_state,
                         self._offered_width(ctx, self._current_columns()),
                     )
                 except PromptContractError:

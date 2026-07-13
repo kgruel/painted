@@ -554,6 +554,55 @@ class TestOfferSeam:
         runner._dispatch(_ctx(is_tty=True, width=999, use_ansi=True, mode=OutputMode.LIVE))
         assert offered == [30, 50]  # the resize re-entered as a changed offer
 
+    def test_forced_plain_live_reoffers_current_geometry_per_frame(self, monkeypatch, capsys):
+        """--plain --live at a real TTY takes the non-ANSI cadence branch, but
+        the offer is still per-frame (§6): --plain drops ANSI, not the
+        viewport, so each state's render re-reads current columns — never the
+        detection-time ctx.width."""
+        import os
+
+        cols = iter([30, 50])
+        monkeypatch.setattr(
+            "shutil.get_terminal_size",
+            lambda *a, **k: os.terminal_size((next(cols), 24)),
+        )
+
+        offered: list[int | None] = []
+
+        def rnd(data, fidelity, width):
+            offered.append(width)
+            return Block.text(str(data), Style())
+
+        async def fake_stream():
+            yield "a"
+            yield "b"
+
+        runner = CliRunner(renderer=rnd, fetch=lambda: "unused", fetch_stream=fake_stream)
+        # Forced-plain on a TTY (use_ansi False, is_tty True) → non-ANSI branch.
+        code = runner._dispatch(_ctx(is_tty=True, width=999, use_ansi=False, mode=OutputMode.LIVE))
+        assert code == 0
+        assert offered == [30, 50]  # never the stale detection-time 999
+        assert "b" in capsys.readouterr().out  # the last frame still deposits
+
+    def test_forced_plain_live_pipe_still_offers_none(self, monkeypatch, capsys):
+        """The same branch under a pipe: the re-read geometry is discarded by
+        the offer rule — every frame's offer stays None (natural sizing)."""
+        offered: list[int | None] = []
+
+        def rnd(data, fidelity, width):
+            offered.append(width)
+            return Block.text(str(data), Style())
+
+        async def fake_stream():
+            yield "a"
+            yield "b"
+
+        runner = CliRunner(renderer=rnd, fetch=lambda: "unused", fetch_stream=fake_stream)
+        code = runner._dispatch(_ctx(is_tty=False, width=80, use_ansi=False, mode=OutputMode.LIVE))
+        assert code == 0
+        assert offered == [None, None]
+        capsys.readouterr()
+
 
 def _ansi_ctx(*, width: int = 80) -> CliContext:
     return CliContext(

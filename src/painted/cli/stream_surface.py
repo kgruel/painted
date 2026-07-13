@@ -108,8 +108,21 @@ class StreamSurface(Surface, Generic[T]):
         self._live_meter = live_meter
 
     @property
+    def last_frame(self) -> tuple[T, tuple[RefScheme, ...] | None] | None:
+        """The most recently fetched (state, schemes) pair — None only when
+        nothing was ever fetched. This is the deposit's read: frame *presence*
+        is this property being non-None, distinct from the state payload,
+        which is unconstrained domain data and may itself legitimately be
+        ``None`` (the transcription default renders it). The two views below
+        conflate those cases and exist for convenience reads only.
+        """
+        return self._last_frame
+
+    @property
     def last_state(self) -> T | None:
-        """The most recently fetched state — None before the first fetch."""
+        """The most recently fetched state — None before the first fetch
+        (and also when the fetched state itself was None; the deposit
+        distinguishes via ``last_frame``)."""
         return None if self._last_frame is None else self._last_frame[0]
 
     @property

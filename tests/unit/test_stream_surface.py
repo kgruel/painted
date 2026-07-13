@@ -675,6 +675,52 @@ def test_deposits_last_frame_on_success(monkeypatch, capsys):
     assert "final" in capsys.readouterr().out  # last frame left in scrollback
 
 
+def test_deposits_a_none_final_state(monkeypatch, capsys):
+    """A final fetched state of None is a real frame — renderer data is
+    unconstrained, so the deposit gates on frame *presence*
+    (surface.last_frame), never the state payload. A run whose last state is
+    None must still get its promised scrollback deposit (and its ref
+    bracket), not exit 0 silently."""
+
+    async def fake_run(self):
+        self._last_frame = (None, None)
+
+    monkeypatch.setattr(StreamSurface, "run", fake_run)
+
+    rendered: list[object] = []
+
+    def rnd(data, fidelity, width):
+        rendered.append(data)
+        return Block.text(repr(data), Style())
+
+    code = _runner(renderer=rnd)._run_live_surface(static_ctx(Zoom.SUMMARY))
+    assert code == 0
+    assert rendered == [None]  # the deposit rendered the None payload
+    assert "None" in capsys.readouterr().out
+
+
+def test_no_fetch_at_all_deposits_nothing(monkeypatch, capsys):
+    """The other side of the presence gate: a run where nothing was ever
+    fetched has no frame to deposit — last_frame is None, the renderer is
+    never called."""
+
+    async def fake_run(self):
+        pass  # no fetch event ever happened
+
+    monkeypatch.setattr(StreamSurface, "run", fake_run)
+
+    rendered: list[object] = []
+
+    def rnd(data, fidelity, width):
+        rendered.append(data)
+        return Block.text(repr(data), Style())
+
+    code = _runner(renderer=rnd)._run_live_surface(static_ctx(Zoom.SUMMARY))
+    assert code == 0
+    assert rendered == []
+    assert capsys.readouterr().out == ""
+
+
 def test_deposit_offers_current_geometry_after_resize(monkeypatch):
     """The final deposited frame is itself an offer (§§5–6): it re-reads
     *current* columns, so a resize during the alt-screen session tracks

@@ -90,9 +90,11 @@ framework handles zoom/format/mode automatically. Declaring neither `renderer=`
 nor `render=` installs the framework's own transcription default, so
 `run_cli(argv, fetch=fetch)` alone still renders something honest. The older
 `render(ctx, data) → Block` shape (reading `ctx.width`/`ctx.zoom` off a full
-`CliContext`) is still accepted as `render=` — useful when a renderer also
-needs `ctx.mode` or another destination fact the three-argument contract
-deliberately excludes — but new code should reach for `renderer=` first.
+`CliContext`) is still accepted as `render=` — a compatibility window, not a
+capability tier: mode, TTY state, and lifecycle are host-selection material
+that a semantic renderer never consumes (behavior that varies by destination
+belongs in handlers and hosts, not the renderer). New code should reach for
+`renderer=` first.
 
 **The disclosure ladder** (`docs/FIDELITY_DESIGN.md`) — each rung additive; climbing never rewrites the rung below:
 

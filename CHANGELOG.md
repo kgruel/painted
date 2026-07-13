@@ -33,7 +33,8 @@ Landing in slices; this section accumulates until the cut.
 - **`ref_schemes=` — the framework-tier denotation declaration** (S4,
   `docs/RENDERER_CONTRACT_DESIGN.md` §7). Static (a tuple of `RefScheme`) or
   callable (`state -> tuple[RefScheme, ...]`, re-evaluated once per fetch
-  event) forms install as a per-cycle bracket around fetch/render/flush: the
+  event) forms resolve after each fetch and install as a bracket around
+  render through serialization/flush: the
   prior ambient `use_refs` state is preserved and restored, and
   `ref_schemes=[]` disables ambient resolution for the run without leaking
   into the next one. A raising callable's exception enters the render-error
