@@ -10,11 +10,11 @@ import argparse
 import json
 import shutil
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import asdict, dataclass, field
 from typing import TYPE_CHECKING, Generic, TypeVar, overload
 
-from contextlib import nullcontext
+from contextlib import AbstractContextManager, nullcontext
 
 from ..core.errors import DeclarationError
 from .types import (
@@ -39,6 +39,7 @@ if TYPE_CHECKING:
 
     from ..core.block import Block
     from ..core.renderer import Renderer
+    from ..refs import RefScheme
     from .help import HelpArg
     from .prompts import Prompt
 
@@ -137,6 +138,36 @@ class CliRunner(Generic[T]):
     # compilation.
     build_fidelity: Callable[[argparse.Namespace, Fidelity], Fidelity] | None = None
 
+    # Ref schemes declaration (docs/RENDERER_CONTRACT_DESIGN.md §7): the
+    # runner-owned bracket around render + serialization, replacing whatever
+    # ambient `use_refs` state was active for that cycle. A static sequence
+    # validates now, at construction (DeclarationError — starts-clean-never-
+    # fires); a callable of state cannot start clean, so it evaluates after a
+    # successful fetch and before the renderer is invoked — a raising
+    # callable enters the render-error path unchanged (app fault, not
+    # painted's), an invalid *result* faults ContractError before any
+    # use_refs call. Absent (None, the default): the framework installs
+    # nothing — ambient schemes an app set through `use_refs` itself flow
+    # through unchanged. `ref_schemes=[]` is a valid explicit empty
+    # declaration: disable ambient resolution for the runner-owned cycle.
+    # Not evaluated on handler-dispatched modes (only a static sequence
+    # installs there — a handler has no fetched state to evaluate a callable
+    # against) or on the `--json` fork (data export never renders, never
+    # serializes a Block).
+    ref_schemes: Sequence[RefScheme] | Callable[[T], Sequence[RefScheme]] | None = field(
+        default=None, kw_only=True
+    )
+
+    # The static form's validated, FROZEN copy — set once in __post_init__,
+    # never re-derived from `self.ref_schemes` afterward. `self.ref_schemes`
+    # is a caller-owned sequence (a list the app can still mutate after
+    # construction); every bracket reads this tuple instead, so a
+    # post-construction mutation (e.g. appending a duplicate name) can never
+    # reopen a declaration that already started clean (§3's defensive-copy
+    # ruling). ``None`` here means "not the static form" — absent, or a
+    # callable, which evaluates fresh per fetch and has nothing to freeze.
+    _ref_schemes_static: tuple[RefScheme, ...] | None = field(default=None, init=False, repr=False)
+
     # Internal parser cache for repeated invocations
     _parser_cache: argparse.ArgumentParser | None = field(default=None, init=False, repr=False)
 
@@ -187,6 +218,26 @@ class CliRunner(Generic[T]):
             raise DeclarationError(
                 f"live_delivery must be 'inplace' or 'surface', got {self.live_delivery!r}"
             )
+
+        # ref_schemes=: the static sequence form validates now, at
+        # construction (§7) — frozen into `_ref_schemes_static` so every
+        # bracket reads that copy, never the caller-owned sequence again
+        # (starts-clean-never-fires; a post-construction mutation must not
+        # be able to reopen it). The callable form can't start clean; it
+        # evaluates per fetch, at dispatch. Anything that is neither a
+        # Sequence nor callable — a set, an iterator, a bare RefScheme —
+        # is a malformed declaration, faulted here too, not left to crash
+        # with an unrelated "not callable" TypeError at render time.
+        if self.ref_schemes is not None:
+            if isinstance(self.ref_schemes, Sequence):
+                self._ref_schemes_static = self._validate_ref_schemes(
+                    self.ref_schemes, error_type=DeclarationError, context="ref_schemes="
+                )
+            elif not callable(self.ref_schemes):
+                raise DeclarationError(
+                    "ref_schemes= must be a Sequence of RefScheme or a callable "
+                    f"of state, got {self.ref_schemes!r}"
+                )
 
     def run(self, args: list[str]) -> int:
         """Parse args, resolve context, dispatch."""
@@ -401,6 +452,96 @@ class CliRunner(Generic[T]):
         return known if ctx.is_tty else None
 
     @staticmethod
+    def _validate_ref_schemes(
+        schemes: object, *, error_type: type[Exception], context: str
+    ) -> tuple[RefScheme, ...]:
+        """Validate a ref_schemes collection, raising ``error_type`` on any
+        registry-shape violation: not a sequence, a non-``RefScheme``
+        element, or a duplicate name (§7). One check, two fault classes —
+        the static declaration (``error_type=DeclarationError``) and a
+        callable's returned result (``error_type=ContractError``) share the
+        same shape rules but fire at different times for different parties.
+        """
+        from ..refs import RefScheme
+
+        # A shape check, not a duck-typed `tuple(...)` — a set, a generator,
+        # or any other one-shot/unordered iterable is not the declared
+        # Sequence[RefScheme] shape and must fault here, on both routes
+        # (static and callable-result), rather than being silently accepted
+        # and misbehaving later (§7).
+        if not isinstance(schemes, Sequence):
+            raise error_type(f"{context} must be a Sequence of RefScheme, got {schemes!r}")
+        seen: set[str] = set()
+        validated: list[RefScheme] = []
+        for scheme in schemes:
+            if not isinstance(scheme, RefScheme):
+                raise error_type(f"{context} element {scheme!r} is not a RefScheme")
+            if scheme.name in seen:
+                raise error_type(f"RefScheme {scheme.name!r} is declared twice")
+            seen.add(scheme.name)
+            validated.append(scheme)
+        return tuple(validated)
+
+    def _resolve_ref_schemes(self, state: T) -> tuple[RefScheme, ...] | None:
+        """Resolve the declared ``ref_schemes=`` against ``state`` for one
+        render+serialize bracket (§7). ``None`` means nothing was declared —
+        the caller installs no bracket, so ambient ``use_refs`` state an app
+        set itself keeps flowing. A static sequence, already validated at
+        construction, returns unchanged (including empty). A callable
+        evaluates now, against this fetch's state — a raising callable
+        propagates unchanged (the caller's render-error path handles it); an
+        invalid result faults ``ContractError``, before any ``use_refs`` call.
+        """
+        ref_schemes = self.ref_schemes
+        if ref_schemes is None:
+            return None
+        if isinstance(ref_schemes, Sequence):
+            # The static form: return the tuple frozen at construction, never
+            # re-read or re-validate the caller-owned sequence — a
+            # post-construction mutation must not reopen what already
+            # started clean (§3's defensive-copy ruling).
+            assert (
+                self._ref_schemes_static is not None
+            )  # set alongside this branch, in __post_init__
+            return self._ref_schemes_static
+
+        from ..core.errors import ContractError
+
+        schemes = ref_schemes(state)  # app code — raises unchanged
+        return self._validate_ref_schemes(
+            schemes, error_type=ContractError, context="ref_schemes= callable result"
+        )
+
+    @staticmethod
+    def _ref_scope(schemes: tuple[RefScheme, ...] | None) -> AbstractContextManager[None]:
+        """The runner-owned bracket for a resolved scheme set (§7).
+
+        ``None`` (nothing declared) installs no bracket at all — a no-op
+        context manager, so ambient state flows through untouched. A
+        (possibly empty) tuple REPLACEs the registry for the scope's
+        duration via ``use_refs``, restoring prior ambient state on exit.
+        """
+        if schemes is None:
+            return nullcontext()
+        from ..refs import use_refs
+
+        return use_refs(*schemes)
+
+    def _handler_ref_scope(self) -> AbstractContextManager[None]:
+        """The bracket around a custom mode handler (§7).
+
+        Handler paths are excluded from callable evaluation — the framework
+        neither fetches nor renders there, so a callable has no state
+        boundary to evaluate against. A static sequence needs no state and
+        installs around the handler invocation like any other declared
+        scope; the handler owns its own ``use_refs`` scope beyond that, like
+        any direct library user.
+        """
+        if self._ref_schemes_static is None:
+            return nullcontext()
+        return self._ref_scope(self._ref_schemes_static)
+
+    @staticmethod
     def _current_columns() -> int:
         """The terminal's current column count, re-read per live frame.
 
@@ -483,7 +624,8 @@ class CliRunner(Generic[T]):
         with self._icon_scope(ctx):
             # Check for custom handler
             if self.handlers and ctx.mode in self.handlers:
-                result = self.handlers[ctx.mode](ctx)
+                with self._handler_ref_scope():
+                    result = self.handlers[ctx.mode](ctx)
                 return result if isinstance(result, int) else 0
 
             # Dispatch by mode
@@ -499,31 +641,47 @@ class CliRunner(Generic[T]):
 
             return 0
 
-    def _run_static(self, ctx: CliContext) -> int:
-        """Run with static output (print_block)."""
+    def _render_and_deliver(self, ctx: CliContext, state: T) -> int:
+        """Resolve ref_schemes, render, and print — shared by the static
+        dispatch and the non-streaming live path (both fetch once, render
+        once). Ref-scheme resolution shares the render-error path (§7): a
+        resolution fault — a raising callable, or an invalid result faulting
+        ``ContractError`` — reports through the same exit code as a renderer
+        fault, never the fetch path. The resolved bracket spans render
+        through the ``print_block`` serialization that resolves refs.
+        """
         from ..core.writer import print_block
 
+        try:
+            schemes = self._resolve_ref_schemes(state)
+        except Exception as exc:
+            self._emit_error(ctx, self._render_error_block(ctx, exc), exc)
+            return 2
+
+        with self._ref_scope(schemes):
+            try:
+                block = self._render(ctx, state, self._offered_width(ctx))
+            except Exception as exc:
+                self._emit_error(ctx, self._render_error_block(ctx, exc), exc)
+                return 2
+            print_block(block, use_ansi=ctx.use_ansi)
+        return 0
+
+    def _run_static(self, ctx: CliContext) -> int:
+        """Run with static output (print_block)."""
         try:
             state = self._do_fetch(ctx)
         except Exception as exc:
             self._emit_error(ctx, self._fetch_error_block(ctx, exc), exc)
             return 1
 
-        try:
-            block = self._render(ctx, state, self._offered_width(ctx))
-        except Exception as exc:
-            self._emit_error(ctx, self._render_error_block(ctx, exc), exc)
-            return 2
-
-        print_block(block, use_ansi=ctx.use_ansi)
-        return 0
+        return self._render_and_deliver(ctx, state)
 
     def _run_live(self, ctx: CliContext) -> int:
         """Run with InPlaceRenderer."""
         import asyncio
 
         from ..inplace import InPlaceRenderer
-        from ..core.writer import print_block
         from .prompts import PromptAbort
 
         if self.fetch_stream is not None:
@@ -539,6 +697,7 @@ class CliRunner(Generic[T]):
                     from ..core.writer import print_block
 
                     last_block = None
+                    last_schemes: tuple[RefScheme, ...] | None = None
                     try:
                         async for state in self._stream_iter(ctx):
                             try:
@@ -547,7 +706,15 @@ class CliRunner(Generic[T]):
                                 # cadence choice, not a per-frame viewport. On a
                                 # pipe the offer is None; on a forced-plain TTY
                                 # it is the known geometry, like static (§5).
-                                last_block = self._render(ctx, state, self._offered_width(ctx))
+                                # ref_schemes evaluates per fetched state (§7)
+                                # even though only the last one is ever
+                                # serialized — the state that actually renders
+                                # is the one whose schemes travel to the print
+                                # below.
+                                schemes = self._resolve_ref_schemes(state)
+                                with self._ref_scope(schemes):
+                                    last_block = self._render(ctx, state, self._offered_width(ctx))
+                                last_schemes = schemes
                             except Exception as exc:
                                 self._emit_error(
                                     ctx, self._render_error_block(ctx, exc), exc, use_ansi=False
@@ -565,7 +732,8 @@ class CliRunner(Generic[T]):
                         )
                         return 1
                     if last_block is not None:
-                        print_block(last_block, use_ansi=False)
+                        with self._ref_scope(last_schemes):
+                            print_block(last_block, use_ansi=False)
                     return 0
 
                 meter = None
@@ -581,24 +749,37 @@ class CliRunner(Generic[T]):
                             if meter is not None:
                                 meter.start()
                             try:
-                                # Re-offer current geometry each frame: the
-                                # in-place host owns a live viewport, so a
-                                # mid-run resize re-enters the renderer as
-                                # changed input (§6).
-                                block = self._render(
-                                    ctx, state, self._offered_width(ctx, self._current_columns())
-                                )
-                            except PromptContractError:
-                                # A refusal never renders into the live region —
-                                # propagate to the outer finalize + the seam.
-                                raise
+                                schemes = self._resolve_ref_schemes(state)
                             except Exception as exc:
                                 renderer.render(self._render_error_block(ctx, exc))
                                 renderer.finalize()
                                 return 2
-                            if meter is not None:
-                                block = meter.dress(block)
-                            renderer.render(block)
+                            # The bracket spans render through the write
+                            # below — InPlaceRenderer.render() writes
+                            # synchronously (its own "flush"), no separate
+                            # callback the way the alt-screen Surface has (§7).
+                            with self._ref_scope(schemes):
+                                try:
+                                    # Re-offer current geometry each frame: the
+                                    # in-place host owns a live viewport, so a
+                                    # mid-run resize re-enters the renderer as
+                                    # changed input (§6).
+                                    block = self._render(
+                                        ctx,
+                                        state,
+                                        self._offered_width(ctx, self._current_columns()),
+                                    )
+                                except PromptContractError:
+                                    # A refusal never renders into the live region —
+                                    # propagate to the outer finalize + the seam.
+                                    raise
+                                except Exception as exc:
+                                    renderer.render(self._render_error_block(ctx, exc))
+                                    renderer.finalize()
+                                    return 2
+                                if meter is not None:
+                                    block = meter.dress(block)
+                                renderer.render(block)
                             if meter is not None:
                                 meter.stop()
                     except PromptAbort:
@@ -634,14 +815,7 @@ class CliRunner(Generic[T]):
             self._emit_error(ctx, self._fetch_error_block(ctx, exc), exc)
             return 1
 
-        try:
-            block = self._render(ctx, state, self._offered_width(ctx))
-        except Exception as exc:
-            self._emit_error(ctx, self._render_error_block(ctx, exc), exc)
-            return 2
-
-        print_block(block, use_ansi=ctx.use_ansi)
-        return 0
+        return self._render_and_deliver(ctx, state)
 
     def _run_live_surface(self, ctx: CliContext) -> int:
         """Stream onto an alt screen, then deposit the final frame.
@@ -668,10 +842,27 @@ class CliRunner(Generic[T]):
         def offer_frame(state: T, geometry: int) -> Block:
             return self._render(ctx, state, self._offered_width(ctx, geometry))
 
+        # The frame bracket (§7): StreamSurface calls this once per
+        # successful fetch event, eagerly, in its own consumer task — never
+        # here at the ContextVar-install seam. The ContextVar itself is
+        # installed later, in the Surface's render task, from the resolved
+        # result this closure returns; the resolver call never happens
+        # there. None when nothing was declared, so StreamSurface installs
+        # no bracket at all.
+        def resolve_ref_schemes(state: T) -> tuple[RefScheme, ...]:
+            schemes = self._resolve_ref_schemes(state)
+            assert schemes is not None  # ref_schemes is declared — guarded below
+            return schemes
+
+        resolve_fn: Callable[[T], tuple[RefScheme, ...]] | None = (
+            resolve_ref_schemes if self.ref_schemes is not None else None
+        )
+
         surface = StreamSurface(
             render=offer_frame,
             fetch_stream=lambda: self._stream_iter(ctx),
             live_meter=self.live_meter,
+            resolve_ref_schemes=resolve_fn,
         )
         try:
             asyncio.run(surface.run())
@@ -700,24 +891,37 @@ class CliRunner(Generic[T]):
             return 1
 
         if surface.last_state is not None:
-            try:
-                # The deposit is itself an offer — the runner's final print to
-                # the normal screen (a TTY; the surface path was gated on it).
-                # It re-reads *current* columns like every other offer (§§5–6):
-                # a resize during the alt-screen session moved the geometry, so
-                # detection-time ctx.width would deposit at a stale width.
-                block = self._render(
-                    ctx, surface.last_state, self._offered_width(ctx, self._current_columns())
-                )
-            except PromptContractError:
-                raise
-            except Exception as exc:
-                print_block(self._render_error_block(ctx, exc), use_ansi=ctx.use_ansi)
-                return 2
-            if self.live_meter:
-                # The deposit carries the run's final gauge — what this show cost.
-                block = surface.meter.dress(block)
-            print_block(block, use_ansi=ctx.use_ansi)
+            # The deposit is itself a separate serialization event, but it
+            # reuses the schemes already resolved for the last fetched
+            # state — never re-evaluates the callable (§7: "the final
+            # deposit serializes under the last state's schemes", not a
+            # fresh evaluation). last_state/last_ref_schemes are two views
+            # of the same atomically-carried pair (StreamSurface), so they
+            # can never desync. A resolution fault would already have
+            # surfaced as surface.error above; by construction there is
+            # nothing left to fail here.
+            with self._ref_scope(surface.last_ref_schemes):
+                try:
+                    # The deposit is itself an offer — the runner's final print
+                    # to the normal screen (a TTY; the surface path was gated
+                    # on it). It re-reads *current* columns like every other
+                    # offer (§§5–6): a resize during the alt-screen session
+                    # moved the geometry, so detection-time ctx.width would
+                    # deposit at a stale width.
+                    block = self._render(
+                        ctx,
+                        surface.last_state,
+                        self._offered_width(ctx, self._current_columns()),
+                    )
+                except PromptContractError:
+                    raise
+                except Exception as exc:
+                    print_block(self._render_error_block(ctx, exc), use_ansi=ctx.use_ansi)
+                    return 2
+                if self.live_meter:
+                    # The deposit carries the run's final gauge — what this show cost.
+                    block = surface.meter.dress(block)
+                print_block(block, use_ansi=ctx.use_ansi)
         return 0
 
     @staticmethod
@@ -821,6 +1025,7 @@ def run_cli(
     prompts: list[Prompt] | None = ...,
     budgets: bool = ...,
     build_fidelity: Callable[[argparse.Namespace, Fidelity], Fidelity] | None = ...,
+    ref_schemes: Sequence[RefScheme] | Callable[[T], Sequence[RefScheme]] | None = ...,
 ) -> int: ...
 
 
@@ -845,6 +1050,7 @@ def run_cli(
     prompts: list[Prompt] | None = ...,
     budgets: bool = ...,
     build_fidelity: Callable[[argparse.Namespace, Fidelity], Fidelity] | None = ...,
+    ref_schemes: Sequence[RefScheme] | Callable[[T], Sequence[RefScheme]] | None = ...,
 ) -> int: ...
 
 
@@ -871,6 +1077,7 @@ def run_cli(
     prompts: list[Prompt] | None = ...,
     budgets: bool = ...,
     build_fidelity: Callable[[argparse.Namespace, Fidelity], Fidelity] | None = ...,
+    ref_schemes: Sequence[RefScheme] | Callable[[T], Sequence[RefScheme]] | None = ...,
 ) -> int: ...
 
 
@@ -895,6 +1102,7 @@ def run_cli(
     prompts: list[Prompt] | None = None,
     budgets: bool = False,
     build_fidelity: Callable[[argparse.Namespace, Fidelity], Fidelity] | None = None,
+    ref_schemes: Sequence[RefScheme] | Callable[[T], Sequence[RefScheme]] | None = None,
 ) -> int:
     """Run a CLI tool with zoom/mode/format handling.
 
@@ -936,6 +1144,11 @@ def run_cli(
         budgets: Whether the app honors --max-chars/--max-lines
         build_fidelity: Transform Fidelity after tag compilation — the escape
             hatch for app-specific residue
+        ref_schemes: Declared ref schemes (docs/RENDERER_CONTRACT_DESIGN.md §7)
+            — a static sequence of RefScheme, or a callable of state evaluated
+            per fetch. Installs as the runner-owned bracket around render and
+            serialization, replacing whatever ambient use_refs state was
+            active; absent, the framework installs nothing
 
     Returns:
         Exit code (0 for success)
@@ -959,4 +1172,5 @@ def run_cli(
         prompts=prompts,
         budgets=budgets,
         build_fidelity=build_fidelity,
+        ref_schemes=ref_schemes,
     ).run(args)

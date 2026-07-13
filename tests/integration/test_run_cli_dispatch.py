@@ -15,7 +15,7 @@ import json
 
 import pytest
 
-from painted import Block, Style
+from painted import Block, RefScheme, Style, current_ref_schemes, use_refs
 from painted.cli import (
     CliContext,
     CliRunner,
@@ -25,7 +25,7 @@ from painted.cli import (
     Zoom,
     run_cli,
 )
-from painted.core.errors import DeclarationError
+from painted.core.errors import ContractError, DeclarationError
 
 
 # =============================================================================
@@ -553,6 +553,298 @@ class TestOfferSeam:
         # LIVE on a TTY viewport (use_ansi True, is_tty True) → in-place ANSI branch.
         runner._dispatch(_ctx(is_tty=True, width=999, use_ansi=True, mode=OutputMode.LIVE))
         assert offered == [30, 50]  # the resize re-entered as a changed offer
+
+
+def _ansi_ctx(*, width: int = 80) -> CliContext:
+    return CliContext(
+        fidelity=Fidelity(depth=int(Zoom.SUMMARY)),
+        mode=OutputMode.STATIC,
+        use_ansi=True,
+        is_tty=True,
+        width=width,
+        height=24,
+    )
+
+
+class TestRefSchemes:
+    """ref_schemes= (§7): the runner-owned bracket around render +
+    serialization. Static declarations validate at construction
+    (DeclarationError); a callable evaluates per fetch, in the render phase —
+    a raising callable enters the render-error path unchanged, an invalid
+    result faults ContractError. Excluded from handler-dispatched modes
+    (static only) and the --json fork (never, static or callable)."""
+
+    def test_bad_name_validates_at_construction(self):
+        with pytest.raises(DeclarationError, match="kebab-case"):
+            CliRunner(
+                renderer=lambda data, fidelity, width: Block.text("x", Style()),
+                fetch=lambda: "x",
+                ref_schemes=[RefScheme("Bad_Name", lambda v: v)],
+            )
+
+    def test_duplicate_names_validate_at_construction(self):
+        with pytest.raises(DeclarationError, match="declared twice"):
+            CliRunner(
+                renderer=lambda data, fidelity, width: Block.text("x", Style()),
+                fetch=lambda: "x",
+                ref_schemes=[
+                    RefScheme("fact", lambda v: v),
+                    RefScheme("fact", lambda v: v.upper()),
+                ],
+            )
+
+    def test_non_refscheme_element_validates_at_construction(self):
+        with pytest.raises(DeclarationError, match="not a RefScheme"):
+            CliRunner(
+                renderer=lambda data, fidelity, width: Block.text("x", Style()),
+                fetch=lambda: "x",
+                ref_schemes=["not-a-scheme"],  # type: ignore[list-item]
+            )
+
+    def test_non_sequence_non_callable_validates_at_construction(self):
+        """A set (or any object that is neither the declared Sequence shape
+        nor callable) must fault DeclarationError at construction — not be
+        silently misclassified as "callable" and crash with an unrelated
+        TypeError at render time (P2-1)."""
+        with pytest.raises(DeclarationError, match="Sequence of RefScheme"):
+            CliRunner(
+                renderer=lambda data, fidelity, width: Block.text("x", Style()),
+                fetch=lambda: "x",
+                ref_schemes={RefScheme("fact", lambda v: v)},  # type: ignore[arg-type]
+            )
+
+    def test_post_construction_mutation_does_not_reopen_the_declaration(self, capsys):
+        """The static form is frozen at construction: mutating the
+        caller-owned list afterward (e.g. appending a duplicate name) must
+        not detonate a mid-cycle DeclarationError from use_refs (P1-1)."""
+        schemes = [RefScheme("fact", lambda v: f"https://loops.dev/f/{v}")]
+
+        def rnd(data, fidelity, width):
+            return Block.text("deploy", Style(), ref="fact:01")
+
+        runner = CliRunner(renderer=rnd, fetch=lambda: "x", ref_schemes=schemes)
+        schemes.append(RefScheme("fact", lambda v: v))  # a duplicate name, added after construction
+
+        code = runner._run_static(_ansi_ctx())
+        assert code == 0  # not 2 — the mutation never reaches the bracket
+        assert "\x1b]8;;https://loops.dev/f/01" in capsys.readouterr().out
+
+    def test_callable_result_rejects_a_set(self, capsys):
+        """The callable-result route enforces the same Sequence[RefScheme]
+        shape as the static route (P2-1) — a set is not a Sequence, even
+        though it's iterable."""
+
+        def bad(state):
+            return {RefScheme("fact", lambda v: v)}
+
+        runner = CliRunner(
+            renderer=lambda data, fidelity, width: Block.text("x", Style()),
+            fetch=lambda: "x",
+            ref_schemes=bad,
+        )
+        code = runner._run_static(_ansi_ctx())
+        assert code == 2
+        out = capsys.readouterr().out
+        assert "ContractError" in out
+        assert "Sequence of RefScheme" in out
+
+    def test_static_ref_schemes_installs_around_render_and_serialize(self, capsys):
+        def rnd(data, fidelity, width):
+            return Block.text("deploy", Style(), ref="fact:01")
+
+        runner = CliRunner(
+            renderer=rnd,
+            fetch=lambda: "x",
+            ref_schemes=[RefScheme("fact", lambda v: f"https://loops.dev/f/{v}")],
+        )
+        code = runner._run_static(_ansi_ctx())
+        assert code == 0
+        assert "\x1b]8;;https://loops.dev/f/01" in capsys.readouterr().out
+
+    def test_absent_ref_schemes_leaves_ambient_untouched(self, capsys):
+        """No declaration → the framework installs no bracket at all: an
+        app's own ambient use_refs() keeps flowing through the CLI tier."""
+
+        def rnd(data, fidelity, width):
+            return Block.text("deploy", Style(), ref="fact:01")
+
+        with use_refs(RefScheme("fact", lambda v: f"https://ambient/{v}")):
+            runner = CliRunner(renderer=rnd, fetch=lambda: "x")  # ref_schemes absent
+            code = runner._run_static(_ansi_ctx())
+
+        assert code == 0
+        assert "https://ambient/01" in capsys.readouterr().out
+
+    def test_empty_ref_schemes_disables_ambient(self, capsys):
+        """ref_schemes=[] is a valid explicit empty declaration: it disables
+        ambient resolution for the runner-owned cycle, restoring the prior
+        ambient state once the bracket exits."""
+
+        def rnd(data, fidelity, width):
+            return Block.text("deploy", Style(), ref="fact:01")
+
+        with use_refs(RefScheme("fact", lambda v: f"https://ambient/{v}")):
+            runner = CliRunner(renderer=rnd, fetch=lambda: "x", ref_schemes=[])
+            code = runner._run_static(_ansi_ctx())
+            # ambient state is restored once the runner-owned bracket exits
+            assert "fact" in current_ref_schemes()
+
+        assert code == 0
+        out = capsys.readouterr().out
+        assert "\x1b]8;;" not in out  # the ref is inert — no hyperlink at all
+
+    def test_callable_evaluates_against_the_fetched_state(self, capsys):
+        seen: list[object] = []
+
+        def schemes_for(state):
+            seen.append(state)
+            return [RefScheme("fact", lambda v: f"https://x/{state}/{v}")]
+
+        def rnd(data, fidelity, width):
+            return Block.text("deploy", Style(), ref="fact:01")
+
+        runner = CliRunner(renderer=rnd, fetch=lambda: "abc", ref_schemes=schemes_for)
+        code = runner._run_static(_ansi_ctx())
+        assert code == 0
+        assert seen == ["abc"]
+        assert "\x1b]8;;https://x/abc/01" in capsys.readouterr().out
+
+    def test_callable_raising_propagates_unchanged_into_render_error_path(self, capsys):
+        def boom(state):
+            raise RuntimeError("app boom")
+
+        runner = CliRunner(
+            renderer=lambda data, fidelity, width: Block.text("x", Style()),
+            fetch=lambda: "x",
+            ref_schemes=boom,
+        )
+        code = runner._run_static(_ansi_ctx())
+        assert code == 2  # the render-error exit code, not a special one
+        out = capsys.readouterr().out
+        assert "RuntimeError: app boom" in out
+        assert "ContractError" not in out  # unwrapped — an app fault, not painted's
+
+    def test_callable_invalid_element_faults_contracterror(self, capsys):
+        def bad(state):
+            return [object()]  # not a RefScheme
+
+        runner = CliRunner(
+            renderer=lambda data, fidelity, width: Block.text("x", Style()),
+            fetch=lambda: "x",
+            ref_schemes=bad,
+        )
+        code = runner._run_static(_ansi_ctx())
+        assert code == 2  # same render-error path as a renderer fault
+        assert "ContractError" in capsys.readouterr().out
+
+    def test_callable_duplicate_names_faults_contracterror(self, capsys):
+        def bad(state):
+            return [RefScheme("fact", lambda v: v), RefScheme("fact", lambda v: v)]
+
+        runner = CliRunner(
+            renderer=lambda data, fidelity, width: Block.text("x", Style()),
+            fetch=lambda: "x",
+            ref_schemes=bad,
+        )
+        code = runner._run_static(_ansi_ctx())
+        assert code == 2
+        out = capsys.readouterr().out
+        assert "ContractError" in out
+        assert "declared twice" in out
+
+    def test_callable_result_is_validated_before_any_use_refs_call(self):
+        """A bad result faults ContractError directly — never use_refs's own
+        DeclarationError, which must not leak mid-cycle (ERRORS_DESIGN)."""
+
+        def bad(state):
+            return [object()]
+
+        runner = CliRunner(
+            renderer=lambda data, fidelity, width: Block.text("x", Style()),
+            fetch=lambda: "x",
+            ref_schemes=bad,
+        )
+        with pytest.raises(ContractError):
+            runner._resolve_ref_schemes("x")
+
+    def test_render_error_path_never_the_fetch_path(self, capsys):
+        """A resolution fault is a declaration-time fault, not a data fault —
+        it must never be misclassified as a fetch failure (exit 1)."""
+
+        def boom(state):
+            raise RuntimeError("scheme boom")
+
+        runner = CliRunner(
+            renderer=lambda data, fidelity, width: Block.text("x", Style()),
+            fetch=lambda: "x",
+            ref_schemes=boom,
+        )
+        code = runner._run_static(_ansi_ctx())
+        assert code == 2  # not 1 — never the fetch path
+
+    def test_handler_mode_does_not_evaluate_a_callable(self, monkeypatch):
+        """Handler paths are excluded: the framework neither fetches nor
+        renders there, so a callable has no state boundary to evaluate."""
+        monkeypatch.setattr("sys.stdout.isatty", lambda: False)
+        called = {"v": False}
+
+        def never_called(state):
+            called["v"] = True
+            return []
+
+        def handler(ctx: CliContext) -> int:
+            return 0
+
+        result = run_cli(
+            ["-i"],
+            render=lambda ctx, data: Block.text("unused", Style()),
+            fetch=lambda: "data",
+            handlers={OutputMode.INTERACTIVE: handler},
+            ref_schemes=never_called,
+        )
+        assert result == 0
+        assert called["v"] is False
+
+    def test_handler_mode_installs_a_static_declaration(self, monkeypatch):
+        """A static sequence needs no state and installs around the handler
+        invocation like any other declared scope."""
+        monkeypatch.setattr("sys.stdout.isatty", lambda: False)
+        seen: dict[str, set[str]] = {}
+
+        def handler(ctx: CliContext) -> int:
+            seen["schemes"] = set(current_ref_schemes())
+            return 0
+
+        result = run_cli(
+            ["-i"],
+            render=lambda ctx, data: Block.text("unused", Style()),
+            fetch=lambda: "data",
+            handlers={OutputMode.INTERACTIVE: handler},
+            ref_schemes=[RefScheme("fact", lambda v: v)],
+        )
+        assert result == 0
+        assert seen["schemes"] == {"fact"}
+        assert current_ref_schemes() == {}  # released after the bracket exits
+
+    def test_json_export_never_evaluates_ref_schemes(self, capsys, monkeypatch):
+        """--json is excluded absolutely, static and callable alike: data
+        export never renders, never serializes a Block."""
+        monkeypatch.setattr("sys.stdout.isatty", lambda: False)
+        called = {"v": False}
+
+        def never_called(state):
+            called["v"] = True
+            return []
+
+        result = run_cli(
+            ["--json"],
+            render=lambda ctx, data: Block.text("unused", Style()),
+            fetch=lambda: {"a": 1},
+            ref_schemes=never_called,
+        )
+        assert result == 0
+        assert called["v"] is False
+        assert json.loads(capsys.readouterr().out) == {"a": 1}
 
 
 class TestRunCliHelp:

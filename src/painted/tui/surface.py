@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import signal
 from collections.abc import Awaitable, Callable
+from contextlib import AbstractContextManager, nullcontext
 from typing import Any
 
 from ..mouse import MouseEvent
@@ -138,8 +139,9 @@ class Surface:
                     # Render if dirty
                     if self._dirty:
                         self._dirty = False
-                        self.render()
-                        self._flush()
+                        with self._frame_scope():
+                            self.render()
+                            self._flush()
 
                     # Adaptive sleep: short yield when input is flowing, else the
                     # REMAINDER of the frame period — sleeping the full period after
@@ -170,6 +172,22 @@ class Surface:
 
     def render(self) -> None:
         """Called each frame when dirty. Override to paint into self._buf."""
+
+    def _frame_scope(self) -> AbstractContextManager[None]:
+        """Context manager entered before ``render()``, exited after
+        ``_flush()`` — one bracket per dirty frame.
+
+        The default is a no-op: most Surface subclasses have no per-frame
+        ambient state to bracket. ``StreamSurface`` overrides this to install
+        the CLI framework's declared ``ref_schemes=`` for the frame's state
+        (docs/RENDERER_CONTRACT_DESIGN.md §7) — render and flush are separate
+        calls, so a scope opened only inside ``render()`` would close before
+        ``_flush()`` resolves refs during serialization. Guaranteed release
+        on success, exception, cancellation, resize, and quit falls out of
+        ordinary ``with``-statement semantics: this brackets both calls in
+        one statement, in the task that owns the loop.
+        """
+        return nullcontext()
 
     def on_key(self, key: str) -> None:
         """Called on keypress. Override to dispatch to focused component."""

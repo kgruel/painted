@@ -25,7 +25,7 @@ from __future__ import annotations
 
 from typing import assert_type
 
-from painted import Block, CliContext, Fidelity, Style
+from painted import Block, CliContext, Fidelity, RefScheme, Style
 from painted import Renderer as RootRenderer  # the taught root facade
 from painted import run_cli as root_run_cli
 from painted.cli import run_cli
@@ -44,6 +44,10 @@ def _fetch() -> str:
     return "x"
 
 
+def _schemes_for(state: str) -> list[RefScheme]:
+    return [RefScheme("fact", lambda v: v)]
+
+
 def _typecheck() -> None:
     """Never called — type checkers analyze the body, nothing runs it."""
     # Renderer is a usable alias for the contract shape.
@@ -55,6 +59,14 @@ def _typecheck() -> None:
     assert_type(run_cli([], render=_legacy, fetch=_fetch), int)  # legacy keyword
     assert_type(run_cli([], renderer=typed_renderer, fetch=_fetch), int)  # via Renderer alias
     assert_type(run_cli([], fetch=_fetch), int)  # neither → transcription default (§4)
+
+    # ref_schemes= (§7) reaches every published call form: a static sequence
+    # and a callable of state, both keyword-only, alongside any renderer form.
+    assert_type(
+        run_cli([], renderer=_renderer, fetch=_fetch, ref_schemes=[RefScheme("fact", str)]), int
+    )
+    assert_type(run_cli([], _legacy, _fetch, ref_schemes=_schemes_for), int)
+    assert_type(run_cli([], fetch=_fetch, ref_schemes=[]), int)
 
     # negative: fetch is required; omitting it matches no overload. The ignore is
     # load-bearing — it suppresses a real no-matching-overload error.

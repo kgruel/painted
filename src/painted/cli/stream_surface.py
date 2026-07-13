@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+from contextlib import AbstractContextManager, nullcontext
 from typing import TYPE_CHECKING, Generic, TypeVar
 
 from ..core.cell import Style
@@ -33,6 +34,7 @@ if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Callable
 
     from ..core.block import Block
+    from ..refs import RefScheme
 
 T = TypeVar("T")
 
@@ -47,6 +49,19 @@ class StreamSurface(Surface, Generic[T]):
     iterator — nearly free). On exit (stream exhausted, quit, or error) the
     last state is left in ``last_state`` / any failure in ``error`` for the
     caller to deposit and translate to an exit code.
+
+    ``ref_schemes=`` evaluation (docs/RENDERER_CONTRACT_DESIGN.md §7): the
+    resolver runs once per successful **fetch event**, eagerly, inside
+    ``_consume()`` — never lazily at render time, and never keyed by state
+    identity. A state that arrives twice (even the same mutated object) is
+    evaluated on every fetch; a state that gets coalesced away before a frame
+    ever renders was still evaluated, at its own fetch, so its callable's
+    fault still surfaces instead of silently disappearing. The resolved
+    ``(state, schemes)`` pair is carried as one atomic tuple into
+    ``self._frame`` (the pair about to render) and ``self._last_frame`` (the
+    pair for the caller's deposit) — the ContextVar itself is installed later,
+    in ``_frame_scope()``, in the rendering task, since ContextVars set in the
+    consumer task would never be visible there.
     """
 
     def __init__(
@@ -56,6 +71,7 @@ class StreamSurface(Surface, Generic[T]):
         fetch_stream: Callable[[], AsyncIterator[T]],
         fps_cap: int = 60,
         live_meter: bool = False,
+        resolve_ref_schemes: Callable[[T], tuple[RefScheme, ...]] | None = None,
     ) -> None:
         super().__init__(fps_cap=fps_cap, on_start=self._spawn, on_stop=self._stop)
         # The render callback is a runner-adapted closure taking the frame's
@@ -63,13 +79,24 @@ class StreamSurface(Surface, Generic[T]):
         # renderer both live behind it, so the surface only supplies geometry.
         self._render = render
         self._fetch_stream = fetch_stream
-        self._state: T | None = None
+        # The runner-owned ref_schemes= resolver — (state) -> schemes, called
+        # once per fetch event in _consume() (see class docstring). None when
+        # the app declared no ref_schemes=.
+        self._resolve_ref_schemes = resolve_ref_schemes
+        # The current (state, schemes) pair, set together in _consume() —
+        # None before the first fetch. render()/_frame_scope() both read this
+        # single attribute, never a standalone `self._state`.
+        self._frame: tuple[T, tuple[RefScheme, ...] | None] | None = None
         self._paused = False
         self._consumer: asyncio.Task[None] | None = None
         self._agen: AsyncIterator[T] | None = None
 
-        # Outcome, read by the caller after the alt screen is torn down.
-        self.last_state: T | None = None
+        # The pair for the most recently fetched state — read by the caller
+        # (the deposit) after the alt screen is torn down, via the
+        # `last_state`/`last_ref_schemes` properties below. Same atomicity
+        # guarantee as `_frame`: one tuple, one write, never two attributes
+        # that could advance independently.
+        self._last_frame: tuple[T, tuple[RefScheme, ...] | None] | None = None
         self.error: Exception | None = None
         self.error_kind: str | None = None  # "fetch" | "render"
 
@@ -79,6 +106,20 @@ class StreamSurface(Surface, Generic[T]):
         # dressing, so an opted-out run pays nothing.
         self.meter = LiveMeter()
         self._live_meter = live_meter
+
+    @property
+    def last_state(self) -> T | None:
+        """The most recently fetched state — None before the first fetch."""
+        return None if self._last_frame is None else self._last_frame[0]
+
+    @property
+    def last_ref_schemes(self) -> tuple[RefScheme, ...] | None:
+        """The ref_schemes= resolved for ``last_state``, at its own fetch
+        (§7) — never re-evaluated at deposit. A read of the same atomic pair
+        ``last_state`` reads, so the two can never desync. None when nothing
+        was declared, or nothing has been fetched yet.
+        """
+        return None if self._last_frame is None else self._last_frame[1]
 
     # --- Stream hosting (lifecycle hooks fire inside Surface.run) ---
 
@@ -113,8 +154,37 @@ class StreamSurface(Surface, Generic[T]):
                     state = await self._agen.__anext__()
                 except StopAsyncIteration:
                     break
-                self._state = state
-                self.last_state = state
+                # ref_schemes= evaluation (§7): eager, once per successful
+                # fetch event — never lazily at render time, never keyed by
+                # state identity. A state that gets coalesced away before a
+                # frame ever renders was still evaluated here, at its own
+                # fetch, so its callable's fault still surfaces instead of
+                # silently disappearing; a repeated-identity fetch (the same
+                # mutated object yielded twice) is evaluated on every fetch.
+                # The ContextVar itself is NOT installed here — it belongs to
+                # the rendering task (_frame_scope()); this only resolves and
+                # validates the app's declaration, an app-code call that
+                # needs no ambient state of its own.
+                if self._resolve_ref_schemes is None:
+                    schemes = None
+                else:
+                    try:
+                        schemes = self._resolve_ref_schemes(state)
+                    except Exception as exc:
+                        # A declaration-time fault (§7), classified as a
+                        # render-phase fault regardless of which task
+                        # detected it — never this method's own "the stream
+                        # raised" classification below.
+                        self.error = exc
+                        self.error_kind = "render"
+                        self.quit()
+                        return
+                # One write, one atomic pair: state and its schemes can never
+                # be observed independently — a reader sees both together or
+                # neither (the `_frame`/`_last_frame` reads below).
+                frame = (state, schemes)
+                self._frame = frame
+                self._last_frame = frame
                 self.mark_dirty()
         except asyncio.CancelledError:
             raise
@@ -127,18 +197,43 @@ class StreamSurface(Surface, Generic[T]):
 
     # --- Surface overrides ---
 
+    def _frame_scope(self) -> AbstractContextManager[None]:
+        """Install the current frame's already-resolved ref_schemes= (§7).
+
+        Evaluation happened once, eagerly, at the fetch event that produced
+        ``self._frame`` (``_consume()``, above) — this method never calls the
+        resolver. It only installs the schemes carried with the current pair
+        as ambient state, in this task (the Surface's own render task), for
+        ``render()``/``_flush()`` below in the same ``with`` statement — the
+        ContextVar set here would never be visible from the consumer task
+        that fetched the state, which is exactly why evaluation itself
+        happens elsewhere and only the *result* travels.
+        """
+        if self._frame is None:
+            return nullcontext()
+        _, schemes = self._frame
+        if schemes is None:  # nothing declared
+            return nullcontext()
+
+        from ..refs import use_refs
+
+        return use_refs(*schemes)
+
     def render(self) -> None:
         if self._buf is None:
             return
         self._buf.fill(0, 0, self._buf.width, self._buf.height, " ", Style())
-        if self._state is None:
+        if self.error is not None:
             return
+        if self._frame is None:
+            return
+        state, _schemes = self._frame
         if self._live_meter:
             self.meter.start()
         try:
             # Offer the buffer's current width — a resize re-created _buf at the
             # new geometry, so this frame's offer tracks it (§6).
-            block = self._render(self._state, self._buf.width)
+            block = self._render(state, self._buf.width)
         except Exception as exc:
             self.error = exc
             self.error_kind = "render"

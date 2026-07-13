@@ -162,28 +162,33 @@ class TestSurface:
         if not self.surface._dirty:
             return
         self.surface._dirty = False
-        self.surface.render()
 
-        surface = self.surface
-        buf = surface._buf
-        prev = surface._prev
-        if buf is None or prev is None:
-            return
+        # Mirrors the production loop's bracket (Surface.run()): render and
+        # flush happen inside one _frame_scope(), so a StreamSurface under
+        # test exercises its ref_schemes= bracket exactly as it would live.
+        with self.surface._frame_scope():
+            self.surface.render()
 
-        needs_clear = surface._needs_clear
-        surface._needs_clear = False
+            surface = self.surface
+            buf = surface._buf
+            prev = surface._prev
+            if buf is None or prev is None:
+                return
 
-        writes: list[CellWrite]
-        if self.capture_writes or self.write_ansi:
-            writes = buf.diff(prev)
-        else:
-            writes = []
+            needs_clear = surface._needs_clear
+            surface._needs_clear = False
 
-        if self.write_ansi and (writes or needs_clear):
-            surface._writer.write_frame(writes, clear_first=needs_clear)
+            writes: list[CellWrite]
+            if self.capture_writes or self.write_ansi:
+                writes = buf.diff(prev)
+            else:
+                writes = []
 
-        # Snapshot once: previous frame state for next diff + captured frame payload.
-        snapshot = buf.clone()
-        surface._prev = snapshot
+            if self.write_ansi and (writes or needs_clear):
+                surface._writer.write_frame(writes, clear_first=needs_clear)
 
-        frames.append(CapturedFrame(buffer=snapshot, writes=tuple(writes)))
+            # Snapshot once: previous frame state for next diff + captured frame payload.
+            snapshot = buf.clone()
+            surface._prev = snapshot
+
+            frames.append(CapturedFrame(buffer=snapshot, writes=tuple(writes)))
