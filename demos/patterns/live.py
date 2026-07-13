@@ -27,9 +27,8 @@ from typing import AsyncIterator
 
 from painted import (
     Block,
-    CliContext,
+    Fidelity,
     Style,
-    Zoom,
     border,
     join_horizontal,
     join_vertical,
@@ -197,7 +196,7 @@ def _counts(checks: tuple[ServiceCheck, ...]) -> dict[Status, int]:
 # --- Zoom renderers ---
 
 
-def _render_minimal(report: HealthReport, width: int) -> Block:
+def _render_minimal(report: HealthReport, width: int | None) -> Block:
     """Zoom 0: one-line status counts."""
     ct = _counts(report.checks)
     p = current_palette()
@@ -211,10 +210,10 @@ def _render_minimal(report: HealthReport, width: int) -> Block:
     if ct[Status.DOWN]:
         parts.append(Block.text(f"  {ct[Status.DOWN]} down", p.error))
     result = join_horizontal(*parts) if parts else Block.text("no checks", Style())
-    return truncate(result, width)
+    return truncate(result, width) if width is not None else result
 
 
-def _render_summary(report: HealthReport, width: int) -> Block:
+def _render_summary(report: HealthReport, width: int | None) -> Block:
     """Zoom 1: service list with status icons."""
     rows: list[Block] = []
     for check in report.checks:
@@ -226,10 +225,11 @@ def _render_summary(report: HealthReport, width: int) -> Block:
             rows.append(join_horizontal(icon, name, host, latency))
         else:
             rows.append(join_horizontal(icon, name, host))
-    return truncate(join_vertical(*rows), width)
+    block = join_vertical(*rows)
+    return truncate(block, width) if width is not None else block
 
 
-def _render_detailed(report: HealthReport, width: int) -> Block:
+def _render_detailed(report: HealthReport, width: int | None) -> Block:
     """Zoom 2: service list + detail + footer."""
     rows: list[Block] = []
     for check in report.checks:
@@ -260,10 +260,11 @@ def _render_detailed(report: HealthReport, width: int) -> Block:
 
     rows.append(Block.text("", Style()))
     rows.append(Block.text(f"{footer_text}{elapsed}", p.muted))
-    return truncate(join_vertical(*rows), width)
+    block = join_vertical(*rows)
+    return truncate(block, width) if width is not None else block
 
 
-def _render_full(report: HealthReport, width: int) -> Block:
+def _render_full(report: HealthReport, width: int | None) -> Block:
     """Zoom 3: bordered box with progress bar and full details."""
     p = current_palette()
 
@@ -271,7 +272,10 @@ def _render_full(report: HealthReport, width: int) -> Block:
     total = len(report.checks)
     ct = _counts(report.checks)
     done = total - ct[Status.PENDING]
-    pbar = progress_bar(ProgressState(value=done / total if total else 0), width=min(40, width - 4))
+    # 40/60 are the demo's own domain sizes — the caps the width-bounded
+    # case already clamps toward — when no width is offered.
+    bar_w = 40 if width is None else min(40, width - 4)
+    pbar = progress_bar(ProgressState(value=done / total if total else 0), width=bar_w)
     progress_label = Block.text(f" {done}/{total} complete", Style(dim=True))
     progress_row = join_horizontal(pbar, progress_label)
 
@@ -305,7 +309,8 @@ def _render_full(report: HealthReport, width: int) -> Block:
         progress_row, Block.text("", Style()), service_block, Block.text("", Style()), footer
     )
     content_width = inner.width
-    padded = pad(inner, right=max(0, min(60, width - 4) - content_width))
+    panel_w = 60 if width is None else min(60, width - 4)
+    padded = pad(inner, right=max(0, panel_w - content_width))
 
     return border(padded, title="Health Check", chars=ROUNDED)
 
@@ -313,14 +318,15 @@ def _render_full(report: HealthReport, width: int) -> Block:
 # --- Main render dispatch ---
 
 
-def _render(ctx: CliContext, report: HealthReport) -> Block:
-    if ctx.zoom >= Zoom.FULL:
-        return _render_full(report, ctx.width)
-    if ctx.zoom >= Zoom.DETAILED:
-        return _render_detailed(report, ctx.width)
-    if ctx.zoom >= Zoom.SUMMARY:
-        return _render_summary(report, ctx.width)
-    return _render_minimal(report, ctx.width)
+def _render(report: HealthReport, fidelity: Fidelity, width: int | None) -> Block:
+    depth = fidelity.depth
+    if depth >= 3:
+        return _render_full(report, width)
+    if depth >= 2:
+        return _render_detailed(report, width)
+    if depth >= 1:
+        return _render_summary(report, width)
+    return _render_minimal(report, width)
 
 
 # --- Entry point ---
@@ -329,7 +335,7 @@ def _render(ctx: CliContext, report: HealthReport) -> Block:
 def main() -> int:
     return run_cli(
         sys.argv[1:],
-        render=_render,
+        renderer=_render,
         fetch=_fetch,
         fetch_stream=_fetch_stream,
         description=__doc__,

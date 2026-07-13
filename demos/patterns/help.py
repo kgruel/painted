@@ -26,7 +26,6 @@ import sys
 
 from painted import (
     Block,
-    CliContext,
     Style,
     Zoom,
     border,
@@ -101,24 +100,25 @@ SAMPLE_HELP = Doc(
 )
 
 
-def _render_doc(doc: Doc, depth: Zoom, width: int) -> Block:
+def _render_doc(doc: Doc, depth: Zoom, width: int | None) -> Block:
     return doc_lens(doc, fidelity=Fidelity(depth=int(depth)), width=width)
 
 
 # --- Render functions (the demo renders the sample at several zooms) ---
 
 
-def render_minimal(doc: Doc, width: int) -> Block:
+def render_minimal(doc: Doc, width: int | None) -> Block:
     """One-line: program name + flag count."""
     groups = [n for n in doc.body if isinstance(n, Section)]
     flag_count = sum(len(d.items) for g in groups for d in g.body if isinstance(d, Defs))
     names = ", ".join(g.heading.lower() for g in groups if g.heading)
     desc = next((n.content for n in doc.body if isinstance(n, Prose)), "")
     label = f"{doc.title} — {desc} ({flag_count} flags: {names})"
-    return truncate(Block.text(label, Style()), width)
+    block = Block.text(label, Style())
+    return truncate(block, width) if width is not None else block
 
 
-def render_at(doc: Doc, depth: Zoom, width: int, label: str) -> Block:
+def render_at(doc: Doc, depth: Zoom, width: int | None, label: str) -> Block:
     """Show the sample help rendered at one zoom, under a dim caption."""
     return join_vertical(
         Block.text(label, Style(dim=True)),
@@ -127,9 +127,16 @@ def render_at(doc: Doc, depth: Zoom, width: int, label: str) -> Block:
     )
 
 
-def render_full(doc: Doc, width: int) -> Block:
+# The demo's own domain size for its one inherently two-column layout: the
+# per-panel width side-by-side comparison uses when no width is offered (a
+# pipe's natural sizing) — the same floor the width-bounded case already
+# clamps toward, not a resurrected terminal-fallback guess.
+_NATURAL_COL_WIDTH = 30
+
+
+def render_full(doc: Doc, width: int | None) -> Block:
     """Side-by-side: SUMMARY vs DETAILED."""
-    col_width = max(30, (width - 3) // 2)
+    col_width = _NATURAL_COL_WIDTH if width is None else max(30, (width - 3) // 2)
     summary_block = _render_doc(doc, Zoom.SUMMARY, col_width)
     detailed_block = _render_doc(doc, Zoom.DETAILED, col_width)
 
@@ -158,20 +165,21 @@ def _fetch() -> Doc:
     return SAMPLE_HELP
 
 
-def _render(ctx: CliContext, doc: Doc) -> Block:
-    if ctx.zoom >= Zoom.FULL:
-        return render_full(doc, ctx.width)
-    if ctx.zoom >= Zoom.DETAILED:
-        return render_at(doc, Zoom.DETAILED, ctx.width, "Help at --help -v:")
-    if ctx.zoom >= Zoom.SUMMARY:
-        return render_at(doc, Zoom.SUMMARY, ctx.width, "Help at default zoom:")
-    return render_minimal(doc, ctx.width)
+def _render(doc: Doc, fidelity: Fidelity, width: int | None) -> Block:
+    depth = fidelity.depth
+    if depth >= 3:
+        return render_full(doc, width)
+    if depth >= 2:
+        return render_at(doc, Zoom.DETAILED, width, "Help at --help -v:")
+    if depth >= 1:
+        return render_at(doc, Zoom.SUMMARY, width, "Help at default zoom:")
+    return render_minimal(doc, width)
 
 
 def main() -> int:
     return run_cli(
         sys.argv[1:],
-        render=_render,
+        renderer=_render,
         fetch=_fetch,
         description=__doc__,
         prog="help.py",

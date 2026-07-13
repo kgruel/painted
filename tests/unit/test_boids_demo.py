@@ -15,8 +15,8 @@ import sys
 from dataclasses import replace
 from pathlib import Path
 
-from painted import Zoom
-from tests.helpers import block_to_text, static_ctx
+from painted import Fidelity, Zoom
+from tests.helpers import block_to_text
 
 _DEMO = Path(__file__).resolve().parent.parent.parent / "demos" / "showcase" / "boids.py"
 
@@ -122,8 +122,10 @@ def test_spread_falls_as_flocks_form() -> None:
 def test_render_is_pure_at_every_zoom() -> None:
     flock = boids._fetch(7, 50)
     for zoom in Zoom:
-        ctx = static_ctx(zoom)
-        assert block_to_text(boids._render(ctx, flock)) == block_to_text(boids._render(ctx, flock))
+        fid = Fidelity(depth=int(zoom))
+        assert block_to_text(boids._render(flock, fid, 80)) == block_to_text(
+            boids._render(flock, fid, 80)
+        )
 
 
 def test_grid_pairs_rows_into_half_blocks() -> None:

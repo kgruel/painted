@@ -24,6 +24,21 @@ Landing in slices; this section accumulates until the cut.
   `tests/unit/test_public_api.py`), beside the `Fidelity` spec it references — so
   the 0.13 host rung can run the same renderer through `Surface` without a
   `tui`→`cli` import. `painted.cli` re-exports it for convenience.
+- **The width offer seam — `_offered_width`** (S2, `docs/RENDERER_CONTRACT_DESIGN.md`
+  §§5–6). A `renderer=` is offered `ctx.width` under STATIC+TTY and `None`
+  (natural sizing) under any non-TTY — never a fabricated column count for a
+  pipe. Both live hosts (`InPlaceRenderer`, `StreamSurface`) re-offer the
+  buffer's *current* geometry on every frame, so a mid-run resize re-enters the
+  renderer as changed input rather than a once-captured detection-time width.
+- **`ref_schemes=` — the framework-tier denotation declaration** (S4,
+  `docs/RENDERER_CONTRACT_DESIGN.md` §7). Static (a tuple of `RefScheme`) or
+  callable (`state -> tuple[RefScheme, ...]`, re-evaluated once per fetch
+  event) forms install as a per-cycle bracket around fetch/render/flush: the
+  prior ambient `use_refs` state is preserved and restored, and
+  `ref_schemes=[]` disables ambient resolution for the run without leaking
+  into the next one. A raising callable's exception enters the render-error
+  path unchanged (never wrapped in `ContractError`); an invalid static
+  sequence faults at `CliRunner` construction, before any cycle starts.
 - **The transcription default — `run_cli` with neither `render=` nor
   `renderer=`** (S3, `docs/RENDERER_CONTRACT_DESIGN.md` §4). The framework renders
   by **transcription**: the fetched data is transcribed (declared-not-invented,
@@ -57,6 +72,15 @@ Landing in slices; this section accumulates until the cut.
   Inference needs a column budget (chart bars, tree indents are width-consuming),
   so `shape_lens` under a `None` width transcribes the declared shape rather than
   guessing a chart/tree — the guess resumes the moment a width is offered.
+
+**Compatibility** (`docs/RENDERER_CONTRACT_DESIGN.md` §12). `renderer=` and
+`ref_schemes=` are additive — no existing `run_cli`/`CliRunner` call needs to
+change. `render=` is **documented legacy** as of this release: it keeps
+working unchanged, with no runtime warning; a `DeprecationWarning` is deferred
+to 0.12, and removal rides the 1.0 freeze window alongside `show()`. Internal
+demos and tests were flipped to `renderer=` in the same change that lands
+this section (S5) — `raymarch.py` and `starmap.py` deliberately stay on
+`render=` until 0.12, as the documented reason the warning gate waits.
 
 ## [0.10.1] — 2026-07-11
 

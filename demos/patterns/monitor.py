@@ -22,9 +22,8 @@ import sys
 
 from painted import (
     Block,
-    CliContext,
+    Fidelity,
     Style,
-    Zoom,
     join_horizontal,
     join_vertical,
     run_cli,
@@ -60,20 +59,27 @@ def _role(name: str) -> Style:
 # --- Zoom 0: worst-first, one line ---
 
 
-def render_minimal(data: dict[str, int], width: int) -> Block:
+def render_minimal(data: dict[str, int], width: int | None) -> Block:
     worst = max(data, key=lambda k: data[k])
     line = join_horizontal(
-        Block.text(f"{worst} {data[worst]}%", _role(_severity(data[worst])).merge(Style(bold=True))),
+        Block.text(
+            f"{worst} {data[worst]}%", _role(_severity(data[worst])).merge(Style(bold=True))
+        ),
         Block.text("   ", Style()),
         Block.text(
             "  ".join(f"{k} {v}%" for k, v in data.items() if k != worst),
             Style(dim=True),
         ),
     )
-    return truncate(line, width)
+    return truncate(line, width) if width is not None else line
 
 
 # --- Zoom 1: labeled severity bars ---
+
+# The bar cap: how wide a severity bar grows when no width is offered (a
+# pipe's natural sizing) — the same ceiling the width-bounded case already
+# clamps toward, not a resurrected terminal-fallback guess.
+_BAR_CAP = 28
 
 
 def _bar_row(label: str, value: int, label_w: int, bar_w: int) -> Block:
@@ -86,10 +92,11 @@ def _bar_row(label: str, value: int, label_w: int, bar_w: int) -> Block:
     )
 
 
-def render_standard(data: dict[str, int], width: int) -> Block:
+def render_standard(data: dict[str, int], width: int | None) -> Block:
     label_w = max(len(k) for k in data)
-    bar_w = max(8, min(28, width - label_w - 8))
-    return truncate(join_vertical(*(_bar_row(k, v, label_w, bar_w) for k, v in data.items())), width)
+    bar_w = _BAR_CAP if width is None else max(8, min(_BAR_CAP, width - label_w - 8))
+    block = join_vertical(*(_bar_row(k, v, label_w, bar_w) for k, v in data.items()))
+    return truncate(block, width) if width is not None else block
 
 
 # --- Zoom 2+: bars + per-metric detail ---
@@ -97,9 +104,9 @@ def render_standard(data: dict[str, int], width: int) -> Block:
 _STATUS = {"error": "critical", "warning": "elevated", "success": "nominal", "accent": "idle"}
 
 
-def render_verbose(data: dict[str, int], width: int) -> Block:
+def render_verbose(data: dict[str, int], width: int | None) -> Block:
     label_w = max(len(k) for k in data)
-    bar_w = max(8, min(28, width - label_w - 12))
+    bar_w = _BAR_CAP if width is None else max(8, min(_BAR_CAP, width - label_w - 12))
     rows: list[Block] = [Block.text("host vitals", Style(bold=True)), Block.text("", Style())]
     for k, v in data.items():
         role = _severity(v)
@@ -111,7 +118,8 @@ def render_verbose(data: dict[str, int], width: int) -> Block:
                 Block.text("  ·  threshold 80%  ·  sampled 60s", Style(dim=True)),
             )
         )
-    return truncate(join_vertical(*rows), width)
+    block = join_vertical(*rows)
+    return truncate(block, width) if width is not None else block
 
 
 # --- run_cli integration ---
@@ -121,19 +129,19 @@ def _fetch() -> dict[str, int]:
     return dict(SAMPLE)
 
 
-def _render(ctx: CliContext, data: dict[str, int]) -> Block:
-    z = int(ctx.zoom)
+def _render(data: dict[str, int], fidelity: Fidelity, width: int | None) -> Block:
+    z = fidelity.depth
     if z <= 0:
-        return render_minimal(data, ctx.width)
+        return render_minimal(data, width)
     if z >= 2:
-        return render_verbose(data, ctx.width)
-    return render_standard(data, ctx.width)
+        return render_verbose(data, width)
+    return render_standard(data, width)
 
 
 def main() -> int:
     return run_cli(
         sys.argv[1:],
-        render=_render,
+        renderer=_render,
         fetch=_fetch,
         description=__doc__,
         prog="monitor.py",

@@ -140,7 +140,7 @@ def test_inplace_live_frames_carry_the_gauge(monkeypatch) -> None:
         height=24,
     )
     runner = CliRunner(
-        render=lambda ctx, s: Block.text(str(s), Style()),
+        renderer=lambda s, fidelity, width: Block.text(str(s), Style()),
         fetch=lambda: None,
         fetch_stream=stream,
         live_meter=True,
@@ -174,7 +174,7 @@ def test_inplace_live_is_undressed_by_default(monkeypatch) -> None:
         height=24,
     )
     runner = CliRunner(
-        render=lambda ctx, s: Block.text(str(s), Style()),
+        renderer=lambda s, fidelity, width: Block.text(str(s), Style()),
         fetch=lambda: None,
         fetch_stream=stream,
     )

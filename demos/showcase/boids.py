@@ -40,9 +40,8 @@ from dataclasses import dataclass, replace
 
 from painted import (
     Block,
-    CliContext,
+    Fidelity,
     Style,
-    Zoom,
     border,
     join_horizontal,
     join_vertical,
@@ -249,13 +248,16 @@ def _spread_sparkline(flock: Flock, width: int) -> Block:
     )
 
 
-def _window(flock: Flock, width: int, *extra: Block) -> Block:
+def _window(flock: Flock, width: int | None, *extra: Block) -> Block:
     """The dressed viewing frame: flock, census, and any extras.
 
     Inner width pins to the grid — every row is sized against it, so the
-    border never moves no matter what the data rows do.
+    border never moves no matter what the data rows do. The grid is a
+    raster of the flock's own domain size (_COLS) — when no width is
+    offered (a pipe's natural sizing), that domain size is the natural
+    inner width, not a resurrected terminal-fallback guess.
     """
-    w = min(width - 4, _COLS)
+    w = _COLS if width is None else min(width - 4, _COLS)
     rows = [_grid(flock, w), truncate(_census(flock), w)]
     rows += [truncate(b, w) for b in extra]
     return border(join_vertical(*rows), title="boids", chars=ROUNDED)
@@ -264,21 +266,22 @@ def _window(flock: Flock, width: int, *extra: Block) -> Block:
 # --- Zoom renderers ---
 
 
-def _render_minimal(flock: Flock, width: int) -> Block:
-    return truncate(_census(flock), width)
+def _render_minimal(flock: Flock, width: int | None) -> Block:
+    block = _census(flock)
+    return truncate(block, width) if width is not None else block
 
 
-def _render_summary(flock: Flock, width: int) -> Block:
+def _render_summary(flock: Flock, width: int | None) -> Block:
     return _window(flock, width)
 
 
-def _render_detailed(flock: Flock, width: int) -> Block:
-    w = min(width - 4, _COLS)
+def _render_detailed(flock: Flock, width: int | None) -> Block:
+    w = _COLS if width is None else min(width - 4, _COLS)
     return _window(flock, width, _spread_sparkline(flock, w))
 
 
-def _render_full(flock: Flock, width: int) -> Block:
-    w = min(width - 4, _COLS)
+def _render_full(flock: Flock, width: int | None) -> Block:
+    w = _COLS if width is None else min(width - 4, _COLS)
     mean_speed = sum(math.hypot(vx, vy) for _, _, vx, vy in flock.boids) / len(flock.boids)
     stats = Block.text(
         f"frame {flock.frame}  ·  seed {flock.seed}  ·  spread {flock.history[-1]:.1f}  ·  "
@@ -288,14 +291,15 @@ def _render_full(flock: Flock, width: int) -> Block:
     return _window(flock, width, _spread_sparkline(flock, w), stats)
 
 
-def _render(ctx: CliContext, flock: Flock) -> Block:
-    if ctx.zoom >= Zoom.FULL:
-        return _render_full(flock, ctx.width)
-    if ctx.zoom >= Zoom.DETAILED:
-        return _render_detailed(flock, ctx.width)
-    if ctx.zoom >= Zoom.SUMMARY:
-        return _render_summary(flock, ctx.width)
-    return _render_minimal(flock, ctx.width)
+def _render(flock: Flock, fidelity: Fidelity, width: int | None) -> Block:
+    depth = fidelity.depth
+    if depth >= 3:
+        return _render_full(flock, width)
+    if depth >= 2:
+        return _render_detailed(flock, width)
+    if depth >= 1:
+        return _render_summary(flock, width)
+    return _render_minimal(flock, width)
 
 
 # --- Entry point ---
@@ -309,7 +313,7 @@ def main() -> int:
 
     return run_cli(
         rest,
-        render=_render,
+        renderer=_render,
         fetch=lambda: _fetch(ns.seed, ns.frame),
         fetch_stream=lambda: _fetch_stream(ns.seed),
         live_delivery="surface",

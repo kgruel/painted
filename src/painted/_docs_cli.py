@@ -13,7 +13,7 @@ Render one: ``painted docs primitives -v --rationale``.
 
 from __future__ import annotations
 
-from painted import Block, Style, join_vertical, print_block, run_cli
+from painted import Block, Fidelity, Style, join_vertical, print_block, run_cli
 from painted.cli import OutputMode, Tag
 from painted.core.doc import Doc, Node, Section, doc_lens
 from painted._doc_pages import DOCS
@@ -64,12 +64,12 @@ def run_doc(name: str, args: list[str]) -> int:
 
     doc = entry.build()
 
-    def render(ctx, d: Doc) -> Block:
-        return doc_lens(d, fidelity=ctx.fidelity, width=ctx.width)
+    def renderer(d: Doc, fidelity: Fidelity, width: int | None) -> Block:
+        return doc_lens(d, fidelity=fidelity, width=width)
 
     return run_cli(
         args,
-        render=render,
+        renderer=renderer,
         fetch=lambda: doc,
         default_mode=OutputMode.STATIC,
         description=entry.description,

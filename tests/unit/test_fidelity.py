@@ -528,7 +528,7 @@ class TestHelpDoc:
         """Without command args, the framework groups are the primary content
         (min_depth 0) so they expand at the default help view."""
         runner = CliRunner(
-            render=lambda ctx, data: Block.text("x", Style()),
+            renderer=lambda data, fidelity, width: Block.text("x", Style()),
             fetch=lambda: "ok",
             prog="test",
         )
@@ -541,7 +541,7 @@ class TestHelpDoc:
         """With command args, those lead (a top-level Defs) and framework groups
         step back to min_depth=SUMMARY (the terse default line)."""
         runner = CliRunner(
-            render=lambda ctx, data: Block.text("x", Style()),
+            renderer=lambda data, fidelity, width: Block.text("x", Style()),
             fetch=lambda: "ok",
             prog="test",
             help_args=[
@@ -564,7 +564,7 @@ class TestHelpDoc:
             parser.add_argument("--format", help="Output format")
 
         runner = CliRunner(
-            render=lambda ctx, data: Block.text("x", Style()),
+            renderer=lambda data, fidelity, width: Block.text("x", Style()),
             fetch=lambda: "ok",
             prog="test",
             add_args=add_args,
@@ -582,7 +582,7 @@ class TestHelpDocRendering:
 
     def _runner(self):
         return CliRunner(
-            render=lambda ctx, data: Block.text("x", Style()),
+            renderer=lambda data, fidelity, width: Block.text("x", Style()),
             fetch=lambda: "ok",
             prog="myapp",
             description="A test app",

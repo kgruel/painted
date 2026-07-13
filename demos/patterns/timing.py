@@ -24,9 +24,8 @@ from dataclasses import dataclass
 
 from painted import (
     Block,
-    CliContext,
+    Fidelity,
     Style,
-    Zoom,
     border,
     join_vertical,
     pad,
@@ -249,20 +248,20 @@ def _fetch() -> TimingData:
 # --- Zoom 0: one-line summary ---
 
 
-def render_minimal(data: TimingData, width: int) -> Block:
+def render_minimal(data: TimingData, width: int | None) -> Block:
     """Single-line timing summary."""
     result = Block.text(
         f"{data.frame_count} frames, avg {data.avg_total_ms:.2f}ms/frame, "
         f"max {data.max_total_ms:.2f}ms",
         Style(),
     )
-    return truncate(result, width)
+    return truncate(result, width) if width is not None else result
 
 
 # --- Zoom 1: phase breakdown ---
 
 
-def render_summary(data: TimingData, width: int) -> Block:
+def render_summary(data: TimingData, width: int | None) -> Block:
     """Phase averages + frame total sparkline."""
     p = current_palette()
     rows: list[Block] = [
@@ -283,19 +282,25 @@ def render_summary(data: TimingData, width: int) -> Block:
 
     rows.append(Block.text("", Style()))
     rows.append(Block.text("Frame totals:", Style(dim=True)))
-    sparkline = chart_lens(list(data.frame_totals), 1, min(60, width - 2))
+    # chart_lens needs a concrete column budget — 60 is the demo's own
+    # domain size (the cap the width-bounded case already clamps toward)
+    # when no width is offered.
+    sparkline_w = 60 if width is None else min(60, width - 2)
+    sparkline = chart_lens(list(data.frame_totals), 1, sparkline_w)
     rows.append(sparkline)
 
-    return truncate(join_vertical(*rows), width)
+    block = join_vertical(*rows)
+    return truncate(block, width) if width is not None else block
 
 
 # --- Zoom 2: charts + flame ---
 
 
-def render_detailed(data: TimingData, width: int) -> Block:
+def render_detailed(data: TimingData, width: int | None) -> Block:
     """Per-frame bar chart + phase flame graph."""
     sections: list[Block] = []
-    inner_width = min(width - 4, 70)
+    # Same natural-sizing floor as render_summary's chart budget.
+    inner_width = 70 if width is None else min(width - 4, 70)
 
     # Per-frame totals as labeled bar chart (indexed labels to avoid dict collapse)
     frame_data = {
@@ -333,11 +338,12 @@ def render_detailed(data: TimingData, width: int) -> Block:
 # --- Zoom 3: frame-by-frame detail ---
 
 
-def render_full(data: TimingData, width: int) -> Block:
+def render_full(data: TimingData, width: int | None) -> Block:
     """Per-frame detail cards with phase breakdown."""
     p = current_palette()
     sections: list[Block] = []
-    inner_width = min(width - 4, 70)
+    inner_width = 70 if width is None else min(width - 4, 70)
+    frame_panel_w = 50 if width is None else min(50, width - 4)
 
     for i in range(data.frame_count):
         total = data.frame_totals[i]
@@ -359,7 +365,7 @@ def render_full(data: TimingData, width: int) -> Block:
         inner = join_vertical(*rows)
         sections.append(
             border(
-                pad(inner, right=max(0, min(50, width - 4) - inner.width)),
+                pad(inner, right=max(0, frame_panel_w - inner.width)),
                 title=f"Frame {i}: {label}",
                 chars=ROUNDED,
             )
@@ -381,20 +387,21 @@ def render_full(data: TimingData, width: int) -> Block:
 # --- run_cli integration ---
 
 
-def _render(ctx: CliContext, data: TimingData) -> Block:
-    if ctx.zoom >= Zoom.FULL:
-        return render_full(data, ctx.width)
-    if ctx.zoom >= Zoom.DETAILED:
-        return render_detailed(data, ctx.width)
-    if ctx.zoom >= Zoom.SUMMARY:
-        return render_summary(data, ctx.width)
-    return render_minimal(data, ctx.width)
+def _render(data: TimingData, fidelity: Fidelity, width: int | None) -> Block:
+    depth = fidelity.depth
+    if depth >= 3:
+        return render_full(data, width)
+    if depth >= 2:
+        return render_detailed(data, width)
+    if depth >= 1:
+        return render_summary(data, width)
+    return render_minimal(data, width)
 
 
 def main() -> int:
     return run_cli(
         sys.argv[1:],
-        render=_render,
+        renderer=_render,
         fetch=_fetch,
         description=__doc__,
         prog="timing.py",

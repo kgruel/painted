@@ -14,8 +14,8 @@ import sys
 from dataclasses import replace
 from pathlib import Path
 
-from painted import Zoom
-from tests.helpers import block_to_text, static_ctx
+from painted import Fidelity, Zoom
+from tests.helpers import block_to_text
 
 _DEMO = Path(__file__).resolve().parent.parent.parent / "demos" / "showcase" / "lorenz.py"
 
@@ -80,9 +80,9 @@ def test_twin_tracers_diverge() -> None:
 def test_render_is_pure_at_every_zoom() -> None:
     orbit = lorenz._fetch(200)
     for zoom in Zoom:
-        ctx = static_ctx(zoom)
-        assert block_to_text(lorenz._render(ctx, orbit)) == block_to_text(
-            lorenz._render(ctx, orbit)
+        fid = Fidelity(depth=int(zoom))
+        assert block_to_text(lorenz._render(orbit, fid, 80)) == block_to_text(
+            lorenz._render(orbit, fid, 80)
         )
 
 

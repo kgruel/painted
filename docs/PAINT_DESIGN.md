@@ -101,6 +101,16 @@ Deferred — additive on the evolving `cli` surface, not part of the 0.8
 `paint()` entry work. Trigger: the first real no-lens graduate (loops'
 migration is the named candidate).
 
+> **Amendment (0.11, docs/RENDERER_CONTRACT_DESIGN.md).** The no-lens graduate
+> landed, but not as an *optional* `render=`. The renderer contract minted a
+> new keyword-only seam, `renderer=` — `(data, fidelity, width) → Block` — and
+> the transcription default installs there when neither `render=` nor
+> `renderer=` is declared. `render=` itself stays exactly as required as it
+> always was; it did not become optional, and it is not the seam the default
+> hangs off. The prediction here (a base case reachable by omitting the
+> render) is realized, but through a new named contract, not through relaxing
+> the old one.
+
 ## 3. The base case is transcription, not "text only"
 
 `show()` led with shape dispatch: `show({...})` guessed key-value,
@@ -457,7 +467,9 @@ the keystone, and it is invisible if only the module call is shown.
   `lens=shape_lens` remains available as explicit exploration.
 - **`run_cli`'s optional `render=`** (the no-lens graduate, §2) is a
   trigger-gated lane on the evolving `cli` surface — recorded there, built
-  when the first no-lens graduate arrives.
+  when the first no-lens graduate arrives. Built as of 0.11: see the §2
+  amendment — the seam is `renderer=`'s transcription default, not `render=`
+  turned optional.
 - **`format`/JSON reshaping at the harness** is not touched here — `run_cli`
   keeps its flags as they are (§8). The `to_markdown` emitter and promoting
   `to_html` to the library surface stay their own trigger-gated lanes

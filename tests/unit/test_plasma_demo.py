@@ -13,8 +13,8 @@ import importlib.util
 import sys
 from pathlib import Path
 
-from painted import Zoom
-from tests.helpers import block_to_text, static_ctx
+from painted import Fidelity, Zoom
+from tests.helpers import block_to_text
 
 _DEMO = Path(__file__).resolve().parent.parent.parent / "demos" / "showcase" / "plasma.py"
 
@@ -45,9 +45,11 @@ def test_field_actually_moves() -> None:
 
 def test_scene_is_a_pure_function_of_the_frame() -> None:
     for zoom in Zoom:
-        ctx = static_ctx(zoom)
+        fid = Fidelity(depth=int(zoom))
         pose = plasma.Plasma(frame=123)
-        assert block_to_text(plasma._render(ctx, pose)) == block_to_text(plasma._render(ctx, pose))
+        assert block_to_text(plasma._render(pose, fid, 80)) == block_to_text(
+            plasma._render(pose, fid, 80)
+        )
 
 
 def test_grid_glyphs_come_only_from_the_ramp() -> None:

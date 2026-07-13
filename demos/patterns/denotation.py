@@ -27,7 +27,7 @@ from datetime import datetime
 
 from painted import (
     Block,
-    CliContext,
+    Fidelity,
     RefScheme,
     Style,
     Zoom,
@@ -206,7 +206,9 @@ def _hit_probes(data: FeedData) -> Block:
         rows.append(
             join_horizontal(
                 Block.text(f"  hit({x:>2},{y})", Style(dim=True)),
-                Block.text(f"  {ref if ref is not None else '(no ref)':<18}", p.accent if ref else p.muted),
+                Block.text(
+                    f"  {ref if ref is not None else '(no ref)':<18}", p.accent if ref else p.muted
+                ),
                 Block.text(f" {label}", Style(dim=True)),
             )
         )
@@ -216,66 +218,59 @@ def _hit_probes(data: FeedData) -> Block:
 # --- Zoom renderers ---
 
 
-def _render_minimal(data: FeedData, width: int) -> Block:
+def _render_minimal(data: FeedData, width: int | None) -> Block:
     p = current_palette()
     refs = [payload["ref"] for _ts, _kind, payload in data.records]
     resolvable = sum(1 for r in refs if resolve_ref(r) is not None)
-    return truncate(
-        Block.text(
-            f"{len(data.records)} records  {len(refs)} refed  {resolvable} resolvable",
-            p.accent,
-        ),
-        width,
+    block = Block.text(
+        f"{len(data.records)} records  {len(refs)} refed  {resolvable} resolvable",
+        p.accent,
     )
+    return truncate(block, width) if width is not None else block
 
 
-def _render_summary(data: FeedData, width: int, zoom: Zoom = Zoom.SUMMARY) -> Block:
-    return truncate(
-        join_vertical(
-            _spacer(),
-            _header("store activity (each summary carries its ref)"),
-            _spacer(),
-            _feed_block(data, zoom),
-        ),
-        width,
+def _render_summary(data: FeedData, width: int | None, zoom: Zoom = Zoom.SUMMARY) -> Block:
+    block = join_vertical(
+        _spacer(),
+        _header("store activity (each summary carries its ref)"),
+        _spacer(),
+        _feed_block(data, zoom),
     )
+    return truncate(block, width) if width is not None else block
 
 
-def _render_detailed(data: FeedData, width: int, zoom: Zoom = Zoom.DETAILED) -> Block:
-    return truncate(
-        join_vertical(
-            _render_summary(data, width, zoom),
-            _spacer(),
-            _header("the link reader: resolve_ref(ref) -> URI | inert"),
-            _spacer(),
-            _resolution_table(data),
-        ),
-        width,
+def _render_detailed(data: FeedData, width: int | None, zoom: Zoom = Zoom.DETAILED) -> Block:
+    block = join_vertical(
+        _render_summary(data, width, zoom),
+        _spacer(),
+        _header("the link reader: resolve_ref(ref) -> URI | inert"),
+        _spacer(),
+        _resolution_table(data),
     )
+    return truncate(block, width) if width is not None else block
 
 
-def _render_full(data: FeedData, width: int) -> Block:
-    return truncate(
-        join_vertical(
-            _render_detailed(data, width, Zoom.FULL),
-            _spacer(),
-            _header("the mouse reader: Buffer.hit(x, y) -> ref"),
-            _spacer(),
-            _hit_probes(data),
-            _spacer(),
-        ),
-        width,
+def _render_full(data: FeedData, width: int | None) -> Block:
+    block = join_vertical(
+        _render_detailed(data, width, Zoom.FULL),
+        _spacer(),
+        _header("the mouse reader: Buffer.hit(x, y) -> ref"),
+        _spacer(),
+        _hit_probes(data),
+        _spacer(),
     )
+    return truncate(block, width) if width is not None else block
 
 
-def _render(ctx: CliContext, data: FeedData) -> Block:
-    if ctx.zoom >= Zoom.FULL:
-        return _render_full(data, ctx.width)
-    if ctx.zoom >= Zoom.DETAILED:
-        return _render_detailed(data, ctx.width)
-    if ctx.zoom >= Zoom.SUMMARY:
-        return _render_summary(data, ctx.width)
-    return _render_minimal(data, ctx.width)
+def _render(data: FeedData, fidelity: Fidelity, width: int | None) -> Block:
+    depth = fidelity.depth
+    if depth >= 3:
+        return _render_full(data, width)
+    if depth >= 2:
+        return _render_detailed(data, width)
+    if depth >= 1:
+        return _render_summary(data, width)
+    return _render_minimal(data, width)
 
 
 def _fetch() -> FeedData:
@@ -286,7 +281,7 @@ def main() -> int:
     with use_refs(*SCHEMES):
         return run_cli(
             sys.argv[1:],
-            render=_render,
+            renderer=_render,
             fetch=_fetch,
             description=__doc__,
             prog="denotation.py",

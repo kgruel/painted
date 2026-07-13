@@ -120,12 +120,12 @@ Surface + Layer             # alt-screen TUI with keyboard + diff rendering
 **Trigger**: I need to modify rendering behavior, the CLI harness, or a component.
 
 **`run_cli` flow** (`cli/runner.py`):
-1. Create `CliRunner(render, fetch, ...)` internally
+1. Create `CliRunner(renderer, fetch, ...)` internally — `renderer` is the contract `(data, fidelity, width) → Block`, keyword-only; legacy positional/keyword `render=` (the `(ctx, data) → Block` shape) is accepted too, and declaring neither installs the transcription default (docs/RENDERER_CONTRACT_DESIGN.md)
 2. Intercept `-h`/`--help` → painted help with zoom awareness
 3. Parse framework args (`-q`, `-v`, `-vv`, `--json`, `--plain`, `--static`, `--live`, `-i`) plus declared flags (each `Tag` → `--{name}`, each depth alias, `budgets=True` → `--max-chars`/`--max-lines`); declaration collisions raise at parser construction
 4. Compile flags into `Fidelity` (`parse_fidelity` resolves tag implications at compile time); `build_fidelity` runs last as the residue escape hatch
 5. `detect_context()` resolves Mode/Format from args and TTY state
-6. Dispatch by mode: STATIC (`print_block`) → LIVE (`InPlaceRenderer` or `StreamSurface`) → INTERACTIVE (custom handler)
+6. Dispatch by mode: STATIC (`print_block`) → LIVE (`InPlaceRenderer` or `StreamSurface`) → INTERACTIVE (custom handler); `renderer=` is offered `width` at the point of delivery — `ctx.width` on a STATIC TTY, `None` (natural sizing) off a TTY, and re-offered per frame under LIVE — never a once-captured context width. `ref_schemes=` declares the denotation channel's resolver for the run (RENDERER_CONTRACT_DESIGN.md §7).
 
 **`record_line` pattern** (`views/record.py`):
 - `record_line()` owns structure, `PayloadLens` interprets domain content

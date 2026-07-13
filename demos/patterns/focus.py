@@ -24,9 +24,8 @@ from dataclasses import dataclass, replace
 
 from painted import (
     Block,
-    CliContext,
+    Fidelity,
     Style,
-    Zoom,
     border,
     join_horizontal,
     join_vertical,
@@ -225,9 +224,7 @@ def _details_panel(state: AppState, *, width: int, height: int) -> Block:
         ),
         Block.text("", Style(), width=content_w),
         Block.text("last command:", STYLE_DIM, width=content_w),
-        Block.text(
-            f"  {cmd}", p.accent if state.last_command else STYLE_DIM, width=content_w
-        ),
+        Block.text(f"  {cmd}", p.accent if state.last_command else STYLE_DIM, width=content_w),
         Block.text("", Style(), width=content_w),
         Block.text("recent deploy log:", STYLE_DIM, width=content_w),
         Block.text("  10:34:12Z  build ✓  sha=9f2c7a1", p.muted, width=content_w),
@@ -481,7 +478,9 @@ def run_scenario(scenario: Scenario) -> ScenarioResult:
 
 def _emission_block(kind: str, data: dict, *, accent: Style, muted: Style, dim: Style) -> Block:
     data_str = " ".join(f"{k}={v}" for k, v in data.items())
-    kind_style = accent if kind.startswith(("focus.", "services.", "search.", "cmd.", "key.")) else muted
+    kind_style = (
+        accent if kind.startswith(("focus.", "services.", "search.", "cmd.", "key.")) else muted
+    )
     return join_horizontal(
         Block.text(f"  {kind:<18s}", kind_style),
         Block.text(f" {data_str}", dim),
@@ -496,7 +495,7 @@ def _check_block(description: str, passed: bool) -> Block:
     return Block.text(f"  {icon} {description}", style)
 
 
-def _render_minimal(results: list[ScenarioResult], width: int) -> Block:
+def _render_minimal(results: list[ScenarioResult], width: int | None) -> Block:
     p = current_palette()
     icons = current_icons()
     total = len(results)
@@ -504,7 +503,8 @@ def _render_minimal(results: list[ScenarioResult], width: int) -> Block:
     all_ok = passed == total
     icon = icons.check if all_ok else icons.cross
     style = p.success if all_ok else p.error
-    return truncate(Block.text(f"{icon} focus demo: {passed}/{total} scenarios", style), width)
+    block = Block.text(f"{icon} focus demo: {passed}/{total} scenarios", style)
+    return truncate(block, width) if width is not None else block
 
 
 def _key_frames(result: ScenarioResult) -> list[tuple[str, object]]:
@@ -544,7 +544,7 @@ def _frame_block(frame: object, *, width: int, max_lines: int) -> Block:
     return join_vertical(*rows)
 
 
-def _render_summary(results: list[ScenarioResult], width: int) -> Block:
+def _render_summary(results: list[ScenarioResult], width: int | None) -> Block:
     p = current_palette()
     dim = STYLE_DIM
     icons = current_icons()
@@ -557,20 +557,29 @@ def _render_summary(results: list[ScenarioResult], width: int) -> Block:
         keys_line = Block.text(f"  keys: {' -> '.join(r.scenario.keys)}", dim)
 
         # Prefer domain emissions; ui.key is left in but muted.
-        trace = join_vertical(*[_emission_block(k, d, accent=p.accent, muted=p.muted, dim=dim) for k, d in r.emissions])
+        trace = join_vertical(
+            *[
+                _emission_block(k, d, accent=p.accent, muted=p.muted, dim=dim)
+                for k, d in r.emissions
+            ]
+        )
         checks = join_vertical(*[_check_block(desc, ok) for desc, ok in r.checks])
 
         sections.append(join_vertical(header, keys_line, trace, checks, Block.text("", Style())))
 
-    return truncate(join_vertical(*sections, _render_minimal(results, width)), width)
+    block = join_vertical(*sections, _render_minimal(results, width))
+    return truncate(block, width) if width is not None else block
 
 
-def _render_detailed(results: list[ScenarioResult], width: int) -> Block:
+def _render_detailed(results: list[ScenarioResult], width: int | None) -> Block:
     p = current_palette()
     dim = STYLE_DIM
     icons = current_icons()
     sections: list[Block] = []
-    snap_w = max(20, min(width - 6, 96))
+    # _frame_block renders a captured surface snapshot — a genuine domain
+    # size (96 is the cap the width-bounded case already clamps toward) when
+    # no width is offered.
+    snap_w = 96 if width is None else max(20, min(width - 6, 96))
     snap_lines = 10
 
     for r in results:
@@ -578,7 +587,12 @@ def _render_detailed(results: list[ScenarioResult], width: int) -> Block:
         header_style = p.success if r.passed else p.error
         header = Block.text(f"{icon} {r.scenario.name}", header_style)
         keys_line = Block.text(f"  keys: {' -> '.join(r.scenario.keys)}", dim)
-        trace = join_vertical(*[_emission_block(k, d, accent=p.accent, muted=p.muted, dim=dim) for k, d in r.emissions])
+        trace = join_vertical(
+            *[
+                _emission_block(k, d, accent=p.accent, muted=p.muted, dim=dim)
+                for k, d in r.emissions
+            ]
+        )
 
         frames: list[Block] = []
         for label, frame in _key_frames(r):
@@ -588,21 +602,28 @@ def _render_detailed(results: list[ScenarioResult], width: int) -> Block:
 
         sections.append(join_vertical(header, keys_line, trace, Block.text("", Style()), *frames))
 
-    return truncate(join_vertical(*sections, _render_minimal(results, width)), width)
+    block = join_vertical(*sections, _render_minimal(results, width))
+    return truncate(block, width) if width is not None else block
 
 
-def _render_full(results: list[ScenarioResult], width: int) -> Block:
+def _render_full(results: list[ScenarioResult], width: int | None) -> Block:
     p = current_palette()
     dim = STYLE_DIM
     icons = current_icons()
     sections: list[Block] = []
-    snap_w = max(20, min(width - 6, 120))
+    # Same natural-sizing floor idiom as _render_detailed, at the full-detail cap.
+    snap_w = 120 if width is None else max(20, min(width - 6, 120))
 
     for r in results:
         icon = icons.check if r.passed else icons.cross
         title = f"{icon} {r.scenario.name}"
         keys_line = Block.text(f"keys: {' -> '.join(r.scenario.keys)}", dim)
-        trace = join_vertical(*[_emission_block(k, d, accent=p.accent, muted=p.muted, dim=dim) for k, d in r.emissions])
+        trace = join_vertical(
+            *[
+                _emission_block(k, d, accent=p.accent, muted=p.muted, dim=dim)
+                for k, d in r.emissions
+            ]
+        )
         checks = join_vertical(*[_check_block(desc, ok) for desc, ok in r.checks])
 
         frame_blocks: list[Block] = []
@@ -635,14 +656,15 @@ def _render_full(results: list[ScenarioResult], width: int) -> Block:
     return join_vertical(*sections, _render_minimal(results, width))
 
 
-def _render(ctx: CliContext, results: list[ScenarioResult]) -> Block:
-    if ctx.zoom >= Zoom.FULL:
-        return _render_full(results, ctx.width)
-    if ctx.zoom >= Zoom.DETAILED:
-        return _render_detailed(results, ctx.width)
-    if ctx.zoom >= Zoom.SUMMARY:
-        return _render_summary(results, ctx.width)
-    return _render_minimal(results, ctx.width)
+def _render(results: list[ScenarioResult], fidelity: Fidelity, width: int | None) -> Block:
+    depth = fidelity.depth
+    if depth >= 3:
+        return _render_full(results, width)
+    if depth >= 2:
+        return _render_detailed(results, width)
+    if depth >= 1:
+        return _render_summary(results, width)
+    return _render_minimal(results, width)
 
 
 def _fetch() -> list[ScenarioResult]:
@@ -652,7 +674,7 @@ def _fetch() -> list[ScenarioResult]:
 def main() -> int:
     return run_cli(
         sys.argv[1:],
-        render=_render,
+        renderer=_render,
         fetch=_fetch,
         description=__doc__,
         prog="focus.py",

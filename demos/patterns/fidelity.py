@@ -38,7 +38,6 @@ from painted import (
     Block,
     Fidelity,
     Style,
-    CliContext,
     Tag,
     Zoom,
     border,
@@ -169,18 +168,18 @@ SAMPLE_DISK = DiskData(
 # --- Zoom 0: one-line summary ---
 
 
-def render_minimal(data: DiskData, width: int) -> Block:
+def render_minimal(data: DiskData, width: int | None) -> Block:
     result = Block.text(
         f"{data.used_percent:.0f}% used ({data.used_human}/{data.total_human})",
         Style(),
     )
-    return truncate(result, width)
+    return truncate(result, width) if width is not None else result
 
 
 # --- Zoom 1: directory list ---
 
 
-def render_standard(data: DiskData, width: int) -> Block:
+def render_standard(data: DiskData, width: int | None) -> Block:
     rows: list[Block] = [
         Block.text(f"Disk usage: {data.mount}", Style(bold=True)),
         Block.text(
@@ -203,7 +202,8 @@ def render_standard(data: DiskData, width: int) -> Block:
 
     rows.append(Block.text("", Style()))
     rows.append(Block.text(f"Free: {data.free_human}", Style()))
-    return truncate(join_vertical(*rows), width)
+    block = join_vertical(*rows)
+    return truncate(block, width) if width is not None else block
 
 
 # --- Zoom 2: styled bars ---
@@ -251,10 +251,11 @@ def _dir_row(entry: DirEntry, parent_bytes: int, bar_width: int, indent: int = 0
     )
 
 
-def render_styled(data: DiskData, width: int) -> Block:
+def render_styled(data: DiskData, width: int | None) -> Block:
     """Zoom 2: styled bars, top-level directories only."""
-    # Shared bar width for consistent alignment
-    bar_width = min(30, width - 30)
+    # Shared bar width for consistent alignment — the natural-sizing floor
+    # (no width offered) is the same 30 the width-bounded case clamps toward.
+    bar_width = 30 if width is None else min(30, width - 30)
 
     usage = _usage_bar(data, bar_width)
     sorted_entries = sorted(data.entries, key=lambda e: e.size_bytes, reverse=True)
@@ -280,9 +281,9 @@ def render_styled(data: DiskData, width: int) -> Block:
 # --- Zoom 3: full detail with children ---
 
 
-def render_full(data: DiskData, width: int) -> Block:
+def render_full(data: DiskData, width: int | None) -> Block:
     """Zoom 3: styled bars with subdirectories expanded."""
-    bar_width = min(30, width - 30)
+    bar_width = 30 if width is None else min(30, width - 30)
 
     usage = _usage_bar(data, bar_width)
     sorted_entries = sorted(data.entries, key=lambda e: e.size_bytes, reverse=True)
@@ -391,11 +392,10 @@ def _env_baseline(parsed: argparse.Namespace, fidelity: Fidelity) -> Fidelity:
     return replace(fidelity, depth=depth, visible=visible)
 
 
-def _budgeted(data: DiskData, ctx: CliContext) -> DiskData:
+def _budgeted(data: DiskData, fid: Fidelity) -> DiskData:
     # Density budgets (rung 3): lines caps items per collection, chars caps
     # string values. Applied to the data once, so every depth renderer honors
     # them without knowing they exist.
-    fid = ctx.fidelity
     if not (fid.has_line_limit or fid.has_char_limit):
         return data
 
@@ -413,20 +413,22 @@ def _budgeted(data: DiskData, ctx: CliContext) -> DiskData:
     return replace(data, mount=cut(data.mount), entries=cap(data.entries))
 
 
-def _render(ctx: CliContext, data: DiskData) -> Block:
+def _render(data: DiskData, fidelity: Fidelity, width: int | None) -> Block:
     # Depth picks the renderer (anonymous detail); the timestamp is a named
     # facet riding fidelity.visible — --timestamp at any depth, implied at -v.
-    data = _budgeted(data, ctx)
-    if ctx.zoom >= Zoom.FULL:
-        block = render_full(data, ctx.width)
-    elif ctx.zoom >= Zoom.DETAILED:
-        block = render_styled(data, ctx.width)
-    elif ctx.zoom >= Zoom.SUMMARY:
-        block = render_standard(data, ctx.width)
+    data = _budgeted(data, fidelity)
+    depth = fidelity.depth
+    if depth >= 3:
+        block = render_full(data, width)
+    elif depth >= 2:
+        block = render_styled(data, width)
+    elif depth >= 1:
+        block = render_standard(data, width)
     else:
-        block = render_minimal(data, ctx.width)
-    if ctx.fidelity.shows("timestamp") and data.timestamp:
-        stamp = truncate(Block.text(f"  {data.timestamp}", Style(dim=True)), ctx.width)
+        block = render_minimal(data, width)
+    if fidelity.shows("timestamp") and data.timestamp:
+        stamp_block = Block.text(f"  {data.timestamp}", Style(dim=True))
+        stamp = truncate(stamp_block, width) if width is not None else stamp_block
         block = join_vertical(block, stamp)
     return block
 
@@ -434,7 +436,7 @@ def _render(ctx: CliContext, data: DiskData) -> Block:
 def main() -> int:
     return run_cli(
         sys.argv[1:],
-        render=_render,
+        renderer=_render,
         fetch=_fetch,
         description=__doc__,
         prog="fidelity.py",

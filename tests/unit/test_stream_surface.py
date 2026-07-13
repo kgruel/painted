@@ -64,8 +64,8 @@ def _surface_render(state: object, width: int) -> Block:
     return Block.text(str(state), Style())
 
 
-def _legacy_render(ctx: CliContext, state: object) -> Block:
-    """The CliRunner ``render=`` legacy shape (ctx, state) — used by the
+def _legacy_render(state: object, fidelity: Fidelity, width: int | None) -> Block:
+    """The CliRunner ``renderer=`` shape (data, fidelity, width) — used by the
     _run_live_surface deposit tests, which drive the runner, not the surface
     callback."""
     return Block.text(str(state), Style())
@@ -661,8 +661,8 @@ def test_space_toggles_pause():
 # --- _run_live_surface: deposit + exit codes ---
 
 
-def _runner(render=_legacy_render, **kwargs) -> CliRunner:
-    return CliRunner(render=render, fetch=lambda: None, fetch_stream=_stream_of([]), **kwargs)
+def _runner(renderer=_legacy_render, **kwargs) -> CliRunner:
+    return CliRunner(renderer=renderer, fetch=lambda: None, fetch_stream=_stream_of([]), **kwargs)
 
 
 def test_deposits_last_frame_on_success(monkeypatch, capsys):
@@ -740,11 +740,11 @@ def test_deposit_installs_the_last_states_schemes(monkeypatch, capsys):
 
     monkeypatch.setattr(StreamSurface, "run", fake_run)
 
-    def rnd(ctx, data):
+    def rnd(data, fidelity, width):
         return Block.text(data, Style(), ref="fact:01")
 
     runner = CliRunner(
-        render=rnd,
+        renderer=rnd,
         fetch=lambda: None,
         fetch_stream=_stream_of([]),
         ref_schemes=[RefScheme("fact", lambda v: f"https://loops.dev/f/{v}")],
@@ -767,11 +767,11 @@ def test_deposit_reuses_the_carried_pair_without_reevaluating(monkeypatch, capsy
 
     monkeypatch.setattr(StreamSurface, "run", fake_run)
 
-    def rnd(ctx, data):
+    def rnd(data, fidelity, width):
         return Block.text(data, Style(), ref="fact:01")
 
     runner = CliRunner(
-        render=rnd, fetch=lambda: None, fetch_stream=_stream_of([]), ref_schemes=resolver
+        renderer=rnd, fetch=lambda: None, fetch_stream=_stream_of([]), ref_schemes=resolver
     )
     code = runner._run_live_surface(_tty_ctx())
     assert code == 0
@@ -834,7 +834,7 @@ def test_surface_delivery_taken_on_tty(monkeypatch):
 
     monkeypatch.setattr(CliRunner, "_run_live_surface", fake)
     runner = CliRunner(
-        render=_legacy_render,
+        renderer=_legacy_render,
         fetch=lambda: None,
         fetch_stream=_stream_of(["x"]),
         live_delivery="surface",
@@ -847,7 +847,7 @@ def test_surface_delivery_falls_back_to_inplace_when_not_tty(capsys):
     """Not a TTY → the alt screen can't be taken; the in-place non-ANSI branch
     deposits the final frame instead (static_ctx is is_tty=False, use_ansi=False)."""
     runner = CliRunner(
-        render=_legacy_render,
+        renderer=_legacy_render,
         fetch=lambda: None,
         fetch_stream=_stream_of(["only"]),
         live_delivery="surface",

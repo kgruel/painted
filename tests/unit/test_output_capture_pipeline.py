@@ -66,8 +66,8 @@ def test_capture_demo_run_cli_shape(tmp_path: Path) -> None:
                 "def _fetch():",
                 "    return 'hi'",
                 "",
-                "def _render(ctx, data):",
-                "    return Block.text(f'{data} width={ctx.width}', Style())",
+                "def _render(data, fidelity, width):",
+                "    return Block.text(f'{data} width={width}', Style())",
                 "",
             ]
         ),
@@ -114,7 +114,7 @@ def test_outputgen_update_doc_round_trip(tmp_path: Path, monkeypatch: pytest.Mon
                 "def _fetch():",
                 "    return 'ok'",
                 "",
-                "def _render(ctx, data):",
+                "def _render(data, fidelity, width):",
                 "    return Block.text(data, Style(fg='green'))",
                 "",
             ]

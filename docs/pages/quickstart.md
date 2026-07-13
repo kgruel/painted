@@ -59,16 +59,16 @@ Use `run_cli()` when you want one entrypoint that can produce quiet/verbose outp
 
 ```python
 import sys
-from painted import Block, CliContext, run_cli
+from painted import Block, Fidelity, run_cli
 
-def render(ctx: CliContext, data: dict) -> Block:
+def renderer(data: dict, fidelity: Fidelity, width: int | None) -> Block:
     return Block.text(f"status: {data['status']}")
 
 def fetch() -> dict:
     return {"status": "ok"}
 
 if __name__ == "__main__":
-    run_cli(sys.argv[1:], render=render, fetch=fetch)
+    run_cli(sys.argv[1:], renderer=renderer, fetch=fetch)
 ```
 
 Run it:

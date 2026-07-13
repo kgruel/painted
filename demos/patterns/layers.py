@@ -29,9 +29,8 @@ from dataclasses import dataclass, replace
 
 from painted import (
     Block,
-    CliContext,
+    Fidelity,
     Style,
-    Zoom,
     border,
     join_vertical,
     pad,
@@ -458,13 +457,17 @@ def _render_summary(traces: list[ScenarioTrace]) -> Block:
     return join_vertical(*sections, _render_minimal(traces))
 
 
-def _render_detailed(ctx: CliContext, traces: list[ScenarioTrace]) -> Block:
+def _render_detailed(width: int | None, traces: list[ScenarioTrace]) -> Block:
     p = current_palette()
     icons = current_icons()
     sections: list[Block] = []
 
-    snap_w = max(24, min(60, ctx.width - 6))
+    # snap_w is a buffer-snapshot render width — a fixed 60-col floor (the
+    # cap the width-bounded case already clamps toward) when no width is
+    # offered, a genuine domain size for a captured-frame render.
+    snap_w = 60 if width is None else max(24, min(60, width - 6))
     snap_h = 10
+    row_width = None if width is None else max(0, width - 2)
 
     for t in traces:
         icon = icons.check if t.invariants_ok else icons.cross
@@ -477,7 +480,7 @@ def _render_detailed(ctx: CliContext, traces: list[ScenarioTrace]) -> Block:
                 f"{s.i:02d} key={s.key:<7s} top={s.handled_by:<7s} "
                 f"action={s.action_str:<14s} {s.stack_before} -> {s.stack_after}"
             )
-            rows.append(Block.text(line, Style(dim=True), width=max(0, ctx.width - 2)))
+            rows.append(Block.text(line, Style(dim=True), width=row_width))
 
         # Key frames: initial + structural steps.
         key_steps = [s for s in t.steps if s.action_str.startswith(("Push", "Pop", "Quit"))]
@@ -502,13 +505,15 @@ def _render_detailed(ctx: CliContext, traces: list[ScenarioTrace]) -> Block:
     return join_vertical(*sections, _render_minimal(traces))
 
 
-def _render_full(ctx: CliContext, traces: list[ScenarioTrace]) -> Block:
+def _render_full(width: int | None, traces: list[ScenarioTrace]) -> Block:
     p = current_palette()
     icons = current_icons()
     sections: list[Block] = []
 
-    snap_w = max(24, min(60, ctx.width - 6))
+    # Same natural-sizing floor as _render_detailed's buffer-snapshot budget.
+    snap_w = 60 if width is None else max(24, min(60, width - 6))
     snap_h = 10
+    row_width = None if width is None else max(0, width - 2)
 
     for t in traces:
         icon = icons.check if t.invariants_ok else icons.cross
@@ -521,7 +526,7 @@ def _render_full(ctx: CliContext, traces: list[ScenarioTrace]) -> Block:
                 f"[{s.i:02d}] key={s.key:<7s} handled_by={s.handled_by:<7s} "
                 f"action={s.action_str:<14s}"
             )
-            rows.append(Block.text(line, Style(dim=True), width=max(0, ctx.width - 2)))
+            rows.append(Block.text(line, Style(dim=True), width=row_width))
 
         # Render order: show progressive buffer snapshots at max stack depth.
         max_step = None
@@ -558,12 +563,13 @@ def _render_full(ctx: CliContext, traces: list[ScenarioTrace]) -> Block:
     return join_vertical(*sections, _render_minimal(traces))
 
 
-def _render(ctx: CliContext, traces: list[ScenarioTrace]) -> Block:
-    if ctx.zoom >= Zoom.FULL:
-        return _render_full(ctx, traces)
-    if ctx.zoom >= Zoom.DETAILED:
-        return _render_detailed(ctx, traces)
-    if ctx.zoom >= Zoom.SUMMARY:
+def _render(traces: list[ScenarioTrace], fidelity: Fidelity, width: int | None) -> Block:
+    depth = fidelity.depth
+    if depth >= 3:
+        return _render_full(width, traces)
+    if depth >= 2:
+        return _render_detailed(width, traces)
+    if depth >= 1:
         return _render_summary(traces)
     return _render_minimal(traces)
 
@@ -578,7 +584,7 @@ def _fetch() -> list[ScenarioTrace]:
 def main() -> int:
     return run_cli(
         sys.argv[1:],
-        render=_render,
+        renderer=_render,
         fetch=_fetch,
         description=__doc__,
         prog="layers.py",

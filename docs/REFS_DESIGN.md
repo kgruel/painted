@@ -179,6 +179,14 @@ use_refs(RefScheme("fact", lambda value: f"https://loops.dev/f/{value}"))
   `current_ref_schemes`, `reset_refs`, `resolve_ref`), same tier as the
   vocabulary exports. Zero CLI imports, structurally — ref schemes
   generate no flags (vocabularies rule 4 applies identically).
+- **The framework-tier declaration**: `use_refs`/`current_ref_schemes` above
+  is the renderer-ambient seam a lens reads. `run_cli`'s `ref_schemes=`
+  (docs/RENDERER_CONTRACT_DESIGN.md §7) is the CLI framework's own
+  declaration of the same channel — static or callable, installed as a
+  per-cycle bracket around fetch/render/flush so a run's ambient state can
+  never leak into the next. The two are the same resolver seam at two
+  altitudes: `use_refs` for a renderer authored directly against the
+  library, `ref_schemes=` for one authored against `run_cli`.
 
 ## 5. ANSI delivery — OSC 8
 

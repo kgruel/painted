@@ -56,17 +56,20 @@ def test_law4_fidelity_compiles_identically_across_destinations(monkeypatch, cap
         budgets=True,
     )
 
+    def renderer(data: str, fidelity, width) -> Block:
+        return Block.text("x", Style())
+
     def run_under(*, isatty: bool, columns: str) -> CliContext:
         monkeypatch.setattr("sys.stdout.isatty", lambda: isatty)
         monkeypatch.setenv("COLUMNS", columns)
         monkeypatch.setenv("LINES", "50" if isatty else "8")
         seen: dict[str, CliContext] = {}
 
-        def render(ctx: CliContext, data: str) -> Block:
+        def fetch(ctx: CliContext) -> str:
             seen["ctx"] = ctx
-            return Block.text("x", Style())
+            return "d"
 
-        assert run_cli(argv, render=render, fetch=lambda: "d", **declarations) == 0
+        assert run_cli(argv, renderer=renderer, fetch=fetch, **declarations) == 0
         return seen["ctx"]
 
     tty_ctx = run_under(isatty=True, columns="200")

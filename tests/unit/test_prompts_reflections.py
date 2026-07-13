@@ -49,7 +49,7 @@ def _terms(section: Section) -> list[str]:
     return [d.term for defs in section.body if isinstance(defs, Defs) for d in defs.items]
 
 
-def _render(_ctx, data):
+def _render(data, _fidelity, _width):
     return Block.text(str(data), Style())
 
 
@@ -193,7 +193,7 @@ class TestRunCliHelpRendersPrompts:
         monkeypatch.setattr("sys.stdout.isatty", lambda: False)
         result = run_cli(
             ["--help"],
-            render=_render,
+            renderer=_render,
             fetch=lambda: "ok",
             prog="myapp",
             prompts=[

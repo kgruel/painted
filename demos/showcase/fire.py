@@ -37,11 +37,10 @@ from dataclasses import dataclass, replace
 
 from painted import (
     Block,
-    CliContext,
+    Fidelity,
     Line,
     Span,
     Style,
-    Zoom,
     border,
     join_horizontal,
     join_vertical,
@@ -218,13 +217,16 @@ def _flame_height(fire: Fire) -> int:
     return 0
 
 
-def _window(fire: Fire, width: int, *extra: Block) -> Block:
+def _window(fire: Fire, width: int | None, *extra: Block) -> Block:
     """The dressed viewing frame: field, census, and any extras.
 
     Inner width pins to the grid — every row is sized against it, so the
-    border never moves no matter what the data rows do.
+    border never moves no matter what the data rows do. The grid is a
+    raster of the field's own domain size (_W) — when no width is offered
+    (a pipe's natural sizing), that domain size is the natural inner width,
+    not a resurrected terminal-fallback guess.
     """
-    w = min(width - 4, _W)
+    w = _W if width is None else min(width - 4, _W)
     rows = [_grid(fire, w), truncate(_census(fire), w)]
     rows += [truncate(b, w) for b in extra]
     return border(join_vertical(*rows), title="fire", chars=ROUNDED)
@@ -233,19 +235,20 @@ def _window(fire: Fire, width: int, *extra: Block) -> Block:
 # --- Zoom renderers ---
 
 
-def _render_minimal(fire: Fire, width: int) -> Block:
-    return truncate(_census(fire), width)
+def _render_minimal(fire: Fire, width: int | None) -> Block:
+    block = _census(fire)
+    return truncate(block, width) if width is not None else block
 
 
-def _render_summary(fire: Fire, width: int) -> Block:
+def _render_summary(fire: Fire, width: int | None) -> Block:
     return _window(fire, width)
 
 
-def _render_detailed(fire: Fire, width: int) -> Block:
+def _render_detailed(fire: Fire, width: int | None) -> Block:
     return _window(fire, width, _legend())
 
 
-def _render_full(fire: Fire, width: int) -> Block:
+def _render_full(fire: Fire, width: int | None) -> Block:
     lit = sum(1 for h in fire.heat if h > 0)
     mean = sum(fire.heat) / len(fire.heat)
     stats = Block.text(
@@ -256,14 +259,15 @@ def _render_full(fire: Fire, width: int) -> Block:
     return _window(fire, width, _legend(), stats)
 
 
-def _render(ctx: CliContext, fire: Fire) -> Block:
-    if ctx.zoom >= Zoom.FULL:
-        return _render_full(fire, ctx.width)
-    if ctx.zoom >= Zoom.DETAILED:
-        return _render_detailed(fire, ctx.width)
-    if ctx.zoom >= Zoom.SUMMARY:
-        return _render_summary(fire, ctx.width)
-    return _render_minimal(fire, ctx.width)
+def _render(fire: Fire, fidelity: Fidelity, width: int | None) -> Block:
+    depth = fidelity.depth
+    if depth >= 3:
+        return _render_full(fire, width)
+    if depth >= 2:
+        return _render_detailed(fire, width)
+    if depth >= 1:
+        return _render_summary(fire, width)
+    return _render_minimal(fire, width)
 
 
 # --- Entry point ---
@@ -277,7 +281,7 @@ def main() -> int:
 
     return run_cli(
         rest,
-        render=_render,
+        renderer=_render,
         fetch=lambda: _fetch(ns.seed, ns.frame),
         fetch_stream=lambda: _fetch_stream(ns.seed),
         live_delivery="surface",

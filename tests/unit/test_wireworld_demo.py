@@ -14,8 +14,8 @@ import sys
 from dataclasses import replace
 from pathlib import Path
 
-from painted import Zoom
-from tests.helpers import block_to_text, static_ctx
+from painted import Fidelity, Zoom
+from tests.helpers import block_to_text
 
 _DEMO = Path(__file__).resolve().parent.parent.parent / "demos" / "showcase" / "wireworld.py"
 
@@ -94,8 +94,10 @@ def test_diode_passes_one_way_and_blocks_the_other() -> None:
 def test_render_is_pure_at_every_zoom() -> None:
     circuit = ww._fetch("diode", ww.DEFAULT_GEN)
     for zoom in Zoom:
-        ctx = static_ctx(zoom)
-        assert block_to_text(ww._render(ctx, circuit)) == block_to_text(ww._render(ctx, circuit))
+        fid = Fidelity(depth=int(zoom))
+        assert block_to_text(ww._render(circuit, fid, 80)) == block_to_text(
+            ww._render(circuit, fid, 80)
+        )
 
 
 def test_grid_glyphs_are_the_three_states() -> None:

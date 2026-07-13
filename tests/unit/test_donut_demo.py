@@ -12,8 +12,8 @@ import importlib.util
 import sys
 from pathlib import Path
 
-from painted import Zoom
-from tests.helpers import block_to_text, static_ctx
+from painted import Fidelity, Zoom
+from tests.helpers import block_to_text
 
 _DEMO = Path(__file__).resolve().parent.parent.parent / "demos" / "showcase" / "donut.py"
 
@@ -56,15 +56,17 @@ def test_torus_straddles_the_grid_center() -> None:
 
 def test_scene_is_a_pure_function_of_the_frame() -> None:
     for zoom in Zoom:
-        ctx = static_ctx(zoom)
+        fid = Fidelity(depth=int(zoom))
         spin = donut.Spin(frame=123)
-        assert block_to_text(donut._render(ctx, spin)) == block_to_text(donut._render(ctx, spin))
+        assert block_to_text(donut._render(spin, fid, 80)) == block_to_text(
+            donut._render(spin, fid, 80)
+        )
 
 
 def test_rotation_actually_rotates() -> None:
-    ctx = static_ctx(Zoom.SUMMARY)
-    a = block_to_text(donut._render(ctx, donut.Spin(frame=0)))
-    b = block_to_text(donut._render(ctx, donut.Spin(frame=30)))
+    fid = Fidelity(depth=int(Zoom.SUMMARY))
+    a = block_to_text(donut._render(donut.Spin(frame=0), fid, 80))
+    b = block_to_text(donut._render(donut.Spin(frame=30), fid, 80))
     assert a != b
 
 

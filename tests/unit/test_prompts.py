@@ -552,7 +552,7 @@ def test_empty_context_ask_refuses_runtime_prompt(monkeypatch: pytest.MonkeyPatc
 # =============================================================================
 
 
-def _render(ctx, data) -> Block:
+def _render(data, fidelity, width) -> Block:
     return Block.text(str(data), Style())
 
 
@@ -565,7 +565,9 @@ def test_run_cli_flag_answer_reaches_fetch_and_strips_args(
     def fetch(ctx):
         return {"args": sorted(ctx.args), "scope": ctx.ask("scope"), "force": ctx.ask("force")}
 
-    rc = run_cli(["--scope", "all", "--force", "--plain"], _render, fetch, prompts=prompts)
+    rc = run_cli(
+        ["--scope", "all", "--force", "--plain"], renderer=_render, fetch=fetch, prompts=prompts
+    )
     out = capsys.readouterr().out
     assert rc == 0
     assert "'scope': 'all'" in out
@@ -581,7 +583,7 @@ def test_run_cli_refusal_goes_to_stderr(
     def fetch(ctx):
         return {"ok": ctx.ask("overwrite")}
 
-    rc = run_cli(["--plain"], _render, fetch, prompts=[Confirm("overwrite", "o")])
+    rc = run_cli(["--plain"], renderer=_render, fetch=fetch, prompts=[Confirm("overwrite", "o")])
     captured = capsys.readouterr()
     assert rc == 1
     assert captured.out == ""  # stdout stays a clean data channel
@@ -598,7 +600,7 @@ def test_run_cli_default_record_line_goes_to_stderr(
     def fetch(ctx):
         return {"scope": ctx.ask("scope")}
 
-    rc = run_cli(["--plain"], _render, fetch, prompts=prompts)
+    rc = run_cli(["--plain"], renderer=_render, fetch=fetch, prompts=prompts)
     captured = capsys.readouterr()
     assert rc == 0
     assert "scope: local (default)" in captured.err
@@ -615,7 +617,7 @@ def test_run_cli_no_input_forces_declared_resolution(
     def fetch(ctx):
         return {"scope": ctx.ask("scope")}
 
-    rc = run_cli(["--plain", "--no-input"], _render, fetch, prompts=prompts)
+    rc = run_cli(["--plain", "--no-input"], renderer=_render, fetch=fetch, prompts=prompts)
     assert rc == 0
     assert "'scope': 'local'" in capsys.readouterr().out
 
@@ -630,7 +632,7 @@ def test_run_cli_json_refusal_emits_nothing_on_stdout(
     def fetch(ctx):
         return {"ok": ctx.ask("overwrite")}
 
-    rc = run_cli(["--json"], _render, fetch, prompts=[Confirm("overwrite", "o")])
+    rc = run_cli(["--json"], renderer=_render, fetch=fetch, prompts=[Confirm("overwrite", "o")])
     captured = capsys.readouterr()
     assert rc == 1
     assert captured.out == ""
@@ -646,6 +648,10 @@ def test_run_cli_live_stream_refusal_goes_to_stderr(
     async def fetch_stream(ctx):
         yield {"n": 1}
 
+    # Legacy render=(ctx, data) form, kept deliberately: this render calls
+    # ctx.ask() itself (proving a render-phase refusal routes through the
+    # same seam as a fetch-phase one), which needs the full CliContext the
+    # three-argument renderer= contract doesn't carry.
     def render(ctx, data):
         ctx.ask("overwrite")  # refuses (non-tty, no flag/default)
         return Block.text(str(data), Style())
@@ -676,8 +682,8 @@ def test_run_cli_custom_handler_refusal_goes_to_stderr(
 
     rc = run_cli(
         ["-i"],
-        _render,
-        lambda: {},
+        renderer=_render,
+        fetch=lambda: {},
         handlers={OutputMode.INTERACTIVE: handler},
         prompts=[Confirm("overwrite", "o")],
     )
@@ -1078,7 +1084,7 @@ def test_run_cli_line_prompt_reads_from_injected_stdin(
     def fetch(ctx):
         return {"scope": ctx.ask("scope")}
 
-    rc = run_cli(["--plain"], _render, fetch, prompts=prompts)
+    rc = run_cli(["--plain"], renderer=_render, fetch=fetch, prompts=prompts)
     captured = capsys.readouterr()
     assert rc == 0
     assert "'scope': 'all'" in captured.out
@@ -1449,7 +1455,7 @@ def test_run_cli_input_parsing_to_none_resolves_none(
     def fetch(ctx):
         return {"maybe": ctx.ask("maybe")}
 
-    rc = run_cli(["--maybe", "x", "--plain"], _render, fetch, prompts=prompts)
+    rc = run_cli(["--maybe", "x", "--plain"], renderer=_render, fetch=fetch, prompts=prompts)
     assert rc == 0
     assert "'maybe': None" in capsys.readouterr().out
 
@@ -1501,8 +1507,8 @@ def test_run_cli_live_prompt_abort_propagates_not_exit_zero(
     with pytest.raises(PromptAbort):
         run_cli(
             ["--live", "--plain"],
-            _render,
-            lambda ctx: {},
+            renderer=_render,
+            fetch=lambda ctx: {},
             fetch_stream=gen,
             prompts=[Confirm("go", "Go?")],
         )
@@ -1518,7 +1524,7 @@ def test_run_cli_live_bare_ctrl_c_without_prompt_stays_graceful(
         raise KeyboardInterrupt
         yield {}  # pragma: no cover
 
-    rc = run_cli(["--live", "--plain"], _render, lambda ctx: {}, fetch_stream=gen)
+    rc = run_cli(["--live", "--plain"], renderer=_render, fetch=lambda: {}, fetch_stream=gen)
     assert rc == 0
 
 
@@ -1709,7 +1715,9 @@ def test_json_plain_prompt_is_plain_line_on_stderr_json_on_stdout(
     def fetch(ctx):
         return {"go": ctx.ask("go")}
 
-    rc = run_cli(["--json", "--plain"], _render, fetch, prompts=[Confirm("go", "Go?")])
+    rc = run_cli(
+        ["--json", "--plain"], renderer=_render, fetch=fetch, prompts=[Confirm("go", "Go?")]
+    )
     assert rc == 0
     assert '"go": true' in capsys.readouterr().out  # JSON on stdout unchanged
     err = stderr.getvalue()
@@ -1730,7 +1738,7 @@ def test_plain_refusal_at_tty_stderr_has_no_sgr(
     def fetch(ctx):
         return {"go": ctx.ask("go")}
 
-    rc = run_cli(["--plain"], _render, fetch, prompts=[Confirm("go", "Go?")])
+    rc = run_cli(["--plain"], renderer=_render, fetch=fetch, prompts=[Confirm("go", "Go?")])
     assert rc == 1
     err = stderr.getvalue()
     assert "--go" in err  # the refusal still names the flag
@@ -1749,7 +1757,7 @@ def test_refusal_at_tty_stderr_stays_styled_without_plain(
     def fetch(ctx):
         return {"go": ctx.ask("go")}
 
-    rc = run_cli([], _render, fetch, prompts=[Confirm("go", "Go?")])
+    rc = run_cli([], renderer=_render, fetch=fetch, prompts=[Confirm("go", "Go?")])
     assert rc == 1
     assert "\x1b[" in stderr.getvalue()  # styled: stderr is a TTY, no request
 
@@ -1764,6 +1772,6 @@ def test_json_only_prompt_unregressed(
     def fetch(ctx):
         return {"go": ctx.ask("go")}
 
-    rc = run_cli(["--json", "--go"], _render, fetch, prompts=[Confirm("go", "Go?")])
+    rc = run_cli(["--json", "--go"], renderer=_render, fetch=fetch, prompts=[Confirm("go", "Go?")])
     assert rc == 0
     assert '"go": true' in capsys.readouterr().out

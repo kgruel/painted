@@ -38,11 +38,10 @@ from dataclasses import dataclass, replace
 
 from painted import (
     Block,
-    CliContext,
+    Fidelity,
     Line,
     Span,
     Style,
-    Zoom,
     border,
     join_horizontal,
     join_vertical,
@@ -157,9 +156,7 @@ def step(circuit: Circuit) -> Circuit:
     for x, y in circuit.wires:
         if (x, y) in charged:
             continue
-        n = sum(
-            (x + dx, y + dy) in heads for dx in (-1, 0, 1) for dy in (-1, 0, 1) if dx or dy
-        )
+        n = sum((x + dx, y + dy) in heads for dx in (-1, 0, 1) for dy in (-1, 0, 1) if dx or dy)
         if n in (1, 2):
             new_heads.append((x, y))
     return replace(
@@ -269,13 +266,15 @@ def _electron_sparkline(circuit: Circuit, width: int) -> Block:
     )
 
 
-def _window(circuit: Circuit, width: int, *extra: Block) -> Block:
+def _window(circuit: Circuit, width: int | None, *extra: Block) -> Block:
     """The dressed viewing frame: copper, census, and any extras.
 
     Inner width pins to the circuit's own bounds — every row is sized
     against it, so the border never moves no matter what the data rows do.
+    When no width is offered (a pipe's natural sizing), that domain size is
+    the natural inner width, not a resurrected terminal-fallback guess.
     """
-    w = min(width - 4, _bounds(circuit)[0])
+    w = _bounds(circuit)[0] if width is None else min(width - 4, _bounds(circuit)[0])
     rows = [_grid(circuit, w), truncate(_census(circuit), w)]
     rows += [truncate(b, w) for b in extra]
     return border(join_vertical(*rows), title="wireworld", chars=ROUNDED)
@@ -284,21 +283,22 @@ def _window(circuit: Circuit, width: int, *extra: Block) -> Block:
 # --- Zoom renderers ---
 
 
-def _render_minimal(circuit: Circuit, width: int) -> Block:
-    return truncate(_census(circuit), width)
+def _render_minimal(circuit: Circuit, width: int | None) -> Block:
+    block = _census(circuit)
+    return truncate(block, width) if width is not None else block
 
 
-def _render_summary(circuit: Circuit, width: int) -> Block:
+def _render_summary(circuit: Circuit, width: int | None) -> Block:
     return _window(circuit, width)
 
 
-def _render_detailed(circuit: Circuit, width: int) -> Block:
-    w = min(width - 4, _bounds(circuit)[0])
+def _render_detailed(circuit: Circuit, width: int | None) -> Block:
+    w = _bounds(circuit)[0] if width is None else min(width - 4, _bounds(circuit)[0])
     return _window(circuit, width, _legend(), _electron_sparkline(circuit, w))
 
 
-def _render_full(circuit: Circuit, width: int) -> Block:
-    w = min(width - 4, _bounds(circuit)[0])
+def _render_full(circuit: Circuit, width: int | None) -> Block:
+    w = _bounds(circuit)[0] if width is None else min(width - 4, _bounds(circuit)[0])
     heads = set(circuit.heads)
     lanes = "  ·  ".join(
         f"{lane} {'.' if probe not in heads else '@'} p{_PERIODS[circuit.name][lane]}"
@@ -311,14 +311,15 @@ def _render_full(circuit: Circuit, width: int) -> Block:
     return _window(circuit, width, _legend(), _electron_sparkline(circuit, w), stats)
 
 
-def _render(ctx: CliContext, circuit: Circuit) -> Block:
-    if ctx.zoom >= Zoom.FULL:
-        return _render_full(circuit, ctx.width)
-    if ctx.zoom >= Zoom.DETAILED:
-        return _render_detailed(circuit, ctx.width)
-    if ctx.zoom >= Zoom.SUMMARY:
-        return _render_summary(circuit, ctx.width)
-    return _render_minimal(circuit, ctx.width)
+def _render(circuit: Circuit, fidelity: Fidelity, width: int | None) -> Block:
+    depth = fidelity.depth
+    if depth >= 3:
+        return _render_full(circuit, width)
+    if depth >= 2:
+        return _render_detailed(circuit, width)
+    if depth >= 1:
+        return _render_summary(circuit, width)
+    return _render_minimal(circuit, width)
 
 
 # --- Entry point ---
@@ -332,7 +333,7 @@ def main() -> int:
 
     return run_cli(
         rest,
-        render=_render,
+        renderer=_render,
         fetch=lambda: _fetch(ns.circuit, ns.gen),
         fetch_stream=lambda: _fetch_stream(ns.circuit),
         live_delivery="surface",
@@ -340,7 +341,11 @@ def main() -> int:
         description=__doc__,
         prog="wireworld.py",
         help_args=[
-            HelpArg("--circuit", f"machine to run: {', '.join(sorted(CIRCUITS))}", default=DEFAULT_CIRCUIT),
+            HelpArg(
+                "--circuit",
+                f"machine to run: {', '.join(sorted(CIRCUITS))}",
+                default=DEFAULT_CIRCUIT,
+            ),
             HelpArg(
                 "--gen",
                 "generation shown by static output (live computes from 0)",

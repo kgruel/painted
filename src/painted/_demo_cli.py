@@ -7,7 +7,7 @@ import sys
 
 from painted import (
     Block,
-    CliContext,
+    Fidelity,
     Style,
     Zoom,
     border,
@@ -101,12 +101,16 @@ def _demo_header(palette) -> Block:
     )
 
 
-def render_demo_list(ctx: CliContext, entries: list[DemoEntry]) -> Block:
+def render_demo_list(entries: list[DemoEntry], fidelity: Fidelity, width: int | None) -> Block:
     """Render the demo curriculum as a progression — painted rendering itself."""
     # Tour has its own command; it's the entry point, surfaced in the header.
     demos = [e for e in entries if e.group]
+    # Two-sided clamp (RENDERER_CONTRACT_DESIGN §8): depth is an open int in
+    # the spec, so an out-of-range value (e.g. a negative build_fidelity
+    # hook) must still land in the MINIMAL branch, not fall through it.
+    depth = min(max(fidelity.depth, 0), 3)
 
-    if ctx.zoom == Zoom.MINIMAL:
+    if depth <= Zoom.MINIMAL:
         # One name per line, for scripting — every demo is runnable by name.
         names = "\n".join(e.name for e in demos)
         return Block.text(names, _PLAIN) if names else Block.empty(0, 0)
@@ -155,7 +159,7 @@ def render_demo_list(ctx: CliContext, entries: list[DemoEntry]) -> Block:
             blocks.append(row)
 
             # DETAILED+: show invocation examples under the same rail.
-            if ctx.zoom >= Zoom.DETAILED and e.invocations:
+            if depth >= Zoom.DETAILED and e.invocations:
                 for inv in e.invocations:
                     blocks.append(
                         join_horizontal(Block.text(rail, tier), Block.text(f"  {inv}", _DIM))
@@ -171,7 +175,7 @@ def render_demo_list(ctx: CliContext, entries: list[DemoEntry]) -> Block:
     blocks.append(join_horizontal(*footer_parts))
 
     result = join_vertical(*blocks) if blocks else Block.empty(0, 0)
-    return truncate(result, ctx.width)
+    return truncate(result, width) if width is not None else result
 
 
 # ---------------------------------------------------------------------------
@@ -183,7 +187,7 @@ def list_demos(args: list[str]) -> int:
     """List available demos via run_cli."""
     return run_cli(
         args,
-        render=render_demo_list,
+        renderer=render_demo_list,
         fetch=discover_demos,
         description="List available painted demos",
         prog="painted demos",
