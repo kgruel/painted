@@ -625,9 +625,10 @@ not when serializing it:
   snapshot**: everything that suppresses color at serialization —
   `--plain`, `NO_COLOR` (with an explicit `no_color=` override winning
   over the environment, matching `Writer`) — narrows content-side
-  `color` too (§9.3). `ColorDepth` is not part of that snapshot: it
-  quantizes color already chosen, and is meaningful only after
-  `color=True` (§9.4).
+  `color` too (§9.3). Positive `ColorDepth` values are not part of that
+  snapshot — they quantize color already chosen, meaningful only after
+  `color=True` — with one explicit exception: a resolved or forced
+  `ColorDepth.NONE` *is* suppression and joins the snapshot (§9.4).
 - **`glyph`** — may I choose non-ASCII glyphs as content carriers? No
   in-repo renderer reads this today; it ships on named cross-repo demand
   (siftd, loops, loops-tasks — `design/capability-facets`) and because
@@ -714,7 +715,7 @@ not share one:
 
 | Facet | Signal | `run_cli` / `paint()` resolution |
 |-------|--------|----------------------------------|
-| `color` | the color-suppression snapshot | `use_ansi and not resolved_no_color` — ANSI off (`--plain`, non-TTY) or `NO_COLOR` set (explicit `no_color=` override winning, matching `Writer`) narrows it |
+| `color` | the color-suppression snapshot | `use_ansi and not resolved_no_color and resolved_color_depth is not NONE` (the depth conjunct applies whenever a depth is resolved or explicitly forced) — ANSI off (`--plain`, non-TTY), `NO_COLOR` set (explicit `no_color=` override winning, matching `Writer`), or a zero depth narrows it |
 | `glyph` | destination encoding / host policy | `True` for a destination whose encoding carries Unicode (a UTF-8 pipe is glyph-capable — glyph does **not** co-narrow with color), `False` for known-ASCII destinations; conservative (`False`) when the encoding is unknowable |
 | `link` | serializer link-carrier configuration | resolved format emits link carriers (ANSI OSC 8 / HTML anchors) *and* hyperlinks are enabled — never bare TTY-ness |
 
