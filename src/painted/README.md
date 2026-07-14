@@ -219,6 +219,7 @@ with use_palette(NORD_PALETTE):  # or scoped override
 `Palette` — 5 semantic Style roles (success, warning, error, accent, muted), plus a `series` categorical ramp for visually separating N peers.
 `IconSet` — named glyph slots (spinner, progress, tree, sparkline).
 Both use ContextVar — scoped overrides via context manager.
+`Capabilities` (`current_capabilities()`) is a sibling ambient channel for destination carriers — color/glyph/link — read by a renderer choosing between carriers (e.g. truecolor portrait vs. luminance glyph ramp), never for glyph fallback or color downsampling (those stay `IconSet`/`ColorDepth`'s job).
 
 ## Refs — denotation becomes a link
 

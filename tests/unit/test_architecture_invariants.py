@@ -667,3 +667,63 @@ def test_raise_sites_use_painted_exception_classes() -> None:
     assert not violations, "Bare stdlib raises outside the exemption list:\n" + "\n".join(
         violations
     )
+
+
+# --- No semantic-renderer read of use_ansi (RENDERER_CONTRACT_DESIGN §9.5) ----
+#
+# capabilities.py replaced ctx.use_ansi as the vocabulary for content-structure
+# carrier choices (color/glyph/link). The two former readers (raymarch, starmap)
+# converted to current_capabilities() in M5-c; this gate keeps them converted and
+# stops a new demo from reintroducing the proxy inside a render path.
+#
+# The exemption is structural, not name-based: a delivery call passing
+# `use_ansi=ctx.use_ansi` straight through to a serializer (print_block, Writer
+# construction) is host territory — it decides how an already-rendered Block
+# reaches the terminal, never what the Block *contains*. Any other read of
+# `.use_ansi` anywhere in demos/ or _demo_cli.py fails the gate, regardless of
+# which function it sits in — a use_ansi-steered branch inside
+# `_handle_interactive` is exactly the leak this must catch.
+_USE_ANSI_DELIVERY_CALLEES = frozenset({"print_block", "Writer"})
+
+
+def _is_use_ansi_delivery_argument(attribute: ast.Attribute, parent: ast.AST | None) -> bool:
+    if not isinstance(parent, ast.keyword) or parent.arg != "use_ansi":
+        return False
+    call = getattr(parent, "_use_ansi_call", None)
+    if not isinstance(call, ast.Call):
+        return False
+    func = call.func
+    name = func.attr if isinstance(func, ast.Attribute) else getattr(func, "id", None)
+    return name in _USE_ANSI_DELIVERY_CALLEES
+
+
+def test_demos_render_paths_do_not_read_use_ansi() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    targets = sorted((repo_root / "demos").rglob("*.py")) + [
+        repo_root / "src" / "painted" / "_demo_cli.py"
+    ]
+    violations: list[str] = []
+    for py_file in targets:
+        tree = ast.parse(py_file.read_text(encoding="utf-8"), filename=str(py_file))
+
+        parent_of: dict[int, ast.AST] = {}
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call):
+                for kw in node.keywords:
+                    kw._use_ansi_call = node  # type: ignore[attr-defined]
+            for child in ast.iter_child_nodes(node):
+                parent_of[id(child)] = node
+
+        for node in ast.walk(tree):
+            if not (isinstance(node, ast.Attribute) and node.attr == "use_ansi"):
+                continue
+            if _is_use_ansi_delivery_argument(node, parent_of.get(id(node))):
+                continue
+            violations.append(
+                f"{py_file.relative_to(repo_root)}:{node.lineno} "
+                "reads .use_ansi outside a delivery call's use_ansi= argument — a "
+                "semantic-renderer path; use painted.capabilities.current_capabilities() "
+                "instead (docs/RENDERER_CONTRACT_DESIGN.md §9.5)"
+            )
+
+    assert not violations, "use_ansi read on a render path:\n" + "\n".join(violations)
