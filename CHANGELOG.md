@@ -26,6 +26,17 @@ breaking changes.
   `diagnostics.py`, which already read `NONE` as colorless; the writer now sides
   with the honest interpretation. Positive depths downsample as before.
 
+### Deprecated
+
+- **`render=` now warns `DeprecationWarning`** (M5-d, `docs/RENDERER_CONTRACT_DESIGN.md`
+  §§3, 12). The 0.11 sequencing promise executes: the gate held silent while
+  `raymarch`/`starmap` were blocked on the capability vocabulary, and opens now
+  that both migrated to `renderer=` (M5-c). The warning fires once, at
+  `CliRunner` construction — never per frame — naming the replacement
+  (`renderer=(data, fidelity, width)`) and the design doc; `renderer=` and the
+  transcription default (neither declared) stay warning-silent. `render=` is
+  removed at 1.0.
+
 ## [0.11.0] — 2026-07-13
 
 The **renderer contract** (0.11, M4) — the framework-seam renderer boundary

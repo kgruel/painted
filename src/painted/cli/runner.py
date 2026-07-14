@@ -10,6 +10,7 @@ import argparse
 import json
 import shutil
 import sys
+import warnings
 from collections.abc import Callable, Sequence
 from dataclasses import asdict, dataclass, field
 from typing import TYPE_CHECKING, Generic, TypeVar, overload
@@ -49,6 +50,22 @@ if TYPE_CHECKING:
 
 T = TypeVar("T")  # State type
 R = TypeVar("R")  # Return type
+
+
+def _legacy_render_stacklevel() -> int:
+    """Stacklevel for the ``render=`` warning, attributed to the caller's own
+    line regardless of entry point: direct ``CliRunner(render=...)``
+    construction, or ``run_cli(...)``'s pass-through construction one frame
+    deeper. Walks past this module's frames and the dataclass-generated
+    ``__init__`` (``co_filename == "<string>"``) rather than hardcoding a
+    depth that only one of the two entry points would get right.
+    """
+    frame = sys._getframe(1)  # the caller of this helper (__post_init__)
+    level = 1
+    while frame is not None and frame.f_code.co_filename in (__file__, "<string>"):
+        frame = frame.f_back
+        level += 1
+    return level
 
 
 @dataclass
@@ -188,6 +205,17 @@ class CliRunner(Generic[T]):
             )
         if self.fetch is None:
             raise DeclarationError("run_cli requires fetch= (how to fetch state)")
+        if self.render is not None:
+            # The 0.11 sequencing promise (§3): render= was silent while raymarch/
+            # starmap were blocked on the capability vocabulary; both migrated in
+            # M5-c, so the gate opens here, once, at the declaration seam — never
+            # per frame.
+            warnings.warn(
+                "render=(ctx, data) is deprecated; use renderer=(data, fidelity, "
+                "width) instead (removed at 1.0, docs/RENDERER_CONTRACT_DESIGN.md §3)",
+                DeprecationWarning,
+                stacklevel=_legacy_render_stacklevel(),
+            )
         if self.render is None and self.renderer is None:
             # Neither declared: render by transcription (§4). The *neither* form
             # is a real call form now — install painted's default renderer so

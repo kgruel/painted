@@ -656,13 +656,14 @@ def test_run_cli_live_stream_refusal_goes_to_stderr(
         ctx.ask("overwrite")  # refuses (non-tty, no flag/default)
         return Block.text(str(data), Style())
 
-    rc = run_cli(
-        ["--plain"],
-        render,
-        lambda: {"n": 0},
-        fetch_stream=fetch_stream,
-        prompts=[Confirm("overwrite", "o")],
-    )
+    with pytest.warns(DeprecationWarning, match="render="):
+        rc = run_cli(
+            ["--plain"],
+            render,
+            lambda: {"n": 0},
+            fetch_stream=fetch_stream,
+            prompts=[Confirm("overwrite", "o")],
+        )
     captured = capsys.readouterr()
     assert rc == 1
     assert captured.out == ""
