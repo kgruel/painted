@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 
+from painted.core.cell import Style
 from painted.core.writer import (
     ColorDepth,
     Writer,
@@ -162,17 +163,31 @@ class TestWriter16:
 
 
 class TestWriterNone:
-    def test_hex_still_downconverts(self):
-        """ColorDepth.NONE (not a TTY) still produces basic codes for non-empty colors."""
-        w = _writer_with_depth(ColorDepth.NONE)
-        codes = w._color_codes("#ff0000", foreground=True)
-        # NONE has value 0, which is < EIGHT_BIT, so hex goes to basic
-        assert len(codes) == 1
+    """ColorDepth.NONE is a colorless destination — apply_style suppresses fg/bg.
 
-    def test_named_still_works(self):
+    The behavior-tightening correction of §9.4 (RENDERER_CONTRACT_DESIGN.md): NONE
+    is not a downsampling target but the NO_COLOR shape — color dropped, attributes
+    kept — so the writer never emits color for it. Previously apply_style emitted
+    basic (16-color) codes at NONE, disagreeing with diagnostics.py's colorless
+    reading; the writer now sides with the honest interpretation.
+    """
+
+    def test_none_suppresses_hex_fg(self):
         w = _writer_with_depth(ColorDepth.NONE)
-        codes = w._color_codes("red", foreground=True)
-        assert codes == ["31"]
+        assert w.apply_style(Style(fg="#ff0000")) == ""
+
+    def test_none_suppresses_named_fg(self):
+        w = _writer_with_depth(ColorDepth.NONE)
+        assert w.apply_style(Style(fg="red")) == ""
+
+    def test_none_suppresses_bg(self):
+        w = _writer_with_depth(ColorDepth.NONE)
+        assert w.apply_style(Style(bg="blue")) == ""
+
+    def test_none_keeps_attributes(self):
+        """Only color is suppressed — bold/underline (the NO_COLOR shape) survive."""
+        w = _writer_with_depth(ColorDepth.NONE)
+        assert w.apply_style(Style(bold=True, underline=True, fg="red")) == "\x1b[1;4m"
 
 
 class TestWriterForcedDepth:

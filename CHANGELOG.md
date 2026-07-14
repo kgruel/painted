@@ -4,6 +4,28 @@ All notable changes to painted are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/); pre-1.0, minor versions may carry
 breaking changes.
 
+## [Unreleased]
+
+### Added
+
+- **`print_block(..., no_color=)` and `InPlaceRenderer(no_color=)`** — additive
+  keyword passthroughs to the serializing `Writer`
+  (`docs/RENDERER_CONTRACT_DESIGN.md` §9.1). A host that has already resolved a
+  delivery's `NO_COLOR` snapshot passes that exact value so the capability
+  bracket and the serializer share one resolution — a mid-run environment change
+  cannot split content choice from serialization. `None` (the default) keeps the
+  prior ambient env resolution, so existing call sites are unchanged.
+
+### Changed
+
+- **Forced `ColorDepth.NONE` now suppresses color** (`core/writer.py`
+  `apply_style`, `docs/RENDERER_CONTRACT_DESIGN.md` §9.4). A behavior-tightening
+  correction: `NONE` denotes a colorless destination, so the writer now drops
+  fg/bg for it — the `NO_COLOR` shape, with bold/underline/etc. kept — where it
+  previously emitted basic (16-color) codes. That old behavior disagreed with
+  `diagnostics.py`, which already read `NONE` as colorless; the writer now sides
+  with the honest interpretation. Positive depths downsample as before.
+
 ## [0.11.0] — 2026-07-13
 
 The **renderer contract** (0.11, M4) — the framework-seam renderer boundary

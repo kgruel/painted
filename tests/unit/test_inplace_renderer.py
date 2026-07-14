@@ -5,6 +5,7 @@ import pytest
 
 from painted import Block, Cell, Style
 from painted.core.errors import LifecycleError
+from painted.core.writer import ColorDepth
 from painted.inplace import InPlaceRenderer
 
 
@@ -21,6 +22,11 @@ class TestInPlaceRenderer:
         block = _block([[Cell("A", red), Cell("B", red), Cell("C", default)]])
 
         with InPlaceRenderer(stream) as renderer:
+            # InPlaceRenderer targets a TTY; a StringIO destination detects
+            # ColorDepth.NONE (now genuine suppression, §9.4), so force a
+            # colour-capable depth to exercise the styled-sequence path it emits
+            # on a real terminal (the _color_depth test idiom).
+            renderer._writer._color_depth = ColorDepth.TRUECOLOR
             renderer.render(block)
             renderer.finalize()
 
