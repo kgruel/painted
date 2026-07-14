@@ -42,11 +42,20 @@ import os
 
 import pytest
 
-from painted import Block, CliContext, Fidelity, RefScheme, Style, Zoom
+from painted import (
+    Block,
+    Capabilities,
+    CliContext,
+    Fidelity,
+    RefScheme,
+    Style,
+    Zoom,
+    current_capabilities,
+)
 from painted.cli.runner import CliRunner
 from painted.cli.stream_surface import StreamSurface
 from painted.cli.types import OutputMode
-from painted.core.writer import Writer
+from painted.core.writer import ColorDepth, Writer
 from painted.refs import current_ref_schemes
 from painted.tui import Buffer, Surface, TestSurface
 from painted.tui.testing import buffer_to_lines
@@ -901,3 +910,150 @@ def test_surface_delivery_falls_back_to_inplace_when_not_tty(capsys):
     code = runner._run_live(static_ctx(Zoom.SUMMARY))
     assert code == 0
     assert "only" in capsys.readouterr().out
+
+
+# --- The one-snapshot rule at the alt-screen seam (§9.1, P1-1) ---
+#
+# _host_scope resolves NO_COLOR ONCE (self._delivery_no_color). The bug: the
+# StreamSurface's own Writer used to re-read NO_COLOR at construction, and
+# _frame_scope then re-bracketed capabilities from that second read — so a
+# mid-run env flip after _host_scope resolution could split the frame's content
+# choice and its serialization from the delivery snapshot. The fix threads the
+# resolved policy into the surface's writer by construction. These tests flip
+# NO_COLOR *after* _host_scope resolves and prove the frame render, the frame
+# serialization, the error output, and the final deposit all retain the original
+# snapshot. Each drives the production _run_live_surface path inside a real
+# _host_scope, popping NO_COLOR before the surface work runs.
+
+
+def _run_surface_under_env_flip(runner: CliRunner, ctx: CliContext, monkeypatch) -> int:
+    """Resolve the host snapshot with NO_COLOR set, then flip it (pop) before
+    _run_live_surface constructs the StreamSurface — the hostile mid-run change
+    the snapshot must survive."""
+    monkeypatch.setenv("NO_COLOR", "1")
+    with runner._host_scope(ctx):
+        assert runner._delivery_no_color is True  # resolved once, snapshot taken
+        monkeypatch.delenv("NO_COLOR", raising=False)  # a fresh read would now yield False
+        return runner._run_live_surface(ctx)
+
+
+def test_surface_writer_is_built_from_the_delivery_snapshot(monkeypatch):
+    """The core fix: the StreamSurface the runner constructs carries the
+    delivery's resolved NO_COLOR (True), not the flipped environment (False)."""
+    seen: dict[str, bool | None] = {}
+
+    async def fake_run(self):
+        seen["no_color"] = self._writer.no_color
+        self._last_frame = ("final", None)
+
+    monkeypatch.setattr(StreamSurface, "run", fake_run)
+    runner = CliRunner(
+        renderer=_legacy_render,
+        fetch=lambda: None,
+        fetch_stream=_stream_of([]),
+        live_delivery="surface",
+    )
+    code = _run_surface_under_env_flip(runner, _tty_ctx(), monkeypatch)
+    assert code == 0
+    assert seen["no_color"] is True  # the resolved snapshot, not the post-flip env
+
+
+def test_surface_frame_render_and_serialization_retain_the_snapshot(monkeypatch):
+    """The frame's content choice (current_capabilities().color) and its
+    serialization both honor the delivery snapshot: color stays suppressed and
+    the link carrier stays emitted, even though NO_COLOR was cleared after
+    resolution. Drives a real _frame_scope → render → _flush on the
+    runner-constructed surface, capturing its serialized output."""
+    seen_caps: list[Capabilities] = []
+    seen_out: list[str] = []
+
+    def app_renderer(data: object, fidelity: Fidelity, width: int | None) -> Block:
+        seen_caps.append(current_capabilities())
+        return Block.text(str(data), Style(fg="red"), ref="star:Sirius")
+
+    async def fake_run(self):
+        # Real frame render + serialization on the runner-constructed surface,
+        # preserving its threaded writer policy but capturing to memory. Force
+        # BASIC depth so the color facet's depth conjunct is fixed (a memory
+        # stream detects NONE, which would mask no_color — the variable under
+        # test) — no_color is the only thing that can vary here.
+        out = io.StringIO()
+        self._writer = Writer(
+            out,
+            no_color=self._writer.no_color,
+            hyperlinks=self._writer.hyperlinks,
+            color_depth=ColorDepth.BASIC,
+        )
+        self._buf = Buffer(30, 1)
+        self._prev = Buffer(30, 1)
+        self._frame = ("d", (RefScheme("star", lambda v: f"https://x/{v}"),))
+        with self._frame_scope():
+            self.render()
+            self._flush()
+        seen_out.append(out.getvalue())
+        self._last_frame = self._frame
+
+    monkeypatch.setattr(StreamSurface, "run", fake_run)
+    runner = CliRunner(
+        renderer=app_renderer,
+        fetch=lambda: None,
+        fetch_stream=_stream_of([]),
+        ref_schemes=[RefScheme("star", lambda v: f"https://x/{v}")],
+        live_delivery="surface",
+    )
+    code = _run_surface_under_env_flip(runner, _tty_ctx(), monkeypatch)
+    assert code == 0
+
+    assert seen_caps and seen_caps[0].color is False  # the facet saw the snapshot
+    assert seen_caps[0].link is True  # use_ansi True + hyperlinks True → link carrier live
+    out = seen_out[0]
+    assert "\x1b[31m" not in out  # no red SGR: serialized under the snapshot
+    assert "31" not in out
+    assert "\x1b]8;;https://x/Sirius" in out  # the link carrier IS emitted
+
+
+def test_surface_deposit_retains_the_snapshot(monkeypatch, capsys):
+    """The scrollback deposit — a runner-side print_block — serializes under the
+    delivery snapshot: a colored final frame emits no color after the env flip."""
+
+    async def fake_run(self):
+        self._last_frame = ("final", None)
+
+    monkeypatch.setattr(StreamSurface, "run", fake_run)
+
+    def app_renderer(data: object, fidelity: Fidelity, width: int | None) -> Block:
+        return Block.text(str(data), Style(fg="red"))
+
+    runner = CliRunner(
+        renderer=app_renderer,
+        fetch=lambda: None,
+        fetch_stream=_stream_of([]),
+        live_delivery="surface",
+    )
+    code = _run_surface_under_env_flip(runner, _tty_ctx(), monkeypatch)
+    out = capsys.readouterr().out
+    assert code == 0
+    assert "final" in out
+    assert "\x1b[31m" not in out  # deposit serialized under the snapshot, not the flip
+
+
+def test_surface_error_output_retains_the_snapshot(monkeypatch, capsys):
+    """The error serializer carries the delivery snapshot too: a fetch error's
+    palette-colored block emits no color after the env flip (§9.1)."""
+
+    async def fake_run(self):
+        self.error = RuntimeError("kaboom")
+        self.error_kind = "fetch"
+
+    monkeypatch.setattr(StreamSurface, "run", fake_run)
+    runner = CliRunner(
+        renderer=_legacy_render,
+        fetch=lambda: None,
+        fetch_stream=_stream_of([]),
+        live_delivery="surface",
+    )
+    code = _run_surface_under_env_flip(runner, _tty_ctx(), monkeypatch)
+    out = capsys.readouterr().out
+    assert code == 1
+    assert "kaboom" in out
+    assert "\x1b[31m" not in out  # the palette error color suppressed by the snapshot

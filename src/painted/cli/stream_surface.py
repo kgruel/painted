@@ -72,8 +72,18 @@ class StreamSurface(Surface, Generic[T]):
         fps_cap: int = 60,
         live_meter: bool = False,
         resolve_ref_schemes: Callable[[T], tuple[RefScheme, ...]] | None = None,
+        no_color: bool | None = None,
     ) -> None:
-        super().__init__(fps_cap=fps_cap, on_start=self._spawn, on_stop=self._stop)
+        # ``no_color`` is the delivery's single resolved NO_COLOR snapshot,
+        # threaded down to the Surface writer so this alt-screen frame's
+        # capability bracket (``_frame_scope`` → ``resolve_surface_capabilities``,
+        # which reads ``self._writer.no_color``) equals the host's outer bracket
+        # by construction, never a second env read (§9.1). ``CliRunner`` passes
+        # ``self._delivery_no_color`` here; a direct construction leaves it
+        # ``None`` and the writer resolves NO_COLOR ambiently, like any Surface.
+        super().__init__(
+            fps_cap=fps_cap, on_start=self._spawn, on_stop=self._stop, no_color=no_color
+        )
         # The render callback is a runner-adapted closure taking the frame's
         # current width (§6), not (ctx, state): the offer rule and the app
         # renderer both live behind it, so the surface only supplies geometry.

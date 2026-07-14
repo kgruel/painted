@@ -53,8 +53,17 @@ class Surface:
         on_emit: Emit | None = None,
         on_start: LifecycleHook | None = None,
         on_stop: LifecycleHook | None = None,
+        no_color: bool | None = None,
     ):
-        self._writer = Writer()
+        # ``no_color`` threads a host's *already-resolved* NO_COLOR snapshot into
+        # this Surface's writer (RENDERER_CONTRACT_DESIGN.md §9.1). A framework
+        # host (``run_cli``) resolves the delivery's color policy once in
+        # ``_host_scope`` and passes it here so ``_frame_scope``'s writer-derived
+        # capability bracket *equals* that snapshot by construction — the frame
+        # can never re-read the environment and split content choice from
+        # serialization. ``None`` (a standalone Surface with no owning host) keeps
+        # the writer resolving NO_COLOR from its own environment, unchanged.
+        self._writer = Writer(no_color=no_color)
         self._fps_cap = fps_cap
         self._buf: Buffer | None = None
         self._prev: Buffer | None = None

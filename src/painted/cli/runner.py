@@ -938,6 +938,14 @@ class CliRunner(Generic[T]):
             fetch_stream=lambda: self._stream_iter(ctx),
             live_meter=self.live_meter,
             resolve_ref_schemes=resolve_fn,
+            # The one-snapshot rule (§9.1): the surface's writer is CONSTRUCTED
+            # from the delivery's already-resolved NO_COLOR policy, not a fresh
+            # env read. _host_scope resolved it once (self._delivery_no_color);
+            # threading it here makes _frame_scope's writer-derived capability
+            # bracket equal the outer host bracket by construction — a mid-run
+            # NO_COLOR flip after resolution can no longer split the frame's
+            # content choice or its serialization from the delivery snapshot.
+            no_color=self._delivery_no_color,
         )
         try:
             asyncio.run(surface.run())
