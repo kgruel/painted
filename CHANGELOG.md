@@ -4,11 +4,11 @@ All notable changes to painted are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/); pre-1.0, minor versions may carry
 breaking changes.
 
-## [Unreleased]
+## [0.11.0] — 2026-07-13
 
 The **renderer contract** (0.11, M4) — the framework-seam renderer boundary
-`(data, fidelity, width) → Block`, ratified in `docs/RENDERER_CONTRACT_DESIGN.md`.
-Landing in slices; this section accumulates until the cut.
+`(data, fidelity, width) → Block`, ratified in `docs/RENDERER_CONTRACT_DESIGN.md`
+and built as five slices (S1–S5), reviewed whole-branch before the cut.
 
 ### Added
 

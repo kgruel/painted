@@ -1,6 +1,6 @@
 # The renderer contract — one boundary, every delivery
 
-**Status: RATIFIED 2026-07-12 (Kyle)** — the 0.11 milestone (M4), the first
+**Status: IMPLEMENTED 2026-07-13 (shipped 0.11.0; ratified 2026-07-12, Kyle)** — the 0.11 milestone (M4), the first
 design produced through the full trace → design pipeline
 (`practice/work-pipeline-kinds`). Five sub-decisions were ratified in
 deliberation 2026-07-11/12 (store: `design/rendering/renderer-contract`,
