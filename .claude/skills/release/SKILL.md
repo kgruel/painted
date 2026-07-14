@@ -20,6 +20,14 @@ not by the tag alone.
    on the branch first.
 3. **Design doc status flipped** (PLANNED → IMPLEMENTED) and the store amended,
    if the release closes a design arc.
+4. **Removing or renaming a public name?** Grep the consumers first:
+   `~/Code/siftd` and `~/Code/loops`. Both pin painted **published** (not
+   editable), so a removal breaks them at their next `painted>=` floor-bump, not
+   instantly. If a live consumer imports the name, **harden in place** rather than
+   remove (the 0.4.0 `callout` lesson — "not adopted yet" was wrong once already);
+   if removal stands, sequence it: cut the painted release without the name, then
+   the consumer bumps its floor in the same commit as its import switch (the
+   0.5.0 completion-arc pattern). A rename is a remove + add — same caution.
 
 ## Steps
 
@@ -57,8 +65,9 @@ deliveries", "painted 0.8.0 — paint(), the single entry").
 ## After shipping
 
 - Emit the ship to the store: `sl emit project observation topic=session/<arc>-ship
-  message="X.Y.Z SHIPPED <date>: ..."` with refs to the arc's decision/thread nodes.
-- Update session memory (the arc's memory file + MEMORY.md index line).
+  message="X.Y.Z SHIPPED <date>: ..."` with refs to the arc's decision/thread nodes,
+  and update the arc's `roadmap`/`thread` nodes to their new status. The store is
+  the operational record — session memory carries nothing painted needs.
 - Consumers (loops, siftd) pin published versions and floor-bump on their own
   schedule — a release never requires same-day consumer coordination, but check
   the arc's design doc for any pre-declared consumer hazards before removing API.
@@ -71,3 +80,7 @@ deliveries", "painted 0.8.0 — paint(), the single entry").
   no token to rotate locally; failures are on the PyPI/GitHub side.
 - If the gate fails post-merge on main: fix forward on main immediately (main
   must stay green); do not tag until it passes.
+- CI landmines (both hit once): `actions/setup-uv@v8` does not exist (no such
+  major — check the action's actual latest); and the `release: published`
+  workflow checks out the **tag's commit**, not HEAD — anything committed after
+  tagging is not in the published artifact.

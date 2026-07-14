@@ -77,17 +77,12 @@ These run alongside the milestones and feed them evidence:
   shape. Start alongside M5 so the viewport adapter and host-event seam are
   designed against a real event loop.
 
-## Milestone 0: Ratify the render model — *mostly complete*
+## Milestone 0: Ratify the render model — *complete (2026-07-11)*
 
-`RENDER_MODEL.md` + `RENDER_MODEL_AUDIT.md` are ratified and committed on the
-`render-model` branch (41d7849, gate 10/10). Remaining residue:
-
-- Merge the branch to main.
-- Align `docs/ARCHITECTURE.md` with the content-Block/delivery-frame split and
-  the model's glossary (one term per decision boundary).
-- Merge the positioning flip (`semantic-renderer-positioning`, rebased onto
-  the ratified vocabulary) — README/site copy claims re-verified against the
-  model's glossary.
+`RENDER_MODEL.md` + `RENDER_MODEL_AUDIT.md` ratified and merged to main
+(`48d3a50`); `docs/ARCHITECTURE.md` declares subordination to the model (the
+full prose revisit rides 0.16); the positioning flip merged and pushed
+(`1253e88`), GitHub description flipped.
 
 No release; docs and positioning only.
 
