@@ -162,6 +162,26 @@ Key patterns:
 
 ---
 
+## Working practices
+
+**Session start**: run `sl read project` — the loops store (`.loops/`, vertex `project`) is the operational memory: decisions, open threads, roadmap status, frictions. Docs are authoritative for the library; the store for what's in flight and why (store: `practice/docs-authoritative-store-operational`). Emit as you work — the loops skill has the practice.
+
+**Git**: never commit directly to `main` — branch first, always. On a feature branch, commit as you go (one logical unit per commit) without asking; pushing needs an explicit ask every time.
+
+**Procedures** with a trigger moment live in `.claude/skills/`: `design-arc` (mint/amend a design doc, deliberate, ratify, flip at ship), `build-slice` (dispatch implementation through subtask with the ratified model tiers and standing sol review), `release` (merge → tag → publish → verify).
+
+**Where knowledge lives** — place new knowledge by its load time; duplication without a drift gate rots:
+
+| Load time | Home | Belongs there |
+|---|---|---|
+| Every session | this file | invariants, navigation, rituals — high bar, it's a per-session tax |
+| Entering an area | a folder guide (Level 1 index) | local orientation and contracts |
+| A trigger moment | `.claude/skills/` | multi-step procedures |
+| On demand | the loops store | decisions, deliberation, threads, operational status |
+| On ratification | `docs/*_DESIGN.md` | contracts + rationale (amend before mint) |
+
+Agent-private memory holds nothing painted needs: if losing it would hurt the project, the content is misplaced — migrate it up this table.
+
 ## Key invariants
 
 <!-- docgen:begin frag:frozen-state#summary -->
