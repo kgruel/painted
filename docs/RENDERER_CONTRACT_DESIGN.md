@@ -728,9 +728,11 @@ Mode coverage, precisely — not "every mode": `run_cli` brackets the
 render offer on the paths that render — STATIC and LIVE — so a
 `renderer=` consumer never reads `CliContext` for capability facts
 (the exit criterion "no renderer reads `use_ansi`"). `--json` renders
-nothing and installs nothing. An INTERACTIVE custom handler owns its
-lifecycle and therefore owns its capability bracket, exactly as it
-owns refs (§7).
+nothing and installs nothing. **Any custom handler** — the `handlers`
+mapping accepts every `OutputMode`, and dispatch consults it before
+the framework paths — owns its capability bracket, because it replaces
+the framework-owned render path; INTERACTIVE is merely today's in-repo
+use. This mirrors refs ownership (§7).
 
 Two honesty notes, resolved in review round 1 (sol,
 `frequently-notable-muskrat`): the glyph facet's narrowing consumers
@@ -763,11 +765,19 @@ The vocabulary must not swallow the two existing capability
   writer. `Capabilities.color` is a content-choice gate; `ColorDepth`
   is a faithful-emission policy for content already chosen — it is
   **meaningful only after `color=True`**. The enum's zero degree is
-  where the two could blur, so the boundary is stated: a host that
-  resolves `ColorDepth.NONE` for its writer is describing a colorless
-  destination and must bracket `color=False`; the facet decides *what
-  the renderer builds*, the depth decides *what the writer emits*, and
-  `NONE` is the one depth that must never meet `color=True`.
+  where the two could blur, so the boundary is stated: `ColorDepth.NONE`
+  means a colorless destination — a host that resolves it must bracket
+  `color=False`; the facet decides *what the renderer builds*, the depth
+  decides *what the writer emits*, and `NONE` is the one depth that must
+  never meet `color=True`. **This corrects shipped behavior**: today's
+  writer emits *basic* codes for forced-`NONE` callers
+  (`core/writer.py` `apply_style`, pinned by
+  `test_color_downconversion`), while `diagnostics.py` already reads
+  `NONE` as "render colorless" — the two in-repo interpretations
+  disagree, and this contract sides with the honest one. M5-b changes
+  the writer so `NONE` genuinely suppresses fg/bg (bold/underline
+  unaffected, the `NO_COLOR` shape) and flips the pinned test — a
+  behavior-tightening change, called out in the CHANGELOG.
 
 And the vocabulary itself is fenced: three facets, no more, until a
 consumer demands a fourth — growth past demand is the exact failure the
@@ -946,7 +956,9 @@ channel (`capabilities.py`: `Capabilities`, `use_capabilities`,
 bracket unit tests including the `glyph=False` carrier-change
 renderer). M5-b — the host brackets (`run_cli` STATIC/LIVE dispatch
 with the §9.3 per-facet resolution, `paint()`, `Surface`; the
-`glyph=False` → ASCII-safe-`IconSet` pairing at each install site).
+`glyph=False` → ASCII-safe-`IconSet` pairing at each install site;
+the `ColorDepth.NONE` writer correction — genuine fg/bg suppression,
+pinned-test flip, CHANGELOG entry — §9.4).
 M5-c — consumer conversions (`raymarch` → `.color`, `starmap` →
 `.link` keeping `resolve_ref`; both migrate `render=` → `renderer=`).
 M5-d — the `render=` `DeprecationWarning` gate opens (§3's promise,
