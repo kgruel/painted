@@ -334,11 +334,7 @@ class AppRunner:
         # subordinated depth (terse under default -h when command args lead,
         # expanded under -vv). Suppressing it entirely made TAB offer flags
         # -h never showed (loops review: intercepted-help-omits-framework-flags).
-        body.extend(
-            framework_sections(
-                framework_depth, tags=cmd.tags, prompts=cmd.prompts
-            )
-        )
+        body.extend(framework_sections(framework_depth, tags=cmd.tags, prompts=cmd.prompts))
 
         prog = f"{self.prog} {cmd.name}" if self.prog else cmd.name
         return Doc(title=prog, body=tuple(body))
