@@ -23,14 +23,14 @@ source "$(dirname "$0")/lib/dev.sh"
 DOCS_ROOTS=(
     README.md CLAUDE.md
     src
-    demos/CLAUDE.md
+    demos/CLAUDE.md tests/CLAUDE.md
     docs/PRIMITIVES.md docs/DATA_PATTERNS.md docs/ARCHITECTURE.md
     docs/ZOOM_PATTERNS.md docs/MODE_RESOLUTION.md docs/DEMO_PATTERNS.md
 )
 # Dedicated snippet store, kept separate from the orphaned docs/.extract/snippets.v1.json.
 DOCS_STORE="docs/.extract/docs-system.v1.json"
 # Consumer guides: README.md is the real body; CLAUDE.md is a symlink to it.
-CONSUMER_GUIDES=(src/painted src/painted/views src/painted/tui)
+CONSUMER_GUIDES=(src/painted src/painted/views src/painted/tui src/painted/cli)
 
 _docgen() {
     run_uv python -m tools.docgen "$@" --roots "${DOCS_ROOTS[@]}" --snippets-out "$DOCS_STORE"
