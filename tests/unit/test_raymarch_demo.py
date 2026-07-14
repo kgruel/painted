@@ -10,14 +10,14 @@ pipe honesty) — no pose cosmetics are pinned.
 from __future__ import annotations
 
 import asyncio
-import dataclasses
 import importlib.util
 import math
 import sys
 from pathlib import Path
 
-from painted import Zoom
-from tests.helpers import block_to_text, static_ctx
+from painted import Fidelity, Zoom
+from painted.capabilities import Capabilities, use_capabilities
+from tests.helpers import block_to_text
 
 _DEMO = Path(__file__).resolve().parent.parent.parent / "demos" / "showcase" / "raymarch.py"
 
@@ -126,17 +126,17 @@ def test_ramp_grid_glyphs_come_only_from_the_ramp() -> None:
 
 
 def test_color_terminals_get_half_blocks_at_both_qualities() -> None:
-    ctx = dataclasses.replace(static_ctx(Zoom.SUMMARY), use_ansi=True)
-    for quality in (0, 1):
-        text = block_to_text(rm._grid(ctx, rm.Shot(frame=110, quality=quality), 80))
-        assert set(text) <= {"▀", " ", "\n"}, f"quality {quality}"
+    with use_capabilities(Capabilities(color=True)):
+        for quality in (0, 1):
+            text = block_to_text(rm._grid(rm.Shot(frame=110, quality=quality), 80))
+            assert set(text) <= {"▀", " ", "\n"}, f"quality {quality}"
 
 
 def test_pipes_get_the_ramp_at_both_qualities() -> None:
-    ctx = static_ctx(Zoom.SUMMARY)  # use_ansi=False
-    for quality in (0, 1):
-        text = block_to_text(rm._grid(ctx, rm.Shot(frame=110, quality=quality), 80))
-        assert set(text) <= set(rm._RAMP) | {" ", "\n"}, f"quality {quality}"
+    with use_capabilities(Capabilities(color=False)):
+        for quality in (0, 1):
+            text = block_to_text(rm._grid(rm.Shot(frame=110, quality=quality), 80))
+            assert set(text) <= set(rm._RAMP) | {" ", "\n"}, f"quality {quality}"
 
 
 def test_the_settle_buys_a_4x_supersample() -> None:
@@ -161,15 +161,15 @@ def test_static_pose_is_always_the_portrait() -> None:
 
 def test_scene_is_a_pure_function_of_the_shot() -> None:
     for zoom in Zoom:
-        ctx = static_ctx(zoom)
+        fid = Fidelity(depth=int(zoom))
         shot = rm.Shot(frame=123)
-        assert block_to_text(rm._render(ctx, shot)) == block_to_text(rm._render(ctx, shot))
+        assert block_to_text(rm._render(shot, fid, 80)) == block_to_text(rm._render(shot, fid, 80))
 
 
 def test_orbit_actually_moves() -> None:
-    ctx = static_ctx(Zoom.SUMMARY)
-    a = block_to_text(rm._render(ctx, rm.Shot(frame=0)))
-    b = block_to_text(rm._render(ctx, rm.Shot(frame=30)))
+    fid = Fidelity(depth=int(Zoom.SUMMARY))
+    a = block_to_text(rm._render(rm.Shot(frame=0), fid, 80))
+    b = block_to_text(rm._render(rm.Shot(frame=30), fid, 80))
     assert a != b
 
 
@@ -189,8 +189,10 @@ def test_stats_facet_changes_output() -> None:
     """The honesty rule's second half: the declared capability changes output.
     --stats at SUMMARY appends march internals the plain window lacks."""
     shot = rm.Shot(frame=110)
-    base = block_to_text(rm._render(static_ctx(Zoom.SUMMARY), shot))
-    faceted = block_to_text(rm._render(static_ctx(Zoom.SUMMARY, visible=("stats",)), shot))
+    base = block_to_text(rm._render(shot, Fidelity(depth=int(Zoom.SUMMARY)), 80))
+    faceted = block_to_text(
+        rm._render(shot, Fidelity(depth=int(Zoom.SUMMARY), visible=frozenset({"stats"})), 80)
+    )
     assert "steps/ray" not in base
     assert "steps/ray" in faceted
 
@@ -198,7 +200,9 @@ def test_stats_facet_changes_output() -> None:
 def test_stats_facet_reaches_minimal() -> None:
     """The noun test in action: the facet is nameable at the floor depth."""
     shot = rm.Shot(frame=110)
-    faceted = block_to_text(rm._render(static_ctx(Zoom.MINIMAL, visible=("stats",)), shot))
+    faceted = block_to_text(
+        rm._render(shot, Fidelity(depth=int(Zoom.MINIMAL), visible=frozenset({"stats"})), 80)
+    )
     assert "steps/ray" in faceted
 
 
@@ -212,6 +216,10 @@ def test_stats_implied_at_full_restores_the_old_bundle() -> None:
 
     shot = rm.Shot(frame=110)
     full = block_to_text(
-        rm._render(static_ctx(Zoom.FULL, visible=tuple(implied_visible(rm._TAGS, 3))), shot)
+        rm._render(
+            shot,
+            Fidelity(depth=int(Zoom.FULL), visible=implied_visible(rm._TAGS, 3)),
+            80,
+        )
     )
     assert "steps/ray" in full

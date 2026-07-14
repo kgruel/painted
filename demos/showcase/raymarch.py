@@ -45,11 +45,10 @@ from functools import lru_cache
 
 from painted import (
     Block,
-    CliContext,
+    Fidelity,
     Line,
     Span,
     Style,
-    Zoom,
     border,
     join_horizontal,
     join_vertical,
@@ -57,6 +56,7 @@ from painted import (
     truncate,
     ROUNDED,
 )
+from painted.capabilities import current_capabilities
 from painted.cli import HelpArg, Tag
 from painted.palette import current_palette
 
@@ -467,10 +467,10 @@ def _grid_portrait(shot: Shot, width: int) -> Block:
     return join_vertical(*rows)
 
 
-def _grid(ctx: CliContext, shot: Shot, width: int) -> Block:
+def _grid(shot: Shot, width: int) -> Block:
     """Capability picks the carrier: color terminals get the lit portrait
     (anti-aliased when the shot settles), pipes get the luminance ramp."""
-    if ctx.use_ansi:
+    if current_capabilities().color:
         return _grid_portrait(shot, width)
     return _grid_live(shot, width)
 
@@ -485,10 +485,10 @@ def _census(shot: Shot) -> Block:
     )
 
 
-def _legend(ctx: CliContext) -> Block:
+def _legend() -> Block:
     spans = [Span("shade ", Style(dim=True))]
     spans += [Span(ch, _tier(i)) for i, ch in enumerate(_RAMP)]
-    if ctx.use_ansi:
+    if current_capabilities().color:
         spans += [Span("   ", Style())]
         for name, mat in (("torus", _MAT_TORUS), ("sphere", _MAT_SPHERE), ("floor", _MAT_FLOOR_A)):
             spans += [
@@ -498,14 +498,17 @@ def _legend(ctx: CliContext) -> Block:
     return Line(spans=tuple(spans)).to_block(58)
 
 
-def _window(ctx: CliContext, shot: Shot, width: int, *extra: Block) -> Block:
+def _window(shot: Shot, width: int | None, *extra: Block) -> Block:
     """The dressed viewing frame: scene, census, and any extras.
 
     Inner width pins to the trace grid — every row is sized against it, so
-    the border never moves no matter what the data rows do.
+    the border never moves no matter what the data rows do. The grid is a
+    raster of the field's own domain size (_W) — when no width is offered
+    (a pipe's natural sizing), that domain size is the natural inner width,
+    not a resurrected terminal-fallback guess.
     """
-    w = min(width - 4, _W)
-    rows = [_grid(ctx, shot, w), truncate(_census(shot), w)]
+    w = _W if width is None else min(width - 4, _W)
+    rows = [_grid(shot, w), truncate(_census(shot), w)]
     rows += [truncate(b, w) for b in extra]
     return border(join_vertical(*rows), title="raymarch", chars=ROUNDED)
 
@@ -513,17 +516,18 @@ def _window(ctx: CliContext, shot: Shot, width: int, *extra: Block) -> Block:
 # --- Zoom renderers ---
 
 
-def _render_minimal(shot: Shot, width: int) -> Block:
-    return truncate(_census(shot), width)
+def _render_minimal(shot: Shot, width: int | None) -> Block:
+    block = _census(shot)
+    return truncate(block, width) if width is not None else block
 
 
-def _stats(ctx: CliContext, shot: Shot) -> Block:
+def _stats(shot: Shot) -> Block:
     """March internals — the --stats facet, implied at -vv.
 
     Stats describe the grid actually displayed: portrait rays on a color
     terminal (4x when the settle supersamples), ramp rays on a pipe.
     """
-    if ctx.use_ansi:
+    if current_capabilities().color:
         _rows, hits, steps, rays = _trace_portrait(shot)
     else:
         _grid_vals, hits, steps = _trace(shot)
@@ -546,19 +550,22 @@ def _count_nodes(node: Node) -> int:
 _TAGS = [Tag("stats", "Show march internals (rays, hit rate, steps)", implied_at=3)]
 
 
-def _render(ctx: CliContext, shot: Shot) -> Block:
+def _render(shot: Shot, fidelity: Fidelity, width: int | None) -> Block:
     # Depth gates anonymous detail; the stats facet rides fidelity.visible —
     # named by --stats at any depth, implied at -vv.
+    depth = fidelity.depth
     extra: list[Block] = []
-    if ctx.zoom >= Zoom.DETAILED:
-        extra.append(_legend(ctx))
-    if ctx.fidelity.shows("stats"):
-        extra.append(_stats(ctx, shot))
-    if ctx.zoom >= Zoom.SUMMARY:
-        return _window(ctx, shot, ctx.width, *extra)
-    census = _render_minimal(shot, ctx.width)
+    if depth >= 2:
+        extra.append(_legend())
+    if fidelity.shows("stats"):
+        extra.append(_stats(shot))
+    if depth >= 1:
+        return _window(shot, width, *extra)
+    census = _render_minimal(shot, width)
     if extra:  # at minimal only stats can be on; the legend is depth-gated
-        return join_vertical(census, *(truncate(b, ctx.width) for b in extra))
+        if width is None:
+            return join_vertical(census, *extra)
+        return join_vertical(census, *(truncate(b, width) for b in extra))
     return census
 
 
@@ -572,7 +579,7 @@ def main() -> int:
 
     return run_cli(
         rest,
-        render=_render,
+        renderer=_render,
         fetch=lambda: _fetch(ns.frame),
         fetch_stream=lambda: _fetch_stream(),
         live_delivery="surface",
