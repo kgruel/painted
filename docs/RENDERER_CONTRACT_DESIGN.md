@@ -18,7 +18,7 @@ Subordinate to `docs/RENDER_MODEL.md` (RATIFIED 2026-07-10), the design of
 record for the render model: this document realizes the model's §2
 renderer-input set at the framework seam and adds nothing to it. The
 capability-vocabulary design (0.12, M5) grows inside this document as
-anticipated — §9, **PLANNED, not yet ratified**; the IMPLEMENTED status
+anticipated — §9, **RATIFIED 2026-07-14, Kyle**; the IMPLEMENTED status
 above covers the 0.11 contract only. Companion to
 `docs/FIDELITY_DESIGN.md` (what compiles into the second parameter) and
 `docs/REFS_DESIGN.md` (whose declaration surface §7 extends).
@@ -586,7 +586,7 @@ criteria 1–2 from evidenced to satisfied.
 
 ## 9. The capability vocabulary — 0.12 (M5)
 
-**Section status: PLANNED (drafted 2026-07-13, arc
+**Section status: RATIFIED 2026-07-14, Kyle (drafted 2026-07-13, arc
 `thread/capability-vocabulary`)** — this section replaces the 0.11 fence
 text that reserved the slot (preserved in git at `feba77c`); the fence's
 commitments are honored below, not re-stated. Three rulings anchor it
