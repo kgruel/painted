@@ -71,20 +71,32 @@ Two facts the design keeps separate:
 
 - **Acceptance** — declared at construction, on the renderer binding: this
   renderer honors a height offer (it has the height-aware callable shape,
-  §4). Nothing declared means the three-argument contract and `None`
-  everywhere: today's behavior, unchanged.
-- **The offer** — decided by the host per delivery invocation:
+  §4). Nothing declared means the three-argument contract and the omitted
+  arm everywhere: today's behavior, unchanged.
+- **The offer** — decided by the host per delivery invocation. Note the
+  matrix has three rows, not two — an undeclared renderer has no `height`
+  keyword to pass anything to:
 
   ```
-  offer H    iff  acceptance declared  AND  this delivery invocation has a
-                  hard vertical frame (alt-screen, interactive, inline-live
-                  region on a TTY — or a STATIC TTY where the app declared
-                  screenful semantics)
-  offer None otherwise (off-TTY always; STATIC TTY by default — scrollback
-                  is a working viewport, and "known ≠ offered" is the
-                  ratified proviso: run_cli knowing the terminal is 60 rows
-                  is not permission to offer them)
+  undeclared binding            → invoke (data, fidelity, width); the
+                                  omitted arm semantically, no keyword
+  declared binding, gated off   → invoke with height=None (off-TTY always;
+                                  STATIC TTY — scrollback is a working
+                                  viewport, and "known ≠ offered" is the
+                                  ratified proviso: run_cli knowing the
+                                  terminal is 60 rows is not permission to
+                                  offer them)
+  declared binding, gated on    → invoke with height=H (a hard vertical
+                                  frame: alt-screen, interactive, bounded
+                                  inline-live region on a TTY)
   ```
+
+  Whether a *declared* renderer on a STATIC TTY can request a synthesized
+  hard frame ("screenful semantics") is **unresolved** — §9 Q7. Until
+  ruled, STATIC TTY sits in the gated-off row unconditionally. If it ships,
+  it is a *separate* declaration from acceptance: "this callable can honor
+  H" and "this delivery should manufacture a hard frame despite usable
+  scrollback" are different propositions.
 
 The honesty property is **conditional**, not unconditional: it is not
 "declared acceptance must visibly change output" but *when passed integer
@@ -153,17 +165,26 @@ and is not this rejection.)
 
 ## 5. Exactness and degenerate allocations
 
-Rules the final-renderer boundary needs pinned before any build (round-0
-P1; each is a deliberation item until ratified):
+Two registers, kept separate so this subordinate document does not appear
+to reopen ratified exactness (round-1 correction):
+
+**Inherited — already normative in RENDER_MODEL §2, restated only:**
 
 - `H` is the **content allocation after the host reserves its own chrome**
-  (terminal 40 = 1 host indicator row + 39 offered), consistent with
-  RENDER_MODEL §2's exactness proviso. The host never crops the result
-  further.
-- Integer `H` requires `block.height == H`. A mismatch is a **contract
-  violation and fails loudly** (`ContractError` site); the host must not
-  crop or pad the result into apparent compliance — silent repair would
-  reintroduce exactly the masked loss law 6 forbids.
+  (terminal 40 = 1 host indicator row + 39 offered). The host never crops
+  the result further.
+- A final renderer accepting integer `H` returns exactly `H` rows.
+- Components keep their documented height semantics (exact / maximum /
+  viewport — RENDER_MODEL §7 Q4): uniform exactness is wrong
+  mid-composition; exactness is scoped to the **final** renderer.
+
+**Proposed — new rulings this arc must ratify:**
+
+- `block.height != H` is a **contract violation and fails loudly**
+  (`ContractError` site); the host must not crop or pad the result into
+  apparent compliance. Silent padding would mask the final-renderer
+  exactness violation (law 5); silent cropping could additionally discard
+  content unmarked (law 6).
 - Short **fitted** content is padded *by the renderer* (exactness belongs
   to it); short **natural** content is padded *by the host adapter* when it
   constructs an exact delivery frame. Same operation, different owner,
@@ -173,9 +194,6 @@ P1; each is a deliberation item until ratified):
   rejects the layout before invoking the renderer. At `H=1` the renderer
   decides whether the sole row is content or evidence; law-6 evidence is
   required only where the allocation physically permits it.
-- Components keep their documented height semantics (exact / maximum /
-  viewport — RENDER_MODEL §7 Q4): uniform exactness is wrong
-  mid-composition; exactness is scoped to the **final** renderer.
 - **Amendment to LIVE_DELIVERY_DESIGN §10**: `finalize()`'s "deposits full
   height — no reason to lose content" holds only for natural-height input.
   Under the offered arm, finalize deposits the `H`-row Block the renderer
@@ -194,12 +212,16 @@ with derived `max_offset`, `can_scroll`, `is_at_top`, `is_at_bottom`, and
 pure transition ops: `scroll(delta)`, `scroll_to`, `page_up`/`page_down`,
 `home`/`end`, `scroll_into_view(index)`, `with_content`/`with_visible`
 (both clamp). It holds slice parameters and never slices; rendering is
-`vslice(content, vp.offset, vp.visible)`. All offsets clamp to
-`[0, max_offset]`; content smaller than the viewport makes scrolling a
-no-op. It has no TUI dependencies. The rationale for extracting it from
-`ListState`/`TableState` (which still hand-roll the identical
-scroll-into-view logic) stands: scrolling is a separable concern; the
-components migrate to it under this arc rather than "a future refactor."
+`vslice(content, vp.offset, vp.visible)`. Clamping is a property of the
+**transition ops**, which normalize their result to `[0, max_offset]` —
+not a construction invariant: there is no validation on direct
+construction, and callers building a `Viewport` by hand own its validity.
+Content smaller than the viewport makes scrolling a no-op. It has no TUI
+dependencies. The component migration the absorbed doc deferred as "a
+future refactor" has since **shipped**: `ListState`, `TableState`, and
+`DataExplorerState` all carry a `Viewport` and delegate scroll-into-view
+to it. What components still lack is law-6 evidence for their own windows
+(§9 Q6).
 
 **Wiring (this arc).** The adapter is the host half of the omitted arm:
 
@@ -208,10 +230,14 @@ components migrate to it under this arc rather than "a future refactor."
   key — streaming data arriving concurrently with a resize must not install
   an old Block under a new generation.
 - **Scroll evidence**: the adapter renders the affordance the render-model
-  audit found missing everywhere — height loss is currently silent across
-  the package. The evidence row/rail (`… ▼ 763 more`, ambient icon set,
-  ASCII degradation) is host-authored because the host decided the window;
-  its exact form is a deliberation item.
+  audit found missing — *movable* host viewporting and component-owned
+  windows have no evidence today; `InPlaceRenderer`'s fixed head-clip
+  (LIVE_DELIVERY §10) is the one shipped exception. The evidence row
+  (`… ▼ 763 more rows`, ambient icon set, ASCII degradation) is
+  host-authored because the host decided the window, and it counts **rows**,
+  not entries — the adapter knows Block height and offset, never how rows
+  map to semantic records; an entry count is the application's to supply.
+  Exact form is a deliberation item (§9 Q2).
 - **Intent, then geometry**: viewing intent — at-bottom/following,
   cursor-following, top-anchored — is captured *before* mutating `visible`
   or `content`, then reapplied. Testing `is_at_bottom` after the mutation is
@@ -247,7 +273,7 @@ components migrate to it under this arc rather than "a future refactor."
 | any height change | recompose chrome/evidence/padding | host-authored rows recompose every frame even when the renderer is not called |
 
 **Chrome and the hybrid shape.** Host viewporting treats a monolithic
-content Block uniformly (RENDER_MODEL §5) — sticky regions (fixed header,
+content Block uniformly (RENDER_MODEL §4, the interaction boundary) — sticky regions (fixed header,
 scrolling body: the *default* TUI shape per the consumer evidence) are the
 offered arm's job: the final renderer takes `H`, reserves its own
 header/footer rows internally, gives the remainder to its body viewport,
@@ -262,7 +288,7 @@ The omitted arm gives the host scroll state the application may care about
 ("viewport at end" — a follow-mode toggle). The outward channel exists:
 `Surface.emit` carries observations up (instrumentation, Facts). The inward
 seam — host viewing-state reaching the application as *input* — is the
-provisional edge RENDER_MODEL §5/§7 Q1 left unresolved, and repurposing an
+provisional edge RENDER_MODEL §4/§7 Q1 left unresolved, and repurposing an
 observation channel for control would change `emit`'s semantics; that
 remains refused. This arc designs the seam against the **streaming
 consumers that already voted with their feet**: `strange-loops follow` and
@@ -283,7 +309,7 @@ Gathered 2026-07-15 (design-arc rule 2: evidence before doc):
 | `StoreExplorerApp`, `AutoresearchApp` (loops) | `Surface` explorers over the store | omitted arm wanted at INTERACTIVE — kills delivery-defaulted arms |
 | tasks dashboard (strange-loops) | `run_cli` display commands (legacy `render=`) | offered arm wanted at INTERACTIVE — same delivery, opposite arm |
 | `strange-loops follow`, `ticked runner` | bypass `run_cli` entirely (direct poll + print / foreground daemon) | the streaming host gap; acceptance test for §7 |
-| siftd `output/live.py` | wraps `InPlaceRenderer` directly, below the framework, own gate/throttle/lifecycle | declaration-surface decisions never reach mechanism consumers; mechanism-level contracts (clip-with-evidence, §5 exactness) are their only protection |
+| siftd `output/live.py` | wraps `InPlaceRenderer` directly, below the framework, own gate/throttle/lifecycle | declaration-surface decisions never reach mechanism consumers; the *mechanism* contract (clip-with-evidence) is their delivery-level protection — §5 exactness is a renderer-boundary contract enforced by whichever caller made the offer, which a direct consumer may adopt itself but `InPlaceRenderer` (receiving only a completed Block) cannot enforce for it |
 
 ## 9. Open questions — the deliberation queue
 
@@ -297,10 +323,16 @@ Gathered 2026-07-15 (design-arc rule 2: evidence before doc):
    content-vs-evidence rule (§5).
 5. **The inward seam's shape** (§7) — after the adapter's needs are
    concrete.
-6. **`ListState`/`TableState` migration** onto `Viewport`: in this arc or a
-   follow-up slice (§6).
-7. **STATIC-TTY declared-screenful** (§3's gate table): ship in 0.13 or
-   fence for later — it is the one gate row with no consumer evidence yet.
+6. **Component-window evidence**: `ListState`/`TableState`/
+   `DataExplorerState` already scroll through `Viewport` (shipped), but
+   their windows carry no law-6 evidence — does that remediation ride 0.13
+   or 0.14 honesty-remediation? (§6; reworded round 1 — the original
+   migration question was already answered in the codebase.)
+7. **STATIC-TTY declared-screenful**: ship in 0.13 or fence for later — no
+   consumer evidence yet, and it needs a declaration *separate from*
+   acceptance (§3). Round-1 recommendation: fence — declared renderers on
+   STATIC TTY receive `height=None` in 0.13; a future screenful
+   declaration can synthesize the hard frame when demand shows up.
 
 ## Appendix — round record
 
@@ -316,3 +348,23 @@ Gathered 2026-07-15 (design-arc rule 2: evidence before doc):
   (runtime *selection* among pre-declared bindings — kept open as the
   future path, §3). Store: `thread/host-rung`,
   `design/host-rung-round-0`.
+- **Round 1 (2026-07-15, doc review)**: same sol session, three passes over
+  the minted draft. Verdict: architecture sound, not ratification-ready.
+  P1s applied: the undeclared-binding row added to §3's offer matrix (an
+  undeclared renderer has no `height` keyword — the two-row matrix
+  contradicted §4's distinct callable contracts); STATIC-TTY screenful
+  removed from the operative gate and marked unresolved pending Q7 (§3 had
+  ruled what §9 held open); the `Viewport` component migration corrected
+  from planned to shipped (`ListState`/`TableState`/`DataExplorerState`
+  verified in-code) and Q6 reworded to the surviving question
+  (component-window evidence). Also applied: §5 split into
+  inherited-normative vs proposed rulings; padding/cropping law attribution
+  precision; transition-op clamping (not construction invariant); scroll
+  evidence narrowed (InPlace head-clip is the shipped exception) and pinned
+  to row counts; RENDER_MODEL citations §5→§4; siftd row's
+  mechanism-vs-renderer-boundary protection split. Ruling recommendations
+  on the §9 queue (Q1 `height_renderer=` binding spelling; Q2 reserved
+  evidence row over a rail; Q3 anchor precedence follow → ref → numeric →
+  top; Q4 `H≥0`, `H=0` valid/evidence-waived; Q7 fence) recorded for
+  Kyle's round-2 rulings; Q5 (inward seam shape) confirmed as the one
+  genuine deferral. Store: `design/host-rung-round-1`.
