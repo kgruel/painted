@@ -4,6 +4,70 @@ All notable changes to painted are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/); pre-1.0, minor versions may carry
 breaking changes.
 
+## [0.12.0] — 2026-07-14
+
+The **capability vocabulary** (0.12, M5) — the sixth content-affecting ambient
+channel, ratified as `docs/RENDERER_CONTRACT_DESIGN.md` §9 and built as five
+slices (M5-a–e). A frozen `Capabilities` value (three boolean facets: `color`,
+`glyph`, `link`) tells a renderer which visual carriers the destination
+supports at the moment content is *chosen* — never re-deciding how it is
+serialized (`ColorDepth` downsampling and `IconSet` fallback stay fenced off).
+Hosts set it with a bracket; the renderer signature stays
+`(data, fidelity, width)` — the 0.11 contract unbroken one milestone later.
+
+### Added
+
+- **`Capabilities`, `current_capabilities()`, `use_capabilities()`,
+  `reset_capabilities()`** (`painted.capabilities`,
+  `docs/RENDERER_CONTRACT_DESIGN.md` §9) — the capability vocabulary and its
+  ambient channel. `current_capabilities()` reads a frozen `Capabilities`
+  value from a ContextVar at the point of consumption (the `current_palette()`
+  shape); `use_capabilities()` is both setter and scoped context manager.
+  Facets are deliberately boolean — *may* the renderer choose a color-bearing
+  form, non-ASCII carrier families, link carriers — leaving *how much* and
+  *which* to the existing mechanisms.
+- **Host capability brackets** — `run_cli` sets the bracket at dispatch per
+  delivery, `Surface` hosts at frame time, `paint()` from the resolved file.
+  Any host sets the bracket instead of fabricating a `CliContext`; the
+  fabricated-context pattern (the `ResponsiveSurface` lesson) is dissolved.
+- **`print_block(..., no_color=)` and `InPlaceRenderer(no_color=)`** — additive
+  keyword passthroughs to the serializing `Writer`
+  (`docs/RENDERER_CONTRACT_DESIGN.md` §9.1). A host that has already resolved a
+  delivery's `NO_COLOR` snapshot passes that exact value so the capability
+  bracket and the serializer share one resolution — a mid-run environment change
+  cannot split content choice from serialization. `None` (the default) keeps the
+  prior ambient env resolution, so existing call sites are unchanged.
+
+### Changed
+
+- **Forced `ColorDepth.NONE` now suppresses color** (`core/writer.py`
+  `apply_style`, `docs/RENDERER_CONTRACT_DESIGN.md` §9.4). A behavior-tightening
+  correction: `NONE` denotes a colorless destination, so the writer now drops
+  fg/bg for it — the `NO_COLOR` shape, with bold/underline/etc. kept — where it
+  previously emitted basic (16-color) codes. That old behavior disagreed with
+  `diagnostics.py`, which already read `NONE` as colorless; the writer now sides
+  with the honest interpretation. Positive depths downsample as before.
+
+### Deprecated
+
+- **`render=` now warns `DeprecationWarning`** (M5-d, `docs/RENDERER_CONTRACT_DESIGN.md`
+  §§3, 12). The 0.11 sequencing promise executes: the gate held silent while
+  `raymarch`/`starmap` were blocked on the capability vocabulary, and opens now
+  that both migrated to `renderer=` (M5-c). The warning fires once, at
+  `CliRunner` construction — never per frame — naming the replacement
+  (`renderer=(data, fidelity, width)`) and the design doc; `renderer=` and the
+  transcription default (neither declared) stay warning-silent. `render=` is
+  removed at 1.0.
+
+### Fixed
+
+- **Intercepted subcommand `-h` now renders the framework grammar groups**
+  (`cli/help.py`). A subcommand's help previously showed only its declared
+  domain flags, while shell completion (the parser's third reflection) offered
+  the universal framework flags too — the two reflections disagreed. Help now
+  documents the framework tier at the subordinated depth, restoring
+  reflection parity.
+
 ## [0.11.0] — 2026-07-13
 
 The **renderer contract** (0.11, M4) — the framework-seam renderer boundary

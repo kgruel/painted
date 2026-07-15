@@ -328,11 +328,13 @@ class AppRunner:
             body.append(Prose(cmd.description))
         if cmd_defs:
             body.append(Defs(cmd_defs))
-        body.extend(
-            framework_sections(
-                framework_depth, include_options=False, tags=cmd.tags, prompts=cmd.prompts
-            )
-        )
+        # include_options: the second and third reflections must agree —
+        # completion (build_parser walk) offers the framework grammar for
+        # every command, so the intercepted -h must document it too, at the
+        # subordinated depth (terse under default -h when command args lead,
+        # expanded under -vv). Suppressing it entirely made TAB offer flags
+        # -h never showed (loops review: intercepted-help-omits-framework-flags).
+        body.extend(framework_sections(framework_depth, tags=cmd.tags, prompts=cmd.prompts))
 
         prog = f"{self.prog} {cmd.name}" if self.prog else cmd.name
         return Doc(title=prog, body=tuple(body))

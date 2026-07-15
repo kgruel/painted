@@ -546,7 +546,9 @@ def test_no_color_flag_suppresses_colour_keeps_bold():
 
 
 def test_colour_present_when_not_no_color():
-    w = Writer(io.StringIO(), no_color=False)
+    # Force a positive depth to isolate the NO_COLOR axis: a non-TTY StringIO would
+    # otherwise resolve ColorDepth.NONE, which now suppresses colour on its own (§9.4).
+    w = Writer(io.StringIO(), no_color=False, color_depth=ColorDepth.BASIC)
     assert "31" in _sgr(w, Style(fg="red"))
 
 
@@ -559,7 +561,9 @@ def test_no_color_env_present_and_nonempty_suppresses(monkeypatch):
 def test_no_color_env_empty_is_treated_as_unset(monkeypatch):
     """no-color.org: honoured only when present AND non-empty."""
     monkeypatch.setenv("NO_COLOR", "")
-    w = Writer(io.StringIO())
+    # Force a positive depth to isolate the NO_COLOR axis from the destination's own
+    # colorlessness: a non-TTY StringIO resolves ColorDepth.NONE, now suppression (§9.4).
+    w = Writer(io.StringIO(), color_depth=ColorDepth.BASIC)
     assert "31" in _sgr(w, Style(fg="red"))
 
 

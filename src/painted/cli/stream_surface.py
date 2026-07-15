@@ -23,8 +23,8 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-from contextlib import AbstractContextManager, nullcontext
-from typing import TYPE_CHECKING, Generic, TypeVar
+from contextlib import AbstractContextManager, ExitStack
+from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
 from ..core.cell import Style
 from ..tui.surface import Surface
@@ -72,8 +72,18 @@ class StreamSurface(Surface, Generic[T]):
         fps_cap: int = 60,
         live_meter: bool = False,
         resolve_ref_schemes: Callable[[T], tuple[RefScheme, ...]] | None = None,
+        no_color: bool | None = None,
     ) -> None:
-        super().__init__(fps_cap=fps_cap, on_start=self._spawn, on_stop=self._stop)
+        # ``no_color`` is the delivery's single resolved NO_COLOR snapshot,
+        # threaded down to the Surface writer so this alt-screen frame's
+        # capability bracket (``_frame_scope`` → ``resolve_surface_capabilities``,
+        # which reads ``self._writer.no_color``) equals the host's outer bracket
+        # by construction, never a second env read (§9.1). ``CliRunner`` passes
+        # ``self._delivery_no_color`` here; a direct construction leaves it
+        # ``None`` and the writer resolves NO_COLOR ambiently, like any Surface.
+        super().__init__(
+            fps_cap=fps_cap, on_start=self._spawn, on_stop=self._stop, no_color=no_color
+        )
         # The render callback is a runner-adapted closure taking the frame's
         # current width (§6), not (ctx, state): the offer rule and the app
         # renderer both live behind it, so the surface only supplies geometry.
@@ -210,27 +220,28 @@ class StreamSurface(Surface, Generic[T]):
 
     # --- Surface overrides ---
 
-    def _frame_scope(self) -> AbstractContextManager[None]:
-        """Install the current frame's already-resolved ref_schemes= (§7).
+    def _frame_scope(self) -> AbstractContextManager[Any]:
+        """Compose the base capability bracket with this frame's ref_schemes= (§7, §9.3).
 
-        Evaluation happened once, eagerly, at the fetch event that produced
-        ``self._frame`` (``_consume()``, above) — this method never calls the
-        resolver. It only installs the schemes carried with the current pair
-        as ambient state, in this task (the Surface's own render task), for
-        ``render()``/``_flush()`` below in the same ``with`` statement — the
-        ContextVar set here would never be visible from the consumer task
-        that fetched the state, which is exactly why evaluation itself
-        happens elsewhere and only the *result* travels.
+        ``super()._frame_scope()`` installs the Surface capability bracket (§9.3
+        Surface row) for ``render()``/``_flush()``. On top of it, this installs the
+        current frame's already-resolved ref schemes: evaluation happened once,
+        eagerly, at the fetch event that produced ``self._frame`` (``_consume()``,
+        above) — this method never calls the resolver, only installs the *result*
+        as ambient state, in this task (the Surface's own render task). The
+        ContextVar set here would never be visible from the consumer task that
+        fetched the state, which is exactly why evaluation happens elsewhere and
+        only the result travels.
         """
-        if self._frame is None:
-            return nullcontext()
-        _, schemes = self._frame
-        if schemes is None:  # nothing declared
-            return nullcontext()
+        stack = ExitStack()
+        stack.enter_context(super()._frame_scope())
+        if self._frame is not None:
+            _, schemes = self._frame
+            if schemes is not None:  # something declared
+                from ..refs import use_refs
 
-        from ..refs import use_refs
-
-        return use_refs(*schemes)
+                stack.enter_context(use_refs(*schemes))
+        return stack
 
     def render(self) -> None:
         if self._buf is None:

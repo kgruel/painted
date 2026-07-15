@@ -1,6 +1,10 @@
 # The render model — one renderer, progressively capable hosts
 
-**Status: RATIFIED 2026-07-10.** Design of record, together with its
+**Status: RATIFIED 2026-07-10; amended 2026-07-14** (RENDERER_CONTRACT_DESIGN
+§9.5 residue sweep — §7 Q3 resolved, §2's capability-input qualifier
+decided, the §8 law-1/law-7 audit rows dated-annotated in place; the
+2026-07-10 audit text is preserved as historical evidence, not rewritten).
+Design of record, together with its
 evidence companion `docs/RENDER_MODEL_AUDIT.md`. Subsequent changes are
 amendments against the laws in §4, not revisions of the foundational model.
 The §7 questions are implementation and API-expression questions; none
@@ -153,7 +157,10 @@ structured formats serialize *domain data* through a parallel boundary —
 This is deliberate: a machine consumer wants the subject, not a picture of
 it. The exception is explicit here so nothing else claims it as precedent.
 
-**Render capabilities (provisional, r4).** The audit surfaced a third
+**Render capabilities.** *(Dated amendment 2026-07-14: the "provisional,
+r4" qualifier is removed — capabilities are a decided input, shipped as
+`capabilities.py` and transported through the sixth ContextVar channel,
+RENDERER_CONTRACT_DESIGN §9.)* The audit surfaced a third
 legitimate renderer input beside fidelity and allocation: **which visual
 carriers the destination supports** — color, glyph repertoire, link
 delivery. `raymarch` chooses between a truecolor half-block portrait and a
@@ -176,7 +183,9 @@ mechanisms: glyph *fallback* stays ambient (`IconSet`'s ASCII degradation),
 and color *downsampling* stays serialization-side (`ColorDepth` in
 `Writer`). A capability input is only for **content-structure choices** —
 selecting the carrier, not substituting glyphs or quantizing colors.
-`ctx.use_ansi` is today's coarse proxy; the real vocabulary is §7 Q3.
+`ctx.use_ansi` was the coarse proxy; the shipped vocabulary is
+`capabilities.py`'s `Capabilities` (color/glyph/link — RENDERER_CONTRACT_DESIGN
+§9, dated amendment 2026-07-14, §7 Q3 resolved).
 
 **The allocation contract (r5).** A dimension is *offered*, not ambient —
 and the old Option A / Option B question ("who owns vertical adaptation?")
@@ -278,7 +287,7 @@ The laws share one umbrella, stated plainly rather than coined:
 | 4 | **Destination independence** — no destination capability or terminal geometry participates in fidelity resolution. | **Verified 2026-07-10** (§8): every `Fidelity` construction site in `src/` is argv/declaration-pure; `detect_context` computes TTY/geometry into separate `CliContext` fields and never writes into the fidelity it's handed. Two gaps: ungated (a regression reading terminal size in `parse_fidelity` would pass today's suite), and FIDELITY_DESIGN documents `build_fidelity`'s *position* but not the keep-geometry-out obligation on its *content*. The hatch stays app territory. |
 | 5 | **Allocation safety** — a passed width is exact, never exceeded; a height accepted by a *final* renderer is likewise exact (§2). | Width: ratified contract, property-tested. Height: r5 extension, not yet implemented — components document their height semantics (exact / maximum / viewport, §7 Q4). |
 | 6 | **Omission evidence** — the layer that *knowingly* discards requested semantic content must preserve evidence of that loss where the format permits; allocation-driven loss never silently masquerades as user intent. | **Audited 2026-07-10 (§8): target invariant, not current fact.** The marked/silent split tracks the *layer*, not the axis: width loss in the lens/compose layer is mostly marked; primitive width loss and **all height loss are silent** — no height-overflow evidence primitive, no rendered scroll affordance in the package. The r4 ownership form (below) shrinks the remediation surface: mechanisms may clip silently; *deciders* must mark. |
-| 7 | **Host independence** — equivalent semantic inputs, allocation, presentation policy, and render capabilities produce equivalent Blocks regardless of host *lifecycle*; a semantic renderer never consumes lifecycle or mode. | **Target invariant, not current fact — but closer than r3 reported (corrected r4).** 23 of 25 in-repo `CliContext` renderers read only fidelity + allocation; 2 (`raymarch`, `starmap`) additionally consume output *capabilities* via the `use_ansi` proxy — legitimate under this law's r4 form, pending the capability vocabulary (§7 Q3); **0** dispatch on lifecycle inside a semantic renderer (r3 miscounted: `responsive.py`/`table.py` read `is_tty` in `_handle_interactive`, which is host territory). `views/` is clean and arch-enforced. The friction evidence stands: `ResponsiveSurface` fabricates a fake `CliContext` (`is_tty=True, mode=INTERACTIVE`) to reuse its renderer. Loops adoption + `run_cli` optional-render is the acceptance test. |
+| 7 | **Host independence** — equivalent semantic inputs, allocation, presentation policy, and render capabilities produce equivalent Blocks regardless of host *lifecycle*; a semantic renderer never consumes lifecycle or mode. | **Target invariant, not current fact — but closer than r3 reported (corrected r4).** 23 of 25 in-repo `CliContext` renderers read only fidelity + allocation; 2 (`raymarch`, `starmap`) additionally consume output *capabilities* via the `use_ansi` proxy — legitimate under this law's r4 form, pending the capability vocabulary (§7 Q3); **0** dispatch on lifecycle inside a semantic renderer (r3 miscounted: `responsive.py`/`table.py` read `is_tty` in `_handle_interactive`, which is host territory). `views/` is clean and arch-enforced. The friction evidence stands: `ResponsiveSurface` fabricates a fake `CliContext` (`is_tty=True, mode=INTERACTIVE`) to reuse its renderer. Loops adoption + `run_cli` optional-render is the acceptance test. *(Dated annotation 2026-07-14: the fabricated-`CliContext` friction was swept in 0.11 — `run_cli`'s `renderer=` seam, RENDERER_CONTRACT_DESIGN §9 — and the two `use_ansi` capability readers (`raymarch`, `starmap`) converted to `current_capabilities()` in 0.12 (§9.5), resolving §7 Q3. The status text above is preserved as the 2026-07-10 finding, not rewritten.)* |
 | 8 | **No downstream policy** — `Block`, composition, `Buffer`, `Writer` carry no disclosure policy. Composition never asks *why* a row exists. | **Verified 2026-07-10** (§8) for the named modules — but held by *discipline*, not construction: no gate forbids `compose.py` importing fidelity, and the arch tests only check cross-layer direction. One sanctioned exception one file over: `core/doc.py` hosts the shared disclosure walk (deliberate, documented in its docstring, kept out of `core.__all__`) — any future gate must name it, `_CLI_SEAMS`-style. |
 
 **Determinism fine print (law 1).** Time is not an exception. The component
@@ -431,6 +440,10 @@ former optional-render question: they turned out to be the same question.)*
    color / glyph / link facets? And where exactly the fence sits against
    the two existing capability mechanisms (ambient `IconSet` fallback,
    `ColorDepth` downsampling) so "capabilities" doesn't swallow them.
+   *(resolved by RENDERER_CONTRACT_DESIGN §9, dated amendment 2026-07-14:
+   `capabilities.py`'s three-facet `Capabilities` — color/glyph/link —
+   ships as the sixth ambient ContextVar channel, resolved after fidelity
+   and never participating in it; the fence holds as designed.)*
 4. **Component height semantics** — the exact / maximum / viewport-height
    trichotomy (§2): declared per component by docstring convention, or
    worth a typed vocabulary? Which existing components (`table`,
@@ -459,10 +472,10 @@ for keeping the full reproducible inventory in-repo.
 
 | Law | Claimed (r2) | Found |
 |-----|--------------|-------|
-| 1 Determinism | ambient list "(palette, theme, icons, refs)" | List corrected (r4): **palette, icons, borders, vocabulary registry, role overrides** — five content-affecting ContextVar channels. `Theme` atomically sets four (not the vocabulary registry). Core-path `refs` resolve only in `Writer` ANSI emission (`core/writer.py:209`) — serialization-side, like `NO_COLOR`; `starmap`'s render-time probe is a capability read. |
+| 1 Determinism | ambient list "(palette, theme, icons, refs)" | List corrected (r4): **palette, icons, borders, vocabulary registry, role overrides** — five content-affecting ContextVar channels. `Theme` atomically sets four (not the vocabulary registry). Core-path `refs` resolve only in `Writer` ANSI emission (`core/writer.py:209`) — serialization-side, like `NO_COLOR`; `starmap`'s render-time probe is a capability read. *(Dated annotation 2026-07-14: six channels as of RENDERER_CONTRACT_DESIGN §9 — `capabilities.py`'s `Capabilities` ships as the sixth, distinguished from the other five as a logical renderer **input** that happens to travel ambiently, not a content-affecting presentation policy channel. The five-channel finding above is unchanged as of 2026-07-10; this note doesn't rewrite it.)* |
 | 4 Destination independence | holds by construction | **Confirmed by reading**, all `Fidelity(...)` sites. Ungated; hatch obligation undocumented in FIDELITY_DESIGN. |
 | 6 Omission evidence | needs audit | **Does not hold.** See below. |
-| 7 Host independence | target invariant | Confirmed target; gap quantified (corrected r4): 23/25 renderers use fidelity + allocation only, 2/25 add capability reads, 0/25 lifecycle-dispatch inside a renderer — plus the taught signature + `Surface.render()` convention. |
+| 7 Host independence | target invariant | Confirmed target; gap quantified (corrected r4): 23/25 renderers use fidelity + allocation only, 2/25 add capability reads, 0/25 lifecycle-dispatch inside a renderer — plus the taught signature + `Surface.render()` convention. *(Dated annotation 2026-07-14: the fabricated-`CliContext` friction evidence below (`ResponsiveSurface`) was swept in 0.11 — `run_cli`'s `renderer=` seam, RENDERER_CONTRACT_DESIGN §9 — and the two capability-reading renderers (`raymarch`, `starmap`) converted from the `use_ansi` proxy to `current_capabilities()` in 0.12 (§9.5). The "target invariant, not current fact" caveat narrows accordingly; the 2026-07-10 gap count above is the historical baseline, not current status.)* |
 | 8 No downstream policy | holds by construction | **Confirmed for the named modules** (the "depth" in `writer.py` is `ColorDepth` — unrelated). Held by discipline: ungated. `core/doc.py` is the one deliberate exception (the shared disclosure walk lives there for import-order reasons; unexported). |
 
 **Law 6, the layer-not-axis finding.** 25 geometry-loss paths inventoried.
@@ -500,7 +513,10 @@ and `starmap.py:421+` additionally consume output capabilities via the
 `use_ansi` proxy (legitimate under the r4 law; vocabulary is §7 Q3); zero
 renderers dispatch on lifecycle — `responsive.py:576` and `table.py:399`
 read `is_tty` inside `_handle_interactive`, which is host territory.
-`views/` imports no cli — enforced.
+`views/` imports no cli — enforced. *(Dated pointer 2026-07-14: both
+readers converted to `current_capabilities()` in 0.12 — RENDERER_CONTRACT_DESIGN
+§9.5; §7 Q3 is resolved. This baseline detail is the 2026-07-10 finding,
+left as historical evidence.)*
 
 **Gates specified by the audit:**
 

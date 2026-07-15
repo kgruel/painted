@@ -243,14 +243,16 @@ class TestSubcommandHelp:
         runner.run(["status", "-h"])
         assert called == [["-h"]]
 
-    def test_subcommand_help_no_framework_groups(self, capsys):
-        """No Zoom/Format groups in subcommand help."""
+    def test_subcommand_help_shows_framework_groups(self, capsys):
+        """Zoom/Format groups render in subcommand help — the -h reflection
+        must document the same framework grammar completion offers (the
+        second and third reflections agree)."""
         runner, _ = self._make_runner()
         rc = runner.run(["emit", "-h", "-vv", "--plain"])
         assert rc == 0
         captured = capsys.readouterr()
-        assert "Zoom" not in captured.out
-        assert "Format" not in captured.out
+        assert "Zoom" in captured.out
+        assert "Format" in captured.out
 
     def test_subcommand_help_shows_args(self, capsys):
         """Command args visible in help output."""
@@ -271,10 +273,12 @@ class TestSubcommandHelp:
         captured = capsys.readouterr()
         data = json.loads(captured.out)
         assert data["title"] == "loops emit"
-        # The description is the leading Prose; the only Section is Help.
+        # The description is the leading Prose; framework grammar groups
+        # follow the command args (reflection parity with completion),
+        # Help last.
         headings = [n.get("heading") for n in data["body"] if "heading" in n]
-        assert headings == ["Help"]
-        assert "Zoom" not in headings and "Format" not in headings
+        assert headings[-1] == "Help"
+        assert "Zoom" in headings and "Format" in headings
 
     def test_subcommand_help_prog(self, capsys):
         """Prog shows 'loops emit'."""

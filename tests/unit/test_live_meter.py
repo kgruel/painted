@@ -125,7 +125,7 @@ def test_inplace_live_frames_carry_the_gauge(monkeypatch) -> None:
     # route this run into a buffer instead of fighting pytest's capture.
     out = io.StringIO()
     real = inplace_mod.InPlaceRenderer
-    monkeypatch.setattr(inplace_mod, "InPlaceRenderer", lambda: real(stream=out))
+    monkeypatch.setattr(inplace_mod, "InPlaceRenderer", lambda **kw: real(stream=out, **kw))
 
     async def stream():
         for s in ("a", "b", "c"):
@@ -159,7 +159,7 @@ def test_inplace_live_is_undressed_by_default(monkeypatch) -> None:
 
     out = io.StringIO()
     real = inplace_mod.InPlaceRenderer
-    monkeypatch.setattr(inplace_mod, "InPlaceRenderer", lambda: real(stream=out))
+    monkeypatch.setattr(inplace_mod, "InPlaceRenderer", lambda **kw: real(stream=out, **kw))
 
     async def stream():
         for s in ("a", "b", "c"):

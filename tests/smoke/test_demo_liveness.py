@@ -23,19 +23,12 @@ import pytest
 
 from painted import Fidelity, Zoom
 from painted.tui.testing import TestSurface
-from tests.helpers import block_to_text, static_ctx
 
 _PROJECT = Path(__file__).resolve().parent.parent.parent
 _DEMOS = _PROJECT / "demos"
 
-# raymarch and starmap stay on the legacy render=(ctx, data) call form per §9
-# until the 0.12 warning gate — see docs/RENDERER_CONTRACT_DESIGN.md §12.
-_LEGACY_RENDER = {"raymarch", "starmap"}
 
-
-def _render_demo(mod, name: str, zoom: Zoom, data: object):
-    if name in _LEGACY_RENDER:
-        return mod._render(static_ctx(zoom), data)
+def _render_demo(mod, zoom: Zoom, data: object):
     return mod._render(data, Fidelity(depth=int(zoom)), 80)
 
 
@@ -104,7 +97,7 @@ def test_pattern_demo_renders(name: str) -> None:
     mod = _load(f"patterns/{name}.py")
     data = mod._fetch()
     for zoom in Zoom:
-        block = _render_demo(mod, name, zoom, data)
+        block = _render_demo(mod, zoom, data)
         assert block.width > 0, f"patterns/{name} rendered an empty block at {zoom.name}"
 
 
@@ -128,7 +121,7 @@ def test_showcase_demo_renders(name: str) -> None:
     mod = _load(f"showcase/{name}.py")
     data = mod._fetch()
     for zoom in Zoom:
-        block = _render_demo(mod, name, zoom, data)
+        block = _render_demo(mod, zoom, data)
         assert block.width > 0, f"showcase/{name} rendered an empty block at {zoom.name}"
 
 

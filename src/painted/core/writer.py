@@ -73,6 +73,26 @@ class Writer:
         else:
             self._no_color = bool(os.environ.get("NO_COLOR"))
 
+    @property
+    def no_color(self) -> bool:
+        """The resolved NO_COLOR policy — read once at construction (§9.1).
+
+        A host that derives capability facets from a delivery's writer reads this
+        so the facet snapshot and the serializer share one resolution, never two
+        env reads that only usually agree.
+        """
+        return self._no_color
+
+    @property
+    def hyperlinks(self) -> bool:
+        """Whether this writer emits OSC 8 link carriers — the link facet's signal."""
+        return self._hyperlinks
+
+    @property
+    def stream(self) -> TextIO:
+        """The destination stream — its encoding is the glyph facet's signal."""
+        return self._stream
+
     def size(self) -> tuple[int, int]:
         """Terminal dimensions (columns, rows)."""
         sz = shutil.get_terminal_size()
@@ -119,14 +139,18 @@ class Writer:
         if style.reverse:
             codes.append("7")
 
-        # NO_COLOR suppresses colour (fg/bg) while keeping bold/underline/etc.;
-        # ColorDepth is untouched (NONE still emits basic for forced-depth callers).
+        # Two suppressions share the NO_COLOR shape — fg/bg dropped, bold/underline
+        # kept: an explicit NO_COLOR, and a colorless destination (ColorDepth.NONE,
+        # resolved or forced). NONE is a colorless destination, not a downsampling
+        # target — the depth is meaningful only after color is chosen (§9.4), so the
+        # writer never emits color for it. Positive depths downsample as usual.
         if not self._no_color:
             depth = self.detect_color_depth()
-            if style.fg is not None:
-                codes.extend(self._color_codes(style.fg, foreground=True, depth=depth))
-            if style.bg is not None:
-                codes.extend(self._color_codes(style.bg, foreground=False, depth=depth))
+            if depth is not ColorDepth.NONE:
+                if style.fg is not None:
+                    codes.extend(self._color_codes(style.fg, foreground=True, depth=depth))
+                if style.bg is not None:
+                    codes.extend(self._color_codes(style.bg, foreground=False, depth=depth))
 
         if not codes:
             return ""
@@ -389,6 +413,7 @@ def print_block(
     stream: TextIO | None = None,
     *,
     use_ansi: bool | None = None,
+    no_color: bool | None = None,
 ) -> None:
     """Print a Block to a stream, optionally with ANSI styling.
 
@@ -400,13 +425,18 @@ def print_block(
         block: The Block to print.
         stream: Output stream (defaults to sys.stdout, resolved at call time).
         use_ansi: Whether to include ANSI escape codes (default: auto-detect).
+        no_color: The NO_COLOR policy for the serializing Writer. ``None``
+            (default) lets the Writer resolve it ambiently from the environment;
+            a host that has already resolved the delivery's color snapshot passes
+            that exact value so the serializer and its capability bracket cannot
+            split (§9.1).
     """
     if stream is None:
         stream = sys.stdout
     if use_ansi is None:
         use_ansi = hasattr(stream, "isatty") and stream.isatty()
     if use_ansi:
-        writer = Writer(stream)
+        writer = Writer(stream, no_color=no_color)
         write_block_ansi(block, writer, stream)
     else:
         # Plain text: just characters, no styling.

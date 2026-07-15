@@ -17,8 +17,10 @@ headline rulings, is the appendix.
 Subordinate to `docs/RENDER_MODEL.md` (RATIFIED 2026-07-10), the design of
 record for the render model: this document realizes the model's §2
 renderer-input set at the framework seam and adds nothing to it. The
-capability-vocabulary work (0.12, M5) will grow inside this document —
-capabilities are a renderer input, not a subsystem (§9). Companion to
+capability-vocabulary design (0.12, M5) grows inside this document as
+anticipated — §9, **IMPLEMENTED (shipped 0.12.0; ratified 2026-07-14,
+Kyle)**; the IMPLEMENTED status above covers the 0.11 contract, §9 the
+0.12 vocabulary. Companion to
 `docs/FIDELITY_DESIGN.md` (what compiles into the second parameter) and
 `docs/REFS_DESIGN.md` (whose declaration surface §7 extends).
 
@@ -583,44 +585,248 @@ milestone): delete dead `fidelity_from_args`, dissolve `piped` across ~11
 lenses, collapse the Spine-1 closures — flipping the spike's exit
 criteria 1–2 from evidenced to satisfied.
 
-## 9. The capability slot — fenced for 0.12
+## 9. The capability vocabulary — 0.12 (M5)
 
-The model's renderer-input inventory (§2, provisional r4) names a third
-input beside fidelity and allocation: **render capabilities** — which
-visual carriers the destination supports (color, glyph repertoire, link
-delivery). The 0.12 milestone replaces semantic-renderer reads of the
-`use_ansi` proxy with a narrow capability vocabulary, and that work grows
-*inside this document* — capabilities are a renderer input, not a
-subsystem.
+**Section status: IMPLEMENTED (shipped 0.12.0; ratified 2026-07-14, Kyle;
+drafted 2026-07-13, arc `thread/capability-vocabulary`)** — this section replaces the 0.11 fence
+text that reserved the slot (preserved in git at `feba77c`); the fence's
+commitments are honored below, not re-stated. Three rulings anchor it
+(store: `decision/design/012-scope`, `design/capability-facets`,
+`design/capability-seam`): 0.12 ships this vocabulary alone; three
+facets — color, glyph, link; the seam is an ambient channel with a host
+bracket, and the renderer signature stays `(data, fidelity, width)`.
 
-What this document commits to now, so 0.12 composes instead of amending:
+The model's renderer-input inventory (§2, r4) names a third input beside
+fidelity and allocation: **render capabilities** — which visual carriers
+the destination supports. `ctx.use_ansi` is today's coarse proxy for all
+of them at once; this section replaces its semantic-renderer reads with
+the named facets. Capabilities are a renderer input, not a subsystem —
+which is why the design lives here.
 
-- **The signature stays closed at three positionals — a fence scoped to
-  capabilities and ambient policy.** Capabilities arrive
-  non-positionally — by a mechanism 0.12 decides; every existing
-  presentation channel (palette, icons, borders, vocabularies) is
-  ambient, so ambient is the natural landing — never as a fourth
-  parameter. The spike found zero lenses consuming capability facts
-  positionally. Offered *height* is not governed by this fence — a
-  dimension is offered, never ambient; its arrival constraints are
-  recorded with the deferral (§10).
-- **The sequencing consequence, stated plainly:** the two real capability
-  consumers (`raymarch`, `starmap`) read `ctx.use_ansi` — legacy-context
-  state that today's ambient mechanisms cannot express (color carrier,
-  link delivery). They therefore **cannot migrate to the three-parameter
-  contract in 0.11 and stay on legacy `render=` until 0.12 ships the
-  vocabulary** — which is why the `render=` `DeprecationWarning` gate
-  opens at 0.12, not 0.11 (§3): the deprecation clock starts when the
-  last blocked consumer class has a path. This is deliberate: migrating
-  them through a closure over
-  host context would re-create the adapter glue this contract exists to
-  dissolve. If 0.12's design finds a non-positional mechanism
-  insufficient, that is an **explicit amendment against this section** —
-  not silent drift.
-- **The fences hold** (per `roadmap/capability-vocabulary`): the
-  vocabulary covers only what the two existing consumers demand, and it
-  must not swallow the two existing capability *mechanisms* — ambient
-  `IconSet` glyph fallback and `ColorDepth` serialization downsampling.
+### 9.1 The vocabulary
+
+```python
+@dataclass(frozen=True)
+class Capabilities:
+    color: bool = True   # the carrier can express color at all
+    glyph: bool = True   # non-ASCII glyphs may be chosen as content
+    link: bool = True    # the carrier can deliver hyperlinks (OSC 8 / anchors)
+```
+
+Each facet answers one question a renderer asks when *choosing content*,
+not when serializing it:
+
+- **`color`** — may I pick a color-bearing form (raymarch's lit RGB
+  portrait) over a color-free one (its luminance ramp)? `False` means
+  choose the form that survives without color — not "colors will be
+  stripped later" (that is serialization's job, and stripping a portrait
+  yields garbage; the read exists precisely so the renderer never emits
+  a form whose meaning dies in the stripping). For that promise to hold,
+  a host must resolve this facet and its writer policy **from one
+  snapshot**: everything that suppresses color at serialization —
+  `--plain`, `NO_COLOR` (with an explicit `no_color=` override winning
+  over the environment, matching `Writer`) — narrows content-side
+  `color` too (§9.3). Positive `ColorDepth` values are not part of that
+  snapshot — they quantize color already chosen, meaningful only after
+  `color=True` — with one explicit exception: a resolved or forced
+  `ColorDepth.NONE` *is* suppression and joins the snapshot (§9.4).
+- **`glyph`** — may I choose non-ASCII glyphs as content carriers? No
+  in-repo renderer reads this today; it ships on named cross-repo demand
+  (siftd, loops, loops-tasks — `design/capability-facets`) and because
+  the three facets are one coherent content-carrier axis.
+- **`link`** — precisely: *this delivery's serializer is configured to
+  emit link carriers* (OSC 8 for ANSI, anchors for HTML) — computed
+  from the resolved format plus the writer's `hyperlinks=` switch. It
+  is **not** a claim about recipient support: ANSI availability does
+  not establish OSC 8 support, and painted's writer already treats
+  links as progressive enhancement (unsupported terminals ignore the
+  sequences). And it is *half* of a link decision: whether a link will
+  *resolve* stays with the denotation channel (`resolve_ref`, §7).
+  `starmap._links_live` keeps its `resolve_ref` conjunct and replaces
+  only the `use_ansi` half.
+
+Facets are booleans deliberately. Degrees live in the mechanisms the
+fence protects (§9.4): *how much* color a terminal renders is
+`ColorDepth` downsampling at serialization; *which* glyph to draw once
+glyphs are allowed is the ambient `IconSet`. A facet only gates the
+renderer's carrier choice.
+
+### 9.2 The seam — ambient channel, host bracket
+
+```python
+from painted import Capabilities, use_capabilities, current_capabilities
+
+with use_capabilities(Capabilities(color=False, link=False)):
+    block = renderer(data, fidelity, width)   # leaf reads current_capabilities()
+```
+
+`Capabilities` is a frozen value in a ContextVar, read where it is
+consumed (`current_capabilities().color` at the leaf, exactly where
+`current_palette()` is read today) and set by whoever owns the delivery.
+It is the sixth content-affecting ambient channel under law 1's
+determinism audit (after palette, icons, borders, vocabulary registry,
+role overrides — RENDER_MODEL §8), and it follows the channel
+discipline exactly — the `use_palette` convention:
+
+- **Lifecycle**: `use_capabilities(caps)` sets immediately (setter
+  semantics) *and* returns a context manager for scoped overrides;
+  exiting the bracket restores the exact prior value, including on
+  exception or cancellation. Nesting composes the same way.
+- **Concurrency**: ContextVar semantics as-is — task-local state,
+  inherited by newly created async tasks, never automatically crossing
+  threads. A live host installs the bracket in the task that actually
+  invokes the renderer.
+- **Scope**: the bracket need only span *content rendering*.
+  Serializers never read it — the writer keeps its own policy
+  (`use_ansi`, `no_color=`, `hyperlinks=`, `ColorDepth`); the facets
+  gate carrier *choice*, upstream of emission (§9.4).
+
+**Public surface**: the channel lives in `src/painted/capabilities.py`
+(root module, the `palette.py`/`refs.py` convention), exporting
+`Capabilities`, `use_capabilities`, `current_capabilities`, and
+`reset_capabilities` (the `reset_icons` convention), re-exported from
+`painted.__init__`. Construction is dataclass-typed, not
+runtime-validated — the facets are plain booleans and the type checker
+is the gate, matching every other channel value.
+
+Why ambient and not a fourth parameter (`design/capability-seam`):
+capability reads happen at leaves and do not transform through
+composition — width threads explicitly because every layer consumes
+columns; capabilities would be luggage through every intermediate
+signature. And capabilities are standing facts about a delivery, not
+per-offer negotiations: width is re-offered per frame under LIVE because
+resize changes it; nothing gains truecolor mid-run. The bracket also
+dissolves fabricated contexts for free — a host that is not `run_cli`
+sets the bracket instead of faking a `CliContext`, which is the
+`ResponsiveSurface` lesson (the fabrication the audit cited is already
+gone; the bracket is what makes its return structurally unnecessary).
+
+**Default: fully capable.** An unbracketed read returns
+`Capabilities()` — all facets `True`. The default is static (law 1: an
+ambient channel's default must not read the environment; determinism per
+bracket, not per terminal). Honest *narrowing* is the host's job — the
+three in-repo hosts below do it; a bare library call without a bracket
+gets capable-carrier content, same as it gets the default palette.
+
+### 9.3 Host mappings
+
+Each delivery owner computes the bracket from what it already knows,
+resolving each facet from its own signal — the facets deliberately do
+not share one:
+
+| Facet | Signal | `run_cli` / `paint()` resolution |
+|-------|--------|----------------------------------|
+| `color` | the color-suppression snapshot | `use_ansi and not resolved_no_color and resolved_color_depth is not NONE` (the depth conjunct applies whenever a depth is resolved or explicitly forced) — ANSI off (`--plain`, non-TTY), `NO_COLOR` set (explicit `no_color=` override winning, matching `Writer`), or a zero depth narrows it |
+| `glyph` | destination encoding / host policy | `True` for a destination whose encoding carries Unicode (a UTF-8 pipe is glyph-capable — glyph does **not** co-narrow with color), `False` for known-ASCII destinations; conservative (`False`) when the encoding is unknowable |
+| `link` | serializer link-carrier configuration | resolved format emits link carriers (ANSI OSC 8 / HTML anchors) *and* hyperlinks are enabled — never bare TTY-ness |
+
+`Surface` hosts bracket at frame time: the alt-screen establishes ANSI
+*control* support — so `color` still consults the `NO_COLOR` snapshot,
+`glyph` still consults encoding/policy, and `link` keeps the
+serializer-configuration meaning; alt-screen operation alone implies
+none of them.
+
+Mode coverage, precisely — not "every mode": `run_cli` brackets the
+render offer on the paths that render — STATIC and LIVE — so a
+`renderer=` consumer never reads `CliContext` for capability facts
+(the exit criterion "no renderer reads `use_ansi`"). `--json` renders
+nothing and installs nothing. **Any custom handler** — the `handlers`
+mapping accepts every `OutputMode`, and dispatch consults it before
+the framework paths — owns its capability bracket, because it replaces
+the framework-owned render path; INTERACTIVE is merely today's in-repo
+use. This mirrors refs ownership (§7).
+
+Two honesty notes, resolved in review round 1 (sol,
+`frequently-notable-muskrat`): the glyph facet's narrowing consumers
+are cross-repo hosts (siftd, loops, loops-tasks —
+`design/capability-facets`), and that is acceptable — every in-repo
+host need not exercise both values — but one in-repo test renderer
+must prove `glyph=False` changes a carrier (§9.5 gates). And glyph is
+*not* "a consumer's call today": `run_cli` and `paint()` already
+install `ASCII_ICONS` whenever ANSI is off — an existing conflation of
+the color and glyph signals that the encoding-derived mapping above
+supersedes for carrier choice (the `IconSet` install itself is §9.4's
+business).
+
+### 9.4 The fences
+
+The vocabulary must not swallow the two existing capability
+*mechanisms*:
+
+- **`IconSet`** stays the ambient *which-glyph* vocabulary.
+  `Capabilities.glyph` gates whether a renderer reaches for non-ASCII
+  *carrier families* at all (half-block portraits, box-drawing charts,
+  unicode ramps); named icon slots remain wholly governed by the
+  active `IconSet` — a renderer never consults `glyph` to second-guess
+  an icon lookup. The precedence rule for the edge case: `ASCII_ICONS`
+  is a separate preset, not an intrinsic fallback, so **a host
+  bracketing `glyph=False` must also install an ASCII-safe `IconSet`**
+  — the combination `glyph=False` + Unicode icons is the host's
+  contract violation, not a state renderers defend against.
+- **`ColorDepth`** stays serialization-side downsampling in the
+  writer. `Capabilities.color` is a content-choice gate; `ColorDepth`
+  is a faithful-emission policy for content already chosen — it is
+  **meaningful only after `color=True`**. The enum's zero degree is
+  where the two could blur, so the boundary is stated: `ColorDepth.NONE`
+  means a colorless destination — a host that resolves it must bracket
+  `color=False`; the facet decides *what the renderer builds*, the depth
+  decides *what the writer emits*, and `NONE` is the one depth that must
+  never meet `color=True`. **This corrects shipped behavior**: today's
+  writer emits *basic* codes for forced-`NONE` callers
+  (`core/writer.py` `apply_style`, pinned by
+  `test_color_downconversion`), while `diagnostics.py` already reads
+  `NONE` as "render colorless" — the two in-repo interpretations
+  disagree, and this contract sides with the honest one. M5-b changes
+  the writer so `NONE` genuinely suppresses fg/bg (bold/underline
+  unaffected, the `NO_COLOR` shape) and flips the pinned test — a
+  behavior-tightening change, called out in the CHANGELOG.
+
+And the vocabulary itself is fenced: three facets, no more, until a
+consumer demands a fourth — growth past demand is the exact failure the
+fence text this section replaced was written to prevent.
+
+### 9.5 Consumer conversions and sequencing
+
+The two blocked consumers convert and migrate in this milestone:
+
+- **`raymarch`** — three `ctx.use_ansi` reads (`_grid` carrier pick,
+  `_legend` swatches, `_stats` ray accounting) become
+  `current_capabilities().color`; then the demo migrates `render=` →
+  `renderer=`.
+- **`starmap`** — `_links_live` reads `current_capabilities().link`
+  (keeping `resolve_ref`); then migrates to `renderer=`.
+
+With the last blocked consumer class unblocked, **the `render=`
+`DeprecationWarning` gate opens in this release** (§3, §12 — the 0.11
+sequencing promise, executed here).
+
+One ordering statement, so law 4 stays whole: capability resolution
+happens *after* — and never participates in — `Fidelity` resolution.
+The compiled disclosure spec is identical on a TTY and in a pipe;
+capabilities then gate carrier choice at render time. No code path may
+consult a facet while compiling fidelity.
+
+Gates (extending §11): the exit criteria become tests — no
+semantic-renderer read of `use_ansi` (arch tier: `demos/` +
+`_demo_cli.py` render paths); bracket unit tests (default, narrowing,
+nesting-restores-on-exception); one in-repo test renderer proving
+`glyph=False` changes its carrier (the honesty gate from §9.3).
+
+RENDER_MODEL residue, the full sweep — a dated amendment, preserving
+the §8 audit of 2026-07-10 as historical evidence rather than
+rewriting it:
+
+- §7 Q3 marked **resolved by this section**;
+- §2's "provisional r4" qualifier on the renderer-input inventory
+  removed — capabilities are a decided input, transported through the
+  sixth ContextVar channel;
+- the law-1 row's channel list amended (five → six) with capabilities
+  distinguished as a logical renderer *input* that happens to travel
+  ambiently;
+- the law-7 row's status updated: the fabricated-`CliContext` claim is
+  stale (swept in 0.11), and the two `use_ansi` capability readers
+  convert here — the law's "target invariant" caveat narrows
+  accordingly.
 
 ## 10. Refusals and deferrals
 
@@ -732,7 +938,7 @@ internal docs, demos, and tests in the change that lands the new word):
 - REFS_DESIGN §4 gains a pointer to the framework-tier `ref_schemes=`
   declaration (this document, §7).
 
-**Build sequence.** S1 — the runtime signature mechanics and
+**Build sequence — 0.11 (S1–S5, complete).** S1 — the runtime signature mechanics and
 construction validation, with the `@overload`s for the two
 authored-renderer forms (legacy positional; keyword `renderer=`) — no
 behavior change; the *neither* form stays unpublished until its
@@ -745,6 +951,24 @@ semantics, fault classification, the frame bracket). S5 — the internal
 flip and docs residue. Each slice lands green through the full gate; S3
 verifies the appearance and outputgen panels stay byte-stable (the
 widening adds an arm; existing `int` calls are untouched).
+
+**Build sequence — 0.12 (M5, planned).** M5-a — the vocabulary and
+channel (`capabilities.py`: `Capabilities`, `use_capabilities`,
+`current_capabilities`, `reset_capabilities`; public re-exports;
+bracket unit tests including the `glyph=False` carrier-change
+renderer). M5-b — the host brackets (`run_cli` STATIC/LIVE dispatch
+with the §9.3 per-facet resolution, `paint()`, `Surface`; the
+`glyph=False` → ASCII-safe-`IconSet` pairing at each install site;
+the `ColorDepth.NONE` writer correction — genuine fg/bg suppression,
+pinned-test flip, CHANGELOG entry — §9.4).
+M5-c — consumer conversions (`raymarch` → `.color`, `starmap` →
+`.link` keeping `resolve_ref`; both migrate `render=` → `renderer=`).
+M5-d — the `render=` `DeprecationWarning` gate opens (§3's promise,
+executed once M5-c unblocks the last consumer class). M5-e — model-doc
+residue (the RENDER_MODEL dated amendment, §9.5) and gates (the
+arch-tier no-`use_ansi` test). Each slice lands green through the full
+gate; M5-d is sequenced after M5-c so the warning never fires on
+in-repo code.
 
 ## Appendix — review record
 

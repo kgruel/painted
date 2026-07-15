@@ -40,38 +40,39 @@ class TestCliRunner:
         """Misconfiguration raises immediately, never degrades at dispatch."""
         with pytest.raises(DeclarationError, match="live_delivery"):
             CliRunner(
-                render=lambda ctx, data: Block.text("x", Style()),
+                renderer=lambda data, fidelity, width: Block.text("x", Style()),
                 fetch=lambda: "x",
                 live_delivery="surfce",
             )
 
     def test_static_output(self, monkeypatch):
-        """Static mode uses print_block and returns 0."""
+        """Static mode uses print_block and returns 0. ctx.mode is surfaced
+        through an arity-1 fetch(ctx) — renderer= never receives ctx."""
         monkeypatch.setattr("sys.stdout.isatty", lambda: False)
         render_called = False
         fetch_called = False
         received_ctx = None
 
-        def render(ctx: CliContext, data: str) -> Block:
-            nonlocal render_called, received_ctx
+        def renderer(data: str, fidelity: Fidelity, width: int | None) -> Block:
+            nonlocal render_called
             render_called = True
-            received_ctx = ctx
-            return Block.text(f"zoom={ctx.zoom.value}: {data}", Style())
+            return Block.text(f"depth={fidelity.depth}: {data}", Style())
 
-        def fetch() -> str:
-            nonlocal fetch_called
+        def fetch(ctx: CliContext) -> str:
+            nonlocal fetch_called, received_ctx
             fetch_called = True
+            received_ctx = ctx
             return "test data"
 
         # AUTO resolves to STATIC when not a TTY
         result = run_cli(
             [],
-            render=render,
+            renderer=renderer,
             fetch=fetch,
         )
 
         assert result == 0
-        assert render_called, "render should be called"
+        assert render_called, "renderer should be called"
         assert fetch_called, "fetch should be called"
         assert received_ctx.mode == OutputMode.STATIC
 
@@ -79,7 +80,7 @@ class TestCliRunner:
         """JSON mode outputs JSON."""
         monkeypatch.setattr("sys.stdout.isatty", lambda: False)
 
-        def render(ctx: CliContext, data: dict) -> Block:
+        def renderer(data: dict, fidelity: Fidelity, width: int | None) -> Block:
             return Block.text("unused", Style())
 
         def fetch() -> dict:
@@ -87,7 +88,7 @@ class TestCliRunner:
 
         result = run_cli(
             ["--json"],
-            render=render,
+            renderer=renderer,
             fetch=fetch,
         )
 
@@ -96,37 +97,38 @@ class TestCliRunner:
         assert '"status": "ok"' in captured.out
         assert '"count": 42' in captured.out
 
-    def test_zoom_passed_to_render(self, monkeypatch):
-        """Zoom level is passed to render function."""
+    def test_zoom_passed_to_renderer(self, monkeypatch):
+        """Zoom level (fidelity.depth) is passed to the renderer."""
         monkeypatch.setattr("sys.stdout.isatty", lambda: False)
-        received_zoom = None
+        received_depth = None
 
-        def render(ctx: CliContext, data: str) -> Block:
-            nonlocal received_zoom
-            received_zoom = ctx.zoom
+        def renderer(data: str, fidelity: Fidelity, width: int | None) -> Block:
+            nonlocal received_depth
+            received_depth = fidelity.depth
             return Block.text(data, Style())
 
         run_cli(
             ["-v"],
-            render=render,
+            renderer=renderer,
             fetch=lambda: "data",
         )
 
-        assert received_zoom == Zoom.DETAILED
+        assert received_depth is not None
+        assert Zoom(received_depth) == Zoom.DETAILED
 
-    def test_fidelity_passed_to_render(self, monkeypatch):
-        """Fidelity from --max-chars/--max-lines is passed to render function."""
+    def test_fidelity_passed_to_renderer(self, monkeypatch):
+        """Fidelity from --max-chars/--max-lines is passed to the renderer."""
         monkeypatch.setattr("sys.stdout.isatty", lambda: False)
         received_fidelity = None
 
-        def render(ctx: CliContext, data: str) -> Block:
+        def renderer(data: str, fidelity: Fidelity, width: int | None) -> Block:
             nonlocal received_fidelity
-            received_fidelity = ctx.fidelity
+            received_fidelity = fidelity
             return Block.text(data, Style())
 
         run_cli(
             ["--max-chars", "50", "--max-lines", "10"],
-            render=render,
+            renderer=renderer,
             fetch=lambda: "data",
             budgets=True,
         )
@@ -136,18 +138,18 @@ class TestCliRunner:
         assert received_fidelity.lines == 10
 
     def test_no_fidelity_flags_gives_zero_limits(self, monkeypatch):
-        """Without density flags, ctx.fidelity.chars and .lines are 0 (unlimited)."""
+        """Without density flags, fidelity.chars and .lines are 0 (unlimited)."""
         monkeypatch.setattr("sys.stdout.isatty", lambda: False)
         received_fidelity = None
 
-        def render(ctx: CliContext, data: str) -> Block:
+        def renderer(data: str, fidelity: Fidelity, width: int | None) -> Block:
             nonlocal received_fidelity
-            received_fidelity = ctx.fidelity
+            received_fidelity = fidelity
             return Block.text(data, Style())
 
         run_cli(
             [],
-            render=render,
+            renderer=renderer,
             fetch=lambda: "data",
         )
 
@@ -169,7 +171,7 @@ class TestCliRunner:
 
         result = run_cli(
             ["-i"],
-            render=lambda ctx, data: Block.text("unused", Style()),
+            renderer=lambda data, fidelity, width: Block.text("unused", Style()),
             fetch=lambda: "data",
             handlers={OutputMode.INTERACTIVE: custom_interactive},
         )
@@ -182,7 +184,7 @@ class TestCliRunner:
         monkeypatch.setattr("sys.stdout.isatty", lambda: False)
         render_called = False
 
-        def render(ctx: CliContext, data: str) -> Block:
+        def renderer(data: str, fidelity: Fidelity, width: int | None) -> Block:
             nonlocal render_called
             render_called = True
             return Block.text("unused", Style())
@@ -190,7 +192,7 @@ class TestCliRunner:
         def fetch() -> str:
             raise ValueError("nope")
 
-        result = run_cli([], render=render, fetch=fetch)
+        result = run_cli([], renderer=renderer, fetch=fetch)
 
         assert result == 1
         assert render_called is False
@@ -206,7 +208,7 @@ class TestCliRunner:
 
         result = run_cli(
             ["--json"],
-            render=lambda ctx, data: Block.text("unused", Style()),
+            renderer=lambda data, fidelity, width: Block.text("unused", Style()),
             fetch=fetch,
         )
 
@@ -218,10 +220,10 @@ class TestCliRunner:
     def test_render_failure_static_renders_minimal_error_and_returns_2(self, capsys, monkeypatch):
         monkeypatch.setattr("sys.stdout.isatty", lambda: False)
 
-        def render(ctx: CliContext, data: str) -> Block:
+        def renderer(data: str, fidelity: Fidelity, width: int | None) -> Block:
             raise KeyError("kaboom")
 
-        result = run_cli([], render=render, fetch=lambda: "ok")
+        result = run_cli([], renderer=renderer, fetch=lambda: "ok")
 
         assert result == 2
         captured = capsys.readouterr()
@@ -336,13 +338,15 @@ class TestRendererContractDispatch:
 
     def test_legacy_positional_form_unchanged(self, capsys, monkeypatch):
         monkeypatch.setattr("sys.stdout.isatty", lambda: False)
-        rc = run_cli(["--plain"], _legacy, lambda: "WORLD")
+        with pytest.warns(DeprecationWarning, match="render="):
+            rc = run_cli(["--plain"], _legacy, lambda: "WORLD")
         assert rc == 0
         assert "legacy WORLD" in capsys.readouterr().out
 
     def test_legacy_keyword_form_unchanged(self, capsys, monkeypatch):
         monkeypatch.setattr("sys.stdout.isatty", lambda: False)
-        rc = run_cli(["--plain"], render=_legacy, fetch=lambda: "WORLD")
+        with pytest.warns(DeprecationWarning, match="render="):
+            rc = run_cli(["--plain"], render=_legacy, fetch=lambda: "WORLD")
         assert rc == 0
         assert "legacy WORLD" in capsys.readouterr().out
 
@@ -351,17 +355,33 @@ class TestRendererContractDispatch:
         binds render then fetch. ``renderer`` is kw_only, so it never steals the
         second positional slot (which would fault as a 'both' declaration)."""
         monkeypatch.setattr("sys.stdout.isatty", lambda: False)
-        runner = CliRunner(_legacy, lambda: "POS")  # positional render, positional fetch
+        with pytest.warns(DeprecationWarning, match="render="):
+            runner = CliRunner(_legacy, lambda: "POS")  # positional render, positional fetch
         assert runner.render is _legacy
         assert runner.renderer is None
         rc = runner.run(["--plain"])
         assert rc == 0
         assert "legacy POS" in capsys.readouterr().out
 
-    def test_render_emits_no_deprecation_warning(self, monkeypatch, recwarn):
-        """0.11 keeps render= silent — the DeprecationWarning gate opens at 0.12 (§3)."""
+    def test_render_emits_deprecation_warning_once_at_construction(self, monkeypatch):
+        """0.12 opens the gate (§3, §12 M5-d): render= warns exactly once, at
+        construction — not per frame — naming the renderer= replacement and
+        the design doc."""
         monkeypatch.setattr("sys.stdout.isatty", lambda: False)
-        run_cli(["--plain"], render=_legacy, fetch=lambda: "x")
+        with pytest.warns(DeprecationWarning, match="renderer=.*RENDERER_CONTRACT_DESIGN") as rec:
+            run_cli(["--plain"], render=_legacy, fetch=lambda: "x")
+        deprecations = [w for w in rec.list if issubclass(w.category, DeprecationWarning)]
+        assert len(deprecations) == 1
+        assert deprecations[0].filename == __file__
+
+    def test_renderer_form_emits_no_deprecation_warning(self, monkeypatch, recwarn):
+        monkeypatch.setattr("sys.stdout.isatty", lambda: False)
+        run_cli(["--plain"], renderer=_renderer, fetch=lambda: "x")
+        assert not [w for w in recwarn.list if issubclass(w.category, DeprecationWarning)]
+
+    def test_transcription_default_emits_no_deprecation_warning(self, monkeypatch, recwarn):
+        monkeypatch.setattr("sys.stdout.isatty", lambda: False)
+        run_cli(["--plain"], fetch=lambda: "x")
         assert not [w for w in recwarn.list if issubclass(w.category, DeprecationWarning)]
 
 
@@ -846,7 +866,7 @@ class TestRefSchemes:
 
         result = run_cli(
             ["-i"],
-            render=lambda ctx, data: Block.text("unused", Style()),
+            renderer=lambda data, fidelity, width: Block.text("unused", Style()),
             fetch=lambda: "data",
             handlers={OutputMode.INTERACTIVE: handler},
             ref_schemes=never_called,
@@ -866,7 +886,7 @@ class TestRefSchemes:
 
         result = run_cli(
             ["-i"],
-            render=lambda ctx, data: Block.text("unused", Style()),
+            renderer=lambda data, fidelity, width: Block.text("unused", Style()),
             fetch=lambda: "data",
             handlers={OutputMode.INTERACTIVE: handler},
             ref_schemes=[RefScheme("fact", lambda v: v)],
@@ -887,7 +907,7 @@ class TestRefSchemes:
 
         result = run_cli(
             ["--json"],
-            render=lambda ctx, data: Block.text("unused", Style()),
+            renderer=lambda data, fidelity, width: Block.text("unused", Style()),
             fetch=lambda: {"a": 1},
             ref_schemes=never_called,
         )
@@ -905,7 +925,7 @@ class TestRunCliHelp:
 
         result = run_cli(
             ["--help"],
-            render=lambda ctx, data: Block.text("unused", Style()),
+            renderer=lambda data, fidelity, width: Block.text("unused", Style()),
             fetch=lambda: "ok",
             prog="myapp",
             description="My application",
@@ -933,7 +953,7 @@ class TestRunCliHelp:
 
         result = run_cli(
             ["--help"],
-            render=lambda ctx, data: Block.text("unused", Style()),
+            renderer=lambda data, fidelity, width: Block.text("unused", Style()),
             fetch=lambda: "ok",
             prog="myapp",
             add_args=add_args,
@@ -951,7 +971,7 @@ class TestRunCliHelp:
 
         result = run_cli(
             ["--help"],
-            render=lambda ctx, data: Block.text("unused", Style()),
+            renderer=lambda data, fidelity, width: Block.text("unused", Style()),
             fetch=lambda: "ok",
             prog="myapp",
         )
@@ -977,7 +997,7 @@ class TestCliRunnerModeInference:
             yield "data"
 
         CliRunner(
-            render=lambda ctx, data: Block.text(str(data), Style()),
+            renderer=lambda data, fidelity, width: Block.text(str(data), Style()),
             fetch=lambda: "data",
             fetch_stream=fake_stream,
         )
@@ -1002,7 +1022,7 @@ class TestCliRunnerModeInference:
 
         result = run_cli(
             ["-i"],
-            render=lambda ctx, data: Block.text("x", Style()),
+            renderer=lambda data, fidelity, width: Block.text("x", Style()),
             fetch=lambda: "ok",
             handlers={OutputMode.INTERACTIVE: handler},
         )
@@ -1012,16 +1032,9 @@ class TestCliRunnerModeInference:
         """--json with AUTO mode resolves to STATIC."""
         monkeypatch.setattr("sys.stdout.isatty", lambda: False)
 
-        received_ctx = None
-
-        def render(ctx: CliContext, data: str) -> Block:
-            nonlocal received_ctx
-            received_ctx = ctx
-            return Block.text(data, Style())
-
         result = run_cli(
             ["--json"],
-            render=render,
+            renderer=lambda data, fidelity, width: Block.text(str(data), Style()),
             fetch=lambda: {"val": 1},
         )
         assert result == 0
@@ -1034,7 +1047,7 @@ class TestCliRunnerModeInference:
         monkeypatch.setattr("sys.stdout.isatty", lambda: False)
         result = run_cli(
             ["--plain"],
-            render=lambda ctx, data: Block.text("hello", Style()),
+            renderer=lambda data, fidelity, width: Block.text("hello", Style()),
             fetch=lambda: "ok",
         )
         assert result == 0
@@ -1045,7 +1058,7 @@ class TestCliRunnerModeInference:
 
         result = run_cli(
             ["-q"],
-            render=lambda ctx, data: Block.text("minimal", Style()),
+            renderer=lambda data, fidelity, width: Block.text("minimal", Style()),
             fetch=lambda: "ok",
         )
         assert result == 0
@@ -1058,7 +1071,7 @@ class TestCliRunnerJsonPath:
 
         result = run_cli(
             ["--json"],
-            render=lambda ctx, data: Block.text("x", Style()),
+            renderer=lambda data, fidelity, width: Block.text("x", Style()),
             fetch=lambda: [1, 2, 3],
         )
         assert result == 0
@@ -1071,7 +1084,7 @@ class TestCliRunnerJsonPath:
 
         result = run_cli(
             ["--json"],
-            render=lambda ctx, data: Block.text("x", Style()),
+            renderer=lambda data, fidelity, width: Block.text("x", Style()),
             fetch=lambda: (_ for _ in ()).throw(IOError("disk full")),
         )
         assert result == 1
@@ -1146,7 +1159,7 @@ class TestCliRunnerLiveFallback:
             height=24,
         )
         runner = CliRunner(
-            render=lambda ctx, data: Block.text("live-ok", Style()),
+            renderer=lambda data, fidelity, width: Block.text("live-ok", Style()),
             fetch=lambda: "ok",
         )
         result = runner._dispatch(ctx)
@@ -1167,7 +1180,7 @@ class TestCliRunnerLiveFallback:
             height=24,
         )
         runner = CliRunner(
-            render=lambda ctx, data: Block.text("x", Style()),
+            renderer=lambda data, fidelity, width: Block.text("x", Style()),
             fetch=lambda: (_ for _ in ()).throw(IOError("fail")),
         )
         result = runner._dispatch(ctx)
@@ -1186,11 +1199,11 @@ class TestCliRunnerLiveFallback:
             height=24,
         )
 
-        def bad_render(ctx, data):
+        def bad_render(data, fidelity, width):
             raise ValueError("render broke")
 
         runner = CliRunner(
-            render=bad_render,
+            renderer=bad_render,
             fetch=lambda: "ok",
         )
         result = runner._dispatch(ctx)
@@ -1209,7 +1222,7 @@ class TestCliRunnerLiveFallback:
             height=24,
         )
         runner = CliRunner(
-            render=lambda ctx, data: Block.text("interactive-fallback", Style()),
+            renderer=lambda data, fidelity, width: Block.text("interactive-fallback", Style()),
             fetch=lambda: "ok",
         )
         result = runner._dispatch(ctx)
@@ -1258,7 +1271,7 @@ class TestCliRunnerLiveStreaming:
             yield "b"
 
         runner = CliRunner(
-            render=lambda ctx, data: Block.text(str(data), Style()),
+            renderer=lambda data, fidelity, width: Block.text(str(data), Style()),
             fetch=lambda: "unused",
             fetch_stream=fake_stream,
         )
@@ -1311,13 +1324,13 @@ class TestCliRunnerLiveStreaming:
             yield "ok"
             yield "boom"
 
-        def maybe_bad_render(ctx, data):
+        def maybe_bad_render(data, fidelity, width):
             if data == "boom":
                 raise ValueError("render broke")
             return Block.text(str(data), Style())
 
         runner = CliRunner(
-            render=maybe_bad_render,
+            renderer=maybe_bad_render,
             fetch=lambda: "unused",
             fetch_stream=fake_stream,
         )
@@ -1369,7 +1382,7 @@ class TestCliRunnerLiveStreaming:
             raise RuntimeError("fetch broke")
 
         runner = CliRunner(
-            render=lambda ctx, data: Block.text(str(data), Style()),
+            renderer=lambda data, fidelity, width: Block.text(str(data), Style()),
             fetch=lambda: "unused",
             fetch_stream=bad_stream,
         )
@@ -1471,18 +1484,21 @@ class TestCtxArgs:
     flags and declared tag/alias dests."""
 
     def test_consumer_arg_on_ctx(self, monkeypatch):
+        """ctx.args is surfaced to an arity-1 fetch (TestFetchArityShim) — the
+        same ctx a renderer= caller never sees, so probing it here goes
+        through fetch rather than the legacy render= form."""
         monkeypatch.setattr("sys.stdout.isatty", lambda: False)
         seen = {}
 
         def add_args(p):
             p.add_argument("--frame", type=int, default=0)
 
-        def render(ctx, data):
+        def fetch(ctx):
             seen["frame"] = ctx.args.frame
             seen["has_quiet"] = "quiet" in ctx.args
-            return Block.text("x", Style())
+            return "d"
 
-        run_cli(["--frame", "5"], render=render, fetch=lambda: "d", add_args=add_args)
+        run_cli(["--frame", "5"], renderer=_renderer, fetch=fetch, add_args=add_args)
         assert seen["frame"] == 5
         # framework flags are owned by the framework, not surfaced as args
         assert seen["has_quiet"] is False
@@ -1493,14 +1509,14 @@ class TestCtxArgs:
         monkeypatch.setattr("sys.stdout.isatty", lambda: False)
         seen = {}
 
-        def render(ctx, data):
+        def fetch(ctx):
             seen["has_thinking"] = "thinking" in ctx.args
-            return Block.text("x", Style())
+            return "d"
 
         run_cli(
             ["--thinking"],
-            render=render,
-            fetch=lambda: "d",
+            renderer=_renderer,
+            fetch=fetch,
             tags=[Tag("thinking", "reasoning")],
         )
         # the tag compiles into fidelity, not ctx.args
@@ -1510,11 +1526,11 @@ class TestCtxArgs:
         monkeypatch.setattr("sys.stdout.isatty", lambda: False)
         seen = {}
 
-        def render(ctx, data):
+        def fetch(ctx):
             seen["len"] = len(ctx.args)
-            return Block.text("x", Style())
+            return "d"
 
-        run_cli([], render=render, fetch=lambda: "d")
+        run_cli([], renderer=_renderer, fetch=fetch)
         assert seen["len"] == 0
 
 
@@ -1530,7 +1546,7 @@ class TestFetchArityShim:
             calls.append("nullary")
             return "d"
 
-        run_cli([], render=lambda ctx, d: Block.text(d, Style()), fetch=fetch)
+        run_cli([], renderer=lambda data, fidelity, width: Block.text(data, Style()), fetch=fetch)
         assert calls == ["nullary"]
 
     def test_ctx_fetch_receives_ctx(self, monkeypatch):
@@ -1546,7 +1562,7 @@ class TestFetchArityShim:
 
         run_cli(
             ["--frame", "3"],
-            render=lambda ctx, d: Block.text(d, Style()),
+            renderer=lambda data, fidelity, width: Block.text(data, Style()),
             fetch=fetch,
             add_args=add_args,
         )
@@ -1563,7 +1579,7 @@ class TestFetchArityShim:
 
         code = run_cli(
             ["--json"],
-            render=lambda ctx, d: Block.text("x", Style()),
+            renderer=lambda data, fidelity, width: Block.text("x", Style()),
             fetch=fetch,
         )
         assert code == 0

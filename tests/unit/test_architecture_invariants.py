@@ -667,3 +667,166 @@ def test_raise_sites_use_painted_exception_classes() -> None:
     assert not violations, "Bare stdlib raises outside the exemption list:\n" + "\n".join(
         violations
     )
+
+
+# --- No semantic-renderer read of use_ansi (RENDERER_CONTRACT_DESIGN §9.5) ----
+#
+# capabilities.py replaced ctx.use_ansi as the vocabulary for content-structure
+# carrier choices (color/glyph/link). The two former readers (raymarch, starmap)
+# converted to current_capabilities() in M5-c; this gate keeps the exit criterion
+# "no semantic renderer reads use_ansi" a STRUCTURAL guarantee, not a
+# spelling-dependent one.
+#
+# The previous gate classified delivery by *callee name* (a {print_block, Writer}
+# allowlist on the enclosing call) — so an aliased delivery callee evaded the
+# exemption, and the guarantee rested on how a call happened to be spelled. This
+# rebuild is structural (the reviewer's direction): it seeds a *render graph* from
+# what a module actually registers as a renderer — the `renderer=`/`render=`
+# arguments of its `run_cli`/`run_app` calls, plus the `_render`-convention entry
+# points — walks the same-module AST call graph to every helper those renderers
+# can reach, and prohibits ANY `.use_ansi` attribute read anywhere in that
+# reachable graph, regardless of spelling. Host-side functions (a custom
+# `_handle_interactive`, a `main()`, anything a renderer cannot reach) are
+# unconstrained: they decide how an already-rendered Block reaches the terminal,
+# never what the Block contains, so an aliased `print_block` there is fine.
+_RENDERER_REGISTER_CALLEES = frozenset({"run_cli", "run_app"})
+_RENDERER_REGISTER_KWARGS = frozenset({"renderer", "render"})
+
+
+def _callee_name(call: ast.Call) -> str | None:
+    """The bare name of a call's callee — ``run_cli`` for both ``run_cli(...)``
+    and ``painted.run_cli(...)``."""
+    func = call.func
+    if isinstance(func, ast.Attribute):
+        return func.attr
+    if isinstance(func, ast.Name):
+        return func.id
+    return None
+
+
+def _module_functions(tree: ast.Module) -> dict[str, ast.AST]:
+    """Module-level function definitions by name (sync + async)."""
+    return {
+        node.name: node
+        for node in tree.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+    }
+
+
+def _render_graph_seeds(tree: ast.Module, funcs: dict[str, ast.AST]) -> set[str]:
+    """The renderer entry points a module declares: `_render`-convention
+    functions, plus any local function passed as `renderer=`/`render=` to a
+    `run_cli`/`run_app` call."""
+    seeds: set[str] = set()
+    for name in funcs:
+        if name == "_render" or name.startswith("_render_"):
+            seeds.add(name)
+    for node in ast.walk(tree):
+        if not (isinstance(node, ast.Call) and _callee_name(node) in _RENDERER_REGISTER_CALLEES):
+            continue
+        for kw in node.keywords:
+            if (
+                kw.arg in _RENDERER_REGISTER_KWARGS
+                and isinstance(kw.value, ast.Name)
+                and kw.value.id in funcs
+            ):
+                seeds.add(kw.value.id)
+    return seeds
+
+
+def _scope_bound_names(fn: ast.AST) -> set[str]:
+    """Names bound in ``fn``'s OWN scope — its parameters, its assignment
+    targets, and any function/class it defines locally. A name bound here is a
+    local (Python function scope), so a Load of it is NOT a reference to a
+    same-named module function — this is what keeps a renderer's local variable
+    (``main = join_responsive(...)``) from spuriously pulling the module's
+    ``main`` into the render graph. Nested function/lambda bodies are a separate
+    scope and deliberately not descended into for binding collection."""
+    bound: set[str] = set()
+    args = getattr(fn, "args", None)
+    if isinstance(args, ast.arguments):
+        for arg in (*args.posonlyargs, *args.args, *args.kwonlyargs):
+            bound.add(arg.arg)
+        if args.vararg:
+            bound.add(args.vararg.arg)
+        if args.kwarg:
+            bound.add(args.kwarg.arg)
+    stack: list[ast.AST] = list(getattr(fn, "body", []))
+    while stack:
+        node = stack.pop()
+        if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
+            bound.add(node.id)
+            continue
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            bound.add(node.name)  # bound in this scope; its body is a new scope
+            continue
+        if isinstance(node, ast.Lambda):
+            continue  # separate scope
+        stack.extend(ast.iter_child_nodes(node))
+    return bound
+
+
+def _same_module_edges(fn: ast.AST, funcs: dict[str, ast.AST]) -> set[str]:
+    """Every module-level function ``fn`` references — a conservative call graph
+    that counts callbacks passed by name, not just direct calls, so an aliased
+    ``deliver = _helper; deliver(...)`` inside a renderer still pulls ``_helper``
+    into the graph. Names bound in ``fn``'s own scope are excluded: a local
+    shadowing a module function is a local, not an edge."""
+    bound = _scope_bound_names(fn)
+    return {
+        node.id
+        for node in ast.walk(fn)
+        if isinstance(node, ast.Name)
+        and isinstance(node.ctx, ast.Load)
+        and node.id in funcs
+        and node.id not in bound
+    }
+
+
+def _render_graph(tree: ast.Module) -> set[str]:
+    """The set of module functions reachable from the render seeds."""
+    funcs = _module_functions(tree)
+    reachable = _render_graph_seeds(tree, funcs)
+    frontier = list(reachable)
+    while frontier:
+        current = frontier.pop()
+        for callee in _same_module_edges(funcs[current], funcs):
+            if callee not in reachable:
+                reachable.add(callee)
+                frontier.append(callee)
+    return reachable
+
+
+def _use_ansi_reads_in_render_graph(source: str, filename: str) -> list[int]:
+    """Line numbers of every ``.use_ansi`` attribute read inside a
+    render-graph-reachable function of ``source``. Empty when the graph is
+    clean. The unit the gate asserts on, factored out so both directions of the
+    guarantee are checkable."""
+    tree = ast.parse(source, filename=filename)
+    funcs = _module_functions(tree)
+    reachable = _render_graph(tree)
+    lines: list[int] = []
+    for name in reachable:
+        for node in ast.walk(funcs[name]):
+            if isinstance(node, ast.Attribute) and node.attr == "use_ansi":
+                lines.append(node.lineno)
+    return sorted(lines)
+
+
+def test_demos_render_paths_do_not_read_use_ansi() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    targets = sorted((repo_root / "demos").rglob("*.py")) + [
+        repo_root / "src" / "painted" / "_demo_cli.py"
+    ]
+    violations: list[str] = []
+    for py_file in targets:
+        source = py_file.read_text(encoding="utf-8")
+        for lineno in _use_ansi_reads_in_render_graph(source, str(py_file)):
+            violations.append(
+                f"{py_file.relative_to(repo_root)}:{lineno} "
+                "reads .use_ansi inside a renderer-reachable function — a "
+                "semantic-renderer path; use painted.capabilities.current_capabilities() "
+                "instead (docs/RENDERER_CONTRACT_DESIGN.md §9.5)"
+            )
+
+    assert not violations, "use_ansi read on a render path:\n" + "\n".join(violations)

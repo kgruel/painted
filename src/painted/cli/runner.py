@@ -10,11 +10,12 @@ import argparse
 import json
 import shutil
 import sys
+import warnings
 from collections.abc import Callable, Sequence
 from dataclasses import asdict, dataclass, field
 from typing import TYPE_CHECKING, Generic, TypeVar, overload
 
-from contextlib import AbstractContextManager, nullcontext
+from contextlib import AbstractContextManager, ExitStack, nullcontext
 
 from ..core.errors import DeclarationError
 from .types import (
@@ -49,6 +50,22 @@ if TYPE_CHECKING:
 
 T = TypeVar("T")  # State type
 R = TypeVar("R")  # Return type
+
+
+def _legacy_render_stacklevel() -> int:
+    """Stacklevel for the ``render=`` warning, attributed to the caller's own
+    line regardless of entry point: direct ``CliRunner(render=...)``
+    construction, or ``run_cli(...)``'s pass-through construction one frame
+    deeper. Walks past this module's frames and the dataclass-generated
+    ``__init__`` (``co_filename == "<string>"``) rather than hardcoding a
+    depth that only one of the two entry points would get right.
+    """
+    frame = sys._getframe(1)  # the caller of this helper (__post_init__)
+    level = 1
+    while frame is not None and frame.f_code.co_filename in (__file__, "<string>"):
+        frame = frame.f_back
+        level += 1
+    return level
 
 
 @dataclass
@@ -188,6 +205,17 @@ class CliRunner(Generic[T]):
             )
         if self.fetch is None:
             raise DeclarationError("run_cli requires fetch= (how to fetch state)")
+        if self.render is not None:
+            # The 0.11 sequencing promise (§3): render= was silent while raymarch/
+            # starmap were blocked on the capability vocabulary; both migrated in
+            # M5-c, so the gate opens here, once, at the declaration seam — never
+            # per frame.
+            warnings.warn(
+                "render=(ctx, data) is deprecated; use renderer=(data, fidelity, "
+                "width) instead (removed at 1.0, docs/RENDERER_CONTRACT_DESIGN.md §3)",
+                DeprecationWarning,
+                stacklevel=_legacy_render_stacklevel(),
+            )
         if self.render is None and self.renderer is None:
             # Neither declared: render by transcription (§4). The *neither* form
             # is a real call form now — install painted's default renderer so
@@ -238,6 +266,12 @@ class CliRunner(Generic[T]):
                     "ref_schemes= must be a Sequence of RefScheme or a callable "
                     f"of state, got {self.ref_schemes!r}"
                 )
+
+        # The delivery's single NO_COLOR read (§9.1), set for the duration of one
+        # dispatch by ``_host_scope`` and reset on its exit. ``None`` outside a
+        # dispatch means "resolve ambiently" — the behavior a direct ``_run_static``
+        # test call still sees.
+        self._delivery_no_color: bool | None = None
 
     def run(self, args: list[str]) -> int:
         """Parse args, resolve context, dispatch."""
@@ -610,25 +644,55 @@ class CliRunner(Generic[T]):
         print(json.dumps(data, default=str))
         return 0
 
-    @staticmethod
-    def _icon_scope(ctx: CliContext):
-        """Scoped ASCII icon override for plain output — restored on exit."""
-        if not ctx.use_ansi:
+    def _host_scope(self, ctx: CliContext) -> ExitStack:
+        """Install the host capability bracket for the framework render paths (§9.2–9.4).
+
+        Capabilities are *standing* facts for the run — a single snapshot resolved
+        from ``stdout`` (§9.3) — so one bracket spans STATIC and every LIVE
+        sub-path: an in-place loop, a plain-cadence stream, the alt-screen surface,
+        and its scrollback deposit all render inside it (a ContextVar set here is
+        inherited by the asyncio tasks the live hosts spawn, per §9.2). The paired
+        ASCII-safe ``IconSet`` honors §9.4: a host narrowing ``glyph=False`` must
+        also install an ASCII-safe glyph vocabulary, so the two never disagree.
+        Custom handlers own their own bracket (§9.3) and never reach here.
+
+        The one-snapshot rule (§9.1): NO_COLOR is read **once** here and stored for
+        the delivery, so the ``color`` facet and every serializer this dispatch
+        opens (STATIC ``print_block``, the in-place LIVE writer, the alt-screen
+        deposit) share the exact same value — a mid-run env change cannot split
+        content choice from serialization.
+        """
+        from ..capabilities import (
+            resolve_host_capabilities,
+            resolve_no_color,
+            use_capabilities,
+        )
+
+        no_color = resolve_no_color()
+        caps = resolve_host_capabilities(sys.stdout, use_ansi=ctx.use_ansi, no_color=no_color)
+        stack = ExitStack()
+        self._delivery_no_color = no_color
+        stack.callback(setattr, self, "_delivery_no_color", None)
+        stack.enter_context(use_capabilities(caps))
+        if not caps.glyph:
             from ..icon_set import ASCII_ICONS, use_icons
 
-            return use_icons(ASCII_ICONS)
-        return nullcontext()
+            stack.enter_context(use_icons(ASCII_ICONS))
+        return stack
 
     def _dispatch(self, ctx: CliContext) -> int:
         """Dispatch to appropriate output mechanism."""
-        with self._icon_scope(ctx):
-            # Check for custom handler
-            if self.handlers and ctx.mode in self.handlers:
-                with self._handler_ref_scope():
-                    result = self.handlers[ctx.mode](ctx)
-                return result if isinstance(result, int) else 0
+        # A custom handler replaces the framework render path, so it owns its own
+        # capability bracket (§9.3, mirroring refs ownership §7) — the framework
+        # installs nothing on its behalf. Its static ref scope still applies.
+        if self.handlers and ctx.mode in self.handlers:
+            with self._handler_ref_scope():
+                result = self.handlers[ctx.mode](ctx)
+            return result if isinstance(result, int) else 0
 
-            # Dispatch by mode
+        # Framework render paths (STATIC, LIVE, INTERACTIVE-fallback): the host
+        # capability bracket wraps every offer these paths make to the renderer.
+        with self._host_scope(ctx):
             if ctx.mode == OutputMode.STATIC:
                 return self._run_static(ctx)
 
@@ -664,7 +728,7 @@ class CliRunner(Generic[T]):
             except Exception as exc:
                 self._emit_error(ctx, self._render_error_block(ctx, exc), exc)
                 return 2
-            print_block(block, use_ansi=ctx.use_ansi)
+            print_block(block, use_ansi=ctx.use_ansi, no_color=self._delivery_no_color)
         return 0
 
     def _run_static(self, ctx: CliContext) -> int:
@@ -752,7 +816,9 @@ class CliRunner(Generic[T]):
                     meter = LiveMeter()
                 from .prompts import PromptContractError
 
-                with InPlaceRenderer() as renderer:
+                # The in-place writer serializes under the delivery's one NO_COLOR
+                # snapshot (§9.1) — the same value the capability bracket used.
+                with InPlaceRenderer(no_color=self._delivery_no_color) as renderer:
                     try:
                         async for state in self._stream_iter(ctx):
                             if meter is not None:
@@ -872,6 +938,14 @@ class CliRunner(Generic[T]):
             fetch_stream=lambda: self._stream_iter(ctx),
             live_meter=self.live_meter,
             resolve_ref_schemes=resolve_fn,
+            # The one-snapshot rule (§9.1): the surface's writer is CONSTRUCTED
+            # from the delivery's already-resolved NO_COLOR policy, not a fresh
+            # env read. _host_scope resolved it once (self._delivery_no_color);
+            # threading it here makes _frame_scope's writer-derived capability
+            # bracket equal the outer host bracket by construction — a mid-run
+            # NO_COLOR flip after resolution can no longer split the frame's
+            # content choice or its serialization from the delivery snapshot.
+            no_color=self._delivery_no_color,
         )
         try:
             asyncio.run(surface.run())
@@ -893,10 +967,20 @@ class CliRunner(Generic[T]):
             # A refusal captured inside the surface routes through the seam too.
             if isinstance(surface.error, PromptContractError):
                 raise surface.error
+            # These error serializers are opened inside _host_scope too, so they
+            # carry the delivery's one NO_COLOR snapshot (§9.1), never a fresh read.
             if surface.error_kind == "render":
-                print_block(self._render_error_block(ctx, surface.error), use_ansi=ctx.use_ansi)
+                print_block(
+                    self._render_error_block(ctx, surface.error),
+                    use_ansi=ctx.use_ansi,
+                    no_color=self._delivery_no_color,
+                )
                 return 2
-            print_block(self._fetch_error_block(ctx, surface.error), use_ansi=ctx.use_ansi)
+            print_block(
+                self._fetch_error_block(ctx, surface.error),
+                use_ansi=ctx.use_ansi,
+                no_color=self._delivery_no_color,
+            )
             return 1
 
         # Gate on frame *presence*, not the state payload: renderer data is
@@ -931,17 +1015,22 @@ class CliRunner(Generic[T]):
                 except PromptContractError:
                     raise
                 except Exception as exc:
-                    print_block(self._render_error_block(ctx, exc), use_ansi=ctx.use_ansi)
+                    print_block(
+                        self._render_error_block(ctx, exc),
+                        use_ansi=ctx.use_ansi,
+                        no_color=self._delivery_no_color,
+                    )
                     return 2
                 if self.live_meter:
                     # The deposit carries the run's final gauge — what this show cost.
                     block = surface.meter.dress(block)
-                print_block(block, use_ansi=ctx.use_ansi)
+                # The scrollback deposit is the alt-screen path's STATIC print —
+                # serialized under the delivery's one NO_COLOR snapshot (§9.1).
+                print_block(block, use_ansi=ctx.use_ansi, no_color=self._delivery_no_color)
         return 0
 
-    @staticmethod
     def _emit_error(
-        ctx: CliContext, block: Block, exc: Exception, *, use_ansi: bool | None = None
+        self, ctx: CliContext, block: Block, exc: Exception, *, use_ansi: bool | None = None
     ) -> None:
         """Print an ordinary fetch/render error block to stdout.
 
@@ -949,6 +1038,11 @@ class CliRunner(Generic[T]):
         refusal seam in ``run()`` routes it to stderr with a clean stdout
         (design §8). Every other error keeps the existing stdout path unchanged,
         so this is the one place mode handlers funnel error rendering through.
+
+        The error writer is a stdout serializer opened inside ``_host_scope``, so
+        it serializes under the delivery's one NO_COLOR snapshot (§9.1) — never a
+        second env read that a mid-run env change (a renderer that flips NO_COLOR
+        and then raises) could desync from the delivery's own policy.
         """
         from .prompts import PromptContractError
 
@@ -956,7 +1050,11 @@ class CliRunner(Generic[T]):
             raise exc
         from ..core.writer import print_block
 
-        print_block(block, use_ansi=ctx.use_ansi if use_ansi is None else use_ansi)
+        print_block(
+            block,
+            use_ansi=ctx.use_ansi if use_ansi is None else use_ansi,
+            no_color=self._delivery_no_color,
+        )
 
     def _emit_refusal(self, ctx: CliContext, exc: Exception, *, plain: bool) -> int:
         """Route a prompt refusal to stderr, leaving stdout a clean data channel.

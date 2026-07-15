@@ -95,9 +95,13 @@ class InPlaceRenderer:
     moves up and overwrites; show cursor.
     """
 
-    def __init__(self, stream: TextIO = sys.stdout):
+    def __init__(self, stream: TextIO = sys.stdout, *, no_color: bool | None = None):
         self._stream = stream
-        self._writer = Writer(stream)
+        # ``no_color`` threads the delivery's resolved color snapshot into the
+        # serializer (§9.1): a live host that computed the capability bracket from
+        # one NO_COLOR read passes that same value here, so content choice and
+        # serialization cannot split. ``None`` keeps the ambient env resolution.
+        self._writer = Writer(stream, no_color=no_color)
         self._height = 0  # lines written by last frame
         self._prev: Block | None = None  # last rendered frame, for row diffing
         self._active = False

@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import signal
 from collections.abc import Awaitable, Callable
-from contextlib import AbstractContextManager, nullcontext
+from contextlib import AbstractContextManager, ExitStack
 from typing import Any
 
 from ..mouse import MouseEvent
@@ -53,8 +53,17 @@ class Surface:
         on_emit: Emit | None = None,
         on_start: LifecycleHook | None = None,
         on_stop: LifecycleHook | None = None,
+        no_color: bool | None = None,
     ):
-        self._writer = Writer()
+        # ``no_color`` threads a host's *already-resolved* NO_COLOR snapshot into
+        # this Surface's writer (RENDERER_CONTRACT_DESIGN.md §9.1). A framework
+        # host (``run_cli``) resolves the delivery's color policy once in
+        # ``_host_scope`` and passes it here so ``_frame_scope``'s writer-derived
+        # capability bracket *equals* that snapshot by construction — the frame
+        # can never re-read the environment and split content choice from
+        # serialization. ``None`` (a standalone Surface with no owning host) keeps
+        # the writer resolving NO_COLOR from its own environment, unchanged.
+        self._writer = Writer(no_color=no_color)
         self._fps_cap = fps_cap
         self._buf: Buffer | None = None
         self._prev: Buffer | None = None
@@ -173,21 +182,43 @@ class Surface:
     def render(self) -> None:
         """Called each frame when dirty. Override to paint into self._buf."""
 
-    def _frame_scope(self) -> AbstractContextManager[None]:
+    def _frame_scope(self) -> AbstractContextManager[Any]:
         """Context manager entered before ``render()``, exited after
         ``_flush()`` — one bracket per dirty frame.
 
-        The default is a no-op: most Surface subclasses have no per-frame
-        ambient state to bracket. ``StreamSurface`` overrides this to install
-        the CLI framework's declared ``ref_schemes=`` for the frame's state
-        (docs/RENDERER_CONTRACT_DESIGN.md §7) — render and flush are separate
-        calls, so a scope opened only inside ``render()`` would close before
-        ``_flush()`` resolves refs during serialization. Guaranteed release
-        on success, exception, cancellation, resize, and quit falls out of
-        ordinary ``with``-statement semantics: this brackets both calls in
-        one statement, in the task that owns the loop.
+        The framework Surface owns the terminal, so it resolves and installs the
+        **capability bracket** here (docs/RENDERER_CONTRACT_DESIGN.md §9.3 Surface
+        row): the scope spans ``render()`` through the ``_flush()`` serialization,
+        in the task that owns the loop, with guaranteed release on success,
+        exception, cancellation, resize, and quit — ordinary ``with`` semantics.
+        The facets come from the Surface's *own writer* (the single snapshot the
+        facets and that writer's serialization share, §9.1): the alt screen
+        establishes ANSI *control* only, so ``color`` still consults NO_COLOR +
+        depth, ``glyph`` the encoding, ``link`` the writer's hyperlink config —
+        alt-screen operation alone implies none of them. The §9.4 pairing folds in:
+        a ``glyph=False`` frame also installs an ASCII-safe ``IconSet``.
+
+        Subclasses that override this **must compose** it — ``StreamSurface`` adds
+        the declared ``ref_schemes=`` for the frame's state (§7) on top of the
+        capability bracket via ``super()._frame_scope()``.
         """
-        return nullcontext()
+        from ..capabilities import resolve_surface_capabilities, use_capabilities
+        from ..core.writer import ColorDepth
+
+        w = self._writer
+        caps = resolve_surface_capabilities(
+            w.stream,
+            no_color=w.no_color,
+            depth_is_none=w.detect_color_depth() is ColorDepth.NONE,
+            hyperlinks=w.hyperlinks,
+        )
+        stack = ExitStack()
+        stack.enter_context(use_capabilities(caps))
+        if not caps.glyph:
+            from ..icon_set import ASCII_ICONS, use_icons
+
+            stack.enter_context(use_icons(ASCII_ICONS))
+        return stack
 
     def on_key(self, key: str) -> None:
         """Called on keypress. Override to dispatch to focused component."""

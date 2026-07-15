@@ -32,10 +32,9 @@ from dataclasses import dataclass
 
 from painted import (
     Block,
-    CliContext,
+    Fidelity,
     RefScheme,
     Style,
-    Zoom,
     border,
     join_horizontal,
     join_vertical,
@@ -45,6 +44,7 @@ from painted import (
     use_refs,
     ROUNDED,
 )
+from painted.capabilities import current_capabilities
 from painted.palette import current_palette
 
 # Declared in main() around the delivery, never at module scope (a module-scope
@@ -288,8 +288,9 @@ def _twinkle(name: str, frame: int) -> int:
 _CellsGrid = dict[tuple[int, int], tuple[str, Style, str | None]]
 
 
-def _grid_size(width: int) -> tuple[int, int]:
-    return max(40, min(width - 4, 96)), _ROWS
+def _grid_size(width: int | None) -> tuple[int, int]:
+    w = 96 if width is None else max(40, min(width - 4, 96))
+    return w, _ROWS
 
 
 def _project(sky: Sky, w: int, h: int, ra: float, dec: float) -> tuple[int, int]:
@@ -418,14 +419,15 @@ def _legend() -> Block:
     )
 
 
-def _links_live(ctx: CliContext) -> bool:
+def _links_live() -> bool:
     """Honesty for the gesture hint: advertise ⌘-click only when this delivery
-    actually emits links — ANSI output AND a declared scheme that resolves."""
-    return ctx.use_ansi and resolve_ref("star:Sirius") is not None
+    actually emits links — link-capable output AND a declared scheme that
+    resolves."""
+    return current_capabilities().link and resolve_ref("star:Sirius") is not None
 
 
 def _window(
-    sky: Sky, width: int, *, labels: bool, legend: bool, hint: bool
+    sky: Sky, width: int | None, *, labels: bool, legend: bool, hint: bool
 ) -> tuple[Block, list[Star]]:
     w, h = _grid_size(width)
     cells, visible = _plot(sky, w, h, labels)
@@ -440,7 +442,7 @@ def _window(
     return framed, visible
 
 
-def _catalog_table(visible: list[Star], width: int) -> Block:
+def _catalog_table(visible: list[Star], width: int | None) -> Block:
     """The brightest of what's in view, each ref through resolve_ref — URIs
     when the scheme is declared, inert (and honestly so) when it isn't."""
     p = current_palette()
@@ -460,51 +462,51 @@ def _catalog_table(visible: list[Star], width: int) -> Block:
     if len(visible) > len(shown):
         rows.append(Block.text(f"  … and {len(visible) - len(shown)} fainter", Style(dim=True)))
     block = join_vertical(*rows) if rows else Block.text("  (empty sky)", Style(dim=True))
-    return truncate(block, width)
+    return truncate(block, width) if width is not None else block
 
 
 # --- Zoom renderers ---
 
 
-def _render_minimal(sky: Sky, width: int) -> Block:
+def _render_minimal(sky: Sky, width: int | None) -> Block:
     w, h = _grid_size(width)
     _cells, visible = _plot(sky, w, h, labels=False)
-    return truncate(_census(sky, visible), width)
+    block = _census(sky, visible)
+    return truncate(block, width) if width is not None else block
 
 
-def _render_summary(sky: Sky, width: int, hint: bool) -> Block:
+def _render_summary(sky: Sky, width: int | None, hint: bool) -> Block:
     framed, _visible = _window(sky, width, labels=False, legend=False, hint=hint)
-    return truncate(framed, width)
+    return truncate(framed, width) if width is not None else framed
 
 
-def _render_detailed(sky: Sky, width: int, hint: bool) -> Block:
+def _render_detailed(sky: Sky, width: int | None, hint: bool) -> Block:
     framed, _visible = _window(sky, width, labels=True, legend=True, hint=hint)
-    return truncate(framed, width)
+    return truncate(framed, width) if width is not None else framed
 
 
-def _render_full(sky: Sky, width: int, hint: bool) -> Block:
+def _render_full(sky: Sky, width: int | None, hint: bool) -> Block:
     framed, visible = _window(sky, width, labels=True, legend=True, hint=hint)
-    return truncate(
-        join_vertical(
-            framed,
-            Block.text("", _PLAIN),
-            Block.text("  in view, by brightness", Style(dim=True)),
-            Block.text("", _PLAIN),
-            _catalog_table(visible, width),
-        ),
-        width,
+    block = join_vertical(
+        framed,
+        Block.text("", _PLAIN),
+        Block.text("  in view, by brightness", Style(dim=True)),
+        Block.text("", _PLAIN),
+        _catalog_table(visible, width),
     )
+    return truncate(block, width) if width is not None else block
 
 
-def _render(ctx: CliContext, sky: Sky) -> Block:
-    hint = _links_live(ctx)
-    if ctx.zoom >= Zoom.FULL:
-        return _render_full(sky, ctx.width, hint)
-    if ctx.zoom >= Zoom.DETAILED:
-        return _render_detailed(sky, ctx.width, hint)
-    if ctx.zoom >= Zoom.SUMMARY:
-        return _render_summary(sky, ctx.width, hint)
-    return _render_minimal(sky, ctx.width)
+def _render(sky: Sky, fidelity: Fidelity, width: int | None) -> Block:
+    hint = _links_live()
+    depth = fidelity.depth
+    if depth >= 3:
+        return _render_full(sky, width, hint)
+    if depth >= 2:
+        return _render_detailed(sky, width, hint)
+    if depth >= 1:
+        return _render_summary(sky, width, hint)
+    return _render_minimal(sky, width)
 
 
 # --- Entry point ---
@@ -514,7 +516,7 @@ def main() -> int:
     with use_refs(STAR_SCHEME):
         return run_cli(
             sys.argv[1:],
-            render=_render,
+            renderer=_render,
             fetch=_fetch,
             fetch_stream=_fetch_stream,
             live_delivery="surface",

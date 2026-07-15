@@ -4,6 +4,7 @@ import os
 
 import pytest
 
+from painted.capabilities import reset_capabilities
 from painted.refs import reset_refs
 from painted.theme import reset_theme
 from painted.vocabulary import reset_vocabularies
@@ -39,6 +40,9 @@ def _reset_ambient_state():
     two-layer like `vocabularies` (there is no built-in ref scheme). All three are
     promoted here from the per-directory fixtures they replace so isolation is a
     property of the whole suite, not something each test directory remembers.
+    `reset_capabilities()` pins the render-capability channel (§9) — the sixth
+    content-affecting ContextVar, whose setter form (`use_capabilities` without a
+    `with`) is the same order-leak vector.
 
     `NO_COLOR` is scrubbed too: the writer resolves it *ambiently* at construction
     (`core/writer.py`), so a caller who runs the suite under `NO_COLOR=1` (or a
@@ -51,8 +55,10 @@ def _reset_ambient_state():
     reset_theme()
     reset_vocabularies()
     reset_refs()
+    reset_capabilities()
     yield
     os.environ.pop("NO_COLOR", None)
     reset_theme()
     reset_vocabularies()
     reset_refs()
+    reset_capabilities()
