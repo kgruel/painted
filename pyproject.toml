@@ -1,6 +1,6 @@
 [project]
 name = "painted"
-version = "0.12.0"
+version = "0.12.1"
 description = "A semantic renderer for the terminal — declare what output means; flags, help, completion, zoom, and format derive"
 readme = "README.md"
 license = "MIT"

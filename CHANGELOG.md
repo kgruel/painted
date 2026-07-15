@@ -4,6 +4,21 @@ All notable changes to painted are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/); pre-1.0, minor versions may carry
 breaking changes.
 
+## [0.12.1] — 2026-07-15
+
+### Fixed
+
+- **Completion glue registers alias program names** — `run_app` (and
+  `completion_handler` / `install_completion` beneath it) accepts
+  `aliases: Sequence[str] = ()`, alternate entry points of the same CLI
+  declared by the consuming app (never auto-detected). The zsh glue emits a
+  multi-name `#compdef`; bash registers `complete -F` per name over the one
+  shared function (its body was already invocation-agnostic via
+  `${words[1]}`). Previously only the primary `prog` was registered, so an
+  alias entry point (e.g. loops' `sl`) silently fell back to the shell's
+  default file completion. Default `aliases=()` output is byte-identical to
+  0.12.0.
+
 ## [0.12.0] — 2026-07-14
 
 The **capability vocabulary** (0.12, M5) — the sixth content-affecting ambient
