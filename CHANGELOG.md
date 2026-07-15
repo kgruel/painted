@@ -4,10 +4,32 @@ All notable changes to painted are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/); pre-1.0, minor versions may carry
 breaking changes.
 
-## [Unreleased]
+## [0.12.0] — 2026-07-14
+
+The **capability vocabulary** (0.12, M5) — the sixth content-affecting ambient
+channel, ratified as `docs/RENDERER_CONTRACT_DESIGN.md` §9 and built as five
+slices (M5-a–e). A frozen `Capabilities` value (three boolean facets: `color`,
+`glyph`, `link`) tells a renderer which visual carriers the destination
+supports at the moment content is *chosen* — never re-deciding how it is
+serialized (`ColorDepth` downsampling and `IconSet` fallback stay fenced off).
+Hosts set it with a bracket; the renderer signature stays
+`(data, fidelity, width)` — the 0.11 contract unbroken one milestone later.
 
 ### Added
 
+- **`Capabilities`, `current_capabilities()`, `use_capabilities()`,
+  `reset_capabilities()`** (`painted.capabilities`,
+  `docs/RENDERER_CONTRACT_DESIGN.md` §9) — the capability vocabulary and its
+  ambient channel. `current_capabilities()` reads a frozen `Capabilities`
+  value from a ContextVar at the point of consumption (the `current_palette()`
+  shape); `use_capabilities()` is both setter and scoped context manager.
+  Facets are deliberately boolean — *may* the renderer choose a color-bearing
+  form, non-ASCII carrier families, link carriers — leaving *how much* and
+  *which* to the existing mechanisms.
+- **Host capability brackets** — `run_cli` sets the bracket at dispatch per
+  delivery, `Surface` hosts at frame time, `paint()` from the resolved file.
+  Any host sets the bracket instead of fabricating a `CliContext`; the
+  fabricated-context pattern (the `ResponsiveSurface` lesson) is dissolved.
 - **`print_block(..., no_color=)` and `InPlaceRenderer(no_color=)`** — additive
   keyword passthroughs to the serializing `Writer`
   (`docs/RENDERER_CONTRACT_DESIGN.md` §9.1). A host that has already resolved a
@@ -36,6 +58,15 @@ breaking changes.
   (`renderer=(data, fidelity, width)`) and the design doc; `renderer=` and the
   transcription default (neither declared) stay warning-silent. `render=` is
   removed at 1.0.
+
+### Fixed
+
+- **Intercepted subcommand `-h` now renders the framework grammar groups**
+  (`cli/help.py`). A subcommand's help previously showed only its declared
+  domain flags, while shell completion (the parser's third reflection) offered
+  the universal framework flags too — the two reflections disagreed. Help now
+  documents the framework tier at the subordinated depth, restoring
+  reflection parity.
 
 ## [0.11.0] — 2026-07-13
 
