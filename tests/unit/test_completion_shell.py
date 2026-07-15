@@ -463,3 +463,77 @@ def test_no_raise_on_any_dangling_quote(dangle):
     # property-ish: a dangling quote of either kind never raises
     _, prefix, _ = _parse_comp_line(f"sl read {dangle}lo", len(f"sl read {dangle}lo"))
     assert prefix == "lo"
+
+
+class TestAliasRegistration:
+    """Alias program names (loops installs `loops` and `sl` from one main) get
+    the same completion glue as the primary prog — the #compdef multi-name fix."""
+
+    def test_zsh_no_aliases_is_byte_identical(self):
+        # default aliases=() must not change existing glue at all.
+        from painted.cli.completion_shell import _zsh_script
+
+        assert _zsh_script("sl") == _zsh_script("sl", ())
+
+    def test_bash_no_aliases_is_byte_identical(self):
+        from painted.cli.completion_shell import _bash_script
+
+        assert _bash_script("sl") == _bash_script("sl", ())
+
+    def test_zsh_compdef_lists_all_names(self):
+        from painted.cli.completion_shell import _zsh_script
+
+        script = _zsh_script("loops", ("sl",))
+        assert script.startswith("#compdef loops sl\n")
+
+    def test_zsh_compdef_lists_multiple_aliases(self):
+        from painted.cli.completion_shell import _zsh_script
+
+        script = _zsh_script("loops", ("sl", "lp"))
+        assert script.startswith("#compdef loops sl lp\n")
+
+    def test_bash_registers_one_complete_per_name(self):
+        from painted.cli.completion_shell import _bash_script
+
+        script = _bash_script("loops", ("sl",))
+        assert "complete -F _loops_complete loops" in script
+        assert "complete -F _loops_complete sl" in script
+        # single shared function body
+        assert script.count("_loops_complete() {") == 1
+
+    def test_completion_handler_emits_aliases_zsh(self, capsys):
+        rc = completion_handler("loops", ("sl",))(["zsh"])
+        out = capsys.readouterr().out
+        assert rc == 0
+        assert out.startswith("#compdef loops sl")
+
+    def test_completion_handler_emits_aliases_bash(self, capsys):
+        rc = completion_handler("loops", ("sl",))(["bash"])
+        out = capsys.readouterr().out
+        assert rc == 0
+        assert "complete -F _loops_complete loops" in out
+        assert "complete -F _loops_complete sl" in out
+
+    def test_completion_handler_default_aliases_unchanged(self, capsys):
+        # no aliases passed → identical to the pre-existing behavior
+        rc = completion_handler("sl")(["zsh"])
+        out_no_arg = capsys.readouterr().out
+        rc2 = completion_handler("sl", ())(["zsh"])
+        out_explicit = capsys.readouterr().out
+        assert rc == rc2 == 0
+        assert out_no_arg == out_explicit
+
+    def test_install_writes_glue_with_aliases(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("ZDOTDIR", str(tmp_path))
+        rc = install_completion("zsh", "loops", aliases=("sl",))
+        target = tmp_path / ".zsh" / "completions" / "_loops"
+        assert rc == 0
+        assert target.read_text(encoding="utf-8").startswith("#compdef loops sl")
+
+    def test_run_app_threads_aliases_into_completion_command(self, capsys):
+        from painted.cli import run_app
+
+        rc = run_app(["completion", "zsh"], [_read_command()], prog="loops", aliases=("sl",))
+        out = capsys.readouterr().out
+        assert rc == 0
+        assert out.startswith("#compdef loops sl")

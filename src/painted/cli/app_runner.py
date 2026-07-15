@@ -365,6 +365,7 @@ def run_app(
     prog: str | None = None,
     description: str | None = None,
     default: AppCommand | None = None,
+    aliases: Sequence[str] = (),
 ) -> int:
     """Run an app with command routing and painted help.
 
@@ -389,19 +390,27 @@ def run_app(
             shorthand). Its handler receives the *full* argv. Often the same
             AppCommand also appears in ``commands`` so it stays in help; omitted,
             an unmatched token is an error.
+        aliases: Alternate program entry points installed from the same main
+            (e.g. loops installs ``loops`` and ``sl``). Not routing aliases —
+            those are per-command (``AppCommand.aliases``) — this widens which
+            invoked names the generated ``completion`` command registers shell
+            glue for. Declared only, never auto-detected; default ``()`` keeps
+            emitted glue byte-identical to before.
 
     Returns:
         Exit code (0 for success)
     """
     return AppRunner(
-        commands=_with_completion(tuple(commands), prog),
+        commands=_with_completion(tuple(commands), prog, aliases),
         prog=prog,
         description=description,
         default=default,
     ).run(argv)
 
 
-def _with_completion(commands: tuple[AppCommand, ...], prog: str | None) -> tuple[AppCommand, ...]:
+def _with_completion(
+    commands: tuple[AppCommand, ...], prog: str | None, aliases: Sequence[str] = ()
+) -> tuple[AppCommand, ...]:
     """Append the framework's ``completion`` command unless the app owns the name.
 
     Every ``run_app`` roster gains ``completion`` (emit shell glue) for free —
@@ -409,7 +418,11 @@ def _with_completion(commands: tuple[AppCommand, ...], prog: str | None) -> tupl
     already declares a ``completion`` command or alias, theirs stands and the
     injection is skipped: the auto-add must not turn a working app into a
     construction-time collision (the alias-collision check would otherwise
-    raise). Lazy import keeps the transport off the module-load path."""
+    raise). Lazy import keeps the transport off the module-load path.
+
+    ``aliases`` (alternate program names) rides straight into
+    ``completion_handler`` so the emitted glue registers every declared entry
+    point, not just ``prog``."""
     from .completion_shell import (
         COMPLETION_COMMAND_NAME,
         completion_add_args,
@@ -423,7 +436,7 @@ def _with_completion(commands: tuple[AppCommand, ...], prog: str | None) -> tupl
         AppCommand(
             COMPLETION_COMMAND_NAME,
             "Set up shell completion (print the glue, or --install it)",
-            completion_handler(prog),
+            completion_handler(prog, aliases),
             detail=(
                 f"{prog or 'app'} completion --install"
                 f'   (or print: completion zsh > "${{fpath[1]}}/_{prog or "app"}")'
