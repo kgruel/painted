@@ -208,7 +208,7 @@ docs/
   PRIMITIVES.md       # Quick reference for all primitives
   DATA_PATTERNS.md    # Frozen state + pure functions patterns
   MOUSE.md            # Terminal mouse protocol + painted's mouse API (shipped)
-  HOST_RUNG_DESIGN.md # The interactive rung: dual allocation contract, viewport adapter, absorbed VIEWPORT_DESIGN.md (PLANNED — 0.13/M6)
+  HOST_RUNG_DESIGN.md # The interactive rung: dual allocation contract, viewport adapter, absorbed VIEWPORT_DESIGN.md (RATIFIED 2026-07-15 — 0.13/M6)
   ZOOM_PATTERNS.md    # Lens zoom propagation patterns
   MODE_RESOLUTION.md  # AUTO mode collapse rules, capability filtering
   DEMO_PATTERNS.md    # TUI app pattern, demo organization
