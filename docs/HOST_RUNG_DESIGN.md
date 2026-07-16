@@ -91,12 +91,14 @@ Two facts the design keeps separate:
                                   inline-live region on a TTY)
   ```
 
-  Whether a *declared* renderer on a STATIC TTY can request a synthesized
-  hard frame ("screenful semantics") is **unresolved** — §9 Q7. Until
-  ruled, STATIC TTY sits in the gated-off row unconditionally. If it ships,
-  it is a *separate* declaration from acceptance: "this callable can honor
-  H" and "this delivery should manufacture a hard frame despite usable
-  scrollback" are different propositions.
+  STATIC-TTY screenful delivery is **fenced from 0.13** (RULED Kyle,
+  2026-07-15, round 2): a declared renderer on a STATIC TTY receives
+  `height=None` unconditionally — no consumer evidence exists, and
+  acceptance must never silently mean "discard scrollback semantics." If
+  demand appears it ships as a *separate* declaration from acceptance:
+  "this callable can honor H" and "this delivery should manufacture a hard
+  frame despite usable scrollback" are different propositions, and the
+  split is pinned here so the fence costs nothing to lift.
 
 The honesty property is **conditional**, not unconditional: it is not
 "declared acceptance must visibly change output" but *when passed integer
@@ -129,7 +131,13 @@ Rejected alternatives, for the record:
 
 The 0.11 contract stays untouched: `renderer=(data, fidelity, width) →
 Block`, and every existing consumer remains source-compatible without
-edits. Declared acceptors adopt the height-aware shape:
+edits. **The declaration spelling** (RULED Kyle, 2026-07-15, round 2): a
+mutually exclusive `height_renderer=` binding beside `renderer=` — the
+parameter name *is* the acceptance declaration, so no separate boolean can
+drift from the callable's actual shape; both normalize to a private
+binding record (future runtime view-selection picks between pre-declared
+bindings, §3); a public `HeightRenderer` callable alias ships beside
+`Renderer`. Declared acceptors adopt the height-aware shape:
 
 ```python
 def renderer(data, fidelity, width) -> Block: ...            # unchanged
@@ -189,11 +197,15 @@ to reopen ratified exactness (round-1 correction):
   to it); short **natural** content is padded *by the host adapter* when it
   constructs an exact delivery frame. Same operation, different owner,
   because ownership follows the offer.
-- Degenerate heights: whether `H=0` is a valid offer depends on whether
-  zero-height frames are representable at this boundary — if not, the host
-  rejects the layout before invoking the renderer. At `H=1` the renderer
-  decides whether the sole row is content or evidence; law-6 evidence is
-  required only where the allocation physically permits it.
+- Degenerate heights (RULED Kyle, 2026-07-15, round 2): `H` is a
+  non-negative integer — a negative offer is a host bug and fails loudly.
+  `H=0` is a valid offer (the primitives already represent it:
+  `Block.empty(w, 0)`, `vslice(..., 0)`, `Viewport.visible=0`), requires an
+  exact zero-height Block, and waives evidence — law-6 evidence is required
+  only where the allocation physically permits it. At `H=1` on the offered
+  arm the renderer owns the content-vs-evidence choice for its one row; an
+  omitted-arm host viewport at frame height 1 with overflow uses the row
+  for evidence, per `InPlaceRenderer`'s shipped precedent.
 - **Amendment to LIVE_DELIVERY_DESIGN §10**: `finalize()`'s "deposits full
   height — no reason to lose content" holds only for natural-height input.
   Under the offered arm, finalize deposits the `H`-row Block the renderer
@@ -229,29 +241,38 @@ to it. What components still lack is law-6 evidence for their own windows
   inputs it was produced from. Cache publication is atomic with its input
   key — streaming data arriving concurrently with a resize must not install
   an old Block under a new generation.
-- **Scroll evidence**: the adapter renders the affordance the render-model
-  audit found missing — *movable* host viewporting and component-owned
-  windows have no evidence today; `InPlaceRenderer`'s fixed head-clip
-  (LIVE_DELIVERY §10) is the one shipped exception. The evidence row
-  (`… ▼ 763 more rows`, ambient icon set, ASCII degradation) is
-  host-authored because the host decided the window, and it counts **rows**,
-  not entries — the adapter knows Block height and offset, never how rows
-  map to semantic records; an entry count is the application's to supply.
-  Exact form is a deliberation item (§9 Q2).
+- **Scroll evidence** (structural form RULED Kyle, 2026-07-15, round 2):
+  the adapter renders the affordance the render-model audit found missing —
+  *movable* host viewporting and component-owned windows have no evidence
+  today; `InPlaceRenderer`'s fixed head-clip (LIVE_DELIVERY §10) is the one
+  shipped exception. The form is a reserved evidence **row**, never a rail:
+  a rail consumes width — shrinking the offer pre-render, changing it
+  conditionally post-render, or overlaying content — and all three tangle
+  the ratified width contract, while a row stays on the vertical axis and
+  preserves height-only re-slicing. Fitting content is shown and padded;
+  overflowing content gets `F−1` content rows plus one evidence row
+  (`… ▼ 763 more rows`, ambient icon set, ASCII degradation), which may
+  carry host-owned interaction refs. It is host-authored because the host
+  decided the window, and it counts **rows**, not entries — the adapter
+  knows Block height and offset, never how rows map to semantic records; an
+  entry count is the application's to supply. Glyphs and styling deferred
+  to appearance review.
 - **Intent, then geometry**: viewing intent — at-bottom/following,
   cursor-following, top-anchored — is captured *before* mutating `visible`
   or `content`, then reapplied. Testing `is_at_bottom` after the mutation is
   too late (the flag may have changed meaning). Note the directionality:
   terminal *shrink* grows `max_offset` and usually keeps offsets valid;
   it is viewport *growth* or content shrink that forces clamping.
-- **The width-reflow anchor policy**: numeric row offsets are not stable
-  across width changes — re-rendering at a new width can wrap one semantic
-  record into a different number of rows, so clamping alone cannot preserve
-  the user's place. The adapter needs a declared policy: reset-to-top,
-  preserve-follow, **semantic anchor via refs where the content carries
-  them** (the denotation channel doing viewport work), numeric offset as
-  documented fallback. Which policies ship and which is default is a
-  deliberation item.
+- **The width-reflow anchor policy** (RULED Kyle, 2026-07-15, round 2):
+  numeric row offsets are not stable across width changes — re-rendering at
+  a new width can wrap one semantic record into a different number of rows,
+  so clamping alone cannot preserve the user's place. One behavior with
+  fallbacks, no public policy enum: (1) follow/bottom intent, if active,
+  survives to the new bottom; (2) otherwise a visible **semantic ref**
+  present in both old and new Blocks re-anchors the view (the denotation
+  channel doing viewport work — best-effort: refs may be absent, repeated,
+  or span rows); (3) otherwise the numeric offset holds, clamped;
+  (4) reset-to-top only for a new content identity or no prior frame.
 - **Hit testing is a frame transform**, not `y + offset`: resolve which
   delivery-frame region contains the coordinate (host chrome and evidence
   rows handle their own events or resolve to no ref); only content-region
@@ -300,7 +321,14 @@ arc's later rounds).
 
 ## 8. Consumer evidence — the recon this design is gated on
 
-Gathered 2026-07-15 (design-arc rule 2: evidence before doc):
+Gathered 2026-07-15 (design-arc rule 2: evidence before doc).
+**Forcing-function consumer (RULED Kyle, 2026-07-15)**: `ticked`
+(~/Code/loops-tasks) is the arc's evidence generator — started early, not a
+late validator. It already exhibits every shape this design must serve:
+the Dashboard list (offered-arm candidate), detail mode (the live law-6
+silent crop the adapter fixes), hybrid chrome, and `runner` (the `run_cli`
+bypass that tests the streaming/inward seam). The §1 exit criteria are
+exercised *inside ticked*: its reference renderer travels the four rungs.
 
 | Consumer | Shape | What it proves |
 |---|---|---|
@@ -311,28 +339,25 @@ Gathered 2026-07-15 (design-arc rule 2: evidence before doc):
 | `strange-loops follow`, `ticked runner` | bypass `run_cli` entirely (direct poll + print / foreground daemon) | the streaming host gap; acceptance test for §7 |
 | siftd `output/live.py` | wraps `InPlaceRenderer` directly, below the framework, own gate/throttle/lifecycle | declaration-surface decisions never reach mechanism consumers; the *mechanism* contract (clip-with-evidence) is their delivery-level protection — §5 exactness is a renderer-boundary contract enforced by whichever caller made the offer, which a direct consumer may adopt itself but `InPlaceRenderer` (receiving only a completed Block) cannot enforce for it |
 
-## 9. Open questions — the deliberation queue
+## 9. The deliberation queue — rulings and remainder
 
-1. **The declaration spelling** on `run_cli` and the adapter: name, shape,
-   and how binding-attachment reads in a one-binding world (§3).
-2. **Evidence form** for host scroll affordances: row vs rail, glyph
-   vocabulary, interaction with gutters (§6).
-3. **Anchor policy set and default** for width reflow; how far refs go as
-   semantic anchors (§6).
-4. **Degenerate-height rulings**: is `H=0` offerable; the `H=1`
-   content-vs-evidence rule (§5).
-5. **The inward seam's shape** (§7) — after the adapter's needs are
-   concrete.
-6. **Component-window evidence**: `ListState`/`TableState`/
-   `DataExplorerState` already scroll through `Viewport` (shipped), but
-   their windows carry no law-6 evidence — does that remediation ride 0.13
-   or 0.14 honesty-remediation? (§6; reworded round 1 — the original
-   migration question was already answered in the codebase.)
-7. **STATIC-TTY declared-screenful**: ship in 0.13 or fence for later — no
-   consumer evidence yet, and it needs a declaration *separate from*
-   acceptance (§3). Round-1 recommendation: fence — declared renderers on
-   STATIC TTY receive `height=None` in 0.13; a future screenful
-   declaration can synthesize the hard frame when demand shows up.
+Round 2 (Kyle, 2026-07-15) ruled the queue batch-as-recommended; each
+ruling lives in its home section. Resolved: **Q1** declaration spelling —
+`height_renderer=` binding (§4); **Q2** evidence form — reserved row,
+never a rail (§6); **Q3** width-reflow anchor precedence — one behavior
+with fallbacks, no public enum (§6); **Q4** degenerate heights — `H≥0`,
+`H=0` valid and evidence-waived, the `H=1` rules (§5); **Q6**
+component-window evidence rides **0.14 honesty-remediation** — 0.13's
+adapter produces the evidence vocabulary components then reuse rather than
+invent first (§6); **Q7** STATIC-TTY screenful **fenced from 0.13** (§3).
+
+Remaining open:
+
+1. **The inward seam's shape** (§7) — the one genuine deferral: the
+   concrete event type waits for the adapter's real input-routing
+   inventory. Constraints already pinned in §7.
+2. **Evidence cosmetics** — glyphs and styling of the evidence row, at
+   appearance review (§6).
 
 ## Appendix — round record
 
@@ -368,3 +393,10 @@ Gathered 2026-07-15 (design-arc rule 2: evidence before doc):
   top; Q4 `H≥0`, `H=0` valid/evidence-waived; Q7 fence) recorded for
   Kyle's round-2 rulings; Q5 (inward seam shape) confirmed as the one
   genuine deferral. Store: `design/host-rung-round-1`.
+- **Round 2 (2026-07-15, rulings)**: Kyle ruled the queue batch as
+  recommended — Q1 `height_renderer=` (§4), Q2 evidence row (§6), Q3
+  anchor precedence (§6), Q4 degenerate heights (§5), Q6 → 0.14, Q7
+  fenced (§3); Q5 (inward seam) stands as the one deferral. Additionally
+  ruled: `ticked` (loops-tasks) is the arc's forcing-function consumer
+  (§8). Store: `decision/design/host-rung-round-2`,
+  `decision/design/host-rung-forcing-consumer`.
