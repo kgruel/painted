@@ -60,7 +60,7 @@ evidence (LIVE_DELIVERY §10, shipped 0.10).
 
 ## 3. The declaration — acceptance is declared, the offer is decided
 
-Ruling sought (round 0 lean, uncontested by the cross-family consult): the
+Ruling (round-0 lean, adopted with round 2's rulings): the
 arm is **view semantics, not delivery policy** — two real interactive
 consumers want opposite arms in the same delivery mode (§8). So neither the
 delivery defaults it nor the runtime negotiates it; the app declares it,
@@ -137,7 +137,10 @@ parameter name *is* the acceptance declaration, so no separate boolean can
 drift from the callable's actual shape; both normalize to a private
 binding record (future runtime view-selection picks between pre-declared
 bindings, §3); a public `HeightRenderer` callable alias ships beside
-`Renderer`. Declared acceptors adopt the height-aware shape:
+`Renderer`. Mutual exclusion covers **all** authored-renderer forms:
+declaring `height_renderer=` alongside `renderer=` *or* legacy `render=`
+is a construction-time `DeclarationError`, matching the existing
+`render=`/`renderer=` collision contract. Declared acceptors adopt the height-aware shape:
 
 ```python
 def renderer(data, fidelity, width) -> Block: ...            # unchanged
@@ -147,9 +150,11 @@ def height_renderer(data, fidelity, width, *,
 ```
 
 `height` is **keyword-only and has no default** in the height-aware
-protocol. The host always passes it explicitly — including `height=None` on
-gated-off deliveries (a pipe, an undeclared STATIC TTY) — so omission is an
-observable decision in the call, never Python's accidental defaulting. This
+protocol. The host always passes it explicitly — including `height=None`
+when a *declared* binding runs on a gated-off delivery (a pipe, a STATIC
+TTY) — so omission is an observable decision in the call, never Python's
+accidental defaulting. (An undeclared binding is never passed the keyword
+at all — §3's matrix.) This
 is how "height omitted is deliberate" (RENDER_MODEL §2 proviso) becomes
 mechanical rather than aspirational. A false declaration or wrong callable
 shape fails loudly at first invocation; no arity inspection.
@@ -249,14 +254,21 @@ to it. What components still lack is law-6 evidence for their own windows
   a rail consumes width — shrinking the offer pre-render, changing it
   conditionally post-render, or overlaying content — and all three tangle
   the ratified width contract, while a row stays on the vertical axis and
-  preserves height-only re-slicing. Fitting content is shown and padded;
-  overflowing content gets `F−1` content rows plus one evidence row
+  preserves height-only re-slicing. The algorithm is conditional on frame
+  height `F`: at `F=0` the frame is empty and evidence is waived (the §5
+  degenerate rule, mirrored on the omitted arm); fitting content at `F≥1`
+  is shown and padded; overflowing content at `F≥1` gets `F−1` content
+  rows plus one evidence row
   (`… ▼ 763 more rows`, ambient icon set, ASCII degradation), which may
   carry host-owned interaction refs. It is host-authored because the host
   decided the window, and it counts **rows**, not entries — the adapter
   knows Block height and offset, never how rows map to semantic records; an
-  entry count is the application's to supply. Glyphs and styling deferred
-  to appearance review.
+  entry count is the application's to supply. The evidence-row builder
+  ships as a **public artifact in 0.13** so offered-arm final renderers
+  (which owe their own law-6 evidence, e.g. the forcing consumer's
+  Dashboard, §8) consume the same vocabulary instead of inventing one;
+  only the `ListState`/`TableState` *integration* waits for 0.14 (§9).
+  Glyphs and styling deferred to appearance review.
 - **Intent, then geometry**: viewing intent — at-bottom/following,
   cursor-following, top-anchored — is captured *before* mutating `visible`
   or `content`, then reapplied. Testing `is_at_bottom` after the mutation is
@@ -315,9 +327,16 @@ remains refused. This arc designs the seam against the **streaming
 consumers that already voted with their feet**: `strange-loops follow` and
 `ticked runner` both bypass `run_cli` for long-running foreground work
 (§8). If the seam plus `StreamSurface` cannot bring `follow` home through
-the framework, the design missed its consumer. Shape intentionally open
-until the viewport adapter's needs are concrete (deliberation item; the
-arc's later rounds).
+the framework, the design missed its consumer. The concrete event type is
+intentionally open until the adapter's input routing exposes the real
+inventory (§9); the constraints it must satisfy are pinned now:
+
+- an inward event identifies the **viewport generation** it was observed
+  against (the same discipline as hit testing, §6 — never new geometry
+  against old content);
+- "viewport reached end" performs no fetching itself — the application
+  changes data/state and requests a semantic re-render;
+- `Surface.emit` is never the carrier (outward stays observational).
 
 ## 8. Consumer evidence — the recon this design is gated on
 
@@ -325,15 +344,22 @@ Gathered 2026-07-15 (design-arc rule 2: evidence before doc).
 **Forcing-function consumer (RULED Kyle, 2026-07-15)**: `ticked`
 (~/Code/loops-tasks) is the arc's evidence generator — started early, not a
 late validator. It already exhibits every shape this design must serve:
-the Dashboard list (offered-arm candidate), detail mode (the live law-6
-silent crop the adapter fixes), hybrid chrome, and `runner` (the `run_cli`
-bypass that tests the streaming/inward seam). The §1 exit criteria are
-exercised *inside ticked*: its reference renderer travels the four rungs.
+the Dashboard (offered-arm candidate: hybrid chrome, internal body
+viewport), detail mode (the live law-6 silent crop), and `runner` (the
+`run_cli` bypass that tests the streaming/inward seam). Ratification
+acceptance **will be exercised** inside ticked: one named renderer binding
+must travel the four rungs. The two arms need not — and do not — share a
+binding: the forcing exercise uses **separately constructed
+hosts/bindings** (the height-aware Dashboard renderer proves the offered
+arm; a natural-height binding under the viewport adapter proves the
+omitted arm), and requires **no in-session arm switch** — runtime
+selection among pre-declared bindings stays the future path §3 reserves,
+not a 0.13 obligation.
 
 | Consumer | Shape | What it proves |
 |---|---|---|
-| `ticked` Dashboard (loops-tasks) | `Surface`; hand-rolls `body_height = height − 2`, `cursor.scroll_into_view`, `min(body.height, height)` crop at paint | the adapter's job description, hand-rolled in the newest consumer |
-| `ticked` detail mode | natural-height detail Block silently cropped to buffer | a live law-6 violation shipping today — the hole the adapter fills |
+| `ticked` Dashboard (loops-tasks) | `Surface`; hand-rolls `body_height = height − 2`, `cursor.scroll_into_view`, `min(body.height, height)` crop at paint | the **height-aware final renderer's** job description, hand-rolled: chrome reservation + internal body viewport + exact-frame return are the offered arm (§6 chrome ruling) — not the adapter's, which handles only monolithic natural-height content |
+| `ticked` detail mode | natural-height detail Block silently cropped to buffer | a live law-6 violation shipping today — the adapter case: natural-height content owed a host viewport with evidence |
 | `StoreExplorerApp`, `AutoresearchApp` (loops) | `Surface` explorers over the store | omitted arm wanted at INTERACTIVE — kills delivery-defaulted arms |
 | tasks dashboard (strange-loops) | `run_cli` display commands (legacy `render=`) | offered arm wanted at INTERACTIVE — same delivery, opposite arm |
 | `strange-loops follow`, `ticked runner` | bypass `run_cli` entirely (direct poll + print / foreground daemon) | the streaming host gap; acceptance test for §7 |
@@ -353,9 +379,10 @@ invent first (§6); **Q7** STATIC-TTY screenful **fenced from 0.13** (§3).
 
 Remaining open:
 
-1. **The inward seam's shape** (§7) — the one genuine deferral: the
-   concrete event type waits for the adapter's real input-routing
-   inventory. Constraints already pinned in §7.
+1. **The inward seam's concrete event type** (§7) — the one genuine
+   deferral, waiting on the adapter's real input-routing inventory. Its
+   constraints (viewport-generation identification, no self-fetching,
+   `emit` never the carrier) are pinned in §7; only the type is open.
 2. **Evidence cosmetics** — glyphs and styling of the evidence row, at
    appearance review (§6).
 
@@ -400,3 +427,22 @@ Remaining open:
   ruled: `ticked` (loops-tasks) is the arc's forcing-function consumer
   (§8). Store: `decision/design/host-rung-round-2`,
   `decision/design/host-rung-forcing-consumer`.
+- **Round 3 (2026-07-15, verification)**: sol verified rounds 1–2; verdict
+  HOLD, four P1s, all remediated: the §4 gated-off example still said
+  "undeclared STATIC TTY" (fixed — a declared binding on a gated-off
+  delivery; undeclared bindings never see the keyword); the §6 evidence
+  algorithm produced `−1` content rows at `F=0` (fixed — conditional on
+  `F`: empty frame + evidence waived at zero, mirroring §5); the forcing
+  consumer as worded pulled runtime binding selection into 0.13 (resolved
+  — the exercise uses separately constructed hosts/bindings per arm, no
+  in-session arm switch; selection stays the reserved future path); the
+  Dashboard evidence row mis-assigned hybrid chrome to the adapter (fixed
+  — it is the height-aware final renderer's job description; detail mode
+  is the adapter case). P2s: `height_renderer=` collides with legacy
+  `render=` too (`DeclarationError`, matching the existing contract);
+  §7 now pins the inward-seam constraints it previously only gestured at
+  (viewport-generation identification, no self-fetching); the offered-arm
+  Dashboard's law-6 obligation resolved by shipping the evidence-row
+  builder as a public 0.13 artifact (component *integration* still 0.14).
+  P3s: acceptance sentence recast to future tense with per-arm bindings;
+  "ruling sought" tense swept. Store: `design/host-rung-round-3`.
