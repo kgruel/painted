@@ -347,10 +347,16 @@ HostEvent = HostViewportEvent | HostHitEvent | HostQuitEvent
 HostEventSink = Callable[[HostEvent], None]      # on_host_event=
 ```
 
-Every event carries **two** frame tokens: `observed` — the displayed
-mapping the input occurred against (the pinned causality rule, mechanical)
-— and `current` — the post-transition mapping (equal to `observed` for a
-clamped/no-op intent). `HostViewportEvent` wraps a typed `ViewportChange`
+Every event carries **two** frame tokens: `observed` — the token of the
+last *displayed* frame, the mapping the input occurred against (the
+pinned causality rule, mechanical; it does not advance across a
+drained-input batch, because no repaint happened) — and `current` — the
+mapping actually installed by this event's transition, never copied from
+`observed` and never fabricated. The two are equal exactly when the
+transition installed no change relative to the displayed frame; later
+events in a drain batch legitimately carry `observed != current`. Before
+a first frame has been displayed there is no observed mapping and no
+event is delivered. `HostViewportEvent` wraps a typed `ViewportChange`
 reason (`ScrollChange` | `FollowChange` | `CursorFollowChange` |
 `ResizeChange`) beside the resulting `offset` / `following` /
 `is_at_bottom` / `cursor_row`; "viewport reached end" is read off
@@ -373,7 +379,15 @@ would let host-only re-slices influence the renderer, contradicting the
 (`on_host_event=queue.put_nowait`); painted standardizes no queue,
 scheduler, or reducer. To satisfy the follow forcing consumer,
 `StreamSurface` adopts the same viewport controller as `HostSurface` —
-a plain direct-paint Surface plus callback is insufficient.
+a plain direct-paint Surface plus callback is insufficient. Stream
+yields arriving faster than the repaint coalesce to the latest state at
+the render boundary (rendering content nobody sees serves no one; the
+application observes its own stream); each *installed* state is
+ticketed and published exactly once, and a not-following publish mints
+no viewport event — no viewing intent or mapping changed, and the
+evidence row's growing below-count is the visible fact. (The deferred
+"coalescing" below is handler-side event coalescing, a different
+thing.)
 
 Deferred until a consumer proves `queue.put_nowait` plus its existing
 re-render path insufficient: async handlers, backpressure, coalescing,
