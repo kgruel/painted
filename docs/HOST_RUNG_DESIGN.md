@@ -328,9 +328,8 @@ remains refused. This arc designs the seam against the **streaming
 consumers that already voted with their feet**: `strange-loops follow` and
 `ticked runner` both bypass `run_cli` for long-running foreground work
 (§8). If the seam plus `StreamSurface` cannot bring `follow` home through
-the framework, the design missed its consumer. The concrete event type is
-intentionally open until the adapter's input routing exposes the real
-inventory (§9); the constraints it must satisfy are pinned now:
+the framework, the design missed its consumer. The constraints, pinned at
+ratification:
 
 - an inward event identifies the **viewport generation** it was observed
   against (the same discipline as hit testing, §6 — never new geometry
@@ -338,6 +337,49 @@ inventory (§9); the constraints it must satisfy are pinned now:
 - "viewport reached end" performs no fetching itself — the application
   changes data/state and requests a semantic re-render;
 - `Surface.emit` is never the carrier (outward stays observational).
+
+**The concrete type** (RULED Kyle, 2026-07-17, round 4 — on S4's real
+input-routing inventory, per the deferral): a frozen, generation-stamped
+`HostEvent` union delivered through a construction-time push callback.
+
+```python
+HostEvent = HostViewportEvent | HostHitEvent | HostQuitEvent
+HostEventSink = Callable[[HostEvent], None]      # on_host_event=
+```
+
+Every event carries **two** frame tokens: `observed` — the displayed
+mapping the input occurred against (the pinned causality rule, mechanical)
+— and `current` — the post-transition mapping (equal to `observed` for a
+clamped/no-op intent). `HostViewportEvent` wraps a typed `ViewportChange`
+reason (`ScrollChange` | `FollowChange` | `CursorFollowChange` |
+`ResizeChange`) beside the resulting `offset` / `following` /
+`is_at_bottom` / `cursor_row`; "viewport reached end" is read off
+`FollowChange`/`is_at_bottom`, not a dedicated event.
+
+The declaration lives on the **host** — `on_host_event=` on `run_cli`,
+`HostSurface`, and `StreamSurface` — never on the renderer binding:
+accepting host input is application/session behavior, and the semantic
+renderer stays unchanged across the four rungs. Delivery is synchronous
+and exactly once, after the pure adapter transition installs; a handler
+failure fails the active host delivery (never swallowed, never translated
+to `emit`). On rungs where painted owns no viewport (STATIC, pipe,
+in-place LIVE, the offered arm) a declared sink receives zero calls —
+honest event-source behavior; painted never manufactures a tokenless
+event or a `view=` snapshot. The rejected alternative — viewing state as
+a renderer argument — is structurally too late (the renderer must run
+before it could see end-reached, so it cannot *cause* the re-render) and
+would let host-only re-slices influence the renderer, contradicting the
+§6 matrix. An application with its own input loop adapts the sink
+(`on_host_event=queue.put_nowait`); painted standardizes no queue,
+scheduler, or reducer. To satisfy the follow forcing consumer,
+`StreamSurface` adopts the same viewport controller as `HostSurface` —
+a plain direct-paint Surface plus callback is insufficient.
+
+Deferred until a consumer proves `queue.put_nowait` plus its existing
+re-render path insufficient: async handlers, backpressure, coalescing,
+callback return directives (`ReRender`/`Fetch`), any framework-owned
+lazy-loading protocol, offered-arm/component-owned viewport events, and
+unification of raw keys, layer events, and `HostEvent`.
 
 ## 8. Consumer evidence — the recon this design is gated on
 
@@ -378,14 +420,17 @@ component-window evidence rides **0.14 honesty-remediation** — 0.13's
 adapter produces the evidence vocabulary components then reuse rather than
 invent first (§6); **Q7** STATIC-TTY screenful **fenced from 0.13** (§3).
 
+Resolved post-ratification: **Q5** the inward seam's concrete event type —
+RULED (Kyle, 2026-07-17, round 4) once S4's input routing exposed the real
+inventory; the ruled shape lives in §7.
+
 Remaining open:
 
-1. **The inward seam's concrete event type** (§7) — the one genuine
-   deferral, waiting on the adapter's real input-routing inventory. Its
-   constraints (viewport-generation identification, no self-fetching,
-   `emit` never the carrier) are pinned in §7; only the type is open.
-2. **Evidence cosmetics** — glyphs and styling of the evidence row, at
-   appearance review (§6).
+1. **Evidence cosmetics** — glyphs and styling of the evidence row, at
+   appearance review (§6). InPlaceRenderer's head-clip wording
+   (`… +N rows`, dim) vs the S2 builder's (`… ▼ N more rows`, muted) also
+   unifies there or not at all — converging silently would change shipped
+   0.10 bytes.
 
 ## Appendix — round record
 
@@ -447,3 +492,11 @@ Remaining open:
   builder as a public 0.13 artifact (component *integration* still 0.14).
   P3s: acceptance sentence recast to future tense with per-arm bindings;
   "ruling sought" tense swept. Store: `design/host-rung-round-3`.
+- **Round 4 (2026-07-17, the Q5 ruling)**: with S1–S4 merged and S4's
+  input-routing inventory in hand (every event already carrying or
+  trivially tagged with its frame token), sol design consult (codex
+  gpt-5.6-sol, session `wildly-free-pika`) recommended the
+  `HostEvent`-union/`on_host_event=` sink shape with the two-token
+  causality spelling; Kyle ruled as recommended. §7 amended from
+  "intentionally open" to the ruled type; §9's open list reduced to
+  evidence cosmetics. Store: `decision/design/host-rung-q5-inward-seam`.
