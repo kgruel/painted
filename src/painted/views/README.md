@@ -47,6 +47,25 @@ never mutated in place. Rendering is a pure function of that state —
 `render_fn(state, ...) → Block`: same inputs, same output, no side effects.
 <!-- docgen:end -->
 
+## Host rung — the frame vocabulary (law-6 evidence)
+
+The host half of the dual allocation contract (`docs/HOST_RUNG_DESIGN.md` §6):
+when a renderer is *not* offered height it returns natural-height content and the
+host applies a viewport. The **frame vocabulary** lives here; the stateful host
+adapter that drives it (`ViewportAdapter`) is host orchestration, not a view, so
+it lives at the package root — `from painted import ViewportAdapter`.
+
+```python
+from painted.views import evidence_row, assemble_frame   # the frame vocabulary (S2)
+```
+
+- **`evidence_row` / `assemble_frame`** — the law-6 scroll-evidence *row* and the
+  F-conditional frame builder. `assemble_frame(content, F, offset)` slices to
+  exactly `F` rows, appending one evidence row when content overflows (waived at
+  `F=0`). Both the root `ViewportAdapter` and offered-arm final renderers that
+  reserve their own body viewport consume this builder rather than inventing
+  evidence twice.
+
 ## Aesthetic
 
 Contextual defaults via ContextVar — set globally or scoped via context manager.

@@ -90,6 +90,7 @@ Surface + Layer             # alt-screen TUI with keyboard + diff rendering
 | Renderer | `publish.py` | to_html, published_fidelity — the doc-IR publisher (root, beside display.py) |
 | Framework | `_transcription.py` | transcription_renderer — run_cli's default renderer (the `(data, fidelity, width)` contract over `transcribe`); at root so `cli` needn't import `views` (§4) |
 | Renderer | `inplace.py` | InPlaceRenderer |
+| Host rung | `host.py` | ViewportAdapter + RenderKey/Plan/Frame/FrameToken/Hit — the omitted arm's host adapter: ticketed cache generations, resize matrix, anchor policy, frame identity, hit testing (HOST_RUNG_DESIGN §6; root, imports `views.assemble_frame` like `diagnostics.py`) |
 | Diagnostics | `diagnostics.py` | PaintedHandler, install, DEFAULT_THRESHOLDS (logging + excepthook glue; root, imports views) |
 | Renderer | `keyboard.py` | KeyboardInput, cbreak_supported, read_key — the delivery layer's key-reading primitive (root; `tui/` re-exports) |
 | Renderer | `mouse.py` | MouseEvent — mouse protocol primitives (root; `tui/` re-exports) |
