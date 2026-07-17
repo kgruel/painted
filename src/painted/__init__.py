@@ -86,6 +86,7 @@ __all__ = [
     "CliContext",
     "CliRunner",
     "Renderer",
+    "HeightRenderer",
     "HelpArg",
     "run_cli",
     "AppCommand",
@@ -147,7 +148,12 @@ if TYPE_CHECKING:
     # optional) and the Renderer alias's shape. src/painted/CLAUDE.md Level 2
     # teaches `from painted import run_cli`, so this taught path must carry the
     # real types to checkers; re-import them here, runtime staying lazy.
-    from .cli import CliRunner as CliRunner, Renderer as Renderer, run_cli as run_cli
+    from .cli import (
+        CliRunner as CliRunner,
+        HeightRenderer as HeightRenderer,
+        Renderer as Renderer,
+        run_cli as run_cli,
+    )
 
 _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     # Errors
@@ -196,6 +202,7 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "CliContext": (".cli", "CliContext"),
     "CliRunner": (".cli", "CliRunner"),
     "Renderer": (".cli", "Renderer"),
+    "HeightRenderer": (".cli", "HeightRenderer"),
     "Fidelity": (".cli", "Fidelity"),
     "Format": (".cli", "Format"),
     "Tag": (".cli", "Tag"),

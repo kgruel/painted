@@ -624,6 +624,210 @@ class TestOfferSeam:
         capsys.readouterr()
 
 
+def _height_renderer(data, fidelity, width, *, height):
+    """A height-aware renderer (docs/HOST_RUNG_DESIGN.md §4). Natural content
+    when the offer is omitted; an exact H-row Block when one is made."""
+    if height is None:
+        return Block.text(f"data={data}", Style())
+    return Block.empty(max(1, width or 1), height)
+
+
+class TestHeightDeclaration:
+    """The `height_renderer=` declaration (docs/HOST_RUNG_DESIGN.md §3–4): the
+    acceptance arm, mutually exclusive with every other renderer form, all four
+    normalizing into the private `_binding` record dispatch consults."""
+
+    def test_height_renderer_alone_is_a_complete_declaration(self):
+        # No renderer= needed: height_renderer= is a full declaration on its own.
+        runner = CliRunner(height_renderer=_height_renderer, fetch=lambda: "d")
+        assert runner.render is None
+        assert runner.renderer is None  # not required, not installed
+        assert runner.height_renderer is _height_renderer
+
+    def test_height_renderer_and_renderer_collide_at_construction(self):
+        with pytest.raises(DeclarationError, match="not both"):
+            CliRunner(
+                renderer=_renderer,
+                height_renderer=_height_renderer,
+                fetch=lambda: "d",
+            )
+
+    def test_height_renderer_and_legacy_render_collide_at_construction(self):
+        # Mutual exclusion covers the legacy render= form too (§4, round-3 P2).
+        with pytest.raises(DeclarationError, match="not both"):
+            CliRunner(
+                render=_legacy,
+                height_renderer=_height_renderer,
+                fetch=lambda: "d",
+            )
+
+    def test_height_renderer_collisions_bypass_the_parser(self, monkeypatch):
+        """Like every render-path fault, the collision fires at construction on
+        empty argv — before any parser is built."""
+        import painted.cli.runner as runner_mod
+
+        def _boom(*a, **k):
+            raise AssertionError("build_parser must not be reached for a render-path fault")
+
+        monkeypatch.setattr(runner_mod, "build_parser", _boom)
+        with pytest.raises(DeclarationError):
+            run_cli([], renderer=_renderer, height_renderer=_height_renderer, fetch=lambda: "d")
+
+    def test_height_renderer_with_tags_is_allowed(self):
+        # The transcription fence is scoped to the *no-renderer* form: a declared
+        # height_renderer= consumes fidelity.visible like renderer=, so tags= is
+        # valid alongside it.
+        from painted.cli import Tag
+
+        runner = CliRunner(
+            height_renderer=_height_renderer,
+            fetch=lambda: "d",
+            tags=[Tag("thinking", "reasoning")],
+        )
+        assert runner.height_renderer is _height_renderer
+
+
+class TestBindingRecord:
+    """All four authored forms normalize into `_binding` (§3), which carries the
+    declared arm — dispatch reads this, never the callable's arity."""
+
+    def test_height_renderer_records_the_accepting_arm(self):
+        runner = CliRunner(height_renderer=_height_renderer, fetch=lambda: "d")
+        assert runner._binding.accepts_height is True
+        assert runner._binding.legacy is False
+        assert runner._binding.call is _height_renderer
+
+    def test_renderer_records_the_three_argument_arm(self):
+        runner = CliRunner(renderer=_renderer, fetch=lambda: "d")
+        assert runner._binding.accepts_height is False
+        assert runner._binding.legacy is False
+        assert runner._binding.call is _renderer
+
+    def test_legacy_render_records_the_legacy_arm(self):
+        with pytest.warns(DeprecationWarning):
+            runner = CliRunner(render=_legacy, fetch=lambda: "d")
+        assert runner._binding.accepts_height is False
+        assert runner._binding.legacy is True
+        assert runner._binding.call is _legacy
+
+    def test_transcription_default_records_the_three_argument_arm(self):
+        # The *neither* form installs the transcription default into `renderer`;
+        # the binding wraps it, undeclared like any renderer= form.
+        runner = CliRunner(fetch=lambda: "d")
+        assert runner._binding.accepts_height is False
+        assert runner._binding.legacy is False
+        assert runner._binding.call is runner.renderer  # the installed default
+
+
+class TestHeightOfferMatrix:
+    """The three-row offer matrix (§3). In S1 every shipped delivery is
+    gated-off — the Q7 STATIC-TTY fence and off-TTY always — so a declared
+    binding is offered `height=None` everywhere; an undeclared binding is never
+    handed the keyword at all."""
+
+    def test_undeclared_renderer_is_never_passed_the_height_keyword(self, capsys):
+        """An undeclared renderer whose signature rejects a `height` kwarg proves
+        the keyword is never passed: if it were, the call would TypeError. It
+        renders cleanly on both a pipe and a TTY."""
+
+        def strict(data, fidelity, width):  # no height, no **kwargs
+            return Block.text("x", Style())
+
+        runner = CliRunner(renderer=strict, fetch=lambda: "d")
+        assert runner._dispatch(_ctx(is_tty=False, width=80)) == 0
+        assert runner._dispatch(_ctx(is_tty=True, width=80)) == 0
+        capsys.readouterr()
+
+    def test_declared_renderer_receives_explicit_none_off_a_tty(self, capsys):
+        received: list[int | None] = []
+
+        def rec(data, fidelity, width, *, height):
+            received.append(height)
+            return Block.text("x", Style())
+
+        runner = CliRunner(height_renderer=rec, fetch=lambda: "d")
+        assert runner._dispatch(_ctx(is_tty=False, width=80)) == 0
+        assert received == [None]  # explicit None, not Python's default
+        capsys.readouterr()
+
+    def test_declared_renderer_receives_explicit_none_on_a_static_tty(self, capsys):
+        """The Q7 fence (§3): a declared renderer on a STATIC TTY receives
+        `height=None` unconditionally — the host does not consult terminal
+        height even though it is known (here a 60-row terminal)."""
+        received: list[int | None] = []
+
+        def rec(data, fidelity, width, *, height):
+            received.append(height)
+            return Block.text("x", Style())
+
+        runner = CliRunner(height_renderer=rec, fetch=lambda: "d")
+        ctx = CliContext(
+            fidelity=Fidelity(depth=int(Zoom.SUMMARY)),
+            mode=OutputMode.STATIC,
+            use_ansi=True,
+            is_tty=True,
+            width=80,
+            height=60,  # a known terminal height — still not offered
+        )
+        assert runner._dispatch(ctx) == 0
+        assert received == [None]
+        capsys.readouterr()
+
+    def test_declared_renderer_renders_natural_content_end_to_end(self, capsys, monkeypatch):
+        """The full run_cli path with a height_renderer=: gated-off, so it renders
+        its natural (height=None) content."""
+        monkeypatch.setattr("sys.stdout.isatty", lambda: False)
+        rc = run_cli(["--plain"], height_renderer=_height_renderer, fetch=lambda: "HELLO")
+        assert rc == 0
+        assert "data=HELLO" in capsys.readouterr().out
+
+
+class TestHeightExactness:
+    """The offer-site exactness contract (§5), exercised through `_render` (the
+    offer site) and the `_verify_height` helper directly, since no shipped S1
+    path offers an integer H yet."""
+
+    def test_offered_height_zero_requires_an_exact_zero_row_block(self):
+        # H=0 is a valid offer (§5): the renderer returns Block.empty(w, 0).
+        runner = CliRunner(height_renderer=_height_renderer, fetch=lambda: "d")
+        block = runner._render(_ctx(is_tty=True, width=10), "d", 10, height=0)
+        assert block.height == 0
+
+    def test_offered_height_is_enforced_exactly(self):
+        runner = CliRunner(height_renderer=_height_renderer, fetch=lambda: "d")
+        block = runner._render(_ctx(is_tty=True, width=10), "d", 10, height=7)
+        assert block.height == 7
+
+    def test_wrong_height_faults_at_the_offer_site(self):
+        # A conforming renderer would return H rows; this one lies, returning 2.
+        def liar(data, fidelity, width, *, height):
+            return Block.empty(max(1, width or 1), 2)
+
+        runner = CliRunner(height_renderer=liar, fetch=lambda: "d")
+        with pytest.raises(ContractError, match="exactly H rows"):
+            runner._render(_ctx(is_tty=True, width=10), "d", 10, height=5)
+
+    def test_negative_offer_faults_before_the_renderer_runs(self):
+        # A negative H is a host bug (§5) — it must fault before app code is
+        # called, never handing a bogus allocation to the renderer.
+        called = {"v": False}
+
+        def rec(data, fidelity, width, *, height):
+            called["v"] = True
+            return Block.empty(1, 0)
+
+        runner = CliRunner(height_renderer=rec, fetch=lambda: "d")
+        with pytest.raises(ContractError, match="non-negative"):
+            runner._render(_ctx(is_tty=True, width=10), "d", 10, height=-1)
+        assert called["v"] is False  # the renderer was never invoked
+
+    def test_none_offer_performs_no_exactness_check(self):
+        # The omitted arm: natural content of any height is fine.
+        runner = CliRunner(height_renderer=_height_renderer, fetch=lambda: "d")
+        block = runner._render(_ctx(is_tty=True, width=10), "some data", 10, height=None)
+        assert block.height >= 1  # natural sizing, unconstrained
+
+
 def _ansi_ctx(*, width: int = 80) -> CliContext:
     return CliContext(
         fidelity=Fidelity(depth=int(Zoom.SUMMARY)),

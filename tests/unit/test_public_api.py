@@ -107,6 +107,10 @@ STABLE_CORE_SURFACE = frozenset(
         # Block, the render model's central unit — in core so the 0.13 host rung
         # can run it through Surface without a tui→cli import (RENDERER_CONTRACT §3)
         "Renderer",
+        # The height-aware sibling (0.13 host rung): (data, fidelity, width, *,
+        # height) → Block — the offered arm of the dual allocation contract
+        # (HOST_RUNG_DESIGN §4). Adding a name is semver-MINOR — a conscious entry.
+        "HeightRenderer",
         # Doc-IR (node vocabulary + doc_lens, the one-way door opened at 0.10;
         # visible_body/capped deliberately unexported — see DOC_IR_DESIGN.md)
         "Doc",

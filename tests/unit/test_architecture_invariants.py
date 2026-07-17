@@ -690,7 +690,10 @@ def test_raise_sites_use_painted_exception_classes() -> None:
 # unconstrained: they decide how an already-rendered Block reaches the terminal,
 # never what the Block contains, so an aliased `print_block` there is fine.
 _RENDERER_REGISTER_CALLEES = frozenset({"run_cli", "run_app"})
-_RENDERER_REGISTER_KWARGS = frozenset({"renderer", "render"})
+# height_renderer= is a renderer form too (HOST_RUNG_DESIGN §4) — a callable
+# passed there must obey the same destination-independence law as renderer=/
+# render=, so it seeds the render graph the .use_ansi ban walks.
+_RENDERER_REGISTER_KWARGS = frozenset({"renderer", "render", "height_renderer"})
 
 
 def _callee_name(call: ast.Call) -> str | None:

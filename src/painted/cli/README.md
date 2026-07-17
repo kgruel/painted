@@ -114,17 +114,36 @@ path skips building a parser entirely.
 
 **Trigger**: I'm working on how a rendered `Block` gets produced and delivered.
 
-`run_cli` accepts one of three renderer forms, resolved at **construction**
-(`CliRunner.__post_init__`), never degrading silently at dispatch:
+`run_cli` accepts one of four renderer forms, resolved at **construction**
+(`CliRunner.__post_init__`), never degrading silently at dispatch. All four
+normalize into one private `_RendererBinding` record carrying the declared arm;
+dispatch (`_render`) reads that record, never the callable's arity:
 
 - `renderer=` — the contract `(data, fidelity, width) → Block` (keyword-only).
   The semantic renderer, given only its three inputs. Reach for this first.
+- `height_renderer=` — the height-aware contract
+  `(data, fidelity, width, *, height) → Block` (keyword-only, `HeightRenderer`).
+  The **acceptance** declaration for the offered arm of the dual allocation
+  contract (`docs/HOST_RUNG_DESIGN.md` §4): the host offers a per-delivery
+  `height`, and when it offers an integer `H` the returned Block must have
+  exactly `H` rows (`_verify_height` enforces this at the offer site, §5).
+  Mutually exclusive with *all* other renderer forms — pairing it with
+  `renderer=` or `render=` is a construction-time `DeclarationError`.
 - `render=` — legacy `(ctx, data) → Block`, optional-positional so existing
   `run_cli(args, render, fetch)` call sites keep working. Deprecation window; no
   runtime warning until 0.12.
 - *neither* — the framework installs the transcription default (`_transcription.py`).
   `tags=` is unavailable on this form (transcription can't map facet names onto
-  arbitrary data) and declaring it raises `DeclarationError`.
+  arbitrary data) and declaring it raises `DeclarationError`; a declared
+  `renderer=` or `height_renderer=` lifts that fence.
+
+The **offer matrix** (§3, three rows) lives in `_render`: an undeclared binding
+is never handed the `height` keyword (it has none); a declared binding gated-off
+is offered `height=None`; a declared binding gated-on is offered `height=H`. In
+0.13/S1 every shipped delivery is gated-off — off-TTY always, and STATIC-TTY
+unconditionally (the Q7 fence: a known terminal height is not permission to offer
+it) — so a declared binding sees `height=None` everywhere. Gated-on offers arrive
+with the bounded-LIVE and interactive delivery slices.
 
 Two local seams worth knowing before you touch delivery:
 
