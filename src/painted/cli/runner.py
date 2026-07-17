@@ -40,6 +40,7 @@ if TYPE_CHECKING:
 
     from ..core.block import Block
     from ..core.renderer import HeightRenderer, Renderer
+    from ..host import HostEventSink
     from ..refs import RefScheme
     from .help import HelpArg
     from .prompts import Prompt
@@ -221,6 +222,19 @@ class CliRunner(Generic[T]):
     ref_schemes: Sequence[RefScheme] | Callable[[T], Sequence[RefScheme]] | None = field(
         default=None, kw_only=True
     )
+
+    # The inward host-event sink (docs/HOST_RUNG_DESIGN.md §7): host viewing-state
+    # reaching the application as *input*, delivered synchronously and exactly once
+    # per event through a construction-time push callback. Keyword-only, on the
+    # HOST constructor (never on the renderer binding / _RendererBinding — accepting
+    # host input is application/session behavior, and the semantic renderer stays
+    # unchanged across the four rungs). Wired into the two rungs where painted owns
+    # a viewport: the interactive host rung (HostSurface, _run_host) and the
+    # alt-screen streaming tier (StreamSurface, _run_live_surface — the follow
+    # path). On every other route (STATIC, pipe, in-place LIVE, the offered arm)
+    # declaring it is legal and it simply never fires — honest event-source silence,
+    # never a manufactured tokenless / synthetic-mount event.
+    on_host_event: HostEventSink | None = field(default=None, kw_only=True)
 
     # The static form's validated, FROZEN copy — set once in __post_init__,
     # never re-derived from `self.ref_schemes` afterward. `self.ref_schemes`
@@ -1088,6 +1102,12 @@ class CliRunner(Generic[T]):
             fetch_stream=lambda: self._stream_iter(ctx),
             live_meter=self.live_meter,
             resolve_ref_schemes=resolve_fn,
+            # A fresh content identity per run: the stream is "the same document"
+            # growing across yields, so a resize never resets scroll and only a new
+            # run starts fresh (§6 fallback 5). The inward seam (§7) reports the
+            # viewport as content grows / the user scrolls — the follow path.
+            content_id=object(),
+            on_host_event=self.on_host_event,
             # The one-snapshot rule (§9.1): the surface's writer is CONSTRUCTED
             # from the delivery's already-resolved NO_COLOR policy, not a fresh
             # env read. _host_scope resolved it once (self._delivery_no_color);
@@ -1256,6 +1276,9 @@ class CliRunner(Generic[T]):
                 content_id=content_id,
                 inputs=ctx.fidelity,
                 no_color=self._delivery_no_color,
+                # The inward seam (§7). On the offered arm HostSurface builds no
+                # viewport controller, so a declared sink there simply never fires.
+                on_host_event=self.on_host_event,
             )
 
     def _emit_error(
@@ -1370,6 +1393,7 @@ def run_cli(
     budgets: bool = ...,
     build_fidelity: Callable[[argparse.Namespace, Fidelity], Fidelity] | None = ...,
     ref_schemes: Sequence[RefScheme] | Callable[[T], Sequence[RefScheme]] | None = ...,
+    on_host_event: HostEventSink | None = ...,
 ) -> int: ...
 
 
@@ -1395,6 +1419,7 @@ def run_cli(
     budgets: bool = ...,
     build_fidelity: Callable[[argparse.Namespace, Fidelity], Fidelity] | None = ...,
     ref_schemes: Sequence[RefScheme] | Callable[[T], Sequence[RefScheme]] | None = ...,
+    on_host_event: HostEventSink | None = ...,
 ) -> int: ...
 
 
@@ -1423,6 +1448,7 @@ def run_cli(
     budgets: bool = ...,
     build_fidelity: Callable[[argparse.Namespace, Fidelity], Fidelity] | None = ...,
     ref_schemes: Sequence[RefScheme] | Callable[[T], Sequence[RefScheme]] | None = ...,
+    on_host_event: HostEventSink | None = ...,
 ) -> int: ...
 
 
@@ -1450,6 +1476,7 @@ def run_cli(
     budgets: bool = ...,
     build_fidelity: Callable[[argparse.Namespace, Fidelity], Fidelity] | None = ...,
     ref_schemes: Sequence[RefScheme] | Callable[[T], Sequence[RefScheme]] | None = ...,
+    on_host_event: HostEventSink | None = ...,
 ) -> int: ...
 
 
@@ -1476,6 +1503,7 @@ def run_cli(
     budgets: bool = False,
     build_fidelity: Callable[[argparse.Namespace, Fidelity], Fidelity] | None = None,
     ref_schemes: Sequence[RefScheme] | Callable[[T], Sequence[RefScheme]] | None = None,
+    on_host_event: HostEventSink | None = None,
 ) -> int:
     """Run a CLI tool with zoom/mode/format handling.
 
@@ -1528,6 +1556,13 @@ def run_cli(
             per fetch. Installs as the runner-owned bracket around render and
             serialization, replacing whatever ambient use_refs state was
             active; absent, the framework installs nothing
+        on_host_event: The inward host-event sink (docs/HOST_RUNG_DESIGN.md §7)
+            — a ``HostEvent -> None`` callback invoked synchronously, exactly
+            once per event, when painted owns a viewport (the interactive host
+            rung and the alt-screen streaming tier). On every other route
+            (STATIC, pipe, in-place LIVE, the offered arm) declaring it is legal
+            and it never fires. A handler exception fails the active host
+            delivery loudly (never swallowed, never rerouted to Surface.emit)
 
     Returns:
         Exit code (0 for success)
@@ -1553,4 +1588,5 @@ def run_cli(
         budgets=budgets,
         build_fidelity=build_fidelity,
         ref_schemes=ref_schemes,
+        on_host_event=on_host_event,
     ).run(args)

@@ -8,8 +8,9 @@ from collections.abc import Awaitable, Callable
 from contextlib import AbstractContextManager, ExitStack
 from typing import TYPE_CHECKING, Any
 
-from ..mouse import MouseButton, MouseEvent
+from ..mouse import MouseEvent
 from ..core.buffer import Buffer, CellWrite
+from ..host import HostViewport
 from ..keyboard import KeyboardInput
 from .layer import Layer
 from .layer import process_key as _process_key
@@ -17,7 +18,7 @@ from ..core.writer import ScrollOp, Writer
 
 if TYPE_CHECKING:
     from ..core.block import Block
-    from ..host import FrameToken, Hit, ViewportAdapter
+    from ..host import Hit
 
 Emit = Callable[[str, dict[str, Any]], None]
 LifecycleHook = Callable[[], Awaitable[None]]
@@ -485,12 +486,6 @@ class Surface:
         return (top, bottom, n, overlap_start, overlap_end, ratio)
 
 
-# Rows a scroll-wheel notch moves the omitted-arm viewport. A small constant, not
-# a page (page_up/page_down own that) — matches the "a few lines per notch" feel
-# every terminal scroll has.
-_WHEEL_ROWS = 3
-
-
 class HostSurface(Surface):
     """The host rung wired to a ``Surface`` — a semantic renderer's Block
     delivered interactively (HOST_RUNG_DESIGN §6).
@@ -528,13 +523,19 @@ class HostSurface(Surface):
     renderer-input token (fidelity, capabilities…) — width is tracked separately
     because it is the re-render-and-reconcile trigger.
 
-    The **event-order discipline** (§6): the token of the last *displayed* frame
-    is retained (``_last_token``, set only in ``render()``, never in
+    Both arms delegate the omitted-arm machinery to the shared ``HostViewport``
+    controller (``_vp``), which ``StreamSurface`` composes too (S5): scroll/wheel
+    routing, frame production, the event-order discipline, and the inward
+    ``on_host_event=`` seam (§7) all live there rather than being forked. The
+    offered arm builds no controller — the renderer owns the frame, so the host
+    holds no viewport and the sink fires zero times.
+
+    The **event-order discipline** (§6): the controller retains the last
+    *displayed* frame's token (set only when a frame is produced, never in
     ``layout()``), and an incoming mouse event resolves against exactly that
-    token. A resize between paint and a queued event mints new geometry while
-    ``_last_token`` still names the displayed frame, so the event resolves stale
-    and is dropped — never translated through the new geometry (S3's ``resolve``
-    does the drop; the host supplies the routing discipline).
+    token. A resize between paint and a queued event mints new geometry while the
+    retained token still names the displayed frame, so the event resolves stale
+    and is dropped — never translated through the new geometry.
     """
 
     def __init__(
@@ -548,6 +549,7 @@ class HostSurface(Surface):
         quit_keys: tuple[str, ...] = ("q", "escape"),
         fps_cap: int = 60,
         on_emit: Emit | None = None,
+        on_host_event: Any = None,  # HostEventSink | None (§7)
         no_color: bool | None = None,
     ) -> None:
         # Mouse is enabled only for the omitted arm — it is the only arm the host
@@ -566,59 +568,66 @@ class HostSurface(Surface):
         self._inputs = inputs
         self._evidence_label = evidence_label
         self._quit_keys = frozenset(quit_keys)
+        # The inward host-event sink (§7): host viewing-state reaching the app as
+        # input. On the *host* constructor, never on the renderer binding — the
+        # semantic renderer stays unchanged across the four rungs. On the offered
+        # arm (accepts_height) the host owns no viewport, so no controller is
+        # built and the sink receives zero calls (honest event-source silence).
+        self._on_host_event = on_host_event
 
-        # Omitted arm: the host viewport state, rebuilt through the adapter's pure
-        # transitions. None on the offered arm (the renderer owns the frame).
-        self._adapter: ViewportAdapter | None = None
-        # The token of the last *displayed* frame — the hit-test anchor (§6).
-        self._last_token: FrameToken | None = None
-        # Current geometry, set on every layout().
+        # Omitted arm: the shared viewport controller (adapter + last token +
+        # routing + event minting). ``None`` on the offered arm and until the
+        # first ``layout`` mounts it.
+        self._vp: HostViewport | None = None
+        # Current geometry, set on every layout() — read by the offered arm.
         self._width = 0
         self._height = 0
-        # Resolved hits, newest last — the observability seam a host consumer /
-        # test reads (the inward event seam stays refused, §7; this is outward).
+        # Resolved hits, newest last — the *outward* observability seam a host
+        # consumer / test reads (``host.hit`` emissions). The inward
+        # ``HostHitEvent`` rides ``on_host_event`` alongside it; ``emit`` stays
+        # outward-only (§7).
         self.hits: list[Hit] = []
 
     # --- Geometry: the resize matrix, decided by the adapter (§6) --------------
 
     def layout(self, width: int, height: int) -> None:
-        """Re-plan on init and every resize (SIGWINCH lands here via ``_resize``).
+        """Mount on init, re-plan on every resize (SIGWINCH lands here via
+        ``_resize``).
 
         Offered arm: nothing to plan — ``render()`` re-invokes the renderer with
-        the new ``H`` each dirty frame. Omitted arm: ``plan`` decides the matrix —
-        a width change (or the first frame) re-renders and reconciles the anchor
-        through ``publish``; a height-only change **re-slices with no renderer
-        call** (``resize``).
+        the new ``H`` each dirty frame. Omitted arm: the first ``layout`` **mounts**
+        the controller (installs content, no event — no synthetic mount event, §7);
+        every later ``layout`` is a resize (``layout`` re-runs only via ``_resize``),
+        so it applies the §6 matrix and mints one ``ResizeChange`` — a width change
+        re-renders and reconciles the anchor, a height-only change **re-slices with
+        no renderer call**.
         """
         self._width = width
         self._height = height
         if self._accepts_height:
             return
 
-        from ..host import RenderAction, RenderKey, ViewportAdapter
+        from ..host import ResizeChange
 
-        adapter = self._adapter if self._adapter is not None else ViewportAdapter()
-        key = RenderKey(content_id=self._content_id, inputs=self._inputs, width=width)
-        plan = adapter.plan(key)
-        if plan.action is RenderAction.RE_RENDER:
-            # The natural render runs *here*, in layout() — outside the run loop's
-            # per-frame bracket — so it must install the Surface's capability /
-            # icon bracket itself. Without this, layout-time and width-resize
-            # renders (initial mount, SIGWINCH width change) would produce content
-            # under ambient/default capabilities instead of the Surface writer's,
-            # and a direct HostSurface (no run_cli outer bracket) would never see
-            # the right ones (RENDERER_CONTRACT §9.3). The offered arm needs no
-            # equivalent: its render is in render(), already inside _frame_scope.
-            with self._frame_scope():
-                content = self._render_frame(width, None)
-            published = adapter.publish(content, plan, frame_height=height)
-            # Single-threaded here: the ticket was minted against this same state
-            # and no concurrent publish exists, so it always holds.
-            assert published is not None
-            adapter = published
-        else:  # RE_SLICE — the height-only arm: no renderer call
-            adapter = adapter.resize(height)
-        self._adapter = adapter
+        # The natural render runs *here*, in layout() — outside the run loop's
+        # per-frame bracket — so it must install the Surface's capability / icon
+        # bracket itself (RENDERER_CONTRACT §9.3). The offered arm needs no
+        # equivalent: its render is in render(), already inside _frame_scope.
+        with self._frame_scope():
+            if self._vp is None:
+                self._vp = HostViewport(
+                    content_id=self._content_id,
+                    on_event=self._on_host_event,
+                    evidence_label=self._evidence_label,
+                )
+                self._vp.set_geometry(width, height)
+                self._vp.install(self._render_frame(width, None), reason=None)
+                return
+            width_changed = self._vp.set_geometry(width, height)
+            if width_changed:
+                self._vp.install(self._render_frame(width, None), reason=ResizeChange())
+            else:  # height-only: re-slice, no renderer call
+                self._vp.reslice(reason=ResizeChange())
 
     # --- Frame production ------------------------------------------------------
 
@@ -645,78 +654,43 @@ class HostSurface(Surface):
                 "crop or pad into compliance — HOST_RUNG_DESIGN §5)"
             )
         block.paint(buf, 0, 0)
-        self._last_token = None  # the renderer owns hit-testing on this arm
 
     def _render_omitted(self, buf: Buffer) -> None:
-        """Assemble the adapter's frame and paint it, retaining its token as the
-        hit-test anchor for the *displayed* frame (§6)."""
-        adapter = self._adapter
-        if adapter is None:
+        """Assemble the controller's frame and paint it. The controller retains
+        its token as the hit-test anchor for the *displayed* frame (§6)."""
+        if self._vp is None:
             return
-        frame = adapter.frame(evidence_label=self._evidence_label)
-        frame.block.paint(buf, 0, 0)
-        self._last_token = frame.token
+        self._vp.frame().block.paint(buf, 0, 0)
 
-    # --- Input routing ---------------------------------------------------------
+    # --- Input routing (through the shared controller) -------------------------
 
     def on_key(self, key: str) -> None:
         if key in self._quit_keys:
+            if self._vp is not None:  # omitted arm only — offered arm fires nothing
+                self._vp.route_quit()
             self.quit()
             return
-        if self._accepts_height:
+        if self._accepts_height or self._vp is None:
             return  # the renderer owns internal scroll on the offered arm (§6)
-        adapter = self._adapter
-        if adapter is None:
-            return
-        moved = self._scroll_for_key(adapter, key)
-        if moved is not None:
-            self._adapter = moved
+        if self._vp.route_key(key):
             self.mark_dirty()
-
-    @staticmethod
-    def _scroll_for_key(adapter: ViewportAdapter, key: str) -> ViewportAdapter | None:
-        """Map a key to a viewport transition (the tui key conventions: arrows,
-        page up/down, home/end), or ``None`` when the key is not ours."""
-        if key in ("up", "k"):
-            return adapter.scroll(-1)
-        if key in ("down", "j"):
-            return adapter.scroll(1)
-        if key == "page_up":
-            return adapter.page_up()
-        if key == "page_down":
-            return adapter.page_down()
-        if key in ("home", "g"):
-            return adapter.home()
-        if key in ("end", "G"):
-            return adapter.end()
-        return None
 
     def on_mouse(self, event: MouseEvent) -> None:
-        if self._accepts_height:
-            return
-        adapter = self._adapter
-        if adapter is None:
+        if self._accepts_height or self._vp is None:
             return
         if event.is_scroll:
-            # Vertical wheel only — the viewport is a vertical window; a
-            # horizontal wheel (SCROLL_LEFT/RIGHT) is not ours.
-            if event.button is MouseButton.SCROLL_UP:
-                delta = -_WHEEL_ROWS
-            elif event.button is MouseButton.SCROLL_DOWN:
-                delta = _WHEEL_ROWS
-            else:
-                return
-            self._adapter = adapter.scroll(delta)
-            self.mark_dirty()
+            # The controller maps the wheel button to a vertical delta (a
+            # horizontal wheel is not the vertical viewport's) and mints the event.
+            if self._vp.route_wheel(event.button):
+                self.mark_dirty()
             return
-        # A click resolves against the LAST DISPLAYED frame's token (§6). If a
-        # resize has since mutated the adapter, the token no longer matches and
-        # ``resolve`` returns a stale drop — never a translation through new
-        # geometry. No frame yet displayed → nothing to resolve against.
-        token = self._last_token
-        if token is None:
+        # A click resolves against the LAST DISPLAYED frame's token (§6): the
+        # controller drops a stale event (a resize mutated geometry after paint)
+        # rather than translating it through the new geometry. It mints the inward
+        # ``HostHitEvent``; here we also record the outward ``host.hit``.
+        hit = self._vp.route_click(event.x, event.y)
+        if hit is None:
             return
-        hit = adapter.resolve(event.x, event.y, token)
         self.hits.append(hit)
         self.emit(
             "host.hit",

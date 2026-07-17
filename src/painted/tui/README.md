@@ -73,9 +73,25 @@ frame):
 *displayed* frame is retained and every mouse event resolves against exactly that
 token, so an event that arrives after a SIGWINCH swaps geometry resolves *stale*
 (dropped) rather than translating through the new geometry. Resolved hits land in
-`.hits` and emit `host.hit` observations (`Surface.emit` stays outward-only — no
-host viewing-state flows back to the app as input; that inward seam is deferred,
-§7).
+`.hits` and emit `host.hit` observations.
+
+**The inward host-event seam** (`on_host_event=`, §7) is the counterpart of the
+outward-only `Surface.emit`: host viewing-state reaching the app as *input*. Pass
+`on_host_event=sink` (a `HostEvent -> None` callback, from `painted`) and the
+omitted arm delivers a `HostViewportEvent` (scroll / follow-track / cursor /
+resize — a typed `ViewportChange` reason beside the resulting `offset` /
+`following` / `is_at_bottom` / `cursor_row`), a `HostHitEvent` (the resolved
+`Hit`), or a `HostQuitEvent` — each carrying two frame tokens: `observed` (the
+displayed mapping the input landed on) and `current` (the live post-transition
+mapping, equal to `observed` exactly when the transition installed no change
+relative to the displayed frame — mid-batch a later event may differ). Delivery is synchronous, exactly once per
+event, after the pure adapter transition installs; a handler exception fails the
+host delivery loud (never swallowed, never rerouted to `emit`). The **offered
+arm** owns no viewport, so a declared sink there fires zero times — honest
+silence, never a synthetic mount event. The **omitted arm** routes through the
+shared `HostViewport` controller (root `painted.host`) — which `StreamSurface`
+composes too, so the machinery is extracted, not forked; the offered arm creates
+no controller (its renderer owns the frame).
 
 ## Layer Pattern
 

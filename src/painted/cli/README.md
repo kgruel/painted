@@ -175,6 +175,17 @@ Two local seams worth knowing before you touch delivery:
   runner-owned `use_refs` bracket around render + serialization. A static
   sequence validates at construction; a callable of state evaluates after fetch.
   See `docs/RENDERER_CONTRACT_DESIGN.md` §7.
+- **`on_host_event=`** declares the inward host-event sink (`docs/HOST_RUNG_DESIGN.md`
+  §7) — a keyword-only `HostEvent -> None` callback on the HOST constructor, never
+  on the renderer binding (`_RendererBinding` carries the acceptance arm, not host
+  input). The runner threads it into the two rungs where painted owns a viewport:
+  `_run_host` (the interactive host rung — the offered arm builds no controller,
+  so it fires nothing there) and `_run_live_surface` (the alt-screen streaming
+  tier — the `follow` path). STATIC, in-place LIVE, the piped fallback, and the
+  offered arm receive zero calls. A handler exception fails the active host
+  delivery loud (never swallowed, never rerouted to `Surface.emit`). Both
+  `HostSurface` and `StreamSurface` drive the shared `HostViewport` controller
+  (root `painted.host`) that mints the events.
 
 The full contract, its rationale, and the width-at-the-offer invariant are in
 `docs/RENDERER_CONTRACT_DESIGN.md` (ratified 2026-07-12). Cite it; don't restate.

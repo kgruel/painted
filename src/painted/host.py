@@ -50,12 +50,13 @@ Two distinct identities, deliberately kept apart (the review's P1a/P1b):
 
 from __future__ import annotations
 
-from collections.abc import Hashable
+from collections.abc import Callable, Hashable
 from dataclasses import dataclass, replace
 from enum import Enum
 from typing import TYPE_CHECKING
 
 from .core.errors import ContractError
+from .mouse import MouseButton
 from .viewport import Viewport
 from .views import assemble_frame
 
@@ -226,6 +227,106 @@ class Hit:
     ref: str | None = None
     content_xy: tuple[int, int] | None = None
     stale: bool = False
+
+
+# --- The inward host-event seam (§7) -----------------------------------------
+#
+# The omitted arm accrues host viewing-state the application may want as *input*
+# (follow-mode reached the end, the user scrolled off the tail, a click resolved
+# a ref). ``Surface.emit`` carries observations *outward* and stays that way
+# (repurposing it for control would change its semantics — refused, §7). The
+# inward path is this frozen, generation-stamped ``HostEvent`` union, delivered
+# through a construction-time push callback (``on_host_event=``). Every event
+# carries **two** frame tokens: ``observed`` — the displayed mapping the input
+# occurred against (the pinned causality rule, mechanical, the same discipline
+# as hit testing) — and ``current`` — the live installed post-transition mapping.
+# The two are equal exactly when the transition installed no change relative to
+# the *displayed* frame; under a drain batch a later event legitimately carries
+# ``observed != current``. The host mints them; the adapter supplies the tokens
+# (``token``) and the resulting viewport state.
+
+
+@dataclass(frozen=True, slots=True)
+class ScrollChange:
+    """A manual scroll moved the viewport — arrows / page / home / wheel — with
+    follow not the driver (``following`` stays False across the transition)."""
+
+
+@dataclass(frozen=True, slots=True)
+class FollowChange:
+    """Follow / at-bottom intent drove the frame: engaged (``end``/``G``, or a
+    downward scroll that reached the bottom), re-tracked the growing bottom
+    while following (a stream publish, a resize), or disengaged (a scroll off
+    the tail). "Viewport reached end" is read off this reason plus
+    ``is_at_bottom`` — there is no dedicated end-reached event (§7)."""
+
+
+@dataclass(frozen=True, slots=True)
+class CursorFollowChange:
+    """Cursor-following intent drove the frame — a tracked content row kept in
+    view (``scroll_into_view``) across the transition."""
+
+
+@dataclass(frozen=True, slots=True)
+class ResizeChange:
+    """A terminal resize re-sliced (height-only) or re-rendered (width) the
+    frame; the resulting viewport was reconciled by the §6 anchor policy."""
+
+
+# The typed reason an omitted-arm viewport transition carries. One flat union of
+# four reasons (§7) — the host classifies each transition into exactly one.
+ViewportChange = ScrollChange | FollowChange | CursorFollowChange | ResizeChange
+
+
+@dataclass(frozen=True, slots=True)
+class HostViewportEvent:
+    """The viewport moved (scroll, follow-track, cursor-track, or resize).
+
+    ``reason`` is the typed transition cause; ``offset`` / ``following`` /
+    ``is_at_bottom`` / ``cursor_row`` are the resulting viewport state the
+    application reads (an at-bottom ``following`` viewport is "follow mode
+    engaged"). ``observed`` / ``current`` are the two frame tokens (see the
+    union comment): equal exactly when the transition installed no change
+    relative to the displayed frame, not merely because the intent was clamped.
+    """
+
+    observed: FrameToken
+    current: FrameToken
+    reason: ViewportChange
+    offset: int
+    following: bool
+    is_at_bottom: bool
+    cursor_row: int | None
+
+
+@dataclass(frozen=True, slots=True)
+class HostHitEvent:
+    """A pointer event resolved against the last displayed frame (§6 hit test).
+
+    ``hit`` is the resolution (region + ref + translated content coordinate, or
+    ``stale`` when a resize replaced the frame the click was observed against).
+    ``observed`` is the frame token the hit was resolved against; ``current`` is
+    the live mapping (equal to ``observed`` unless a resize has since moved it).
+    """
+
+    observed: FrameToken
+    current: FrameToken
+    hit: Hit
+
+
+@dataclass(frozen=True, slots=True)
+class HostQuitEvent:
+    """The user asked the host to quit (a quit key). Carries the two tokens for
+    a uniform seam; there is no viewport transition, so ``current`` equals
+    ``observed`` (the last displayed frame)."""
+
+    observed: FrameToken
+    current: FrameToken
+
+
+# The inward seam's payload union and its sink type (``on_host_event=``).
+HostEvent = HostViewportEvent | HostHitEvent | HostQuitEvent
+HostEventSink = Callable[[HostEvent], None]
 
 
 # --- Window arithmetic --------------------------------------------------------
@@ -545,6 +646,16 @@ class ViewportAdapter:
         gid = None if self.generation is None else self.generation.gid
         return FrameToken(generation=gid, offset=self.viewport.offset, height=self.frame_height)
 
+    def token(self) -> FrameToken:
+        """The current displayed mapping's token — generation + offset + height.
+
+        The same token ``frame`` returns beside its Block and ``resolve``
+        matches on, exposed without producing a Frame so a host controller can
+        stamp it as an inward event's ``current`` (the post-transition mapping,
+        §7). Reading it never mutates state — pure, like ``frame``.
+        """
+        return self._token()
+
     def frame(self, *, evidence_label: str | None = None) -> Frame:
         """The delivered frame — Block + token — exactly ``frame_height`` rows (§6).
 
@@ -629,6 +740,275 @@ class ViewportAdapter:
         return Hit(FrameRegion.CONTENT, ref=self.content.cell_ref(lx, cy), content_xy=(lx, cy))
 
 
+# --- The shared omitted-arm controller (§6–7) --------------------------------
+#
+# The stateful host-side holder both interactive surfaces drive: ``HostSurface``
+# (a single fetch) and ``StreamSurface`` (streaming publishes) compose one rather
+# than fork the routing. It lives here, beside the frozen adapter it drives, not
+# in ``tui`` — it is pure host orchestration with **no** delivery dependency (no
+# Surface, Buffer, or keyboard), so both a tui surface and the cli streaming
+# surface reach it through this one root import. That keeps the cli→tui seam free
+# of a private cross-package symbol while keeping the controller unforked.
+
+
+# Rows a scroll-wheel notch moves the viewport. A small constant, not a page
+# (page_up/page_down own that) — the "a few lines per notch" feel every terminal
+# scroll has.
+_WHEEL_ROWS = 3
+
+
+def _scroll_for_key(adapter: ViewportAdapter, key: str) -> ViewportAdapter | None:
+    """Map a key to a viewport transition, or ``None`` when the key is not ours
+    (the tui conventions: arrows / ``j``·``k``, page up/down, home/end /
+    ``g``·``G``). Shared by both host surfaces."""
+    if key in ("up", "k"):
+        return adapter.scroll(-1)
+    if key in ("down", "j"):
+        return adapter.scroll(1)
+    if key == "page_up":
+        return adapter.page_up()
+    if key == "page_down":
+        return adapter.page_down()
+    if key in ("home", "g"):
+        return adapter.home()
+    if key in ("end", "G"):
+        return adapter.end()
+    return None
+
+
+class HostViewport:
+    """The shared omitted-arm host controller (HOST_RUNG_DESIGN §6–7).
+
+    Owns the ``ViewportAdapter`` and the last-*displayed* ``FrameToken``, routes
+    scroll / wheel / click input through the adapter's pure transitions, produces
+    frames, and mints the inward ``HostEvent`` seam (§7). ``HostSurface`` (a
+    single fetch) and ``StreamSurface`` (streaming publishes) both **compose** one
+    rather than fork the routing — the extraction the round-4 ruling required so
+    ``StreamSurface`` runs the same omitted-arm machinery, not a plain direct
+    paint plus callback.
+
+    Not a frozen dataclass: it is the mutable host-side holder the frozen adapter
+    is swapped *inside* — exactly the ``_adapter`` / ``_last_token`` pair
+    ``HostSurface`` held directly before the extraction. Its transitions are pure
+    (each installs a new frozen adapter); the event dispatch is the one side
+    effect, and it is the seam's whole point. Unexported (not in ``__all__``): a
+    delivery-internal collaborator, reached by the two surfaces, not app code.
+
+    Event discipline (§7, the ruled two-token causality): every event carries
+    ``observed`` — ALWAYS the last *displayed* frame's token (``last_token``,
+    set only by ``frame()``) — and ``current`` — ALWAYS the live installed
+    post-transition mapping (``adapter.token()``), never copied from ``observed``.
+    ``last_token`` stays fixed across a production drain batch (``Surface.run``
+    drains several inputs before a repaint), which is exactly its causality job:
+    ``observed`` names the frame the input landed on even after earlier events in
+    the batch advanced the adapter, so a later event legitimately carries
+    ``observed != current``. They coincide only when the transition installs no
+    change relative to the displayed frame (a true no-op). Before any frame has
+    been displayed there is no observed mapping, so **no event fires** — input is
+    ignored for event purposes until the first display; painted never
+    manufactures a tokenless event. The sink fires synchronously, exactly once
+    per event, AFTER the adapter transition installs; a handler exception
+    propagates (the caller's ``mark_dirty`` never runs) — the active host
+    delivery fails loudly, never swallowed, never rerouted to ``Surface.emit``
+    (which stays outward-only).
+    """
+
+    def __init__(
+        self,
+        *,
+        content_id: Hashable,
+        on_event: HostEventSink | None = None,
+        evidence_label: str | None = None,
+        follow_start: bool = False,
+    ) -> None:
+        # ``follow_start`` seeds the tail-follow intent so a stream tracks the
+        # bottom from its first overflow (the ``follow`` shape); a single-fetch
+        # document starts top-anchored (False).
+        self.adapter: ViewportAdapter = (
+            ViewportAdapter(following=True) if follow_start else ViewportAdapter()
+        )
+        # FrameToken | None — set only when a frame is displayed (produced).
+        self.last_token: FrameToken | None = None
+        self._content_id = content_id
+        self._on_event = on_event
+        self._evidence_label = evidence_label
+        self._width = 0
+        self._height = 0
+        # A per-publish input token: a fresh int each generation forces the
+        # adapter's plan() to RE_RENDER (a new content generation under the same
+        # content identity), while a height-only resize routes through reslice()
+        # and never bumps it. Deterministic (not object()/random) for testable
+        # generation identity.
+        self._seq = 0
+
+    @property
+    def width(self) -> int:
+        return self._width
+
+    @property
+    def height(self) -> int:
+        return self._height
+
+    # --- Geometry (the §6 resize matrix, split from content) ------------------
+
+    def set_geometry(self, width: int, height: int) -> bool:
+        """Record the frame geometry; return whether the *width* changed — the
+        re-render-and-reconcile trigger (§6). Records geometry only; the caller
+        installs / re-slices content through the methods below (a streaming host
+        has no content at mount, so geometry and content are separate steps)."""
+        changed = width != self._width
+        self._width = width
+        self._height = height
+        return changed
+
+    def install(self, content: Block, *, reason: ViewportChange | None) -> None:
+        """Install a new content generation at the current geometry (RE_RENDER),
+        reconciling the viewport by the §6 anchor policy. ``reason`` is the
+        ``ViewportChange`` to emit, or ``None`` for a silent mount (no synthetic
+        mount event — §7). ``content`` was rendered at ``self.width`` by the
+        caller, inside its capability bracket."""
+        self._install_generation(content)
+        if reason is not None:
+            self._emit_viewport(reason)
+
+    def publish_stream(self, content: Block) -> None:
+        """A streaming yield: a new content generation, then a ``FollowChange``
+        iff the viewport tracked the growing bottom (follow was engaged). A
+        scrolled-up viewer holds their place — offset and follow unchanged, only
+        the evidence row's below-count grows — so no viewport event fires (the
+        four-reason vocabulary has no content-changed reason; the viewport state
+        the seam reports did not move)."""
+        self._install_generation(content)
+        if self.adapter.following:
+            self._emit_viewport(FollowChange())
+
+    def reslice(self, *, reason: ViewportChange) -> None:
+        """Height-only resize: re-window the cached generation, no renderer call
+        (§6 matrix). Emits ``reason`` (a ``ResizeChange``)."""
+        self.adapter = self.adapter.resize(self._height)
+        self._emit_viewport(reason)
+
+    def _install_generation(self, content: Block) -> None:
+        self._seq += 1
+        key = RenderKey(content_id=self._content_id, inputs=self._seq, width=self._width)
+        plan = self.adapter.plan(key)
+        published = self.adapter.publish(content, plan, frame_height=self._height)
+        # Single-threaded: the ticket was minted against this same state and no
+        # concurrent publish exists, so it always holds.
+        assert published is not None
+        self.adapter = published
+
+    # --- Input routing (mint the inward events) -------------------------------
+
+    def route_key(self, key: str) -> bool:
+        """Route a scroll key through the adapter; return whether it was ours.
+        Mints one ``HostViewportEvent`` (``FollowChange`` when follow is involved
+        either side of the transition, else ``ScrollChange``) — even for a clamped
+        move (its ``current`` equals ``observed`` only when it installed no change
+        relative to the displayed frame; mid-batch it may still differ)."""
+        moved = _scroll_for_key(self.adapter, key)
+        if moved is None:
+            return False
+        self._apply_scroll(moved)
+        return True
+
+    def route_wheel(self, button: MouseButton) -> bool:
+        """Route a wheel button to a vertical viewport delta (a horizontal wheel
+        is not the vertical viewport's), minting the event. Returns whether the
+        wheel was ours."""
+        if button is MouseButton.SCROLL_UP:
+            delta = -_WHEEL_ROWS
+        elif button is MouseButton.SCROLL_DOWN:
+            delta = _WHEEL_ROWS
+        else:
+            return False
+        self._apply_scroll(self.adapter.scroll(delta))
+        return True
+
+    def _apply_scroll(self, moved: ViewportAdapter) -> None:
+        before_following = self.adapter.following
+        self.adapter = moved
+        reason: ViewportChange = (
+            FollowChange() if (before_following or moved.following) else ScrollChange()
+        )
+        self._emit_viewport(reason)
+
+    def route_click(self, x: int, y: int) -> Hit | None:
+        """Resolve a pointer coordinate against the last *displayed* frame's token
+        (§6 event-order discipline) and mint a ``HostHitEvent``. Returns the
+        ``Hit`` (or ``None`` when no frame has been displayed to resolve against).
+        A resize since the paint mints new geometry while ``last_token`` still
+        names the displayed frame, so the hit resolves ``stale`` — dropped, never
+        translated through the new geometry."""
+        token = self.last_token
+        if token is None:
+            return None
+        hit = self.adapter.resolve(x, y, token)
+        if self._on_event is not None:
+            self._on_event(HostHitEvent(observed=token, current=self.adapter.token(), hit=hit))
+        return hit
+
+    def cursor_to(self, index: int) -> None:
+        """Move the retained cursor to content row ``index`` (the cursor-following
+        intent, §6) and mint a ``CursorFollowChange``. No 0.13 *host* key routes
+        here — the monolithic host has no cursor; the adapter's cursor-following
+        is the component integration deferred to 0.14 (§9 Q6). Exposed on the
+        controller so the reason is minted from a real transition (the adapter's
+        ``scroll_into_view``), not synthesized — a component-owning host wires a
+        key to it without new plumbing."""
+        self.adapter = self.adapter.scroll_into_view(index)
+        self._emit_viewport(CursorFollowChange())
+
+    def route_quit(self) -> None:
+        """Mint a ``HostQuitEvent`` for a quit key. ``observed`` is the last
+        displayed frame; ``current`` is the *live* installed mapping — never
+        copied from ``observed`` (under a drain batch a prior transition may have
+        moved the adapter off the displayed frame, §7). No frame displayed yet →
+        no observed mapping → no event (painted never manufactures a tokenless
+        event)."""
+        observed = self.last_token
+        if self._on_event is None or observed is None:
+            return
+        self._on_event(HostQuitEvent(observed=observed, current=self.adapter.token()))
+
+    # --- Frame production ------------------------------------------------------
+
+    def frame(self) -> Frame:
+        """The delivered frame — Block + token — retaining the token as the
+        hit-test anchor for the *displayed* frame (§6)."""
+        frame = self.adapter.frame(evidence_label=self._evidence_label)
+        self.last_token = frame.token
+        return frame
+
+    # --- Event minting ---------------------------------------------------------
+
+    def _emit_viewport(self, reason: ViewportChange) -> None:
+        # ``observed`` is ALWAYS the last *displayed* frame (``last_token``). It
+        # is set only by ``frame()``, never by a transition, so it stays fixed
+        # across a drain batch — its causality job: it names the frame the input
+        # landed on, even after earlier events in the batch moved the adapter.
+        # ``current`` is ALWAYS the live installed post-transition mapping
+        # (``adapter.token()``) — never copied from ``observed``, so a later
+        # event in a batch legitimately carries ``observed != current`` (§7).
+        # Before any frame is displayed there is NO observed mapping, so no event
+        # fires — painted never manufactures a tokenless event.
+        observed = self.last_token
+        if self._on_event is None or observed is None:
+            return
+        vp = self.adapter.viewport
+        self._on_event(
+            HostViewportEvent(
+                observed=observed,
+                current=self.adapter.token(),
+                reason=reason,
+                offset=vp.offset,
+                following=self.adapter.following,
+                is_at_bottom=vp.is_at_bottom,
+                cursor_row=self.adapter.cursor,
+            )
+        )
+
+
 __all__ = [
     "ViewportAdapter",
     "RenderKey",
@@ -638,4 +1018,15 @@ __all__ = [
     "FrameToken",
     "FrameRegion",
     "Hit",
+    # The inward host-event seam (§7)
+    "HostEvent",
+    "HostEventSink",
+    "HostViewportEvent",
+    "HostHitEvent",
+    "HostQuitEvent",
+    "ViewportChange",
+    "ScrollChange",
+    "FollowChange",
+    "CursorFollowChange",
+    "ResizeChange",
 ]

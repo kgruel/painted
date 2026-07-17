@@ -305,9 +305,13 @@ def test_empty_schemes_result_is_carried_as_an_empty_tuple_not_none():
 
 
 def test_render_paints_current_state():
+    # A fetched state publishes as a new content generation (`_pending`), which
+    # the viewport slices into the frame (S5). Geometry is set as layout would.
     surf = _make_surface(["hello"])
     surf._buf = Buffer(10, 1)
+    surf._vp.set_geometry(10, 1)
     surf._frame = ("hello", None)
+    surf._pending = True
     surf.render()
     assert buffer_to_lines(surf._buf)[0].startswith("hello")
 
@@ -318,8 +322,10 @@ def test_render_exception_is_captured_as_render():
 
     surf = _make_surface(["x"], render=boom)
     surf._buf = Buffer(10, 1)
+    surf._vp.set_geometry(10, 1)
     surf._running = True
     surf._frame = ("x", None)
+    surf._pending = True  # a pending state drives the publish that raises
     surf.render()
     assert surf.error_kind == "render"
     assert isinstance(surf.error, ValueError)
@@ -345,11 +351,66 @@ def test_render_offers_buffer_width_per_frame():
 
     surf = _make_surface(["x"], render=capture)
     surf._frame = ("x", None)
+    surf._vp.set_geometry(30, 1)
     surf._buf = Buffer(30, 1)
+    surf._pending = True
     surf.render()
+    surf._vp.set_geometry(52, 1)
     surf._buf = Buffer(52, 1)  # the alt screen resized
+    surf._pending = True
     surf.render()
     assert offered == [30, 52]
+
+
+# --- Yield coalescing + publish-once (P2a) --------------------------------------
+
+
+def test_stream_coalesces_multiple_yields_to_the_latest_at_render():
+    """Several yields between two repaints coalesce to the latest: only the
+    newest state renders, as one content generation (P2a — coalesce-to-latest is
+    accepted delivery behavior; publishing every intermediate yield would render
+    content no one sees)."""
+    rendered: list[int] = []
+
+    def capture(state, width):
+        rendered.append(state)
+        return Block.text(str(state), Style())
+
+    surf = _make_surface([], render=capture)
+    surf._buf = Buffer(20, 6)
+    surf._vp.set_geometry(20, 6)
+    # Two yields arrive before a render — the consumer overwrites _frame each time.
+    surf._frame = (3, None)
+    surf._pending = True
+    surf._frame = (7, None)  # the latest — coalesces over the 3
+    surf._pending = True
+    surf.render()
+    assert rendered == [7]  # only the latest state rendered
+    assert surf._vp._seq == 1  # exactly one content generation published
+
+
+def test_a_pending_yield_publishes_once_across_a_width_resize():
+    """A width resize while a yield is pending must not publish that state twice:
+    layout defers to render(), so one yield → one generation, not two (P2a — the
+    double-publish bug: layout installed the pending state, then render() published
+    the same state again)."""
+    rendered: list[tuple[int, int]] = []
+
+    def capture(state, width):
+        rendered.append((state, width))
+        return Block.text(str(state), Style())
+
+    surf = _make_surface([], render=capture)
+    surf._buf = Buffer(20, 6)
+    surf.layout(20, 6)
+    surf._frame = (10, None)
+    surf._pending = True
+    # A width resize lands while the yield is still pending.
+    surf._buf = Buffer(30, 6)
+    surf.layout(30, 6)  # width changed — but pending, so layout defers the publish
+    surf.render()  # the one pending yield publishes ONCE here, at the new width
+    assert surf._vp._seq == 1  # a single generation for the single yield
+    assert rendered == [(10, 30)]  # rendered exactly once, at width 30
 
 
 # --- _frame_scope(): installs an already-resolved pair, never evaluates ---
@@ -462,8 +523,11 @@ def test_scope_releases_after_a_swallowed_renderer_exception_via_test_surface():
 
     surf = StreamSurface(render=boom, fetch_stream=_stream_of([]))
     surf._running = True
-    surf._frame = ("x", (RefScheme("fact", lambda v: v),))
+    # Mount first (layout with no state yet), then present a pending state — the
+    # production order: content arrives from the consumer after mount (S5).
     harness = TestSurface(surf, width=10, height=1)
+    surf._frame = ("x", (RefScheme("fact", lambda v: v),))
+    surf._pending = True
     harness.run_to_completion()
     assert current_ref_schemes() == {}
     assert surf.error_kind == "render"
@@ -986,7 +1050,9 @@ def test_surface_frame_render_and_serialization_retain_the_snapshot(monkeypatch)
         )
         self._buf = Buffer(30, 1)
         self._prev = Buffer(30, 1)
+        self._vp.set_geometry(30, 1)
         self._frame = ("d", (RefScheme("star", lambda v: f"https://x/{v}"),))
+        self._pending = True  # a pending state publishes + slices into the frame (S5)
         with self._frame_scope():
             self.render()
             self._flush()

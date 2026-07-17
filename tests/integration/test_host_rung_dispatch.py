@@ -278,3 +278,100 @@ def test_interactive_is_available_on_every_command() -> None:
     parser = runner._get_parser()
     options = {s for a in parser._actions for s in a.option_strings}
     assert "-i" in options
+
+
+# --- The inward sink fires only where painted owns a viewport (§7) ------------
+#
+# ``on_host_event=`` is legal on every route; it fires ONLY on the two rungs where
+# painted owns a viewport (the interactive host rung's omitted arm, and the
+# alt-screen streaming tier). On STATIC, the piped/in-place LIVE routes, and the
+# offered arm it receives zero calls — honest event-source silence, pinned at the
+# route level through the assembled dispatch.
+
+
+def _tall(width: int | None) -> Block:
+    return Block.empty(max(1, width or 10), 30)  # overflows a short frame → scrollable
+
+
+def _mount_host_forwarding_events(monkeypatch, *, input_queue) -> None:
+    """Swap the alt-screen launch for a TestSurface run of the SAME HostSurface,
+    forwarding ``on_host_event`` (which the real ``run_host_surface`` threads) and
+    replaying ``input_queue`` so the sink's firing (or silence) is observable."""
+
+    def fake_run_host_surface(
+        *, render, accepts_height, content_id, inputs, on_host_event=None, **_kw
+    ) -> int:
+        from painted.tui import HostSurface, TestSurface
+
+        surface = HostSurface(
+            render=render,
+            accepts_height=accepts_height,
+            content_id=content_id,
+            inputs=inputs,
+            on_host_event=on_host_event,
+        )
+        TestSurface(surface, width=40, height=5, input_queue=input_queue).run_to_completion()
+        return 0
+
+    monkeypatch.setattr("painted.cli.stream_surface.run_host_surface", fake_run_host_surface)
+
+
+def test_static_route_sink_never_fires() -> None:
+    events: list[object] = []
+    runner = CliRunner(
+        renderer=lambda d, f, w: _tall(w), fetch=lambda: {"x": 1}, on_host_event=events.append
+    )
+    runner._dispatch(_ctx(OutputMode.STATIC, is_tty=True, use_ansi=True))
+    assert events == []
+
+
+def test_inplace_live_route_sink_never_fires(monkeypatch) -> None:
+    _stub_inplace(monkeypatch)
+    events: list[object] = []
+    runner = CliRunner(
+        renderer=lambda d, f, w: _tall(w),
+        fetch=lambda: {"x": 1},
+        fetch_stream=lambda: _one({"x": 1}),
+        on_host_event=events.append,
+    )
+    runner._dispatch(_ctx(OutputMode.LIVE, is_tty=True, use_ansi=True))
+    assert events == []
+
+
+def test_piped_interactive_route_sink_never_fires(monkeypatch, capsys) -> None:
+    events: list[object] = []
+    runner = CliRunner(
+        renderer=lambda d, f, w: _tall(w), fetch=lambda: {"x": 1}, on_host_event=events.append
+    )
+    # Not a usable TTY → INTERACTIVE falls back to LIVE (no viewport): zero calls.
+    runner._dispatch(_ctx(OutputMode.INTERACTIVE, is_tty=False, use_ansi=False))
+    assert events == []
+
+
+def test_offered_arm_interactive_sink_never_fires(monkeypatch) -> None:
+    _mount_host_forwarding_events(monkeypatch, input_queue=["down", "j", "G", "q"])
+    events: list[object] = []
+    runner = CliRunner(
+        height_renderer=HeightRecorder(), fetch=lambda: {"x": 1}, on_host_event=events.append
+    )
+    # The offered arm's renderer owns the frame — painted holds no viewport, so
+    # even scroll/quit keys mint nothing (§7).
+    runner._dispatch(_ctx(OutputMode.INTERACTIVE, is_tty=True, use_ansi=True, height=5))
+    assert events == []
+
+
+def test_omitted_arm_interactive_sink_fires(monkeypatch) -> None:
+    """The positive control: on the omitted arm (an undeclared / ``renderer=``
+    binding, the host owns the viewport), the same wiring DOES deliver — so the
+    silence tests above are not vacuous."""
+    _mount_host_forwarding_events(monkeypatch, input_queue=["down", "q"])
+    events: list[object] = []
+    runner = CliRunner(
+        renderer=lambda d, f, w: _tall(w), fetch=lambda: {"x": 1}, on_host_event=events.append
+    )
+    runner._dispatch(_ctx(OutputMode.INTERACTIVE, is_tty=True, use_ansi=True, height=5))
+    # A scroll and a quit both reached the sink.
+    from painted import HostQuitEvent, HostViewportEvent
+
+    assert any(isinstance(e, HostViewportEvent) for e in events)
+    assert any(isinstance(e, HostQuitEvent) for e in events)

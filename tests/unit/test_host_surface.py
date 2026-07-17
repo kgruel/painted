@@ -78,8 +78,8 @@ def test_omitted_arm_offers_natural_sizing_and_slices_to_frame() -> None:
     # Frame is exactly the allocation; overflow (20 > 10) reserves one evidence row.
     assert len(frames[-1].lines) == 10
     assert "more rows" in frames[-1].text
-    assert app._adapter is not None
-    assert app._adapter.viewport.offset == 0
+    assert app._vp.adapter is not None
+    assert app._vp.adapter.viewport.offset == 0
 
 
 def test_omitted_arm_scroll_keys_route_through_adapter() -> None:
@@ -91,19 +91,19 @@ def test_omitted_arm_scroll_keys_route_through_adapter() -> None:
 
     app = HostSurface(render=render, accepts_height=False)
     TestSurface(app, width=24, height=10).run_to_completion()
-    assert app._adapter is not None
+    assert app._vp.adapter is not None
 
     app.on_key("down")
-    assert app._adapter.viewport.offset == 1
+    assert app._vp.adapter.viewport.offset == 1
     app.on_key("page_down")
-    down_offset = app._adapter.viewport.offset
+    down_offset = app._vp.adapter.viewport.offset
     assert down_offset > 1
     app.on_key("end")
-    assert app._adapter.following is True
-    assert app._adapter.viewport.is_at_bottom
+    assert app._vp.adapter.following is True
+    assert app._vp.adapter.viewport.is_at_bottom
     app.on_key("home")
-    assert app._adapter.viewport.offset == 0
-    assert app._adapter.following is False
+    assert app._vp.adapter.viewport.offset == 0
+    assert app._vp.adapter.following is False
 
     # Scrolling never re-renders — it is pure re-slice territory.
     assert calls == [(24, None)]
@@ -112,13 +112,13 @@ def test_omitted_arm_scroll_keys_route_through_adapter() -> None:
 def test_omitted_arm_scroll_wheel_moves_viewport() -> None:
     app = HostSurface(render=lambda w, h: _rows(30, w), accepts_height=False)
     TestSurface(app, width=24, height=10).run_to_completion()
-    assert app._adapter is not None
+    assert app._vp.adapter is not None
 
     app.on_mouse(MouseEvent(MouseAction.SCROLL, MouseButton.SCROLL_DOWN, 0, 0))
-    assert app._adapter.viewport.offset > 0
-    scrolled = app._adapter.viewport.offset
+    assert app._vp.adapter.viewport.offset > 0
+    scrolled = app._vp.adapter.viewport.offset
     app.on_mouse(MouseEvent(MouseAction.SCROLL, MouseButton.SCROLL_UP, 0, 0))
-    assert app._adapter.viewport.offset < scrolled
+    assert app._vp.adapter.viewport.offset < scrolled
 
 
 def test_quit_keys_stop_the_loop() -> None:
@@ -322,6 +322,6 @@ def test_no_displayed_frame_yet_means_no_resolution() -> None:
     # Construct without running the loop: layout ran (adapter built) but render
     # has not, so there is no displayed-frame token to resolve against.
     TestSurface(app, width=24, height=10)
-    app._last_token = None
+    app._vp.last_token = None
     app.on_mouse(_click(0, 2))
     assert app.hits == []  # nothing resolved — no frame was displayed
