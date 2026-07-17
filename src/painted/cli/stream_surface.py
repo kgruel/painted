@@ -27,7 +27,7 @@ from contextlib import AbstractContextManager, ExitStack
 from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
 from ..core.cell import Style
-from ..tui.surface import Surface
+from ..tui.surface import HostSurface, Surface
 from .live_meter import LiveMeter
 
 if TYPE_CHECKING:
@@ -35,6 +35,7 @@ if TYPE_CHECKING:
 
     from ..core.block import Block
     from ..refs import RefScheme
+    from ..tui.surface import HostRender
 
 T = TypeVar("T")
 
@@ -278,3 +279,45 @@ class StreamSurface(Surface, Generic[T]):
             self.quit()
         elif key == " ":
             self._paused = not self._paused
+
+
+def run_host_surface(
+    *,
+    render: HostRender,
+    accepts_height: bool,
+    content_id: object,
+    inputs: object,
+    evidence_label: str | None = None,
+    no_color: bool | None = None,
+    on_emit: Callable[[str, dict[str, object]], None] | None = None,
+) -> int:
+    """Mount a renderer binding into the interactive host rung and run it
+    (HOST_RUNG_DESIGN §6 — the fourth delivery).
+
+    The cli→tui seam for the host rung lives *here*, in the same file that already
+    crosses to ``painted.tui.surface`` for ``StreamSurface`` — the architecture
+    tripwire caps that crossing at the two existing seam files, so the runner
+    reaches ``HostSurface`` through this cli-internal launcher rather than a third
+    ``cli → tui`` import (``runner`` stays tui-free). The launcher is thin: it
+    constructs the ``HostSurface`` from the runner's already-built render closure
+    and runs the alt-screen loop, translating ``KeyboardInterrupt`` to a clean
+    exit like every other delivery path. Exactness, the offer rule, and error
+    routing all live behind ``render`` (the runner's ``_render``) and inside
+    ``HostSurface``; nothing about them is re-implemented here.
+    """
+    import asyncio
+
+    surface = HostSurface(
+        render=render,
+        accepts_height=accepts_height,
+        content_id=content_id,
+        inputs=inputs,
+        evidence_label=evidence_label,
+        no_color=no_color,
+        on_emit=on_emit,
+    )
+    try:
+        asyncio.run(surface.run())
+    except KeyboardInterrupt:
+        pass  # Ctrl-C is a clean interactive exit, like the live paths
+    return 0

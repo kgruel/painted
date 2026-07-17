@@ -301,7 +301,14 @@ def detect_context(
         resolved_mode = default_mode if is_tty else OutputMode.STATIC
     else:
         resolved_mode = mode
-    use_ansi = not force_plain and (is_tty or resolved_mode == OutputMode.INTERACTIVE)
+    # ANSI capability is CONTEXT-derived, never mode-granted: explicit `-i` on a
+    # pipe must not manufacture ANSI the destination can't render. The mode may
+    # still degrade off-TTY (INTERACTIVE → LIVE fallback in dispatch), but the
+    # degraded route produces the same clean, non-ANSI output the context would
+    # otherwise get. On a real TTY the interactive alt-screen path gets `use_ansi`
+    # via `is_tty` like every other delivery — no INTERACTIVE special case needed
+    # (HOST_RUNG_DESIGN §1; the host rung only runs on a usable TTY).
+    use_ansi = not force_plain and is_tty
 
     size = _env_terminal_size()
     if size is None:

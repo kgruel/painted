@@ -247,13 +247,23 @@ class TestUseAnsiResolution:
         ctx = detect_context(Fidelity(depth=int(Zoom.SUMMARY)), OutputMode.STATIC)
         assert ctx.use_ansi is False
 
-    def test_interactive_always_ansi(self, monkeypatch):
-        """INTERACTIVE mode forces use_ansi=True even on pipe."""
+    def test_interactive_ansi_is_context_derived_not_mode_granted(self, monkeypatch):
+        """Explicit INTERACTIVE on a pipe does NOT grant ANSI (HOST_RUNG §1).
+
+        ANSI capability follows the destination, never the requested mode: `-i`
+        into a pipe degrades to a clean, non-ANSI route rather than serializing
+        escapes the pipe can't render. On a real TTY, use_ansi comes via is_tty
+        like every other delivery.
+        """
         from painted.cli import detect_context
 
         monkeypatch.setattr("sys.stdout.isatty", lambda: False)
-        ctx = detect_context(Fidelity(depth=int(Zoom.SUMMARY)), OutputMode.INTERACTIVE)
-        assert ctx.use_ansi is True
+        piped = detect_context(Fidelity(depth=int(Zoom.SUMMARY)), OutputMode.INTERACTIVE)
+        assert piped.use_ansi is False
+
+        monkeypatch.setattr("sys.stdout.isatty", lambda: True)
+        at_tty = detect_context(Fidelity(depth=int(Zoom.SUMMARY)), OutputMode.INTERACTIVE)
+        assert at_tty.use_ansi is True
 
 
 # =============================================================================

@@ -476,13 +476,14 @@ class CliRunner(Generic[T]):
         modes: set[OutputMode] = {OutputMode.STATIC}
         if self.fetch_stream is not None:
             modes.add(OutputMode.LIVE)
-        # -i is available with a custom handler, or when surface delivery is
-        # opted in — then INTERACTIVE falls through to the alt-screen live path,
-        # converging -i and --live onto the same StreamSurface.
-        if (self.handlers and OutputMode.INTERACTIVE in self.handlers) or (
-            self.live_delivery == "surface" and self.fetch_stream is not None
-        ):
-            modes.add(OutputMode.INTERACTIVE)
+        # -i is honest for every command now (HOST_RUNG_DESIGN §1): the host rung
+        # mounts *any* renderer binding into an interactive Surface, so INTERACTIVE
+        # always does something on a TTY — the mode-filtering rationale
+        # (docs/MODE_RESOLUTION.md: hide -i when it is a no-op) is satisfied by the
+        # capability existing, not by gating. A custom INTERACTIVE handler still
+        # wins the dispatch (the escape), and a surface stream still converges -i
+        # onto StreamSurface; off a TTY, -i falls back to LIVE.
+        modes.add(OutputMode.INTERACTIVE)
 
         self._parser_cache = build_parser(
             add_args=self.add_args,
@@ -849,8 +850,8 @@ class CliRunner(Generic[T]):
                 return self._run_live(ctx)
 
             elif ctx.mode == OutputMode.INTERACTIVE:
-                # Falls back to LIVE if no custom handler
-                return self._run_live(ctx)
+                # No custom handler (that was intercepted above): the host rung.
+                return self._run_interactive(ctx)
 
             return 0
 
@@ -1177,6 +1178,85 @@ class CliRunner(Generic[T]):
                 # serialized under the delivery's one NO_COLOR snapshot (§9.1).
                 print_block(block, use_ansi=ctx.use_ansi, no_color=self._delivery_no_color)
         return 0
+
+    def _run_interactive(self, ctx: CliContext) -> int:
+        """Resolve the INTERACTIVE mode to a delivery (HOST_RUNG_DESIGN §1).
+
+        A custom ``handlers[INTERACTIVE]`` was already intercepted in
+        ``_dispatch`` (the escape), so this is the framework path. Three
+        resolutions, gated the way the surrounding live paths already gate:
+
+          * **not a usable TTY** (piped, forced-plain) — no alt screen is
+            possible, so fall back to LIVE, exactly as INTERACTIVE did before the
+            host rung existed (preserves the run-and-exit / one-shot behavior a
+            non-TTY ``-i`` had).
+          * **a declared stream** — streaming delivery is the live tier's job
+            (surface or in-place); ``-i`` keeps converging onto it. The single
+            *fetch* host rung would drop the stream, and bringing ``follow`` home
+            through the framework is the inward-seam's future work (§7), not this.
+          * **otherwise** — the host rung: mount the binding into ``HostSurface``.
+        """
+        if not (ctx.is_tty and ctx.use_ansi):
+            return self._run_live(ctx)
+        if self.fetch_stream is not None:
+            return self._run_live(ctx)
+        return self._run_host(ctx)
+
+    def _run_host(self, ctx: CliContext) -> int:
+        """Mount the renderer binding into the interactive host rung (§6).
+
+        One fetch, then an alt-screen ``HostSurface`` scrolls / re-renders over it
+        (the omitted arm's viewport, or the offered arm's per-frame ``height=H``
+        offer). The offer, exactness (§5), and the offer matrix all stay in
+        ``_render`` — the surface is handed a ``(width, height) → Block`` closure
+        over it, the same shape the alt-screen stream path hands ``StreamSurface``,
+        so the renderer itself stays pure and signature-identical.
+
+        Fetch and ref-scheme resolution route errors the same way the one-shot
+        paths do (fetch fault → exit 1, resolution fault → exit 2, a prompt
+        refusal / abort through the single seam). ``ref_schemes=`` installs once
+        around the whole session — a single fetched state has one scheme set, so
+        there is no per-frame resolution the way a stream needs (§7).
+        """
+        from .prompts import PromptAbort
+
+        try:
+            state = self._do_fetch(ctx)
+        except PromptAbort:
+            raise  # propagates out of run_cli, like every other mode
+        except Exception as exc:
+            self._emit_error(ctx, self._fetch_error_block(ctx, exc), exc)
+            return 1
+
+        try:
+            schemes = self._resolve_ref_schemes(state)
+        except Exception as exc:
+            self._emit_error(ctx, self._render_error_block(ctx, exc), exc)
+            return 2
+
+        binding = self._binding
+
+        def render_frame(width: int, height: int | None) -> Block:
+            # The offer site: `_render` reads the binding (§3 matrix), applies the
+            # width-offer rule, and — on the offered arm — verifies §5 exactness.
+            # The omitted arm passes height=None (an undeclared binding never even
+            # sees the keyword). Width is the frame's current geometry each call.
+            return self._render(ctx, state, self._offered_width(ctx, width), height=height)
+
+        # A fresh identity per session: "the same document" across resizes (so a
+        # resize never resets scroll), a new one only for a new run (§6 fallback 5).
+        content_id = object()
+
+        from .stream_surface import run_host_surface
+
+        with self._ref_scope(schemes):
+            return run_host_surface(
+                render=render_frame,
+                accepts_height=binding.accepts_height,
+                content_id=content_id,
+                inputs=ctx.fidelity,
+                no_color=self._delivery_no_color,
+            )
 
     def _emit_error(
         self, ctx: CliContext, block: Block, exc: Exception, *, use_ansi: bool | None = None
