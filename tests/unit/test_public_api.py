@@ -189,6 +189,9 @@ STABLE_VIEWS_SURFACE = frozenset(
         "sparkline",
         "sparkline_with_range",
         "cost_meter",
+        # Host-rung scroll evidence (law-6) + frame assembly (0.13)
+        "evidence_row",
+        "assemble_frame",
         # Callout (severity-tagged message)
         "callout",
         "Severity",

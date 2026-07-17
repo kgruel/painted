@@ -80,6 +80,14 @@ class IconSet:
     bar_fill: str = "█"
     bar_empty: str = "░"
 
+    # Scroll / overflow direction markers for the host-rung evidence row
+    # (HOST_RUNG_DESIGN §6): content hidden above / below the visible window. A
+    # glyph slot (not a literal) so the evidence row degrades to ASCII like every
+    # other gutter marker. Appended AFTER every pre-existing field so a full
+    # positional ``IconSet(...)`` construction keeps its original binding.
+    scroll_up: str = "▲"
+    scroll_down: str = "▼"
+
     def __post_init__(self) -> None:
         # Coerce a caller-owned sequence to a tuple so this frozen value cannot
         # be mutated through a retained reference (the value is indexed at
@@ -111,6 +119,8 @@ ASCII_ICONS = IconSet(
     sparkline=("_", ".", "-", "~", "^", "*", "#", "@"),
     bar_fill="#",
     bar_empty="-",
+    scroll_up="^",
+    scroll_down="v",
 )
 
 
