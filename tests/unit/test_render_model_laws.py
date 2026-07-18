@@ -24,6 +24,8 @@ from __future__ import annotations
 
 import ast
 
+import pytest
+
 from tests.helpers import PAINTED_SRC, _assert_no_imports, _iter_imported_modules, row_text
 
 _PAINTED = PAINTED_SRC / "painted"
@@ -746,3 +748,283 @@ class TestLaw6EvidencePins:
         tblock = table(tstate, cols, rows, visible_height=4)
         assert "n9" in row_text(tblock, 2 + 2), "table resize hid the selected final row"
         assert "…" in row_text(tblock, 2 + 3), "table resize dropped its evidence row"
+
+    # --- 0.14 S3: tree subtree-drop evidence + one-row node contract ----------
+    #
+    # When indentation exhausts the width budget, the child row and its whole
+    # subtree are dropped; the tree lens owes a ``… N nodes hidden`` evidence
+    # line (the shared evidence-row vocabulary via its caller-wording seam) with
+    # N the count of nodes the renderer WOULD have drawn for that subtree at the
+    # current zoom (cyclic nodes redrawn per level until the zoom budget runs
+    # out) — never silently skipped. Evidence for a contiguous dropped run is
+    # flushed at the run's position (no equal-prefix-width assumption). A tree
+    # that fits renders markerless. The node_renderer callback is a one-row
+    # offer (taller ⇒ ContractError); its actual cells are fitted content-aware
+    # (real-content cut marks, padding cut stays clean), never label-substituted.
+
+    # ``{a:{b:{c:{d:{e:{f:{g,h}}}}}}}`` at zoom 9: every node a..e renders (its
+    # prefix leaves room); at depth 6 ``f``'s prefix (18 cols) exhausts width 18,
+    # so ``f`` and its two leaves g, h are dropped — exactly 3 zoom-visible nodes.
+    _DEEP_TREE = {"a": {"b": {"c": {"d": {"e": {"f": {"g": 1, "h": 2}}}}}}}
+
+    def test_tree_subtree_drop_marks_exact_count(self):
+        from painted.views import tree_lens
+
+        blk = tree_lens(self._DEEP_TREE, zoom=9, width=18)
+        assert blk.width == 18
+        # f + its two leaves = 3 zoom-visible nodes, one aggregated evidence line
+        # placed where the dropped sibling group would have rendered.
+        assert row_text(blk, blk.height - 1).rstrip() == "… 3 nodes hidden"
+        blob = "\n".join(row_text(blk, y) for y in range(blk.height))
+        assert blob.count("hidden") == 1, "one evidence line per dropped sibling group"
+        # the nodes that DID fit are still present, unmarked.
+        for label in "abcde":
+            assert any(f"─ {label}" in row_text(blk, y) for y in range(blk.height))
+
+    def test_tree_fits_is_byte_identical_markerless(self):
+        from painted.views import tree_lens
+        from tests.helpers import assert_blocks_equal
+
+        # Deepest content (``h: 2`` at prefix 21) needs width 25; that is the
+        # exact-fit width. A slack render (width 60) must be byte-identical over
+        # the exact width's columns, and neither may carry a marker.
+        exact = tree_lens(self._DEEP_TREE, zoom=9, width=25)
+        slack = tree_lens(self._DEEP_TREE, zoom=9, width=60)
+        assert exact.width == 25
+        assert exact.height == slack.height
+        for y in range(exact.height):
+            assert exact.row(y) == slack.row(y)[:25], f"exact-fit row {y} diverged"
+        blob = "\n".join(row_text(exact, y) for y in range(exact.height))
+        assert "…" not in blob and "hidden" not in blob, "a mark without loss is false evidence"
+        # A wider slack render of the same width is itself byte-identical (idempotent).
+        assert_blocks_equal(exact, tree_lens(self._DEEP_TREE, zoom=9, width=25))
+
+    def test_tree_subtree_drop_evidence_degrades_with_ascii_icons(self):
+        from painted import ASCII_ICONS, use_icons
+        from painted.views import tree_lens
+
+        with use_icons(ASCII_ICONS):
+            blk = tree_lens(self._DEEP_TREE, zoom=9, width=22)
+        last = row_text(blk, blk.height - 1)
+        assert "…" not in last and last.lstrip().startswith("..."), "evidence glyph did not degrade"
+        assert "3 nodes hidden" in last
+
+    def test_tree_nested_skip_not_double_counted(self):
+        from painted.views import tree_lens
+
+        # The dropped subtree is itself multi-level (``f:{g:{h,i}}``): a skip
+        # nested inside a skipped subtree must be counted once, not re-counted or
+        # re-emitted. Zoom-visible under f: f, g, h, i = 4, one evidence line.
+        nested = {"a": {"b": {"c": {"d": {"e": {"f": {"g": {"h": 1, "i": 2}}}}}}}}
+        blk = tree_lens(nested, zoom=12, width=18)
+        blob = "\n".join(row_text(blk, y) for y in range(blk.height))
+        assert blob.count("hidden") == 1, "nested skip emitted more than one evidence line"
+        assert row_text(blk, blk.height - 1).rstrip() == "… 4 nodes hidden"
+
+    def test_tree_singular_node_wording(self):
+        from painted.views import tree_lens
+
+        # A single dropped leaf reads "1 node hidden" (singular), not "1 nodes".
+        one = {"a": {"b": {"c": {"d": {"e": {"f": "leaf"}}}}}}
+        blk = tree_lens(one, zoom=9, width=18)
+        assert row_text(blk, blk.height - 1).rstrip() == "… 1 node hidden"
+
+    def test_tree_cyclic_count_mirrors_render(self):
+        from painted.views import tree_lens
+
+        # Sol finding 1: the count must equal what the renderer WOULD draw — a
+        # cyclic node is redrawn at every zoom level until the budget runs out,
+        # not cut off at the first back-edge. A self-referential dict dropped at
+        # remaining_zoom=4 is redrawn at zoom levels 4,3,2,1,0 → owes exactly 5.
+        # ``d`` sits at depth 6 (prefix 18 exhausts width 18) with zoom 10, so the
+        # remaining zoom at the drop is 10 - 6 = 4.
+        d: dict = {}
+        d["self"] = d
+        cyclic = {"a": {"b": {"c": {"d1": {"e": {"f": d}}}}}}
+        blk = tree_lens(cyclic, zoom=10, width=18)
+        assert blk.width == 18
+        assert row_text(blk, blk.height - 1).rstrip() == "… 5 nodes hidden"
+        blob = "\n".join(row_text(blk, y) for y in range(blk.height))
+        assert blob.count("hidden") == 1, "one evidence line for the dropped cycle"
+
+    def test_tree_node_renderer_must_be_one_row(self):
+        from painted import Block, Style
+        from painted.core.compose import join_vertical
+        from painted.core.errors import ContractError
+        from painted.views import tree_lens
+
+        def two_row(key: str, value: object, depth: int) -> Block:
+            return join_vertical(Block.text(key, Style()), Block.text("extra", Style()))
+
+        with pytest.raises(ContractError) as excinfo:
+            tree_lens({"a": 1}, zoom=1, width=20, node_renderer=two_row)
+        assert "2" in str(excinfo.value), "ContractError message must name the offending height"
+
+        # A height-1 callback renders without complaint.
+        def one_row(key: str, value: object, depth: int) -> Block:
+            return Block.text(f"<{key}>", Style())
+
+        ok = tree_lens({"a": 1}, zoom=1, width=20, node_renderer=one_row)
+        assert "<root>" in "\n".join(row_text(ok, y) for y in range(ok.height))
+
+    def test_tree_callback_content_cut_marks(self):
+        from painted import Block, Style
+        from painted.views import tree_lens
+
+        # Sol finding 2a: a callback row wider than its column is the lens's own
+        # cut, so it owes the mark — the ACTUAL callback cells, ellipsized, never
+        # a silent prefix. "ABCDEFGHIJ" into a 5-col child slot renders "ABCD…".
+        def wide(key: str, value: object, depth: int) -> Block:
+            return Block.text("ABCDEFGHIJ", Style())
+
+        blk = tree_lens(("root", {"x": 1}), zoom=1, width=8, node_renderer=wide)
+        # child "x": branch prefix 3, content_width 5 → "ABCD…"
+        assert row_text(blk, 1).rstrip() == "└─ ABCD…", "callback content cut left no mark"
+        # root: full width 8 → "ABCDEFG…"
+        assert row_text(blk, 0).rstrip() == "ABCDEFG…"
+
+    def test_tree_callback_padding_cut_is_clean(self):
+        from painted import Block, Style
+        from painted.views import tree_lens
+
+        # Sol finding 2: only real content owes a mark. A width-padded callback
+        # whose trailing padding (not content) is discarded must render clean —
+        # a mark there would be false evidence on spaces.
+        def padded(key: str, value: object, depth: int) -> Block:
+            return Block.text("hi", Style(), width=40)
+
+        blk = tree_lens(("r", None), zoom=1, width=6, node_renderer=padded)
+        assert row_text(blk, 0) == "hi    ", "padding-only cut must not mark"
+
+    def test_tree_callback_styled_blank_is_content(self):
+        from painted import Block, Cell, Style
+        from painted.views import tree_lens
+
+        # Sol re-review 1: a styled blank is not padding — its bg/underline/reverse
+        # is visible on HTML and buffer surfaces even where the ANSI writer trims
+        # trailing spaces. Only a semantically-neutral blank (== EMPTY_CELL) is
+        # padding; cutting a styled-blank suffix owes the mark. "X" + blue-bg
+        # blanks into a 6-col slot must end in the ellipsis, not a bare cut.
+        def styled_blank(key: str, value: object, depth: int) -> Block:
+            return Block([[Cell("X", Style())] + [Cell(" ", Style(bg="blue"))] * 39], 40)
+
+        blk = tree_lens(("root", None), zoom=1, width=6, node_renderer=styled_blank)
+        assert row_text(blk, 0).rstrip().endswith("…"), "styled-blank cut left no mark"
+
+    def test_tree_callback_refs_travel_with_cells(self):
+        from painted import Block, Cell, Style
+        from painted.views import tree_lens
+
+        # Sol re-review 2: rebuilding the row from cells must carry refs. An
+        # exact-fit root callback keeps its ref at every cell; a cut drops the
+        # cut cells' refs with the cells; the ellipsis mark denotes nothing.
+        def ref_node(key: str, value: object, depth: int) -> Block:
+            return Block.text("NODE", Style(), width=4, ref="node-ref")
+
+        exact = tree_lens(("NODE", None), zoom=1, width=4, node_renderer=ref_node)
+        assert [exact.cell_ref(x, 0) for x in range(4)] == ["node-ref"] * 4, (
+            "exact-fit root callback lost its cell refs"
+        )
+
+        def ref_wide(key: str, value: object, depth: int) -> Block:
+            return Block.text("NODEDATA", Style(), width=8, ref="r")
+
+        cut = tree_lens(("root", None), zoom=1, width=6, node_renderer=ref_wide)
+        # width 6: "NODED" (5 kept cells, ref "r") + ellipsis (no ref).
+        assert [cut.cell_ref(x, 0) for x in range(6)] == ["r", "r", "r", "r", "r", None], (
+            "cut refs did not follow their cells / ellipsis carried a ref"
+        )
+
+        # A ref-carrying blank suffix is a denotation, not padding — its cut marks.
+        def ref_blank(key: str, value: object, depth: int) -> Block:
+            cells = [Cell("X", Style())] + [Cell(" ", Style())] * 39
+            refs = [[None] + ["blank-ref"] * 39]
+            return Block([cells], 40, refs=refs)
+
+        blk = tree_lens(("root", None), zoom=1, width=6, node_renderer=ref_blank)
+        assert row_text(blk, 0).rstrip().endswith("…"), "ref-bearing blank cut left no mark"
+
+    def test_tree_root_renders_callback_cells_not_label(self):
+        from painted import Block, Style
+        from painted.views import tree_lens
+
+        # Sol finding 2b: the root path must render the CALLBACK's cells, never
+        # discard them and truncate the tree label instead. A padded "X" at
+        # width 6 renders "X" + padding (not "longl…" from the label); an
+        # overflowing callback marks its OWN content ("CALLB…", not the label).
+        def padded_x(key: str, value: object, depth: int) -> Block:
+            return Block.text("X", Style(), width=40)
+
+        assert row_text(tree_lens(("longlabelZZZ", None), 1, 6, node_renderer=padded_x), 0) == (
+            "X     "
+        ), "root substituted the label for the callback's padded cells"
+
+        def overflow(key: str, value: object, depth: int) -> Block:
+            return Block.text("CALLBACKCONTENT", Style())
+
+        assert (
+            row_text(tree_lens(("longlabelZZZ", None), 1, 6, node_renderer=overflow), 0).rstrip()
+            == "CALLB…"
+        ), "root marked the label instead of the callback content"
+
+    def test_tree_callback_cut_degrades_and_waives_ascii(self):
+        from painted import ASCII_ICONS, Block, Style, use_icons
+        from painted.views import tree_lens
+
+        def wide(key: str, value: object, depth: int) -> Block:
+            return Block.text("ABCDEFGHIJ", Style())
+
+        # ASCII: the marker degrades to "..." on the callback cut too.
+        with use_icons(ASCII_ICONS):
+            blk = tree_lens(("root", {"x": 1}), zoom=1, width=12, node_renderer=wide)
+            assert row_text(blk, 1).rstrip().endswith("...")
+            assert "…" not in row_text(blk, 1)
+            # Physical-space waiver: when content + marker cannot both fit (ASCII
+            # "..." is 3 cols; a width-1 root slot has no room), the plain cut
+            # stands unmarked.
+            one = tree_lens(("r", None), 1, 1, node_renderer=wide)
+            assert row_text(one, 0) == "A" and "." not in row_text(one, 0)
+
+    def test_tree_dropped_run_evidence_precedes_fitting_sibling(self):
+        from painted import IconSet, use_icons
+        from painted.views import tree_lens
+
+        # Sol finding 3: aggregate placement must not assume equal prefix width
+        # across siblings. With a WIDE tree_branch (non-last) and a NARROW
+        # tree_last, an earlier sibling drops while the last one fits — the
+        # evidence must land at the dropped run's position (before the fitting
+        # sibling), not after it. IconSet imposes no equal-width contract.
+        uneven = IconSet(
+            tree_branch="├──────── ",  # 10 cols — non-last siblings
+            tree_last="└ ",  # 2 cols — the last sibling
+            tree_indent="│         ",
+            tree_space="  ",
+        )
+        data = {"aaa": {"k1": "v1"}, "bbb": "leaf"}
+        with use_icons(uneven):
+            blk = tree_lens(data, zoom=3, width=8)
+        rows = [row_text(blk, y).rstrip() for y in range(blk.height)]
+        # aaa (prefix 10 > 8) drops with its one child → "… 2 nodes hidden";
+        # bbb (prefix 2) fits. Evidence sits BEFORE the fitting bbb row.
+        assert rows == ["root", "… 2 node", "└ bbb: …"], rows
+        ev = next(i for i, r in enumerate(rows) if "node" in r)
+        bbb = next(i for i, r in enumerate(rows) if "bbb" in r)
+        assert ev < bbb, "evidence landed after the fitting sibling"
+
+    def test_tree_row0_tail_ellipsis_marks_and_width1_waives(self):
+        from painted import ASCII_ICONS, use_icons
+        from painted.views import tree_lens
+
+        # A label longer than its allotment gets the ambient ellipsis (change 3);
+        # the tuple form gives a childless root so the mark is the label's own
+        # tail cut, not a subtree drop. The width-1 physical-space waiver stands:
+        # no room for content + mark, so the plain cut is uncounted.
+        label = ("longlabel", None)
+        assert row_text(tree_lens(label, zoom=1, width=6), 0).rstrip().endswith("…")
+        assert row_text(tree_lens(label, zoom=1, width=2), 0) == "l…"  # boundary: marks
+        assert row_text(tree_lens(label, zoom=1, width=1), 0) == "l"  # waiver: no mark
+        with use_icons(ASCII_ICONS):
+            assert row_text(tree_lens(label, zoom=1, width=8), 0).rstrip().endswith("...")
+            # ASCII ellipsis is 3 cols wide: the waiver holds until content + "..."
+            # both fit — a plain cut (no mark) below that width.
+            assert "..." not in row_text(tree_lens(label, zoom=1, width=3), 0)
