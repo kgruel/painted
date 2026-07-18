@@ -416,6 +416,163 @@ class TestLaw6EvidencePins:
             "false evidence when it fits"
         )
 
+    # --- 0.14 S2: table wholly-hidden-column badge under Overflow.CLIP -------
+    #
+    # A CLIP cut that drops whole columns owes their exact count alongside the
+    # ordinary right-edge clip mark (RENDER_MODEL law 6's own table example); a
+    # cut that only shortens the last visible column keeps the plain mark, and
+    # a table that fits is byte-identical to an unclipped (slack-width) render.
+
+    def test_table_column_badge_counts_wholly_hidden_columns(self):
+        from painted.core.span import Line
+        from painted.views import Column, TableState, table
+
+        cols = [Column(header=Line.plain(h), width=10) for h in "ABCD"]
+        rows = [[Line.plain(c * 10) for c in "abcd"]]
+
+        # Total natural width 10*4 + 3 seps = 43; clipped to 15 columns drops
+        # B, C, D wholly (their reserved-marker cutoff falls before B starts) —
+        # exactly 3, not merely "some".
+        clipped = table(TableState(), cols, rows, visible_height=2, width=15)
+        assert clipped.width == 15
+        header = row_text(clipped, 0)
+        assert "+3c" in header, "wholly-hidden columns left no exposed count"
+        assert header.rstrip().endswith("+3c")
+        for letter in "BCD":
+            assert letter not in header, f"column {letter} should be wholly clipped away"
+
+        # A partial clip of the LAST visible column is not a column loss —
+        # not counted, ordinary ellipsis mark only.
+        single = [Column(header=Line.plain("Item"), width=20)]
+        one_row = [[Line.plain("v" * 20)]]
+        partial = table(TableState(), single, one_row, visible_height=2, width=10)
+        text = row_text(partial, 2)
+        assert text.rstrip().endswith("…"), "partial column clip lost its ordinary mark"
+        assert "+" not in text, "a partially-visible column must not be counted"
+
+    def test_table_column_badge_absent_when_it_fits(self):
+        from painted.core.span import Line
+        from painted.views import Column, TableState, table
+        from tests.helpers import assert_blocks_equal
+
+        cols = [Column(header=Line.plain("A"), width=5), Column(header=Line.plain("B"), width=5)]
+        rows = [[Line.plain("aaaaa"), Line.plain("bbbbb")]]
+
+        # Exact-fit (passed width == the table's natural width) must render
+        # byte-identical to a slack render (width far beyond natural) — a mark
+        # or a badge without loss is false evidence.
+        exact = table(TableState(), cols, rows, visible_height=2, width=11)
+        slack = table(TableState(), cols, rows, visible_height=2, width=200)
+        assert exact.width == 11
+        assert_blocks_equal(exact, slack)
+        blob = "\n".join(row_text(exact, y) for y in range(exact.height))
+        assert "…" not in blob and "+" not in blob, "a mark without loss is false evidence"
+
+    def test_table_column_badge_degrades_with_ascii_icons(self):
+        from painted import ASCII_ICONS, use_icons
+        from painted.core.span import Line
+        from painted.views import Column, TableState, table
+
+        cols = [Column(header=Line.plain(h), width=10) for h in "ABCD"]
+        rows = [[Line.plain(c * 10) for c in "abcd"]]
+        with use_icons(ASCII_ICONS):
+            clipped = table(TableState(), cols, rows, visible_height=2, width=15)
+        header = row_text(clipped, 0)
+        assert "…" not in header and "..." in header, "column badge mark did not degrade"
+        assert "+3c" in header
+
+    def test_table_column_badge_degenerate_width_waives_to_ellipsis(self):
+        from painted.core.span import Line
+        from painted.views import Column, TableState, table
+
+        cols = [Column(header=Line.plain(h), width=5) for h in "ABC"]
+        rows = [[Line.plain(c * 5) for c in "abc"]]
+
+        # width=3: "… +3c" cannot possibly fit — the badge is waived, the plain
+        # ellipsis (the minimal resolution-loss mark) stands. Pin the boundary.
+        narrow = table(TableState(), cols, rows, visible_height=2, width=3)
+        assert narrow.width == 3
+        header = row_text(narrow, 0)
+        assert "…" in header and "+" not in header, "degenerate width must waive the badge"
+
+        # width=1: not even the plain ellipsis has room for content beside it —
+        # the one cell left is the mark itself (compose.truncate's own waiver).
+        one_cell = table(TableState(), cols, rows, visible_height=2, width=1)
+        assert one_cell.width == 1
+        assert row_text(one_cell, 0) == "…"
+
+    def test_table_column_badge_renders_at_exact_marker_width(self):
+        """Sol review finding 1: waive only when the marker cannot fit (cw >
+        width, strict) — a marker that fits *exactly* is not degenerate. Three
+        5-cell columns at width=5 (Unicode) / width=7 (ASCII): the stable
+        fixed point is the badge occupying the entire allocation, all three
+        columns wholly hidden — the S1 F=1 evidence-row precedent (when the
+        allocation is only big enough for the evidence, the evidence IS the
+        render).
+        """
+        from painted import ASCII_ICONS, use_icons
+        from painted.core.span import Line
+        from painted.views import Column, TableState, table
+
+        cols = [Column(header=Line.plain(h), width=5) for h in "ABC"]
+        rows = [[Line.plain(c * 5) for c in "abc"]]
+
+        exact = table(TableState(), cols, rows, visible_height=2, width=5)
+        assert exact.width == 5
+        assert row_text(exact, 0) == "… +3c"
+
+        with use_icons(ASCII_ICONS):
+            ascii_exact = table(TableState(), cols, rows, visible_height=2, width=7)
+        assert ascii_exact.width == 7
+        assert row_text(ascii_exact, 0) == "... +3c"
+
+    def test_table_column_badge_absent_when_it_fits_ascii(self):
+        from painted import ASCII_ICONS, use_icons
+        from painted.core.span import Line
+        from painted.views import Column, TableState, table
+        from tests.helpers import assert_blocks_equal
+
+        cols = [Column(header=Line.plain("A"), width=5), Column(header=Line.plain("B"), width=5)]
+        rows = [[Line.plain("aaaaa"), Line.plain("bbbbb")]]
+
+        with use_icons(ASCII_ICONS):
+            exact = table(TableState(), cols, rows, visible_height=2, width=11)
+            slack = table(TableState(), cols, rows, visible_height=2, width=200)
+        assert exact.width == 11
+        assert_blocks_equal(exact, slack)
+        blob = "\n".join(row_text(exact, y) for y in range(exact.height))
+        assert "..." not in blob and "+" not in blob, "a mark without loss is false evidence"
+
+    def test_table_row_evidence_and_column_badge_coexist(self):
+        """S1's row evidence and S2's column badge are independent axes — a
+        table both taller and wider than its allocation owes both, each with
+        its own exact count, in the same render.
+        """
+        from painted.core.span import Line
+        from painted.views import Column, TableState, table
+
+        cols = [Column(header=Line.plain(h), width=10) for h in "ABCD"]
+        rows = [[Line.plain(f"{c}{i}") for c in "abcd"] for i in range(10)]
+
+        blk = table(TableState(), cols, rows, visible_height=4, width=15)
+
+        assert blk.width == 15
+        assert blk.height == 6  # header + separator + 4 body rows (unchanged total)
+
+        # S2: the column badge — B, C, D wholly hidden, exact count 3 — marks
+        # every row (the marker is folded into the uniform right-edge cut).
+        header = row_text(blk, 0)
+        assert "+3c" in header
+        for letter in "BCD":
+            assert letter not in header
+
+        # S1: the last body row is the row-evidence row — 10 rows over a
+        # 4-row window with 3 shown leaves exactly 7 hidden — surviving even
+        # though its own text is itself column-clipped by the same cut.
+        evidence = row_text(blk, 5)
+        assert "7 more" in evidence, "row evidence count did not survive column clipping"
+        assert "+3c" in evidence, "column badge must still mark the evidence row's own cut"
+
     def test_windowed_components_keep_selection_above_evidence(self):
         """Law-6 corollary: reserving the evidence row must not hide the selected
         final item behind it — the offset math clamps against the content

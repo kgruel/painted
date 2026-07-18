@@ -503,3 +503,57 @@ class TestOverflowFitRender:
         rows = _make_rows([["x" * 30, "y" * 30]])
         blk = table(state=TableState(), columns=cols, rows=rows, visible_height=1, width=20)
         assert blk.width == 20  # CLIP remains the default
+
+
+class TestClipColumnBadge:
+    """0.14 S2: the wholly-hidden-column badge under Overflow.CLIP.
+
+    Two-armed law-6 pins live in tests/unit/test_render_model_laws.py
+    (TestLaw6EvidencePins) — these are the component-local shape tests.
+    """
+
+    def test_two_wholly_hidden_columns_reserve_badge_inside_width(self) -> None:
+        cols = _make_columns(["A", "B", "C"], [8, 8, 8])
+        rows = _make_rows([["a" * 8, "b" * 8, "c" * 8]])
+
+        blk = table(TableState(), cols, rows, visible_height=2, width=12)
+
+        assert blk.width == 12  # honors-width: never exceeded
+        header = row_text(blk, 0)
+        assert "+2c" in header
+        assert "B" not in header and "C" not in header
+
+    def test_no_wholly_hidden_columns_no_badge(self) -> None:
+        cols = _make_columns(["Item"], [20])
+        rows = _make_rows([["v" * 20]])
+
+        blk = table(TableState(), cols, rows, visible_height=2, width=12)
+
+        assert blk.width == 12
+        text = row_text(blk, 2)
+        assert text.rstrip().endswith("…")
+        assert "+" not in text
+
+    def test_growing_the_badge_can_grow_the_count(self) -> None:
+        # A column just past the plain-ellipsis cutoff can fall wholly behind
+        # the wider badge-reserving cutoff — the fixed point must catch it.
+        cols = _make_columns(["A", "B", "C", "D"], [10, 10, 10, 10])
+        rows = _make_rows([["a" * 10, "b" * 10, "c" * 10, "d" * 10]])
+
+        blk = table(TableState(), cols, rows, visible_height=2, width=15)
+
+        header = row_text(blk, 0)
+        assert "+3c" in header
+        for letter in "BCD":
+            assert letter not in header
+
+    def test_fitting_table_is_unaffected(self) -> None:
+        cols = _make_columns(["A", "B"], [5, 5])
+        rows = _make_rows([["aaaaa", "bbbbb"]])
+
+        fits = table(TableState(), cols, rows, visible_height=2, width=11)
+
+        assert fits.width == 11
+        blob = "\n".join(row_text(fits, y) for y in range(fits.height))
+        assert "…" not in blob
+        assert "+" not in blob

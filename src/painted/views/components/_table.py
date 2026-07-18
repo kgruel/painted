@@ -343,6 +343,56 @@ def resolve_column_widths(
     return widths
 
 
+def _clip_marker(width: int, resolved: list[int], sep_width: int) -> str:
+    """The right-edge clip marker for an over-budget table under Overflow.CLIP.
+
+    Plain ambient ellipsis when the cut merely shortens the last visible
+    column; ``"{ellipsis} +Nc"`` when the cut drops N columns entirely — zero
+    visible cells, counted exactly (RENDER_MODEL law 6: a table dropping
+    semantic columns owes an exposed count). A wider marker reserves more
+    space, which can itself push another column past the cutoff, so the count
+    is found by fixed point. When even the badge alone can't fit inside
+    ``width``, the ambient ellipsis is the physical-space waiver — the
+    minimal resolution-loss mark still applies.
+    """
+    from ...icon_set import current_icons
+
+    ellipsis = current_icons().ellipsis
+
+    starts: list[int] = []
+    col_x = 0
+    for i, cw in enumerate(resolved):
+        starts.append(col_x)
+        col_x += cw
+        if i < len(resolved) - 1:
+            col_x += sep_width
+
+    def prefix_budget(marker_width: int) -> int:
+        if marker_width <= 0:
+            return width
+        if marker_width >= width:
+            return 0
+        return width - marker_width
+
+    def hidden_count(cutoff: int) -> int:
+        return sum(1 for start in starts if start >= cutoff)
+
+    n = hidden_count(prefix_budget(display_width(ellipsis)))
+    if n == 0:
+        return ellipsis
+
+    for _ in range(len(resolved) + 1):
+        candidate = f"{ellipsis} +{n}c"
+        cw = display_width(candidate)
+        if cw > width:
+            return ellipsis  # degenerate: the badge itself can't fit — waive it
+        new_n = hidden_count(prefix_budget(cw))
+        if new_n == n:
+            return candidate
+        n = new_n
+    return ellipsis
+
+
 def table(
     state: TableState,
     columns: list[Column],
@@ -487,6 +537,9 @@ def table(
     result = Block(block_rows, total_width)
     # CLIP truncates an over-budget block at the right edge; FIT has already
     # shrunk or chosen to overflow, so it never clips (no column/value dropped).
+    # A cut that drops whole columns owes their count alongside the ordinary
+    # clip mark (RENDER_MODEL law 6) — _clip_marker finds it by fixed point.
     if overflow is Overflow.CLIP and width is not None and result.width > width:
-        result = truncate(result, width)
+        marker = _clip_marker(width, resolved, sep_width)
+        result = truncate(result, width, ellipsis=marker)
     return result
