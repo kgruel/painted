@@ -1,11 +1,12 @@
 # The host rung — interactive delivery under the dual allocation contract
 
-**Status: RATIFIED (Kyle, 2026-07-15; drafted 2026-07-15, arc
-`thread/host-rung`)** — the 0.13 milestone (M6), ratified after three
-deliberation rounds (appendix). Nothing in this document is shipped unless
-explicitly marked as existing behavior; present-tense statements about the
-*design* describe the ratified contract, implemented by this milestone's
-slices. Flips to IMPLEMENTED at ship.
+**Status: IMPLEMENTED 2026-07-18 (shipped 0.13.0; ratified 2026-07-15, Kyle;
+drafted 2026-07-15, arc `thread/host-rung`)** — the 0.13 milestone (M6),
+ratified after three deliberation rounds (appendix), built as five slices
+(S1–S5) and validated by the forcing-consumer exercise (`~/Code/tasked`:
+`ls_view`/`show_view` travel all four rungs; runner comes home through
+`StreamSurface` + `on_host_event`). Present-tense statements describe shipped
+behavior.
 
 Subordinate to `docs/RENDER_MODEL.md` (RATIFIED 2026-07-10): this document
 realizes the model's §2 **dual allocation contract** at the interactive rung
