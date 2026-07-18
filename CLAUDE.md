@@ -90,6 +90,7 @@ Surface + Layer             # alt-screen TUI with keyboard + diff rendering
 | Renderer | `publish.py` | to_html, published_fidelity — the doc-IR publisher (root, beside display.py) |
 | Framework | `_transcription.py` | transcription_renderer — run_cli's default renderer (the `(data, fidelity, width)` contract over `transcribe`); at root so `cli` needn't import `views` (§4) |
 | Renderer | `inplace.py` | InPlaceRenderer |
+| Host rung | `host.py` | ViewportAdapter + RenderKey/Plan/Frame/FrameToken/Hit — the omitted arm's host adapter: ticketed cache generations, resize matrix, anchor policy, frame identity, hit testing (HOST_RUNG_DESIGN §6); plus the inward host-event seam (`HostEvent` union + `HostEventSink`, §7) and `HostViewport`, the shared stateful controller both interactive surfaces compose (tui-independent, so cli's `StreamSurface` reaches it without a private cross-package import) (root, imports `views.assemble_frame` like `diagnostics.py`) |
 | Diagnostics | `diagnostics.py` | PaintedHandler, install, DEFAULT_THRESHOLDS (logging + excepthook glue; root, imports views) |
 | Renderer | `keyboard.py` | KeyboardInput, cbreak_supported, read_key — the delivery layer's key-reading primitive (root; `tui/` re-exports) |
 | Renderer | `mouse.py` | MouseEvent — mouse protocol primitives (root; `tui/` re-exports) |
@@ -128,7 +129,7 @@ Surface + Layer             # alt-screen TUI with keyboard + diff rendering
 3. Parse framework args (`-q`, `-v`, `-vv`, `--json`, `--plain`, `--static`, `--live`, `-i`) plus declared flags (each `Tag` → `--{name}`, each depth alias, `budgets=True` → `--max-chars`/`--max-lines`); declaration collisions raise at parser construction
 4. Compile flags into `Fidelity` (`parse_fidelity` resolves tag implications at compile time); `build_fidelity` runs last as the residue escape hatch
 5. `detect_context()` resolves Mode/Format from args and TTY state
-6. Dispatch by mode: STATIC (`print_block`) → LIVE (`InPlaceRenderer` or `StreamSurface`) → INTERACTIVE (custom handler); `renderer=` is offered `width` at the point of delivery — `ctx.width` on a STATIC TTY, `None` (natural sizing) off a TTY, and re-offered per frame under LIVE — never a once-captured context width. `ref_schemes=` declares the denotation channel's resolver for the run (RENDERER_CONTRACT_DESIGN.md §7).
+6. Dispatch by mode: STATIC (`print_block`) → LIVE (`InPlaceRenderer` or `StreamSurface`) → INTERACTIVE (custom handler); `renderer=` is offered `width` at the point of delivery — `ctx.width` on a STATIC TTY, `None` (natural sizing) off a TTY, and re-offered per frame under LIVE — never a once-captured context width. `ref_schemes=` declares the denotation channel's resolver for the run (RENDERER_CONTRACT_DESIGN.md §7). `on_host_event=` declares the inward host-event sink (HOST_RUNG_DESIGN.md §7): fired only where painted owns a viewport (the interactive host rung's omitted arm and the alt-screen streaming tier), silent on every other route.
 
 **`record_line` pattern** (`views/record.py`):
 - `record_line()` owns structure, `PayloadLens` interprets domain content
@@ -208,7 +209,7 @@ docs/
   PRIMITIVES.md       # Quick reference for all primitives
   DATA_PATTERNS.md    # Frozen state + pure functions patterns
   MOUSE.md            # Terminal mouse protocol + painted's mouse API (shipped)
-  VIEWPORT_DESIGN.md  # Scroll state management
+  HOST_RUNG_DESIGN.md # The interactive rung: dual allocation contract, viewport adapter, inward host-event seam, absorbed VIEWPORT_DESIGN.md (implemented 0.13)
   ZOOM_PATTERNS.md    # Lens zoom propagation patterns
   MODE_RESOLUTION.md  # AUTO mode collapse rules, capability filtering
   DEMO_PATTERNS.md    # TUI app pattern, demo organization

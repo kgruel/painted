@@ -60,6 +60,9 @@ __all__ = [
     "sparkline",
     "sparkline_with_range",
     "cost_meter",
+    # Host-rung scroll evidence (law-6) + frame assembly (0.13)
+    "evidence_row",
+    "assemble_frame",
     "callout",
     "Severity",
     "SpinnerState",
@@ -170,6 +173,8 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "sparkline": (".components._sparkline", "sparkline"),
     "sparkline_with_range": (".components._sparkline", "sparkline_with_range"),
     "cost_meter": (".components._meter", "cost_meter"),
+    "evidence_row": ("._frame", "evidence_row"),
+    "assemble_frame": ("._frame", "assemble_frame"),
     "callout": (".components._callout", "callout"),
     "Severity": (".components._callout", "Severity"),
     "SpinnerState": (".components._spinner", "SpinnerState"),

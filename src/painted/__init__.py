@@ -53,6 +53,26 @@ __all__ = [
     "Cursor",
     "CursorMode",
     "Viewport",
+    # Host rung — the omitted arm's viewport adapter (0.13)
+    "ViewportAdapter",
+    "RenderKey",
+    "Plan",
+    "RenderAction",
+    "Frame",
+    "FrameToken",
+    "FrameRegion",
+    "Hit",
+    # Host rung — the inward host-event seam (0.13, §7)
+    "HostEvent",
+    "HostEventSink",
+    "HostViewportEvent",
+    "HostHitEvent",
+    "HostQuitEvent",
+    "ViewportChange",
+    "ScrollChange",
+    "FollowChange",
+    "CursorFollowChange",
+    "ResizeChange",
     "BorderChars",
     "ROUNDED",
     "HEAVY",
@@ -86,6 +106,7 @@ __all__ = [
     "CliContext",
     "CliRunner",
     "Renderer",
+    "HeightRenderer",
     "HelpArg",
     "run_cli",
     "AppCommand",
@@ -147,7 +168,12 @@ if TYPE_CHECKING:
     # optional) and the Renderer alias's shape. src/painted/CLAUDE.md Level 2
     # teaches `from painted import run_cli`, so this taught path must carry the
     # real types to checkers; re-import them here, runtime staying lazy.
-    from .cli import CliRunner as CliRunner, Renderer as Renderer, run_cli as run_cli
+    from .cli import (
+        CliRunner as CliRunner,
+        HeightRenderer as HeightRenderer,
+        Renderer as Renderer,
+        run_cli as run_cli,
+    )
 
 _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     # Errors
@@ -192,10 +218,30 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "Cursor": (".cursor", "Cursor"),
     "CursorMode": (".cursor", "CursorMode"),
     "Viewport": (".viewport", "Viewport"),
+    # Host rung
+    "ViewportAdapter": (".host", "ViewportAdapter"),
+    "RenderKey": (".host", "RenderKey"),
+    "Plan": (".host", "Plan"),
+    "RenderAction": (".host", "RenderAction"),
+    "Frame": (".host", "Frame"),
+    "FrameToken": (".host", "FrameToken"),
+    "FrameRegion": (".host", "FrameRegion"),
+    "Hit": (".host", "Hit"),
+    "HostEvent": (".host", "HostEvent"),
+    "HostEventSink": (".host", "HostEventSink"),
+    "HostViewportEvent": (".host", "HostViewportEvent"),
+    "HostHitEvent": (".host", "HostHitEvent"),
+    "HostQuitEvent": (".host", "HostQuitEvent"),
+    "ViewportChange": (".host", "ViewportChange"),
+    "ScrollChange": (".host", "ScrollChange"),
+    "FollowChange": (".host", "FollowChange"),
+    "CursorFollowChange": (".host", "CursorFollowChange"),
+    "ResizeChange": (".host", "ResizeChange"),
     # CLI
     "CliContext": (".cli", "CliContext"),
     "CliRunner": (".cli", "CliRunner"),
     "Renderer": (".cli", "Renderer"),
+    "HeightRenderer": (".cli", "HeightRenderer"),
     "Fidelity": (".cli", "Fidelity"),
     "Format": (".cli", "Format"),
     "Tag": (".cli", "Tag"),

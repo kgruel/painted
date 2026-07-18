@@ -112,7 +112,7 @@ The other two axes:
 - **Format** (`--json`/`--plain`): ANSI (TTY default), PLAIN (pipe default), JSON
 - **Mode** (`-i`/`--static`/`--live`): AUTO detects from TTY
 
-Streaming: add `fetch_stream` for live updates. Mode flags follow the honesty rule too: `--live` exists only when `fetch_stream` is declared, and `-i` only with an INTERACTIVE handler or `live_delivery="surface"` *plus* `fetch_stream` (where it converges with `--live` onto the same alt-screen surface).
+Streaming: add `fetch_stream` for live updates. Mode flags follow the honesty rule too: `--live` exists only when `fetch_stream` is declared. `-i` is universal since 0.13 — the **host rung** (`docs/HOST_RUNG_DESIGN.md`) mounts *any* renderer binding into an interactive alt-screen `Surface`, so `-i` always delivers on a TTY (falling back to LIVE off one). A custom INTERACTIVE handler still overrides it, and a `live_delivery="surface"` stream still converges `-i` onto the alt-screen surface.
 
 **Don't reach for yet**: Surface, Layer, InPlaceRenderer (unless you need custom animation outside the CLI harness).
 

@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, Generic, TypeVar, overload
 
 from contextlib import AbstractContextManager, ExitStack, nullcontext
 
-from ..core.errors import DeclarationError
+from ..core.errors import ContractError, DeclarationError
 from .types import (
     ArgsView,
     CliContext,
@@ -39,7 +39,8 @@ if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
     from ..core.block import Block
-    from ..core.renderer import Renderer
+    from ..core.renderer import HeightRenderer, Renderer
+    from ..host import HostEventSink
     from ..refs import RefScheme
     from .help import HelpArg
     from .prompts import Prompt
@@ -66,6 +67,42 @@ def _legacy_render_stacklevel() -> int:
         frame = frame.f_back
         level += 1
     return level
+
+
+@dataclass(frozen=True)
+class _RendererBinding(Generic[T]):
+    """The normalized renderer declaration (docs/HOST_RUNG_DESIGN.md §3–4).
+
+    All four authored forms — legacy ``render=``, ``renderer=``,
+    ``height_renderer=``, and the transcription default — collapse to one record
+    at construction, and dispatch consults *this*, never the callable's arity.
+    The design rationale (§3): a future runtime view-selection picks between
+    pre-declared bindings, and the acceptance flag it selects on must be a
+    standing fact recorded here, not re-derived by inspecting results.
+
+    Fields carry the two orthogonal axes the offer matrix reads:
+
+      * ``accepts_height`` — the **acceptance** declaration (§3). ``True`` only
+        for ``height_renderer=``: this callable has the keyword-only ``height``
+        parameter and honors the offered arm. The host passes ``height=`` only
+        when this is set; an undeclared binding is never handed the keyword
+        (it has none), which is the top row of the §3 matrix.
+      * ``legacy`` — the ``(ctx, data)`` call shape of the deprecated ``render=``
+        form. Mutually exclusive with ``accepts_height``.
+
+    Neither flag set is the ``(data, fidelity, width)`` contract (``renderer=``
+    or the transcription default).
+    """
+
+    # Widened to Callable[..., Block] deliberately: the record's whole point is
+    # that the *flags* below carry the call shape, not the callable's static
+    # type — dispatch reads `accepts_height`/`legacy` to pick the arguments, and
+    # a single union type here would force every call site to re-narrow it. The
+    # three authored shapes (Renderer[T], HeightRenderer[T], the legacy
+    # (ctx, data)) all satisfy this.
+    call: Callable[..., Block]
+    accepts_height: bool
+    legacy: bool
 
 
 @dataclass
@@ -95,6 +132,17 @@ class CliRunner(Generic[T]):
     # (§4) never leaks through the generated repr — the default renderer stays
     # private; its callable identity is not API.
     renderer: Renderer[T] | None = field(default=None, kw_only=True, repr=False)
+
+    # The height-aware acceptance declaration (docs/HOST_RUNG_DESIGN.md §4): a
+    # renderer with the keyword-only `height` parameter that honors the offered
+    # arm of the dual allocation contract. Keyword-only, beside `renderer=`, and
+    # mutually exclusive with *all* authored-renderer forms — declaring it with
+    # `renderer=` or legacy `render=` is a construction-time DeclarationError
+    # (the same collision contract). `height_renderer=` alone is a complete
+    # declaration; no `renderer=` is needed. The parameter name *is* the
+    # acceptance flag, so no boolean can drift from the callable's real shape —
+    # both forms normalize into `_binding` (§3).
+    height_renderer: HeightRenderer[T] | None = field(default=None, kw_only=True, repr=False)
 
     # How to fetch state (sync). Arity-polymorphic via the run() shim: declared
     # nullary it's called fetch(), declared with a parameter it receives ctx —
@@ -175,6 +223,19 @@ class CliRunner(Generic[T]):
         default=None, kw_only=True
     )
 
+    # The inward host-event sink (docs/HOST_RUNG_DESIGN.md §7): host viewing-state
+    # reaching the application as *input*, delivered synchronously and exactly once
+    # per event through a construction-time push callback. Keyword-only, on the
+    # HOST constructor (never on the renderer binding / _RendererBinding — accepting
+    # host input is application/session behavior, and the semantic renderer stays
+    # unchanged across the four rungs). Wired into the two rungs where painted owns
+    # a viewport: the interactive host rung (HostSurface, _run_host) and the
+    # alt-screen streaming tier (StreamSurface, _run_live_surface — the follow
+    # path). On every other route (STATIC, pipe, in-place LIVE, the offered arm)
+    # declaring it is legal and it simply never fires — honest event-source silence,
+    # never a manufactured tokenless / synthetic-mount event.
+    on_host_event: HostEventSink | None = field(default=None, kw_only=True)
+
     # The static form's validated, FROZEN copy — set once in __post_init__,
     # never re-derived from `self.ref_schemes` afterward. `self.ref_schemes`
     # is a caller-owned sequence (a list the app can still mutate after
@@ -187,6 +248,12 @@ class CliRunner(Generic[T]):
 
     # Internal parser cache for repeated invocations
     _parser_cache: argparse.ArgumentParser | None = field(default=None, init=False, repr=False)
+
+    # The normalized renderer declaration (§3–4), set once in __post_init__ from
+    # whichever of the four authored forms was declared. Dispatch reads this —
+    # never `render`/`renderer`/`height_renderer` directly, never the callable's
+    # arity — so the acceptance arm is a standing fact, not a per-call inspection.
+    _binding: _RendererBinding[T] = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
         # Same promise as the declaration collision checks: misconfiguration
@@ -203,6 +270,23 @@ class CliRunner(Generic[T]):
                 "declare either render= (legacy (ctx, data)) or renderer= (the "
                 "(data, fidelity, width) contract), not both"
             )
+        # `height_renderer=` (HOST_RUNG_DESIGN §4) is the acceptance declaration
+        # and is mutually exclusive with *every* authored-renderer form — the
+        # same collision contract as render=/renderer= above, one callable of
+        # record per command. Checked before fetch so the misconfiguration a
+        # caller sees is the declaration collision, not a missing fetch masking it.
+        if self.height_renderer is not None and self.renderer is not None:
+            raise DeclarationError(
+                "declare either renderer= (the (data, fidelity, width) contract) or "
+                "height_renderer= (the height-aware (data, fidelity, width, *, "
+                "height) contract), not both"
+            )
+        if self.height_renderer is not None and self.render is not None:
+            raise DeclarationError(
+                "declare either render= (legacy (ctx, data)) or height_renderer= "
+                "(the height-aware (data, fidelity, width, *, height) contract), "
+                "not both"
+            )
         if self.fetch is None:
             raise DeclarationError("run_cli requires fetch= (how to fetch state)")
         if self.render is not None:
@@ -216,8 +300,8 @@ class CliRunner(Generic[T]):
                 DeprecationWarning,
                 stacklevel=_legacy_render_stacklevel(),
             )
-        if self.render is None and self.renderer is None:
-            # Neither declared: render by transcription (§4). The *neither* form
+        if self.render is None and self.renderer is None and self.height_renderer is None:
+            # Nothing declared: render by transcription (§4). The *neither* form
             # is a real call form now — install painted's default renderer so
             # dispatch has always exactly one renderer, no special no-render branch.
             #
@@ -225,13 +309,15 @@ class CliRunner(Generic[T]):
             # map app-domain facet names onto arbitrary data), yet every declared
             # Tag mints a --{name} flag — so tags= under the default renderer
             # would be a dead public flag, the honesty violation FIDELITY_DESIGN §1
-            # calls structurally impossible. tags= with neither renderer therefore
-            # faults here, taking the old *neither* fault's place (§4).
+            # calls structurally impossible. tags= with no renderer therefore
+            # faults here, taking the old *neither* fault's place (§4). A declared
+            # renderer= or height_renderer= *can* consume facets, so the fence is
+            # scoped to this transcription branch only.
             if self.tags:
                 raise DeclarationError(
-                    "tags= requires render= or renderer=: the transcription default "
-                    "cannot consume declared facets (fidelity.visible), so each "
-                    "--{tag} flag would be dead "
+                    "tags= requires render=, renderer=, or height_renderer=: the "
+                    "transcription default cannot consume declared facets "
+                    "(fidelity.visible), so each --{tag} flag would be dead "
                     "(docs/RENDERER_CONTRACT_DESIGN.md §4)"
                 )
             # The default renderer lives at the root, not here: cli may not import
@@ -241,6 +327,22 @@ class CliRunner(Generic[T]):
             from .._transcription import transcription_renderer
 
             self.renderer = transcription_renderer
+
+        # Normalize the four forms into the one record dispatch consults (§3–4).
+        # Order mirrors the declaration precedence: an explicit height_renderer=
+        # first (the only accepting arm), then the (data, fidelity, width) forms
+        # (an authored renderer= or the transcription default installed just
+        # above), then the legacy (ctx, data) render=. Dispatch never inspects
+        # the callable's arity — the arm is this standing fact.
+        if self.height_renderer is not None:
+            self._binding = _RendererBinding(
+                self.height_renderer, accepts_height=True, legacy=False
+            )
+        elif self.renderer is not None:
+            self._binding = _RendererBinding(self.renderer, accepts_height=False, legacy=False)
+        else:
+            assert self.render is not None  # transcription filled renderer otherwise
+            self._binding = _RendererBinding(self.render, accepts_height=False, legacy=True)
 
         if self.live_delivery not in ("inplace", "surface"):
             raise DeclarationError(
@@ -388,13 +490,14 @@ class CliRunner(Generic[T]):
         modes: set[OutputMode] = {OutputMode.STATIC}
         if self.fetch_stream is not None:
             modes.add(OutputMode.LIVE)
-        # -i is available with a custom handler, or when surface delivery is
-        # opted in — then INTERACTIVE falls through to the alt-screen live path,
-        # converging -i and --live onto the same StreamSurface.
-        if (self.handlers and OutputMode.INTERACTIVE in self.handlers) or (
-            self.live_delivery == "surface" and self.fetch_stream is not None
-        ):
-            modes.add(OutputMode.INTERACTIVE)
+        # -i is honest for every command now (HOST_RUNG_DESIGN §1): the host rung
+        # mounts *any* renderer binding into an interactive Surface, so INTERACTIVE
+        # always does something on a TTY — the mode-filtering rationale
+        # (docs/MODE_RESOLUTION.md: hide -i when it is a no-op) is satisfied by the
+        # capability existing, not by gating. A custom INTERACTIVE handler still
+        # wins the dispatch (the escape), and a surface stream still converges -i
+        # onto StreamSurface; off a TTY, -i falls back to LIVE.
+        modes.add(OutputMode.INTERACTIVE)
 
         self._parser_cache = build_parser(
             add_args=self.add_args,
@@ -586,28 +689,89 @@ class CliRunner(Generic[T]):
         """
         return shutil.get_terminal_size().columns
 
-    def _render(self, ctx: CliContext, state: T, offered: int | None) -> Block:
+    def _render(
+        self, ctx: CliContext, state: T, offered: int | None, *, height: int | None = None
+    ) -> Block:
         """Produce the content Block, dispatching the declared render contract.
 
-        The one seam both delivery-path renders funnel through, so the two
-        contracts differ in exactly one place. ``renderer=`` gets the three
-        inputs (§1) — state, the compiled Fidelity intact, and the ``offered``
-        width the caller resolved through ``_offered_width``; ``render=`` gets
-        the legacy whole context and reads ``ctx.width`` itself (the known
-        geometry stays ``int`` through the migration window, §5). Construction
-        guarantees a renderer is present — the app's, or the transcription
-        default installed when neither was declared (§4), which travels the
-        ``renderer`` branch like any other.
+        The one seam every delivery-path render funnels through — it reads the
+        binding record (§3–4), never the callable's arity. The three call shapes
+        differ in exactly one place:
 
-        The offer is computed *per offer* at the caller, not here: static and
-        non-streaming callers pass ``_offered_width(ctx)``; the in-place live
+          * the ``(data, fidelity, width)`` contract (``renderer=`` or the
+            transcription default, §1) — state, the compiled Fidelity intact, and
+            the ``offered`` width the caller resolved through ``_offered_width``;
+          * the height-aware contract (``height_renderer=``, §4) — the same three
+            plus a keyword-only ``height`` *offer*, always passed explicitly so
+            omission (``height=None``) is an observable decision, never Python's
+            default. This seam is the **offer site**: after a height-aware call it
+            enforces §5 exactness on the result, and a negative offer is a host
+            bug faulted *before* the call, never handed to the renderer;
+          * legacy ``render=`` — the whole context, reading ``ctx.width`` itself.
+
+        The offer matrix's three rows (§3) fall out of the binding: an undeclared
+        renderer is never handed the ``height`` keyword (it has none); a declared
+        renderer always is. ``height`` defaults to ``None`` because every S1
+        delivery is gated-off (the Q7 STATIC-TTY fence, off-TTY always) — a
+        gated-on delivery slice passes an integer ``H`` here instead.
+
+        The width offer is computed *per offer* at the caller, not here: static
+        and non-streaming callers pass ``_offered_width(ctx)``; the in-place live
         loop re-reads geometry each frame; the alt-screen adapter passes the
         surface buffer's current width (§6). This seam only forwards it.
         """
-        if self.renderer is not None:
-            return self.renderer(state, ctx.fidelity, offered)
-        assert self.render is not None  # exactly one of render/renderer, per construction
-        return self.render(ctx, state)
+        binding = self._binding
+        if binding.accepts_height:
+            # §5: a negative offer is a host bug — fail loudly *before* the
+            # renderer runs (never hand a bogus allocation to app code).
+            if height is not None and height < 0:
+                raise ContractError(
+                    f"height offer must be a non-negative integer, got {height!r} "
+                    "(a negative allocation is a host bug — HOST_RUNG_DESIGN §5)"
+                )
+            block = binding.call(state, ctx.fidelity, offered, height=height)
+            self._verify_height(block, height)  # §5 exactness at the offer site
+            return block
+        if binding.legacy:
+            return binding.call(ctx, state)
+        return binding.call(state, ctx.fidelity, offered)
+
+    @staticmethod
+    def _verify_height(block: Block, height: int | None) -> None:
+        """Enforce the offered-arm exactness contract at the offer site (§5).
+
+        The conditional honesty property: when the host offers an integer ``H``,
+        the height-aware renderer's Block must have exactly ``H`` rows. This is
+        the offer-site helper the gated-on delivery slices (bounded LIVE,
+        interactive) call after their own ``_render``; in S1 no shipped path
+        offers ``H``, so it is exercised only by tests.
+
+          * ``height is None`` — the omitted arm (natural sizing); no check.
+          * ``H == 0`` — a valid offer (``Block.empty(w, 0)``); requires an exact
+            zero-height Block, evidence waived (§5).
+          * ``H < 0`` — a host bug; faults even here (the offer should have been
+            rejected pre-call, but the helper is complete on its own).
+          * ``block.height != H`` — a contract violation: the host **never** crops
+            or pads the result into apparent compliance (silent padding would mask
+            the final-renderer exactness violation of law 5; silent cropping could
+            discard content unmarked, law 6). It faults loudly instead.
+
+        Reads ``block.height`` only — no renderer-type import needed, so ``cli``
+        import discipline stays intact.
+        """
+        if height is None:
+            return
+        if height < 0:
+            raise ContractError(
+                f"height offer must be a non-negative integer, got {height!r} "
+                "(a negative allocation is a host bug — HOST_RUNG_DESIGN §5)"
+            )
+        if block.height != height:
+            raise ContractError(
+                f"height-aware renderer returned {block.height} rows for an offer of "
+                f"{height} (the offered arm must return exactly H rows; the host does "
+                "not crop or pad into compliance — HOST_RUNG_DESIGN §5)"
+            )
 
     def _stream_iter(self, ctx: CliContext) -> AsyncIterator[T]:
         """Open the fetch_stream async iterator through the arity shim."""
@@ -700,8 +864,8 @@ class CliRunner(Generic[T]):
                 return self._run_live(ctx)
 
             elif ctx.mode == OutputMode.INTERACTIVE:
-                # Falls back to LIVE if no custom handler
-                return self._run_live(ctx)
+                # No custom handler (that was intercepted above): the host rung.
+                return self._run_interactive(ctx)
 
             return 0
 
@@ -938,6 +1102,12 @@ class CliRunner(Generic[T]):
             fetch_stream=lambda: self._stream_iter(ctx),
             live_meter=self.live_meter,
             resolve_ref_schemes=resolve_fn,
+            # A fresh content identity per run: the stream is "the same document"
+            # growing across yields, so a resize never resets scroll and only a new
+            # run starts fresh (§6 fallback 5). The inward seam (§7) reports the
+            # viewport as content grows / the user scrolls — the follow path.
+            content_id=object(),
+            on_host_event=self.on_host_event,
             # The one-snapshot rule (§9.1): the surface's writer is CONSTRUCTED
             # from the delivery's already-resolved NO_COLOR policy, not a fresh
             # env read. _host_scope resolved it once (self._delivery_no_color);
@@ -1029,6 +1199,88 @@ class CliRunner(Generic[T]):
                 print_block(block, use_ansi=ctx.use_ansi, no_color=self._delivery_no_color)
         return 0
 
+    def _run_interactive(self, ctx: CliContext) -> int:
+        """Resolve the INTERACTIVE mode to a delivery (HOST_RUNG_DESIGN §1).
+
+        A custom ``handlers[INTERACTIVE]`` was already intercepted in
+        ``_dispatch`` (the escape), so this is the framework path. Three
+        resolutions, gated the way the surrounding live paths already gate:
+
+          * **not a usable TTY** (piped, forced-plain) — no alt screen is
+            possible, so fall back to LIVE, exactly as INTERACTIVE did before the
+            host rung existed (preserves the run-and-exit / one-shot behavior a
+            non-TTY ``-i`` had).
+          * **a declared stream** — streaming delivery is the live tier's job
+            (surface or in-place); ``-i`` keeps converging onto it. The single
+            *fetch* host rung would drop the stream, and bringing ``follow`` home
+            through the framework is the inward-seam's future work (§7), not this.
+          * **otherwise** — the host rung: mount the binding into ``HostSurface``.
+        """
+        if not (ctx.is_tty and ctx.use_ansi):
+            return self._run_live(ctx)
+        if self.fetch_stream is not None:
+            return self._run_live(ctx)
+        return self._run_host(ctx)
+
+    def _run_host(self, ctx: CliContext) -> int:
+        """Mount the renderer binding into the interactive host rung (§6).
+
+        One fetch, then an alt-screen ``HostSurface`` scrolls / re-renders over it
+        (the omitted arm's viewport, or the offered arm's per-frame ``height=H``
+        offer). The offer, exactness (§5), and the offer matrix all stay in
+        ``_render`` — the surface is handed a ``(width, height) → Block`` closure
+        over it, the same shape the alt-screen stream path hands ``StreamSurface``,
+        so the renderer itself stays pure and signature-identical.
+
+        Fetch and ref-scheme resolution route errors the same way the one-shot
+        paths do (fetch fault → exit 1, resolution fault → exit 2, a prompt
+        refusal / abort through the single seam). ``ref_schemes=`` installs once
+        around the whole session — a single fetched state has one scheme set, so
+        there is no per-frame resolution the way a stream needs (§7).
+        """
+        from .prompts import PromptAbort
+
+        try:
+            state = self._do_fetch(ctx)
+        except PromptAbort:
+            raise  # propagates out of run_cli, like every other mode
+        except Exception as exc:
+            self._emit_error(ctx, self._fetch_error_block(ctx, exc), exc)
+            return 1
+
+        try:
+            schemes = self._resolve_ref_schemes(state)
+        except Exception as exc:
+            self._emit_error(ctx, self._render_error_block(ctx, exc), exc)
+            return 2
+
+        binding = self._binding
+
+        def render_frame(width: int, height: int | None) -> Block:
+            # The offer site: `_render` reads the binding (§3 matrix), applies the
+            # width-offer rule, and — on the offered arm — verifies §5 exactness.
+            # The omitted arm passes height=None (an undeclared binding never even
+            # sees the keyword). Width is the frame's current geometry each call.
+            return self._render(ctx, state, self._offered_width(ctx, width), height=height)
+
+        # A fresh identity per session: "the same document" across resizes (so a
+        # resize never resets scroll), a new one only for a new run (§6 fallback 5).
+        content_id = object()
+
+        from .stream_surface import run_host_surface
+
+        with self._ref_scope(schemes):
+            return run_host_surface(
+                render=render_frame,
+                accepts_height=binding.accepts_height,
+                content_id=content_id,
+                inputs=ctx.fidelity,
+                no_color=self._delivery_no_color,
+                # The inward seam (§7). On the offered arm HostSurface builds no
+                # viewport controller, so a declared sink there simply never fires.
+                on_host_event=self.on_host_event,
+            )
+
     def _emit_error(
         self, ctx: CliContext, block: Block, exc: Exception, *, use_ansi: bool | None = None
     ) -> None:
@@ -1110,13 +1362,15 @@ class CliRunner(Generic[T]):
         return Block.text(text.replace("\n", " "), Style(), width=width, wrap=Wrap.WORD)
 
 
-# Three published call forms — the truth type checkers carry, so no caller ever
+# Four published call forms — the truth type checkers carry, so no caller ever
 # sees `fetch` as optional even though the runtime signature says None (the
-# requiredness lives in construction). One overload per call form: the two
-# authored-renderer contracts (legacy positional `render`; keyword `renderer=`)
-# and the *neither* form (the transcription default, §4) — published now that its
-# behavior lands in S3, the call form spelled the moment it behaves. Each requires
-# `fetch`. See RENDERER_CONTRACT_DESIGN.md §§3, 12.
+# requiredness lives in construction). One overload per call form: the three
+# authored-renderer contracts (legacy positional `render`; keyword `renderer=`;
+# keyword `height_renderer=`, HOST_RUNG_DESIGN §4) and the *neither* form (the
+# transcription default, §4). Each requires `fetch`, and no overload lists more
+# than one renderer keyword — so declaring two at once matches none, the type
+# analog of the construction-time mutual-exclusion DeclarationError. See
+# RENDERER_CONTRACT_DESIGN.md §§3, 12.
 @overload
 def run_cli(
     args: list[str],
@@ -1139,6 +1393,7 @@ def run_cli(
     budgets: bool = ...,
     build_fidelity: Callable[[argparse.Namespace, Fidelity], Fidelity] | None = ...,
     ref_schemes: Sequence[RefScheme] | Callable[[T], Sequence[RefScheme]] | None = ...,
+    on_host_event: HostEventSink | None = ...,
 ) -> int: ...
 
 
@@ -1164,6 +1419,36 @@ def run_cli(
     budgets: bool = ...,
     build_fidelity: Callable[[argparse.Namespace, Fidelity], Fidelity] | None = ...,
     ref_schemes: Sequence[RefScheme] | Callable[[T], Sequence[RefScheme]] | None = ...,
+    on_host_event: HostEventSink | None = ...,
+) -> int: ...
+
+
+# The height-aware form — keyword `height_renderer=` (HOST_RUNG_DESIGN §4). A
+# complete declaration on its own (no `renderer=` needed); it lists no other
+# renderer keyword, so pairing it with render=/renderer= matches no overload.
+@overload
+def run_cli(
+    args: list[str],
+    *,
+    height_renderer: HeightRenderer[T],
+    fetch: Callable[..., T],
+    fetch_stream: Callable[..., AsyncIterator[T]] | None = ...,
+    handlers: dict[OutputMode, Callable[[CliContext], R]] | None = ...,
+    default_zoom: Zoom = ...,
+    default_mode: OutputMode = ...,
+    live_delivery: str = ...,
+    live_meter: bool = ...,
+    description: str | None = ...,
+    prog: str | None = ...,
+    add_args: Callable[[argparse.ArgumentParser], None] | None = ...,
+    help_args: list[HelpArg] | None = ...,
+    tags: list[Tag] | None = ...,
+    depth_aliases: dict[str, int] | None = ...,
+    prompts: list[Prompt] | None = ...,
+    budgets: bool = ...,
+    build_fidelity: Callable[[argparse.Namespace, Fidelity], Fidelity] | None = ...,
+    ref_schemes: Sequence[RefScheme] | Callable[[T], Sequence[RefScheme]] | None = ...,
+    on_host_event: HostEventSink | None = ...,
 ) -> int: ...
 
 
@@ -1191,6 +1476,7 @@ def run_cli(
     budgets: bool = ...,
     build_fidelity: Callable[[argparse.Namespace, Fidelity], Fidelity] | None = ...,
     ref_schemes: Sequence[RefScheme] | Callable[[T], Sequence[RefScheme]] | None = ...,
+    on_host_event: HostEventSink | None = ...,
 ) -> int: ...
 
 
@@ -1200,6 +1486,7 @@ def run_cli(
     fetch: Callable[..., T] | None = None,
     *,
     renderer: Renderer[T] | None = None,
+    height_renderer: HeightRenderer[T] | None = None,
     fetch_stream: Callable[..., AsyncIterator[T]] | None = None,
     handlers: dict[OutputMode, Callable[[CliContext], R]] | None = None,
     default_zoom: Zoom = Zoom.SUMMARY,
@@ -1216,6 +1503,7 @@ def run_cli(
     budgets: bool = False,
     build_fidelity: Callable[[argparse.Namespace, Fidelity], Fidelity] | None = None,
     ref_schemes: Sequence[RefScheme] | Callable[[T], Sequence[RefScheme]] | None = None,
+    on_host_event: HostEventSink | None = None,
 ) -> int:
     """Run a CLI tool with zoom/mode/format handling.
 
@@ -1223,6 +1511,10 @@ def run_cli(
 
       * ``renderer=`` — the contract (§1): ``(data, fidelity, width) → Block``,
         the semantic renderer given only its three inputs. Keyword-only.
+      * ``height_renderer=`` — the height-aware contract (HOST_RUNG_DESIGN §4):
+        ``(data, fidelity, width, *, height) → Block``, the offered arm of the
+        dual allocation contract. Keyword-only, mutually exclusive with *all*
+        authored-renderer forms.
       * ``render=`` — legacy ``(ctx, data) → Block``, optional-positional so
         existing ``run_cli(args, render, fetch)`` call sites keep working. Kept
         through a deprecation window; no runtime warning until 0.12 (§3).
@@ -1231,13 +1523,15 @@ def run_cli(
         on this form (transcription cannot consume declared facets), and
         declaring it raises ``DeclarationError``.
 
-    Passing both renderers raises ``DeclarationError`` at construction — as does
-    a missing ``fetch``.
+    Passing more than one renderer form raises ``DeclarationError`` at
+    construction — as does a missing ``fetch``.
 
     Args:
         args: Command-line arguments (sys.argv[1:])
         render: Legacy render callback ``(ctx, data) → Block`` (deprecation window)
         renderer: The renderer contract ``(data, fidelity, width) → Block`` (§1)
+        height_renderer: The height-aware renderer contract
+            ``(data, fidelity, width, *, height) → Block`` (HOST_RUNG_DESIGN §4)
         fetch: Function to fetch state (sync)
         fetch_stream: Optional async iterator for streaming updates
         handlers: Custom handlers for specific output modes
@@ -1262,6 +1556,13 @@ def run_cli(
             per fetch. Installs as the runner-owned bracket around render and
             serialization, replacing whatever ambient use_refs state was
             active; absent, the framework installs nothing
+        on_host_event: The inward host-event sink (docs/HOST_RUNG_DESIGN.md §7)
+            — a ``HostEvent -> None`` callback invoked synchronously, exactly
+            once per event, when painted owns a viewport (the interactive host
+            rung and the alt-screen streaming tier). On every other route
+            (STATIC, pipe, in-place LIVE, the offered arm) declaring it is legal
+            and it never fires. A handler exception fails the active host
+            delivery loudly (never swallowed, never rerouted to Surface.emit)
 
     Returns:
         Exit code (0 for success)
@@ -1269,6 +1570,7 @@ def run_cli(
     return CliRunner(
         render=render,
         renderer=renderer,
+        height_renderer=height_renderer,
         fetch=fetch,
         fetch_stream=fetch_stream,
         handlers=handlers,  # type: ignore[arg-type]
@@ -1286,4 +1588,5 @@ def run_cli(
         budgets=budgets,
         build_fidelity=build_fidelity,
         ref_schemes=ref_schemes,
+        on_host_event=on_host_event,
     ).run(args)

@@ -205,7 +205,7 @@ def on_mouse(self, event: MouseEvent) -> None:
         self._viewport = self._viewport.scroll(event.scroll_delta)
 ```
 
-See [VIEWPORT_DESIGN.md](VIEWPORT_DESIGN.md) for `Viewport` API.
+See [HOST_RUNG_DESIGN.md](HOST_RUNG_DESIGN.md) §6 for the `Viewport` API.
 
 ## Remaining Open Questions
 

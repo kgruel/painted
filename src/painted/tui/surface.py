@@ -6,17 +6,28 @@ import os
 import signal
 from collections.abc import Awaitable, Callable
 from contextlib import AbstractContextManager, ExitStack
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from ..mouse import MouseEvent
 from ..core.buffer import Buffer, CellWrite
+from ..host import HostViewport
 from ..keyboard import KeyboardInput
 from .layer import Layer
 from .layer import process_key as _process_key
 from ..core.writer import ScrollOp, Writer
 
+if TYPE_CHECKING:
+    from ..core.block import Block
+    from ..host import Hit
+
 Emit = Callable[[str, dict[str, Any]], None]
 LifecycleHook = Callable[[], Awaitable[None]]
+
+# The content renderer the host rung drives: given the frame's current width and
+# the height offer (``None`` on the omitted arm, the integer ``H`` on the offered
+# arm — HOST_RUNG_DESIGN §2), return a content Block. The offer rule and the app
+# renderer both live behind it; the Surface only supplies geometry.
+HostRender = Callable[[int, "int | None"], "Block"]
 
 # Minimum sleep: yields the event loop without measurably delaying the frame.
 MIN_YIELD = 0.001
@@ -473,3 +484,218 @@ class Surface:
             overlap_start = max(0, overlap_start)
             overlap_end = min(height - 1, overlap_end)
         return (top, bottom, n, overlap_start, overlap_end, ratio)
+
+
+class HostSurface(Surface):
+    """The host rung wired to a ``Surface`` — a semantic renderer's Block
+    delivered interactively (HOST_RUNG_DESIGN §6).
+
+    The fourth delivery of the dual allocation contract, beside ``print_block``
+    (STATIC), ``InPlaceRenderer`` / ``StreamSurface`` (LIVE): a renderer that
+    travels the other three rungs unchanged now also drives an alt-screen TUI,
+    with no hand-rolled viewport/scroll/evidence glue (RENDER_MODEL law 7). It is
+    an *addition* — direct-``Buffer`` ``Surface`` apps remain fully supported (§1).
+
+    Two arms, chosen by ``accepts_height`` — the binding's standing **acceptance**
+    fact (§3), never inspected per frame:
+
+      * **omitted arm** (``accepts_height=False`` — ``renderer=`` / ``render=`` /
+        the transcription default): the *host* owns the viewport. The renderer is
+        offered natural sizing (``render(width, None)``) once per width, and a
+        ``ViewportAdapter`` (root ``painted.host``) slices that natural-height
+        Block into the frame, routes scroll keys, tracks follow / at-bottom
+        intent, and marks omitted rows with the reserved evidence row. A
+        **height-only resize re-slices with no renderer call** (§6 matrix); a
+        width change re-renders and reconciles the anchor.
+      * **offered arm** (``accepts_height=True`` — ``height_renderer=``): the
+        *renderer* owns the frame. The host offers ``height=H`` — the full frame
+        height, since it draws no chrome and so subtracts none (§5) — verifies the
+        returned Block is exactly ``H`` rows (a loud ``ContractError`` otherwise,
+        never a crop or pad), and paints it. Internal chrome and body scroll are
+        the renderer's business (the hybrid shape, §6); the host treats the Block
+        as opaque and routes it no scroll keys.
+
+    ``render`` is ``(width, height) -> Block``. ``run_cli`` passes a closure over
+    its binding and the width-offer rule; a direct consumer passes any such
+    callable. ``content_id`` / ``inputs`` are the adapter's ``RenderKey`` identity
+    (§6): ``content_id`` is "the same document" (a constant across a single-fetch
+    session, so a resize never resets scroll), ``inputs`` the opaque
+    renderer-input token (fidelity, capabilities…) — width is tracked separately
+    because it is the re-render-and-reconcile trigger.
+
+    Both arms delegate the omitted-arm machinery to the shared ``HostViewport``
+    controller (``_vp``), which ``StreamSurface`` composes too (S5): scroll/wheel
+    routing, frame production, the event-order discipline, and the inward
+    ``on_host_event=`` seam (§7) all live there rather than being forked. The
+    offered arm builds no controller — the renderer owns the frame, so the host
+    holds no viewport and the sink fires zero times.
+
+    The **event-order discipline** (§6): the controller retains the last
+    *displayed* frame's token (set only when a frame is produced, never in
+    ``layout()``), and an incoming mouse event resolves against exactly that
+    token. A resize between paint and a queued event mints new geometry while the
+    retained token still names the displayed frame, so the event resolves stale
+    and is dropped — never translated through the new geometry.
+    """
+
+    def __init__(
+        self,
+        *,
+        render: HostRender,
+        accepts_height: bool = False,
+        content_id: Any = None,
+        inputs: Any = None,
+        evidence_label: str | None = None,
+        quit_keys: tuple[str, ...] = ("q", "escape"),
+        fps_cap: int = 60,
+        on_emit: Emit | None = None,
+        on_host_event: Any = None,  # HostEventSink | None (§7)
+        no_color: bool | None = None,
+    ) -> None:
+        # Mouse is enabled only for the omitted arm — it is the only arm the host
+        # hit-tests (the offered arm's renderer owns its own regions). ``no_color``
+        # threads the delivery's resolved snapshot to the writer (RENDERER_CONTRACT
+        # §9.1), exactly as StreamSurface does.
+        super().__init__(
+            fps_cap=fps_cap,
+            enable_mouse=not accepts_height,
+            on_emit=on_emit,
+            no_color=no_color,
+        )
+        self._render_frame = render
+        self._accepts_height = accepts_height
+        self._content_id = content_id
+        self._inputs = inputs
+        self._evidence_label = evidence_label
+        self._quit_keys = frozenset(quit_keys)
+        # The inward host-event sink (§7): host viewing-state reaching the app as
+        # input. On the *host* constructor, never on the renderer binding — the
+        # semantic renderer stays unchanged across the four rungs. On the offered
+        # arm (accepts_height) the host owns no viewport, so no controller is
+        # built and the sink receives zero calls (honest event-source silence).
+        self._on_host_event = on_host_event
+
+        # Omitted arm: the shared viewport controller (adapter + last token +
+        # routing + event minting). ``None`` on the offered arm and until the
+        # first ``layout`` mounts it.
+        self._vp: HostViewport | None = None
+        # Current geometry, set on every layout() — read by the offered arm.
+        self._width = 0
+        self._height = 0
+        # Resolved hits, newest last — the *outward* observability seam a host
+        # consumer / test reads (``host.hit`` emissions). The inward
+        # ``HostHitEvent`` rides ``on_host_event`` alongside it; ``emit`` stays
+        # outward-only (§7).
+        self.hits: list[Hit] = []
+
+    # --- Geometry: the resize matrix, decided by the adapter (§6) --------------
+
+    def layout(self, width: int, height: int) -> None:
+        """Mount on init, re-plan on every resize (SIGWINCH lands here via
+        ``_resize``).
+
+        Offered arm: nothing to plan — ``render()`` re-invokes the renderer with
+        the new ``H`` each dirty frame. Omitted arm: the first ``layout`` **mounts**
+        the controller (installs content, no event — no synthetic mount event, §7);
+        every later ``layout`` is a resize (``layout`` re-runs only via ``_resize``),
+        so it applies the §6 matrix and mints one ``ResizeChange`` — a width change
+        re-renders and reconciles the anchor, a height-only change **re-slices with
+        no renderer call**.
+        """
+        self._width = width
+        self._height = height
+        if self._accepts_height:
+            return
+
+        from ..host import ResizeChange
+
+        # The natural render runs *here*, in layout() — outside the run loop's
+        # per-frame bracket — so it must install the Surface's capability / icon
+        # bracket itself (RENDERER_CONTRACT §9.3). The offered arm needs no
+        # equivalent: its render is in render(), already inside _frame_scope.
+        with self._frame_scope():
+            if self._vp is None:
+                self._vp = HostViewport(
+                    content_id=self._content_id,
+                    on_event=self._on_host_event,
+                    evidence_label=self._evidence_label,
+                )
+                self._vp.set_geometry(width, height)
+                self._vp.install(self._render_frame(width, None), reason=None)
+                return
+            width_changed = self._vp.set_geometry(width, height)
+            if width_changed:
+                self._vp.install(self._render_frame(width, None), reason=ResizeChange())
+            else:  # height-only: re-slice, no renderer call
+                self._vp.reslice(reason=ResizeChange())
+
+    # --- Frame production ------------------------------------------------------
+
+    def render(self) -> None:
+        buf = self._buf
+        if buf is None:
+            return
+        if self._accepts_height:
+            self._render_offered(buf)
+        else:
+            self._render_omitted(buf)
+
+    def _render_offered(self, buf: Buffer) -> None:
+        """Offer ``height=H`` (the full frame — no host chrome), verify exactness,
+        paint. The renderer owns the frame; the host holds no viewport token."""
+        h = self._height
+        block = self._render_frame(self._width, h)
+        if block.height != h:
+            from ..core.errors import ContractError
+
+            raise ContractError(
+                f"height-aware renderer returned {block.height} rows for an offer of "
+                f"{h} (the offered arm must return exactly H rows; the host does not "
+                "crop or pad into compliance — HOST_RUNG_DESIGN §5)"
+            )
+        block.paint(buf, 0, 0)
+
+    def _render_omitted(self, buf: Buffer) -> None:
+        """Assemble the controller's frame and paint it. The controller retains
+        its token as the hit-test anchor for the *displayed* frame (§6)."""
+        if self._vp is None:
+            return
+        self._vp.frame().block.paint(buf, 0, 0)
+
+    # --- Input routing (through the shared controller) -------------------------
+
+    def on_key(self, key: str) -> None:
+        if key in self._quit_keys:
+            if self._vp is not None:  # omitted arm only — offered arm fires nothing
+                self._vp.route_quit()
+            self.quit()
+            return
+        if self._accepts_height or self._vp is None:
+            return  # the renderer owns internal scroll on the offered arm (§6)
+        if self._vp.route_key(key):
+            self.mark_dirty()
+
+    def on_mouse(self, event: MouseEvent) -> None:
+        if self._accepts_height or self._vp is None:
+            return
+        if event.is_scroll:
+            # The controller maps the wheel button to a vertical delta (a
+            # horizontal wheel is not the vertical viewport's) and mints the event.
+            if self._vp.route_wheel(event.button):
+                self.mark_dirty()
+            return
+        # A click resolves against the LAST DISPLAYED frame's token (§6): the
+        # controller drops a stale event (a resize mutated geometry after paint)
+        # rather than translating it through the new geometry. It mints the inward
+        # ``HostHitEvent``; here we also record the outward ``host.hit``.
+        hit = self._vp.route_click(event.x, event.y)
+        if hit is None:
+            return
+        self.hits.append(hit)
+        self.emit(
+            "host.hit",
+            region=hit.region.name,
+            ref=hit.ref,
+            content_xy=hit.content_xy,
+            stale=hit.stale,
+        )

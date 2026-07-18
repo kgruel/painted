@@ -4,6 +4,91 @@ All notable changes to painted are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/); pre-1.0, minor versions may carry
 breaking changes.
 
+## [0.13.0] — 2026-07-18
+
+The **host rung** (0.13, M6) — the interactive delivery rung, ratified as
+`docs/HOST_RUNG_DESIGN.md` and built as five slices (S1–S5) plus a
+forcing-consumer exercise (tasked's `ls_view`/`show_view` travel all four
+rungs unchanged). One semantic renderer now reaches STATIC, LIVE, and both
+arms of interactive delivery under the render model's dual allocation
+contract: the **offered arm** (a height-aware renderer accepts the host's
+exact allocation) and the **omitted arm** (a natural-height renderer is
+mounted into a framework-owned scrollable viewport with law-6 overflow
+evidence). The renderer signature stays `(data, fidelity, width) → Block` —
+height appears only at the separately declared binding, never threaded
+through the base contract.
+
+### Added
+
+- **`HeightRenderer` and the `height_renderer=` binding** (`painted.cli`,
+  HOST_RUNG_DESIGN §3–4) — the offered arm. A height-aware callable
+  `(data, fidelity, width, *, height: int | None) → Block`, declared beside
+  (and mutually exclusive with) `renderer=`; the parameter name selects the
+  callable contract. The three-row offer matrix governs what `height` is
+  offered: an exact `H` only where the host owns a bounded region
+  (interactive; alt-screen LIVE), `None` everywhere else — STATIC on a TTY is
+  fenced to `height=None` unconditionally (no screenful synthesis). The offer
+  is exact: a returned block whose height differs from an offered `H` raises
+  `ContractError`; `H=0` is valid (exact zero-height block, evidence waived).
+
+- **`painted.host`** — the omitted arm's viewport adapter. `ViewportAdapter`
+  (frozen state, pure transitions) with `RenderKey`/`Plan`/`RenderAction`/
+  `Frame`/`FrameToken`/`FrameRegion`/`Hit`: ticket-based publish, fork-safe
+  generation identity (per-plan sentinel — provenance, not a counter),
+  intent-before-geometry scroll math, the ratified width-reflow anchor
+  precedence (follow → cursor → visible semantic ref → numeric clamp →
+  top-reset on new content identity), the qualified resize matrix, and
+  hit-testing where `Frame`+`FrameToken` are inseparable — frame identity IS
+  the screen↔content mapping, so stale tokens can never mistranslate a click.
+
+- **The inward host-event seam** (`painted.host`, HOST_RUNG_DESIGN §7) —
+  `HostEvent` union (`HostViewportEvent` | `HostHitEvent` | `HostQuitEvent`),
+  each event carrying two `FrameToken`s: `observed` (the displayed mapping
+  the input occurred against — frozen across a drain batch) and `current`
+  (the installed post-transition mapping). `HostViewportEvent` wraps a typed
+  `ViewportChange` reason (`ScrollChange`/`FollowChange`/`CursorFollowChange`/
+  `ResizeChange`). Declared as `on_host_event=` on the hosts — `run_cli`,
+  `HostSurface`, `StreamSurface` — never on the renderer binding: accepting
+  host input is session behavior; the semantic renderer stays unchanged
+  across the four rungs. Delivery is synchronous, exactly once, after the
+  pure transition installs; handler failure fails the active delivery (never
+  swallowed, never rerouted to `emit`, which stays outward-only). Eventless
+  routes (STATIC, pipes, the offered arm) fire zero events — honesty, not
+  omission.
+
+- **`HostSurface` / `HostRender`** (`painted.tui`) — the interactive host
+  that `run_cli` INTERACTIVE mounts either arm into: offered-arm `H` from
+  real Surface geometry with exactness verification; omitted-arm
+  `ViewportAdapter` with scroll/wheel routing, follow, and evidence.
+
+- **`evidence_row` / `assemble_frame`** (`painted.views`) — the law-6 scroll
+  evidence as a public artifact: a reserved evidence ROW (never a rail — a
+  rail would perturb the width offer and break height-only re-slice) counting
+  hidden rows above/below, plus the frame assembler that composes content
+  window + evidence into an exact-height block.
+
+- **`IconSet.scroll_up` / `scroll_down`** glyph slots (`▲`/`▼`, ASCII `^`/`v`)
+  — appended after every pre-existing field, so positional constructions keep
+  their original bindings.
+
+- **Universal `-i`** — every command now accepts `-i` (the host rung makes it
+  honest everywhere): ANSI capability is context-derived (mode degrades off a
+  TTY; ANSI is never granted by mode), and non-TTY `-i` falls back to LIVE.
+
+### Changed
+
+- **`StreamSurface` rebuilt on the omitted-arm machinery** — the alt-screen
+  streaming tier now composes the same `HostViewport` controller as
+  `HostSurface` (shared at root across the cli→tui seam): scrollable
+  tail with follow intent preserved across publishes, coalesce-to-latest
+  accepted-and-documented, publish-once across a mid-pending resize, and
+  evidence below-counts that grow while scrolled up. A long-running stream is
+  no longer a fire-hose you can only watch.
+
+- **`docs/VIEWPORT_DESIGN.md` absorbed** into HOST_RUNG_DESIGN.md and
+  deleted (preserved in git); `docs/LIVE_DELIVERY_DESIGN.md` §10 amended
+  (finalize semantics, doc-only).
+
 ## [0.12.1] — 2026-07-15
 
 ### Fixed

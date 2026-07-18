@@ -114,17 +114,54 @@ path skips building a parser entirely.
 
 **Trigger**: I'm working on how a rendered `Block` gets produced and delivered.
 
-`run_cli` accepts one of three renderer forms, resolved at **construction**
-(`CliRunner.__post_init__`), never degrading silently at dispatch:
+`run_cli` accepts one of four renderer forms, resolved at **construction**
+(`CliRunner.__post_init__`), never degrading silently at dispatch. All four
+normalize into one private `_RendererBinding` record carrying the declared arm;
+dispatch (`_render`) reads that record, never the callable's arity:
 
 - `renderer=` — the contract `(data, fidelity, width) → Block` (keyword-only).
   The semantic renderer, given only its three inputs. Reach for this first.
+- `height_renderer=` — the height-aware contract
+  `(data, fidelity, width, *, height) → Block` (keyword-only, `HeightRenderer`).
+  The **acceptance** declaration for the offered arm of the dual allocation
+  contract (`docs/HOST_RUNG_DESIGN.md` §4): the host offers a per-delivery
+  `height`, and when it offers an integer `H` the returned Block must have
+  exactly `H` rows (`_verify_height` enforces this at the offer site, §5).
+  Mutually exclusive with *all* other renderer forms — pairing it with
+  `renderer=` or `render=` is a construction-time `DeclarationError`.
 - `render=` — legacy `(ctx, data) → Block`, optional-positional so existing
   `run_cli(args, render, fetch)` call sites keep working. Deprecation window; no
   runtime warning until 0.12.
 - *neither* — the framework installs the transcription default (`_transcription.py`).
   `tags=` is unavailable on this form (transcription can't map facet names onto
-  arbitrary data) and declaring it raises `DeclarationError`.
+  arbitrary data) and declaring it raises `DeclarationError`; a declared
+  `renderer=` or `height_renderer=` lifts that fence.
+
+The **offer matrix** (§3, three rows) lives in `_render`: an undeclared binding
+is never handed the `height` keyword (it has none); a declared binding gated-off
+is offered `height=None`; a declared binding gated-on is offered `height=H`. The
+gated-off routes (STATIC, in-place/streaming LIVE — off-TTY always, and STATIC-TTY
+unconditionally per the Q7 fence: a known terminal height is not permission to
+offer it) pass `height=None`. The **interactive path is the gated-on route that
+ships in 0.13/S4** (`_run_interactive` → `_run_host`): on a usable TTY it mounts
+the binding into the host rung (`HostSurface`, below) and the *offered arm*
+receives `height=H` from real Surface geometry. The bounded inline-LIVE row of the
+matrix stays fenced (a later decision — see `docs/HOST_RUNG_DESIGN.md` §3). Route-
+level pinning of every row is `tests/integration/test_host_rung_dispatch.py`.
+
+**INTERACTIVE dispatch** (`_run_interactive`): a custom `handlers[INTERACTIVE]`
+still wins first (the escape). Otherwise the framework resolves it: **not a usable
+TTY** → fall back to LIVE (the pre-host-rung behavior); **a declared stream** →
+stay on the live tier (`-i` keeps converging onto `StreamSurface`; the single-
+fetch host rung would drop the stream, and the inward seam that would bring
+`follow` home is §7's future work); **otherwise** → the host rung. Because the
+host rung mounts *any* binding, `-i` is now honest on every command and
+`_get_parser` offers it unconditionally — the `docs/MODE_RESOLUTION.md` filtering
+rationale (hide `-i` when it is a no-op) is satisfied by the capability existing,
+not by gating. The runner reaches the tui `HostSurface` through the *existing*
+`stream_surface.py` cli→tui seam (a thin `run_host_surface` launcher) — the arch
+tripwire caps that crossing at two seam files, so `runner.py` itself stays tui-
+free.
 
 Two local seams worth knowing before you touch delivery:
 
@@ -138,6 +175,17 @@ Two local seams worth knowing before you touch delivery:
   runner-owned `use_refs` bracket around render + serialization. A static
   sequence validates at construction; a callable of state evaluates after fetch.
   See `docs/RENDERER_CONTRACT_DESIGN.md` §7.
+- **`on_host_event=`** declares the inward host-event sink (`docs/HOST_RUNG_DESIGN.md`
+  §7) — a keyword-only `HostEvent -> None` callback on the HOST constructor, never
+  on the renderer binding (`_RendererBinding` carries the acceptance arm, not host
+  input). The runner threads it into the two rungs where painted owns a viewport:
+  `_run_host` (the interactive host rung — the offered arm builds no controller,
+  so it fires nothing there) and `_run_live_surface` (the alt-screen streaming
+  tier — the `follow` path). STATIC, in-place LIVE, the piped fallback, and the
+  offered arm receive zero calls. A handler exception fails the active host
+  delivery loud (never swallowed, never rerouted to `Surface.emit`). Both
+  `HostSurface` and `StreamSurface` drive the shared `HostViewport` controller
+  (root `painted.host`) that mints the events.
 
 The full contract, its rationale, and the width-at-the-offer invariant are in
 `docs/RENDERER_CONTRACT_DESIGN.md` (ratified 2026-07-12). Cite it; don't restate.

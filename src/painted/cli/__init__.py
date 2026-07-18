@@ -23,7 +23,7 @@ if TYPE_CHECKING:
     # erasing run_cli's published @overloads (so `fetch` would look optional) and
     # the Renderer alias's shape. Re-import the type-bearing symbols here so the
     # public import paths carry the real types to checkers, runtime staying lazy.
-    from ..core.renderer import Renderer as Renderer
+    from ..core.renderer import HeightRenderer as HeightRenderer, Renderer as Renderer
     from .runner import CliRunner as CliRunner, run_cli as run_cli
 
 # name → (submodule, attr). The only place the module-of-record for each public
@@ -40,6 +40,7 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     # The renderer contract type — canonical home is painted.core; re-exported
     # here for convenience (RENDERER_CONTRACT_DESIGN.md §3).
     "Renderer": ("..core.renderer", "Renderer"),
+    "HeightRenderer": ("..core.renderer", "HeightRenderer"),
     "resolve_mode": (".types", "resolve_mode"),
     "detect_context": (".types", "detect_context"),
     "add_cli_args": (".types", "add_cli_args"),

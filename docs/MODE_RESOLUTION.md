@@ -38,9 +38,11 @@ only applies to AUTO (no explicit flag).
 
 | Config present | Modes registered |
 |----------------|-----------------|
-| (always) | STATIC |
+| (always) | STATIC, INTERACTIVE |
 | `fetch_stream` | + LIVE |
-| `handlers[INTERACTIVE]` | + INTERACTIVE |
+
+INTERACTIVE is always registered since 0.13 (the host rung mounts any binding);
+`handlers[INTERACTIVE]` still overrides the framework host rung when present.
 
 Only supported modes get argparse flags. A CLI without `fetch_stream` never
 shows `--live` in `--help`.
@@ -79,15 +81,26 @@ User passes explicit mode flag?
 `--help` only shows flags for modes the CLI supports. This prevents user
 confusion ("why does `-i` do nothing?").
 
+Since 0.13 (the host rung, `docs/HOST_RUNG_DESIGN.md`) **INTERACTIVE is always
+supported**: `-i` mounts *any* renderer binding into an alt-screen `HostSurface`
+on a usable TTY (falling back to LIVE off a TTY), so it is never a no-op and
+`run_cli` offers it unconditionally. `--live` still follows the honesty rule —
+it exists only when `fetch_stream` is declared.
+
+**ANSI stays context-derived, never mode-granted.** Requesting `-i` does not
+manufacture ANSI the destination can't render: `use_ansi` follows the *TTY*, so
+`-i` into a pipe resolves `use_ansi=False` and the degraded LIVE route emits the
+same clean, non-ANSI output the pipe would otherwise get — no alt-screen escapes,
+no cursor control. On a real TTY the interactive path gets ANSI via `is_tty` like
+every other delivery; there is no INTERACTIVE special case in `detect_context`.
+
 | CLI capabilities | Flags shown |
 |-----------------|-------------|
-| Static only | (no mode flags) |
-| Static + Live | `--static`, `--live` |
-| Static + Interactive | `-i`, `--static` |
-| Static + Live + Interactive | `-i`, `--static`, `--live` |
+| Static only (no stream) | `-i`, `--static` |
+| Static + Live (a stream) | `-i`, `--static`, `--live` |
 
-`--static` appears whenever LIVE or INTERACTIVE is available — it's the
-"force no animation" escape hatch.
+`--static` is the "force no animation" escape hatch; `-i` forces the interactive
+host rung; `--live` (when present) forces in-place/surface live.
 
 ## Design Rationale
 
@@ -108,9 +121,14 @@ incompatible.
 ### Why capability filtering exists
 
 Without filtering, every CLI shows `-i`, `--live`, and `--static` regardless
-of whether those modes do anything. A user passing `-i` to a CLI with no
-interactive handler gets silently downgraded to LIVE — confusing. Better to
-not offer what you can't deliver.
+of whether those modes do anything. The rule is the honesty rule applied to
+modes: offer a flag only when it delivers. `--live` still obeys this (no
+`fetch_stream`, no `--live`). `-i` no longer needs it: the host rung
+(`docs/HOST_RUNG_DESIGN.md`) makes INTERACTIVE deliver for *any* binding, so
+`-i` is honest everywhere and is offered unconditionally — the capability
+existing is what satisfies the rule, not the gating. A custom
+`handlers[INTERACTIVE]` still overrides the framework host rung; a declared
+surface stream still converges `-i` onto `StreamSurface`.
 
 ## Non-Rule: Format Never Implies Mode (Except for Collapse)
 

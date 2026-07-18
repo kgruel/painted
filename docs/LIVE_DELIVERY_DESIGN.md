@@ -247,9 +247,18 @@ evidence (primitives stay silent by contract).
 
 Boundaries of the declaration:
 
-- **`finalize()` deposits full height.** The final frame belongs to terminal
-  history and nothing repaints after it, so there is no tearing hazard and no
-  reason to lose content — the deposit is the point of this tier.
+- **`finalize()` deposits the Block it is handed, unclipped.** For
+  natural-height input the final frame belongs to terminal history and nothing
+  repaints after it, so there is no tearing hazard and no reason to lose content
+  — the deposit is the point of this tier. Under the dual allocation contract's
+  *offered* arm (HOST_RUNG_DESIGN §5), the renderer has already returned an
+  `H`-row frame and owns evidence for what it omitted; finalize deposits that
+  `H`-row Block unchanged and does **not** resurrect the semantically omitted
+  content at deposit time. Either way `finalize()` deposits exactly the Block
+  passed to it — the viewport clip in `render()` is never applied here. (No code
+  change: `finalize()` already writes the Block it is handed verbatim; the "full
+  height" phrasing only ever held because live frames are natural-height, and
+  the offered arm makes that assumption explicit.)
 - **Pipes are never clipped.** A non-TTY stream has no viewport and no
   repaint, so there is nothing to tear; the frame passes through whole.
 - **Clipping keeps the head, evidence takes the tail** — reading-order loss,

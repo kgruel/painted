@@ -69,6 +69,45 @@ def test_sparkline_chars_length():
     assert len(ASCII_ICONS.sparkline) == 8
 
 
+def test_scroll_slots_degrade():
+    assert (IconSet().scroll_up, IconSet().scroll_down) == ("▲", "▼")
+    assert (ASCII_ICONS.scroll_up, ASCII_ICONS.scroll_down) == ("^", "v")
+
+
+def test_positional_construction_preserves_pre_scroll_field_binding():
+    """Regression: new fields must be APPENDED, never inserted mid-list.
+
+    The host-rung ``scroll_up``/``scroll_down`` slots were added at the end of
+    ``IconSet`` so that a full positional ``IconSet(...)`` written against the
+    historical field list still binds each value to its original slot. Were a new
+    field inserted before ``sparkline`` instead, a positional construction would
+    silently shift — the sparkline tuple landing in the wrong slot — and
+    both-directions evidence rendering would then raise. This pins the ordering:
+    it constructs positionally against every pre-``scroll`` field and asserts the
+    pre-existing slots still bound correctly and the appended slots kept their
+    defaults.
+    """
+    fields = dataclasses.fields(IconSet)
+    assert [f.name for f in fields[-2:]] == ["scroll_up", "scroll_down"], (
+        "scroll_up/scroll_down must remain the LAST fields — appending preserves "
+        "positional-construction compatibility (do not insert new fields mid-list)"
+    )
+
+    pre_scroll = [f for f in fields if f.name not in ("scroll_up", "scroll_down")]
+    # A full old-style positional construction: one arg per pre-existing field,
+    # in declaration order. Correct binding ⇒ the result matches the all-default
+    # set and the appended slots were not consumed positionally.
+    defaults = IconSet()
+    icons = IconSet(*[getattr(defaults, f.name) for f in pre_scroll])
+
+    assert isinstance(icons.sparkline, tuple)
+    assert icons.sparkline == IconSet().sparkline  # the tuple did not shift slots
+    assert icons.bar_fill == "█"
+    assert icons.bar_empty == "░"
+    assert icons.scroll_up == "▲"  # appended slot untouched by positional args
+    assert icons.scroll_down == "▼"
+
+
 def test_context_var_default():
     reset_icons()
     default = current_icons()

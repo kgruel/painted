@@ -17,6 +17,18 @@ sleeps); ``fps_cap`` only bounds repaint. The final frame is deposited to
 the normal screen by the caller (``CliRunner._run_live``) after the alt
 screen is torn down — smoothness of the alt screen, scrollback persistence
 of in-place.
+
+**Yield coalescing (delivery contract).** The consumer and the render loop are
+decoupled, so several yields can arrive between two repaints. ``StreamSurface``
+**coalesces to the latest**: the consumer overwrites ``_frame`` and flags
+``_pending`` on every yield, and the next ``render()`` publishes only that latest
+state as one content generation. Publishing every intermediate yield would render
+content no one sees; the application observes its own stream, so nothing is lost
+by showing only the newest. Coalescing is at the *render* boundary — every
+``ref_schemes=`` resolution still fires once per fetch (`_consume`), independent
+of it. A given yielded state is ticketed and published **exactly once** (the
+publish lives solely in ``render()``; a concurrent resize defers to it rather than
+publishing the same state a second time).
 """
 
 from __future__ import annotations
@@ -27,14 +39,18 @@ from contextlib import AbstractContextManager, ExitStack
 from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
 from ..core.cell import Style
-from ..tui.surface import Surface
+from ..host import HostViewport
+from ..mouse import MouseEvent
+from ..tui.surface import HostSurface, Surface
 from .live_meter import LiveMeter
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Callable
 
     from ..core.block import Block
+    from ..host import HostEventSink
     from ..refs import RefScheme
+    from ..tui.surface import HostRender
 
 T = TypeVar("T")
 
@@ -72,6 +88,9 @@ class StreamSurface(Surface, Generic[T]):
         fps_cap: int = 60,
         live_meter: bool = False,
         resolve_ref_schemes: Callable[[T], tuple[RefScheme, ...]] | None = None,
+        content_id: object | None = None,
+        evidence_label: str | None = None,
+        on_host_event: HostEventSink | None = None,
         no_color: bool | None = None,
     ) -> None:
         # ``no_color`` is the delivery's single resolved NO_COLOR snapshot,
@@ -81,8 +100,15 @@ class StreamSurface(Surface, Generic[T]):
         # by construction, never a second env read (§9.1). ``CliRunner`` passes
         # ``self._delivery_no_color`` here; a direct construction leaves it
         # ``None`` and the writer resolves NO_COLOR ambiently, like any Surface.
+        #
+        # Mouse is enabled: the omitted-arm viewport routes the scroll wheel and
+        # resolves clicks (§6), the same as ``HostSurface``.
         super().__init__(
-            fps_cap=fps_cap, on_start=self._spawn, on_stop=self._stop, no_color=no_color
+            fps_cap=fps_cap,
+            enable_mouse=True,
+            on_start=self._spawn,
+            on_stop=self._stop,
+            no_color=no_color,
         )
         # The render callback is a runner-adapted closure taking the frame's
         # current width (§6), not (ctx, state): the offer rule and the app
@@ -97,9 +123,30 @@ class StreamSurface(Surface, Generic[T]):
         # None before the first fetch. render()/_frame_scope() both read this
         # single attribute, never a standalone `self._state`.
         self._frame: tuple[T, tuple[RefScheme, ...] | None] | None = None
+        # True when a *new* fetched state awaits publication — set in _consume(),
+        # cleared once render() installs it as a new content generation. A scroll
+        # re-render (no new state) leaves it False, so the viewport re-slices the
+        # existing generation instead of resetting it (§6 matrix).
+        self._pending = False
         self._paused = False
         self._consumer: asyncio.Task[None] | None = None
         self._agen: AsyncIterator[T] | None = None
+
+        # The omitted-arm viewport controller (S5 §7): streaming delivery runs the
+        # same host machinery as ``HostSurface`` — each stream yield is a new
+        # content generation under one content identity, sliced into the frame with
+        # follow / evidence, scroll-routed, and reported through the inward
+        # ``on_host_event=`` seam. ``follow_start=True``: a stream tails the bottom
+        # from its first overflow (the ``follow`` shape) until the user scrolls off.
+        self._vp = HostViewport(
+            content_id=content_id if content_id is not None else object(),
+            on_event=on_host_event,
+            evidence_label=evidence_label,
+            follow_start=True,
+        )
+        # Resolved hits, newest last — the outward observability seam (host.hit
+        # emissions), beside the inward HostHitEvent on the sink (§7).
+        self.hits: list[object] = []
 
         # The pair for the most recently fetched state — read by the caller
         # (the deposit) after the alt screen is torn down, via the
@@ -208,6 +255,10 @@ class StreamSurface(Surface, Generic[T]):
                 frame = (state, schemes)
                 self._frame = frame
                 self._last_frame = frame
+                # A new fetched state awaits publication as a new content
+                # generation — render() installs it (a fast stream coalesces to
+                # the latest at the render boundary, as before).
+                self._pending = True
                 self.mark_dirty()
         except asyncio.CancelledError:
             raise
@@ -243,6 +294,55 @@ class StreamSurface(Surface, Generic[T]):
                 stack.enter_context(use_refs(*schemes))
         return stack
 
+    def _meter_reserve(self) -> int:
+        """Rows the cost gauge reserves below the viewport frame (§6 chrome): one
+        when metering, so the frame is ``buf.height − 1`` and ``meter.dress``'s
+        appended row lands it back at exactly ``buf.height`` — the pinned-window
+        contract, kept even under the host viewport."""
+        return 1 if self._live_meter else 0
+
+    def layout(self, width: int, height: int) -> None:
+        """Track frame geometry and reconcile the *already-published* generation
+        (§6 matrix).
+
+        Publishing a stream yield is ``render()``'s job, and its *only* job — a
+        given yielded state is ticketed and published **exactly once** (P2a). So
+        ``layout`` never installs the pending state: the initial mount (no state
+        yet) and any resize while a fresh yield is pending both defer to
+        ``render()``, which publishes that state once at the new geometry. Only
+        when NO yield is pending does ``layout`` reconcile the live generation to
+        the resize — a width change re-renders the current state (a reconcile of
+        content already shown, not a new yield), a height-only change re-slices
+        with no renderer call. Each such reconcile mints one ``ResizeChange``.
+
+        A *renderer* fault on the width reconcile is captured as ``self.error``
+        (the delivery's own error path), exactly as ``render()`` does; the sink
+        call (``install``) runs **after** the guarded render, so a *handler*
+        fault propagates loudly (§7) instead of being misfiled as a render error.
+        """
+        frame_h = max(0, height - self._meter_reserve())
+        width_changed = self._vp.set_geometry(width, frame_h)
+        # No content yet, OR a fresh yield is pending: render() owns that publish,
+        # once, at the new geometry — installing here would double-publish one
+        # yield (two generations, P2a). Geometry is recorded above; that suffices.
+        if self._frame is None or self._pending:
+            return
+        from ..host import ResizeChange
+
+        state, _ = self._frame
+        if not width_changed:
+            self._vp.reslice(reason=ResizeChange())  # no renderer call
+            return
+        with self._frame_scope():
+            try:
+                content = self._render(state, width)
+            except Exception as exc:
+                self.error = exc
+                self.error_kind = "render"
+                self.quit()
+                return
+            self._vp.install(content, reason=ResizeChange())  # sink — unguarded (§7)
+
     def render(self) -> None:
         if self._buf is None:
             return
@@ -250,19 +350,29 @@ class StreamSurface(Surface, Generic[T]):
         if self.error is not None:
             return
         if self._frame is None:
-            return
-        state, _schemes = self._frame
+            return  # no state yet — a blank frame
+        state, _ = self._frame
         if self._live_meter:
             self.meter.start()
-        try:
-            # Offer the buffer's current width — a resize re-created _buf at the
-            # new geometry, so this frame's offer tracks it (§6).
-            block = self._render(state, self._buf.width)
-        except Exception as exc:
-            self.error = exc
-            self.error_kind = "render"
-            self.quit()
-            return
+        # A newly fetched state installs as a new content generation (offering the
+        # buffer's *current* width, §6 — a resize re-created _buf at the new
+        # geometry). A scroll re-render (no pending state) skips this and re-slices
+        # the existing generation, so scrolling never resets content. A *renderer*
+        # fault is captured; the sink (publish_stream) runs after, unguarded, so a
+        # *handler* fault propagates loudly (§7).
+        if self._pending:
+            self._pending = False
+            try:
+                content = self._render(state, self._buf.width)
+            except Exception as exc:
+                self.error = exc
+                self.error_kind = "render"
+                self.quit()
+                return
+            self._vp.publish_stream(content)
+        # The viewport frame is exactly the reserved height; the gauge row (when
+        # metering) lands it back at buf.height.
+        block = self._vp.frame().block
         if self._live_meter:
             block = self.meter.dress(block)
         block.paint(self._buf, 0, 0)
@@ -275,6 +385,75 @@ class StreamSurface(Surface, Generic[T]):
 
     def on_key(self, key: str) -> None:
         if key in ("q", "\x03"):
+            self._vp.route_quit()  # inward HostQuitEvent (§7) before the loop exits
             self.quit()
-        elif key == " ":
+            return
+        if key == " ":
             self._paused = not self._paused
+            return
+        # Scroll keys route through the shared viewport controller (arrows / page /
+        # home / end), the same as HostSurface — a scrolled-up viewer holds place
+        # as content grows, `end`/`G` re-engages follow.
+        if self._vp.route_key(key):
+            self.mark_dirty()
+
+    def on_mouse(self, event: MouseEvent) -> None:
+        if event.is_scroll:
+            if self._vp.route_wheel(event.button):
+                self.mark_dirty()
+            return
+        hit = self._vp.route_click(event.x, event.y)
+        if hit is None:
+            return
+        self.hits.append(hit)
+        self.emit(
+            "host.hit",
+            region=hit.region.name,
+            ref=hit.ref,
+            content_xy=hit.content_xy,
+            stale=hit.stale,
+        )
+
+
+def run_host_surface(
+    *,
+    render: HostRender,
+    accepts_height: bool,
+    content_id: object,
+    inputs: object,
+    evidence_label: str | None = None,
+    no_color: bool | None = None,
+    on_emit: Callable[[str, dict[str, object]], None] | None = None,
+    on_host_event: HostEventSink | None = None,
+) -> int:
+    """Mount a renderer binding into the interactive host rung and run it
+    (HOST_RUNG_DESIGN §6 — the fourth delivery).
+
+    The cli→tui seam for the host rung lives *here*, in the same file that already
+    crosses to ``painted.tui.surface`` for ``StreamSurface`` — the architecture
+    tripwire caps that crossing at the two existing seam files, so the runner
+    reaches ``HostSurface`` through this cli-internal launcher rather than a third
+    ``cli → tui`` import (``runner`` stays tui-free). The launcher is thin: it
+    constructs the ``HostSurface`` from the runner's already-built render closure
+    and runs the alt-screen loop, translating ``KeyboardInterrupt`` to a clean
+    exit like every other delivery path. Exactness, the offer rule, and error
+    routing all live behind ``render`` (the runner's ``_render``) and inside
+    ``HostSurface``; nothing about them is re-implemented here.
+    """
+    import asyncio
+
+    surface = HostSurface(
+        render=render,
+        accepts_height=accepts_height,
+        content_id=content_id,
+        inputs=inputs,
+        evidence_label=evidence_label,
+        no_color=no_color,
+        on_emit=on_emit,
+        on_host_event=on_host_event,
+    )
+    try:
+        asyncio.run(surface.run())
+    except KeyboardInterrupt:
+        pass  # Ctrl-C is a clean interactive exit, like the live paths
+    return 0

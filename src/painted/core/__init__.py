@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     # Any — erasing, for instance, the ``Renderer`` alias's generic shape. Re-
     # import the type-bearing symbols here so ``from painted.core import Renderer``
     # carries the real type to checkers while runtime stays fully lazy.
-    from .renderer import Renderer as Renderer
+    from .renderer import HeightRenderer as HeightRenderer, Renderer as Renderer
 
 __all__ = [
     # Errors
@@ -65,6 +65,9 @@ __all__ = [
     "Zoom",
     # The framework-seam renderer contract (0.11) — (data, fidelity, width) → Block
     "Renderer",
+    # Its height-aware sibling (0.13 host rung) — adds a keyword-only `height`
+    # offer, the offered arm of the dual allocation contract (HOST_RUNG_DESIGN §4)
+    "HeightRenderer",
     # Doc-IR: node vocabulary + the document compositor (exported at 0.10;
     # the disclosure walk visible_body/capped stays unexported — painted's two
     # projectors are its only sanctioned readers)
@@ -124,6 +127,7 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "display_width": ("._text_width", "display_width"),
     "Zoom": (".zoom", "Zoom"),
     "Renderer": (".renderer", "Renderer"),
+    "HeightRenderer": (".renderer", "HeightRenderer"),
     "Doc": (".doc", "Doc"),
     "Section": (".doc", "Section"),
     "Prose": (".doc", "Prose"),
