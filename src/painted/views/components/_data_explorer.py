@@ -5,12 +5,13 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from typing import Any
 
-from ...core._text_width import display_width, truncate
+from ...core._text_width import display_width, truncate, truncate_ellipsis
 from ...core.block import Block
 from ...core.cell import Style
 from ...core.compose import join_vertical
 from ...cursor import Cursor
-from ...viewport import Viewport
+from ...viewport import Viewport, _scroll_into_capacity, frame_capacity
+from .._frame import evidence_row
 
 _MAX_CHILDREN = 50
 
@@ -184,7 +185,9 @@ class DataExplorerState:
         new_state = replace(self, expanded=new_expanded, _nodes=None)
         new_nodes = new_state.nodes
         new_cursor = cursor.with_count(len(new_nodes))
-        new_viewport = viewport.with_content(len(new_nodes)).scroll_into_view(new_cursor.index)
+        new_viewport = _scroll_into_capacity(
+            viewport.with_content(len(new_nodes)), new_cursor.index
+        )
         return replace(new_state, cursor=new_cursor, viewport=new_viewport)
 
     def move_up(self) -> DataExplorerState:
@@ -193,7 +196,7 @@ class DataExplorerState:
         cursor = self.cursor.with_count(len(nodes))
         viewport = self.viewport.with_content(len(nodes))
         new_cursor = cursor.prev()
-        new_vp = viewport.scroll_into_view(new_cursor.index)
+        new_vp = _scroll_into_capacity(viewport, new_cursor.index)
         return replace(self, cursor=new_cursor, viewport=new_vp)
 
     def move_down(self) -> DataExplorerState:
@@ -202,25 +205,34 @@ class DataExplorerState:
         cursor = self.cursor.with_count(len(nodes))
         viewport = self.viewport.with_content(len(nodes))
         new_cursor = cursor.next()
-        new_vp = viewport.scroll_into_view(new_cursor.index)
+        new_vp = _scroll_into_capacity(viewport, new_cursor.index)
         return replace(self, cursor=new_cursor, viewport=new_vp)
 
     def page_up(self) -> DataExplorerState:
-        """Move cursor up by one page."""
+        """Move cursor up by one page — one *displayed* page, not the allocation.
+
+        The page delta is the content *capacity* (``frame_capacity`` — ``F − 1``
+        under overflow, since one row is the reserved evidence row), so a page step
+        lands where the eye expects. At capacity 0 (``F = 0``, or ``F = 1`` under
+        overflow) the delta is 0: no content is displayed, so paging is a no-op —
+        ``move_up`` still advances by one.
+        """
         nodes = self.nodes
         cursor = self.cursor.with_count(len(nodes))
         viewport = self.viewport.with_content(len(nodes))
-        new_cursor = cursor.move(-viewport.visible)
-        new_vp = viewport.scroll_into_view(new_cursor.index)
+        delta = frame_capacity(viewport.visible, len(nodes))
+        new_cursor = cursor.move(-delta)
+        new_vp = _scroll_into_capacity(viewport, new_cursor.index)
         return replace(self, cursor=new_cursor, viewport=new_vp)
 
     def page_down(self) -> DataExplorerState:
-        """Move cursor down by one page."""
+        """Move cursor down by one page — one *displayed* page (see ``page_up``)."""
         nodes = self.nodes
         cursor = self.cursor.with_count(len(nodes))
         viewport = self.viewport.with_content(len(nodes))
-        new_cursor = cursor.move(viewport.visible)
-        new_vp = viewport.scroll_into_view(new_cursor.index)
+        delta = frame_capacity(viewport.visible, len(nodes))
+        new_cursor = cursor.move(delta)
+        new_vp = _scroll_into_capacity(viewport, new_cursor.index)
         return replace(self, cursor=new_cursor, viewport=new_vp)
 
     def home(self) -> DataExplorerState:
@@ -229,7 +241,7 @@ class DataExplorerState:
         cursor = self.cursor.with_count(len(nodes))
         viewport = self.viewport.with_content(len(nodes))
         new_cursor = cursor.home()
-        new_vp = viewport.scroll_into_view(new_cursor.index)
+        new_vp = _scroll_into_capacity(viewport, new_cursor.index)
         return replace(self, cursor=new_cursor, viewport=new_vp)
 
     def end(self) -> DataExplorerState:
@@ -238,14 +250,15 @@ class DataExplorerState:
         cursor = self.cursor.with_count(len(nodes))
         viewport = self.viewport.with_content(len(nodes))
         new_cursor = cursor.end()
-        new_vp = viewport.scroll_into_view(new_cursor.index)
+        new_vp = _scroll_into_capacity(viewport, new_cursor.index)
         return replace(self, cursor=new_cursor, viewport=new_vp)
 
     def with_visible(self, height: int) -> DataExplorerState:
-        """Update viewport visible height."""
+        """Update viewport visible height, keeping the cursor in view."""
         nodes = self.nodes
         cursor = self.cursor.with_count(len(nodes))
         new_vp = self.viewport.with_visible(height).with_content(len(nodes))
+        new_vp = _scroll_into_capacity(new_vp, cursor.index)
         return replace(self, cursor=cursor, viewport=new_vp)
 
 
@@ -287,14 +300,21 @@ def data_explorer(
     Shows an indented tree with expand indicators, inline value previews,
     and cursor highlight.
     """
+    n = len(state.nodes)
+    if height <= 0:
+        return Block.empty(width, 0)
     nodes = state.nodes
     if not nodes:
         return Block.text("(empty)", dim_style, width=width)
 
-    # Apply viewport
-    vp = state.viewport.with_visible(height).with_content(len(nodes))
+    # Reserve the last row for law-6 scroll evidence when nodes overflow: the
+    # window clamps against the content *capacity* (one row fewer than the frame
+    # under overflow), so a selected final node lands above the evidence row.
+    cap = frame_capacity(height, n)
+    overflow = n > height
+    vp = state.viewport.with_visible(cap).with_content(n)
     start = vp.offset
-    end = min(start + height, len(nodes))
+    end = min(start + cap, n)
 
     rows: list[Block] = []
     for i in range(start, end):
@@ -312,7 +332,11 @@ def data_explorer(
         remaining = width - display_width(prefix)
 
         if remaining <= 0:
-            line_text = truncate(prefix, width)
+            # Indentation exhausts the width: the node identity is dropped. The
+            # component chose that cut, so it owes the mark — the surviving prefix
+            # fragment carries the ambient ellipsis (at one cell there is no room
+            # for both content and mark, so the plain cut stands — the waiver).
+            line_text = truncate_ellipsis(prefix, width)
         elif node.expandable and not node.expanded:
             # Show key + summary count
             count = len(node.value) if isinstance(node.value, (dict, list)) else 0
@@ -330,6 +354,11 @@ def data_explorer(
 
         row_style = cursor_style if is_cursor else Style()
         rows.append(Block.text(line_text, row_style, width=width))
+
+    # Law-6 scroll evidence: the last row marks the nodes the window omits (counts
+    # rows, matches the width so it never perturbs it). Waived at height 0 above.
+    if overflow:
+        rows.append(evidence_row(start, n - end, width))
 
     # Fill remaining height with empty rows
     while len(rows) < height:

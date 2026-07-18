@@ -5,6 +5,34 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 
 
+def frame_capacity(frame_height: int, content_height: int) -> int:
+    """Content rows a frame of ``frame_height`` shows for ``content_height`` rows.
+
+    The law-6 reserved-row arithmetic shared by every windowed view (the host
+    ``ViewportAdapter`` and the offered-arm ``list_view``/``table``/
+    ``data_explorer`` components) — one definition so the frame vocabulary and
+    the scroll state that feeds it never drift:
+
+    - ``frame_height <= 0`` → ``0`` (nothing shows; law-6 evidence waived).
+    - content **fits** (``content_height <= frame_height``) → ``frame_height``
+      (the whole frame is content; offset pins to 0).
+    - content **overflows** → ``frame_height - 1`` (one row is reserved for the
+      evidence row; ``0`` at ``frame_height == 1`` — the single row *is* the
+      evidence row, the ``assemble_frame``/``InPlaceRenderer`` precedent).
+
+    This equals ``assemble_frame``'s ``shown``, so an offset clamped against this
+    capacity matches the frame builder's own slice — a selected final item lands
+    above the evidence row, never behind it. The overflow decision compares the
+    natural ``content_height`` to ``frame_height`` (not to the capacity), which is
+    the resolved fixpoint: reserving the row cannot itself flip the decision.
+    """
+    if frame_height <= 0:
+        return 0
+    if content_height <= frame_height:
+        return frame_height
+    return frame_height - 1
+
+
 @dataclass(frozen=True, slots=True)
 class Viewport:
     """Scroll state for a vertically-scrollable view.
@@ -90,3 +118,30 @@ class Viewport:
         """Return viewport with updated visible height, clamping offset if needed."""
         new = replace(self, visible=visible)
         return replace(new, offset=new._clamp(new.offset))
+
+
+def _scroll_into_capacity(vp: Viewport, index: int) -> Viewport:
+    """Scroll ``vp`` so ``index`` is visible within the content *capacity*.
+
+    Like ``Viewport.scroll_into_view``, but clamps against
+    ``frame_capacity(vp.visible, vp.content)`` — one row fewer under overflow,
+    reserved for the law-6 evidence row — so a selected final item lands above
+    that row, never behind it. ``vp.visible`` is the frame allocation ``F`` (the
+    page size a caller reads off it directly) and is **preserved**; only the
+    offset moves. At capacity 0 (``F = 0``, or ``F = 1`` under overflow — the
+    single row *is* the evidence row) there is no content row to reveal, so the
+    offset is left untouched.
+
+    This is the one capacity-scroll every windowed component's state goes through
+    — ``list_view``/``table``/``data_explorer`` ``scroll_into_view``,
+    ``with_visible``, and the ``data_explorer`` move/page ops — so the package
+    holds a single viewport-state convention: ``visible`` is always ``F``, the
+    offset always capacity-clamped. Module-level and underscore-private: it is not
+    part of ``Viewport``'s public surface (the offered-arm evidence slice is an
+    internal contract, not an exported viewport operation).
+    """
+    cap = frame_capacity(vp.visible, vp.content)
+    if cap <= 0:
+        return vp
+    scrolled = vp.with_visible(cap).scroll_into_view(index)
+    return replace(scrolled, visible=vp.visible)

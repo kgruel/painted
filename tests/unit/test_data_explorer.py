@@ -137,31 +137,50 @@ class TestDataExplorerState:
         new_state = state.toggle_expand()
         assert new_state.expanded == state.expanded
 
-    def test_page_down_moves_by_visible_height(self):
+    def test_page_down_moves_by_displayed_capacity(self):
+        # 10 nodes overflow a height-3 frame, so one row is the reserved evidence
+        # row: a page moves by the displayed capacity (2), not the allocation (3).
         data = {f"k{i}": i for i in range(10)}
         state = DataExplorerState(data=data).with_visible(3)
 
         state = state.page_down()
-        assert state.cursor_index == 3
+        assert state.cursor_index == 2
 
         state = state.page_down()
-        assert state.cursor_index == 6
+        assert state.cursor_index == 4
 
-    def test_page_up_moves_by_visible_height(self):
+    def test_page_up_moves_by_displayed_capacity(self):
         data = {f"k{i}": i for i in range(10)}
         state = DataExplorerState(data=data).with_visible(3)
 
         state = state.end()
         assert state.cursor_index == 9
 
+        state = state.page_up()  # capacity 2
+        assert state.cursor_index == 7
+
         state = state.page_up()
-        assert state.cursor_index == 6
+        assert state.cursor_index == 5
 
         state = state.page_up()
         assert state.cursor_index == 3
 
-        state = state.page_up()
-        assert state.cursor_index == 0
+    def test_page_delta_is_full_allocation_when_content_fits(self):
+        # No overflow → capacity == allocation, so a page is the whole frame.
+        data = {f"k{i}": i for i in range(3)}
+        state = DataExplorerState(data=data).with_visible(5)
+        state = state.page_down()
+        assert state.cursor_index == 2  # 0 + 5, clamped to the last node
+
+    def test_page_is_noop_at_degenerate_heights(self):
+        # F=0 (no viewport) and F=1 under overflow (the single row *is* the
+        # evidence row, capacity 0) both give a page delta of 0 — paging cannot
+        # move, though move_down still advances by one.
+        data = {f"k{i}": i for i in range(10)}
+        for height in (0, 1):
+            state = DataExplorerState(data=data).with_visible(height)
+            assert state.page_down().cursor_index == 0, f"F={height} page moved"
+            assert state.move_down().cursor_index == 1, f"F={height} move_down stuck"
 
     def test_page_down_clamps_at_end(self):
         data = {f"k{i}": i for i in range(5)}

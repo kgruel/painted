@@ -13,7 +13,9 @@ from ...core.compose import Align, truncate
 from ...core._text_width import display_width
 from ...cursor import Cursor
 from ...core.span import Line, Span
-from ...viewport import Viewport
+from ...viewport import Viewport, _scroll_into_capacity, frame_capacity
+from .._frame import evidence_row
+from ._line_ellipsis import EllipsisSide, ellipsize_line
 
 if TYPE_CHECKING:
     from ...core.borders import BorderChars
@@ -69,23 +71,6 @@ class Overflow(Enum):
 
     CLIP = "clip"
     FIT = "fit"
-
-
-class EllipsisSide(Enum):
-    """Which end of a truncated cell the ``…`` marker sits on (and thus which
-    end of the content survives).
-
-    A dedicated two-valued type rather than a reuse of ``Align``: the choice is
-    *which content is kept*, not how a short value is positioned, and ``Align``
-    would admit a meaningless ``CENTER``.
-
-    - ``END`` (default): marker on the right, keep the head — ``"long descrip…"``.
-    - ``START``: marker on the left, keep the tail — ``"…Code/siftd"`` (so a path
-      leaf survives).
-    """
-
-    END = "end"
-    START = "start"
 
 
 @dataclass(frozen=True)
@@ -158,71 +143,30 @@ class TableState:
         return replace(self, cursor=cursor, viewport=viewport)
 
     def with_visible(self, height: int) -> TableState:
-        """Update viewport visible height."""
-        return replace(self, viewport=self.viewport.with_visible(height))
+        """Update the frame height, keeping the selected row visible.
 
-    def scroll_into_view(self, visible_height: int) -> TableState:
-        """Adjust viewport so selected row is visible."""
-        vp = self.viewport.with_visible(visible_height).with_content(self.cursor.count)
-        vp = vp.scroll_into_view(self.cursor.index)
+        A resize reconciles through ``_scroll_into_capacity`` and re-scrolls the
+        cursor into the resulting capacity (the same shape as ``scroll_into_view``
+        and ``DataExplorerState.with_visible``): shrinking the frame so the
+        selection would fall behind the reserved evidence row scrolls it back into
+        view, rather than clamping the offset against the raw allocation.
+        """
+        vp = self.viewport.with_visible(height).with_content(self.cursor.count)
+        vp = _scroll_into_capacity(vp, self.cursor.index)
         return replace(self, viewport=vp)
 
+    def scroll_into_view(self, visible_height: int) -> TableState:
+        """Adjust viewport so the selected row is visible above any evidence row.
 
-def _truncate_keep_end(line: Line, max_width: int) -> Line:
-    """Truncate a Line keeping its *rightmost* ``max_width`` columns.
-
-    The mirror of ``Line.truncate`` (which keeps the leftmost) — used for the
-    left-ellipsis case where the tail (a path leaf) is the part worth keeping.
-    Display-width aware; preserves each span's style across the cut.
-    """
-    remaining = max_width
-    kept: list[Span] = []
-    for span in reversed(line.spans):
-        sw = span.width
-        if sw <= remaining:
-            kept.append(span)
-            remaining -= sw
-        else:
-            chars: list[str] = []
-            used = 0
-            for ch in reversed(span.text):
-                cw = display_width(ch) or 1
-                if used + cw > remaining:
-                    break
-                chars.append(ch)
-                used += cw
-            if chars:
-                kept.append(Span("".join(reversed(chars)), span.style))
-            break
-    return Line(spans=tuple(reversed(kept)), style=line.style)
-
-
-def _ellipsize_line(line: Line, max_width: int, side: EllipsisSide, style: Style) -> Line:
-    """Truncate ``line`` to ``max_width`` columns with a ``…`` marker.
-
-    ``side == EllipsisSide.START`` puts the ellipsis on the left and keeps the
-    tail; ``EllipsisSide.END`` puts it on the right and keeps the head. Falls
-    back to a plain cut (kept side preserved) when there is no room for the
-    marker.
-
-    The marker is the ambient ``IconSet.ellipsis`` so it degrades to ASCII under
-    ``use_icons(ASCII_ICONS)`` like every other glyph.
-    """
-    from ...icon_set import current_icons
-
-    ellipsis = current_icons().ellipsis
-    ell_w = display_width(ellipsis)
-    if max_width <= ell_w:
-        if side == EllipsisSide.START:
-            return _truncate_keep_end(line, max_width)
-        return line.truncate(max_width)
-    budget = max_width - ell_w
-    ell_span = Span(ellipsis, style)
-    if side == EllipsisSide.START:
-        kept = _truncate_keep_end(line, budget)
-        return Line(spans=(ell_span, *kept.spans), style=line.style)
-    kept = line.truncate(budget)
-    return Line(spans=(*kept.spans, ell_span), style=line.style)
+        Goes through the shared ``_scroll_into_capacity`` — ``visible`` stays the
+        frame height ``F``, the offset clamps against the content capacity (one row
+        fewer when rows overflow, reserved for the law-6 evidence row) — so a
+        selected final row is never hidden behind that row, under the one
+        viewport-state convention every windowed component shares.
+        """
+        vp = self.viewport.with_visible(visible_height).with_content(self.cursor.count)
+        vp = _scroll_into_capacity(vp, self.cursor.index)
+        return replace(self, viewport=vp)
 
 
 def _pad_line(
@@ -242,7 +186,7 @@ def _pad_line(
     current = line.width
     if current > target_width:
         if ellipsis:
-            return _ellipsize_line(line, target_width, ellipsis_side, style)
+            return ellipsize_line(line, target_width, ellipsis_side, style)
         return line.truncate(target_width)
     if current == target_width:
         return line
@@ -444,8 +388,14 @@ def table(
 
     separator = b.vertical
 
-    vp = state.viewport.with_visible(visible_height).with_content(len(rows))
-    cursor = state.cursor.with_count(len(rows))
+    n = len(rows)
+    # Reserve the last body row for law-6 scroll evidence when rows overflow the
+    # window: the offset math clamps against the content *capacity* (one less than
+    # the frame under overflow), so a selected final row lands above the evidence
+    # row, not behind it (RENDER_MODEL law 6; ``assemble_frame`` precedent).
+    cap = frame_capacity(visible_height, n)
+    vp = state.viewport.with_visible(cap).with_content(n)
+    cursor = state.cursor.with_count(n)
 
     # Resolve each column's track-sizing function (fixed/AUTO/Fill) against the
     # budget, then lay out exactly as before from the resolved integer widths.
@@ -491,7 +441,7 @@ def table(
 
     # -- Data rows (visible window) --
     start = vp.offset
-    end = min(start + visible_height, len(rows))
+    end = min(start + cap, n)
 
     for row_offset, row_idx in enumerate(range(start, end)):
         row_data = rows[row_idx] if row_idx < len(rows) else []
@@ -518,6 +468,14 @@ def table(
             if i < len(columns) - 1:
                 buf.put_text(col_x, buf_y, separator, row_style)
                 col_x += sep_width
+
+    # -- Law-6 scroll evidence -- the last body row marks the rows the window
+    # omits (waived at F=0, where no body row exists; at F=1 the single body row
+    # *is* the evidence row, cap==0 above having shown no data). Counts rows, not
+    # records, and matches the total width so it never perturbs the layout.
+    if n > visible_height and visible_height >= 1:
+        evidence = evidence_row(start, n - end, total_width)
+        evidence.paint(buf, 0, 2 + visible_height - 1)
 
     # Extract rows from buffer into Block
     block_rows = []

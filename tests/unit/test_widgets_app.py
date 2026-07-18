@@ -88,9 +88,10 @@ def test_down_advances_list_selection_with_scroll() -> None:
     assert app.focus.id == "list"
     assert app.list_state.selected == 3
     # The demo calls scroll_into_view(3) inside render(); the rendered state's
-    # offset must keep the selection visible. selected=3 in a height-3 window
-    # forces a non-zero scroll offset.
-    assert app.list_state.scroll_into_view(3).scroll_offset == 1
+    # offset must keep the selection visible. 5 items overflow a height-3 window,
+    # so the last row is reserved for the law-6 evidence row (capacity 2), forcing
+    # selected=3 to offset 2 — window [2, 4) shows items 2 and 3 above the mark.
+    assert app.list_state.scroll_into_view(3).scroll_offset == 2
 
 
 def test_tab_to_text_and_editing_changes_content() -> None:

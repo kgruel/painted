@@ -134,11 +134,12 @@ class TestListViewScrolling:
         )
         block = list_view(state, items, visible_height=4)
 
-        # Visible window: items 3, 4, 5, 6
+        # 10 items overflow a height-4 window: the last row is the law-6 evidence
+        # row (capacity 3), so the content window is items 3, 4, 5.
         assert "item-3" in row_text(block, 0)
         assert "item-4" in row_text(block, 1)
         assert "item-5" in row_text(block, 2)
-        assert "item-6" in row_text(block, 3)
+        assert "…" in row_text(block, 3)  # evidence marker (text clipped at this width)
 
     def test_cursor_in_scrolled_view(self) -> None:
         items = [Line.plain(f"item-{i}") for i in range(10)]
@@ -160,25 +161,25 @@ class TestListViewScrolling:
         )
         block = list_view(state, items, visible_height=5)
 
-        # Only 5 rows rendered
+        # Still exactly 5 rows, but the last is the law-6 evidence row (capacity
+        # 4): content is rows 0-3, then the marker counting the 16 rows omitted.
         assert block.height == 5
         assert "row-0" in row_text(block, 0)
-        assert "row-4" in row_text(block, 4)
+        assert "row-3" in row_text(block, 3)
+        assert "…" in row_text(block, 4) and "16" in row_text(block, 4)
 
     def test_scroll_near_end(self) -> None:
         items = [Line.plain(f"n{i}") for i in range(10)]
-        state = ListState(
-            cursor=Cursor(index=9, count=10),
-            viewport=Viewport(offset=7, visible=3, content=10),
-        )
+        # scroll_into_view keeps the selected final item above the reserved
+        # evidence row: with capacity 2 (height 3, overflow), offset lands at 8.
+        state = ListState(cursor=Cursor(index=9, count=10)).scroll_into_view(3)
         block = list_view(state, items, visible_height=3)
 
-        assert "n7" in row_text(block, 0)
-        assert "n8" in row_text(block, 1)
-        assert "n9" in row_text(block, 2)
-
-        # n9 is selected (index=9, offset=7, visual row=2)
-        assert row_text(block, 2).startswith("\u25b8 ")
+        assert "n8" in row_text(block, 0)
+        assert "n9" in row_text(block, 1)
+        # n9 is selected and visible above the evidence row (never behind it).
+        assert row_text(block, 1).startswith("\u25b8 ")
+        assert "…" in row_text(block, 2)  # evidence marker below the selection
 
 
 class TestListStateWithVisible:

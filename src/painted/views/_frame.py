@@ -19,8 +19,9 @@ Two public artifacts, one vocabulary (HOST_RUNG_DESIGN §6):
 Both the S3 host viewport adapter (the omitted arm) and offered-arm final
 renderers that reserve their own body viewport (e.g. a dashboard's chrome, §6)
 consume the same builder rather than inventing evidence twice — which is why it
-is public in 0.13, even though ``ListState``/``TableState`` integration waits
-for 0.14 (§9 Q6).
+is public in 0.13. The windowed components (``list_view``/``table``/
+``data_explorer``) reuse ``evidence_row`` directly, reserving their last body row
+under overflow (0.14 honesty-remediation S1, RENDER_MODEL law 6).
 
 Placement (views, not core.compose): this is a *meaning-bearing* disclosure
 artifact — it renders the semantics of omission through the ambient icon set and

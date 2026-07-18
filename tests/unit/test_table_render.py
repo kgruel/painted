@@ -188,10 +188,11 @@ class TestScrollingBehavior:
 
         blk = table(state, cols, rows, visible_height=3)
 
-        # Visible window: rows c, d, e (offset=2)
+        # 5 rows overflow a height-3 window: the last body row is the law-6
+        # evidence row (capacity 2), so the content window is rows c, d.
         assert "c" in row_text(blk, 2)
         assert "d" in row_text(blk, 3)
-        assert "e" in row_text(blk, 4)
+        assert "…" in row_text(blk, 4)  # evidence marker (text clipped at width 5)
 
     def test_scroll_shows_correct_selection(self) -> None:
         cols = _make_columns(["V"], [5])

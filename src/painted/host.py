@@ -57,7 +57,7 @@ from typing import TYPE_CHECKING
 
 from .core.errors import ContractError
 from .mouse import MouseButton
-from .viewport import Viewport
+from .viewport import Viewport, frame_capacity
 from .views import assemble_frame
 
 if TYPE_CHECKING:
@@ -332,32 +332,19 @@ HostEventSink = Callable[[HostEvent], None]
 # --- Window arithmetic --------------------------------------------------------
 
 
-def _content_capacity(frame_height: int, content_height: int) -> int:
-    """Content rows the window shows at frame height ``F`` — matches ``assemble_frame``.
-
-    At ``F = 0`` nothing shows. When content **fits** (``content ≤ F``) the whole
-    frame is content, so the capacity is ``F`` (offset pins to 0). When content
-    **overflows** one row is reserved for the evidence row, so the capacity is
-    ``F − 1`` (0 at ``F = 1`` — the single row *is* evidence). This equals
-    ``assemble_frame``'s ``shown``, so ``max_offset`` matches its offset clamp.
-    """
-    if frame_height <= 0:
-        return 0
-    if content_height <= frame_height:
-        return frame_height
-    return frame_height - 1
-
-
 def _window(offset: int, frame_height: int, content_height: int) -> Viewport:
     """A ``Viewport`` for ``content_height`` rows in a frame of ``frame_height``.
 
-    The offset is *not* clamped here — the caller applies the intent op
+    ``visible`` is the ``frame_capacity`` (``viewport.py``) — the content rows the
+    window shows, ``F`` when content fits and ``F − 1`` under overflow (one row
+    reserved for the evidence row) — so ``max_offset`` matches ``assemble_frame``'s
+    slice. The offset is *not* clamped here — the caller applies the intent op
     (``end``/``scroll_to``/``scroll_into_view``) that clamps, so intent survives
     the geometry change.
     """
     return Viewport(
         offset=offset,
-        visible=_content_capacity(frame_height, content_height),
+        visible=frame_capacity(frame_height, content_height),
         content=content_height,
     )
 

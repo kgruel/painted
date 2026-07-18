@@ -10,7 +10,9 @@ from ...core.buffer import Buffer
 from ...core.cell import Style
 from ...cursor import Cursor
 from ...core.span import Line, Span
-from ...viewport import Viewport
+from ...viewport import Viewport, _scroll_into_capacity, frame_capacity
+from .._frame import evidence_row
+from ._line_ellipsis import EllipsisSide, ellipsize_line
 
 if TYPE_CHECKING:
     from ...icon_set import IconSet
@@ -60,13 +62,29 @@ class ListState:
         return replace(self, cursor=cursor, viewport=viewport)
 
     def with_visible(self, height: int) -> ListState:
-        """Update viewport visible height."""
-        return replace(self, viewport=self.viewport.with_visible(height))
+        """Update the frame height, keeping the selected item visible.
+
+        A resize reconciles through ``_scroll_into_capacity`` and re-scrolls the
+        cursor into the resulting capacity (the same shape as ``scroll_into_view``
+        and ``DataExplorerState.with_visible``): shrinking the frame so the
+        selection would fall behind the reserved evidence row scrolls it back into
+        view, rather than clamping the offset against the raw allocation.
+        """
+        vp = self.viewport.with_visible(height).with_content(self.cursor.count)
+        vp = _scroll_into_capacity(vp, self.cursor.index)
+        return replace(self, viewport=vp)
 
     def scroll_into_view(self, visible_height: int) -> ListState:
-        """Adjust viewport so selected item is visible."""
+        """Adjust viewport so the selected item is visible above any evidence row.
+
+        Goes through the shared ``_scroll_into_capacity`` — ``visible`` stays the
+        frame height ``F``, the offset clamps against the content capacity (one row
+        fewer when items overflow, reserved for the law-6 evidence row) — so a
+        selected final item is never hidden behind that row, under the one
+        viewport-state convention every windowed component shares.
+        """
         vp = self.viewport.with_visible(visible_height).with_content(self.cursor.count)
-        vp = vp.scroll_into_view(self.cursor.index)
+        vp = _scroll_into_capacity(vp, self.cursor.index)
         return replace(self, viewport=vp)
 
 
@@ -104,15 +122,31 @@ def list_view(
     ss = selected_style or Style(reverse=True)
     prefix = cursor_char or "▸"
 
-    vp = state.viewport.with_visible(visible_height).with_content(len(items))
-    cursor = state.cursor.with_count(len(items))
+    n = len(items)
+    # Reserve the last row for law-6 scroll evidence when items overflow the
+    # window: the offset math clamps against the content *capacity* (one less than
+    # the frame under overflow), so a selected final item lands above the evidence
+    # row, not behind it (RENDER_MODEL law 6; ``assemble_frame`` precedent).
+    cap = frame_capacity(visible_height, n)
+    overflow = n > visible_height and visible_height >= 1
+    vp = state.viewport.with_visible(cap).with_content(n)
+    cursor = state.cursor.with_count(n)
 
     # Determine visible window
     start = vp.offset
-    end = min(start + visible_height, len(items))
+    end = min(start + cap, n)
 
-    # Find max width across visible items (+ 2 for cursor prefix)
-    max_width = max((items[i].width for i in range(start, end)), default=0) + 2
+    # Find max width across visible items (+ 2 for cursor prefix). When the window
+    # is empty under overflow (F=1: the one row is pure evidence) there is no
+    # visible item to measure, so the evidence row spans the widest item instead
+    # of collapsing to the prefix width.
+    if start < end:
+        content_w = max(items[i].width for i in range(start, end))
+    elif overflow:
+        content_w = max(it.width for it in items)
+    else:
+        content_w = 0
+    max_width = content_w + 2
     if width is not None:
         max_width = min(max_width, width)
 
@@ -136,7 +170,12 @@ def list_view(
                 spans=(prefix_span,) + items[i].spans,
             )
 
-        row_line = row_line.truncate(max_width)
+        # The component chose this row width, so it owes the mark: an item wider
+        # than the allotted width is ellipsized (ambient glyph), not silently cut.
+        if row_line.width > max_width:
+            row_line = ellipsize_line(
+                row_line, max_width, EllipsisSide.END, ss if is_selected else Style()
+            )
         view = buf.region(0, row_idx, max_width, 1)
         row_line.paint(view, 0, 0)
 
@@ -145,6 +184,13 @@ def list_view(
         if filled < max_width:
             fill_style = ss if is_selected else Style()
             buf.fill(filled, row_idx, max_width - filled, 1, " ", fill_style)
+
+    # Law-6 scroll evidence: the last row marks the items the window omits (counts
+    # rows, matches the block width so it never perturbs it). Waived at F=0; at F=1
+    # cap==0 leaves the single row for evidence alone.
+    if overflow:
+        evidence = evidence_row(start, n - end, max_width)
+        evidence.paint(buf, 0, visible_height - 1)
 
     # Extract rows from buffer into Block
     rows = []

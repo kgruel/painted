@@ -30,5 +30,7 @@ class TestListStateViewport:
         state = ListState(cursor=Cursor(index=15, count=30), viewport=Viewport(offset=0))
         state2 = state.scroll_into_view(visible_height=10)
 
-        expected = Viewport(offset=0, visible=10, content=30).scroll_into_view(15).offset
+        # 30 items overflow a height-10 window, so one row is reserved for the
+        # law-6 evidence row: the offset clamps against the capacity (9), not 10.
+        expected = Viewport(offset=0, visible=9, content=30).scroll_into_view(15).offset
         assert state2.scroll_offset == expected

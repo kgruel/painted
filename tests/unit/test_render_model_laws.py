@@ -267,3 +267,325 @@ class TestLaw6EvidencePins:
         with InPlaceRenderer(stream) as renderer:
             renderer.render(fitting)
         assert "rows" not in stream.getvalue(), "a mark without loss is false evidence"
+
+    # --- 0.14 S1: the windowed offered-arm components adopt evidence_row -------
+    #
+    # list_view / table / data_explorer reserve their last body row for the
+    # shared law-6 evidence row when content overflows the window, and are
+    # byte-clean (no marker, full height for content) when it fits. Each site
+    # pins both arms; the ambient-glyph sites pin Unicode + ASCII.
+
+    def test_list_view_overflow_marks_and_fit_is_clean(self):
+        from painted import Cursor, Style
+        from painted.core.span import Line
+        from painted.views import ListState, list_view
+
+        wide = [Line.plain(f"entry-{i:02d}-payload") for i in range(20)]
+        over = list_view(ListState(cursor=Cursor(count=20)), wide, visible_height=6)
+        assert over.height == 6
+        assert "15 more rows" in row_text(over, 5), "overflow left no scroll evidence"
+
+        fit = list_view(ListState(cursor=Cursor(count=4)), wide[:4], visible_height=6)
+        assert fit.height == 6
+        blob = "\n".join(row_text(fit, y) for y in range(fit.height))
+        assert "…" not in blob and "more rows" not in blob, "a mark without loss is false evidence"
+        for i in range(4):
+            assert f"entry-{i:02d}-payload" in row_text(fit, i)
+
+    def test_list_view_evidence_degrades_with_ascii_icons(self):
+        from painted import ASCII_ICONS, Cursor, use_icons
+        from painted.core.span import Line
+        from painted.views import ListState, list_view
+
+        wide = [Line.plain(f"entry-{i:02d}-payload") for i in range(20)]
+        with use_icons(ASCII_ICONS):
+            over = list_view(ListState(cursor=Cursor(count=20)), wide, visible_height=6)
+        row = row_text(over, 5)
+        assert "…" not in row and row.lstrip().startswith("..."), "evidence glyph did not degrade"
+        assert "15 more rows" in row
+
+    def test_list_view_row_tail_ellipsis_marks_and_fits_clean(self):
+        from painted import ASCII_ICONS, Cursor, use_icons
+        from painted.core.span import Line
+        from painted.views import ListState, list_view
+
+        # An item wider than the allotted width is the component's own cut, so it
+        # owes the mark — the ellipsizing path, not a silent Line.truncate.
+        long_item = [Line.plain("a very long item that exceeds the width")]
+        clipped = list_view(
+            ListState(cursor=Cursor(count=1)), long_item, visible_height=2, width=12
+        )
+        assert row_text(clipped, 0).rstrip().endswith("…"), "row-tail cut left no mark"
+        with use_icons(ASCII_ICONS):
+            ascii_clip = list_view(
+                ListState(cursor=Cursor(count=1)), long_item, visible_height=2, width=12
+            )
+        assert row_text(ascii_clip, 0).rstrip().endswith("..."), "row-tail mark did not degrade"
+
+        # A row that fits keeps its exact bytes — no ellipsis intrudes.
+        short_item = [Line.plain("short")]
+        fit = list_view(ListState(cursor=Cursor(count=1)), short_item, visible_height=2, width=12)
+        assert "…" not in row_text(fit, 0), "a mark without loss is false evidence"
+
+    def test_table_overflow_marks_and_fit_is_clean(self):
+        from painted.core.span import Line
+        from painted.views import Column, TableState, table
+
+        cols = [Column(header=Line.plain("Item"), width=20)]
+        rows = [[Line.plain(f"v{i}")] for i in range(10)]
+        over = table(TableState(), cols, rows, visible_height=4)
+        assert over.height == 6  # header + separator + 4 body rows (unchanged total)
+        assert "7 more rows" in row_text(over, 5), "table overflow left no scroll evidence"
+
+        fit = table(TableState(), cols, rows[:3], visible_height=4)
+        blob = "\n".join(row_text(fit, y) for y in range(fit.height))
+        assert "…" not in blob and "more rows" not in blob, "a mark without loss is false evidence"
+        for i in range(3):
+            assert f"v{i}" in row_text(fit, 2 + i)
+
+    def test_table_evidence_degrades_with_ascii_icons(self):
+        from painted import ASCII_ICONS, use_icons
+        from painted.core.span import Line
+        from painted.views import Column, TableState, table
+
+        cols = [Column(header=Line.plain("Item"), width=20)]
+        rows = [[Line.plain(f"v{i}")] for i in range(10)]
+        with use_icons(ASCII_ICONS):
+            over = table(TableState(), cols, rows, visible_height=4)
+        row = row_text(over, 5)
+        assert "…" not in row and row.lstrip().startswith("..."), "table evidence did not degrade"
+        assert "7 more rows" in row
+
+    def test_data_explorer_overflow_marks_and_fit_is_clean(self):
+        from painted.views import DataExplorerState, data_explorer
+
+        data = {f"k{i}": i for i in range(20)}
+        over = data_explorer(DataExplorerState(data=data), width=30, height=6)
+        assert over.height == 6
+        assert "15 more rows" in row_text(over, 5), "data_explorer overflow left no evidence"
+
+        small = {f"k{i}": i for i in range(4)}
+        fit = data_explorer(DataExplorerState(data=small), width=30, height=6)
+        blob = "\n".join(row_text(fit, y) for y in range(fit.height))
+        assert "…" not in blob and "more rows" not in blob, "a mark without loss is false evidence"
+        for i in range(4):
+            assert f"k{i}" in row_text(fit, i)
+
+    def test_data_explorer_evidence_degrades_with_ascii_icons(self):
+        from painted import ASCII_ICONS, use_icons
+        from painted.views import DataExplorerState, data_explorer
+
+        data = {f"k{i}": i for i in range(20)}
+        with use_icons(ASCII_ICONS):
+            over = data_explorer(DataExplorerState(data=data), width=30, height=6)
+        row = row_text(over, 5)
+        assert "…" not in row and row.lstrip().startswith("..."), (
+            "explorer evidence did not degrade"
+        )
+        assert "15 more rows" in row
+
+    def test_data_explorer_deep_prefix_marks_and_waiver(self):
+        from painted import ASCII_ICONS, use_icons
+        from painted.views import DataExplorerState, data_explorer
+
+        # Indentation that exhausts the width drops the node identity — the
+        # surviving prefix fragment carries the mark.
+        deep = {"a": {"b": {"c": {"d": {"e": 1}}}}}
+        expanded = frozenset({("a",), ("a", "b"), ("a", "b", "c"), ("a", "b", "c", "d")})
+        state = DataExplorerState(data=deep, expanded=expanded)
+        narrow = data_explorer(state, width=6, height=8)
+        deep_rows = [row_text(narrow, y) for y in range(8)]
+        assert any(r.rstrip().endswith("…") for r in deep_rows), "deep-prefix cut left no mark"
+        with use_icons(ASCII_ICONS):
+            ascii_narrow = data_explorer(state, width=6, height=8)
+        ascii_rows = [row_text(ascii_narrow, y) for y in range(8)]
+        assert any(r.rstrip().endswith("...") for r in ascii_rows), (
+            "deep-prefix mark did not degrade"
+        )
+
+        # The one-display-cell physical-space waiver: no room for both content
+        # and mark, so the plain cut stands (pinned so the boundary can't drift).
+        one_cell = data_explorer(state, width=1, height=8)
+        assert "…" not in "\n".join(row_text(one_cell, y) for y in range(8)), (
+            "waiver breached at w=1"
+        )
+
+        # A width that fits every prefix marks nothing.
+        wide = data_explorer(state, width=40, height=8)
+        assert "…" not in "\n".join(row_text(wide, y) for y in range(8)), (
+            "false evidence when it fits"
+        )
+
+    def test_windowed_components_keep_selection_above_evidence(self):
+        """Law-6 corollary: reserving the evidence row must not hide the selected
+        final item behind it — the offset math clamps against the content
+        capacity, so the last item stays visible above the mark."""
+        from painted import Cursor
+        from painted.core.span import Line
+        from painted.views import (
+            Column,
+            DataExplorerState,
+            ListState,
+            TableState,
+            data_explorer,
+            list_view,
+            table,
+        )
+
+        # list_view: select the final item, scroll it into view, render.
+        items = [Line.plain(f"n{i}") for i in range(12)]
+        lst = ListState(cursor=Cursor(index=11, count=12)).scroll_into_view(4)
+        lblock = list_view(lst, items, visible_height=4)
+        assert "n11" in row_text(lblock, 2), "list_view hid the selected final item"
+        assert "…" in row_text(lblock, 3), "list_view dropped its evidence row"
+
+        # table: same, over the body window (rows below the header + separator).
+        cols = [Column(header=Line.plain("V"), width=6)]
+        trows = [[Line.plain(f"n{i}")] for i in range(12)]
+        tstate = TableState(cursor=Cursor(index=11, count=12)).scroll_into_view(4)
+        tblock = table(tstate, cols, trows, visible_height=4)
+        assert "n11" in row_text(tblock, 2 + 2), "table hid the selected final row"
+        assert "…" in row_text(tblock, 2 + 3), "table dropped its evidence row"
+
+        # data_explorer: End selects the last node; it must sit above the mark.
+        data = {f"k{i}": i for i in range(12)}
+        dstate = DataExplorerState(data=data).with_visible(4).end()
+        dblock = data_explorer(dstate, width=30, height=4)
+        assert "k11" in row_text(dblock, 2), "data_explorer hid the selected final node"
+        assert "…" in row_text(dblock, 3), "data_explorer dropped its evidence row"
+
+    # --- Exact-fit boundary: N == F must fit, not overflow ---------------------
+    #
+    # The overflow decision is ``content > F`` (capacity ``frame_capacity``). At
+    # N == F content fits exactly — a wrong ``>=`` would reserve a row, drop the
+    # last item, and mark it. These pins compare the exact-fit block byte-for-byte
+    # (content rows) against a slack render that definitely fits, and assert no
+    # marker in BOTH icon modes (the false marker differs by mode).
+
+    def test_list_view_exact_fit_does_not_overflow(self):
+        from painted import ASCII_ICONS, Cursor, use_icons
+        from painted.core.span import Line
+        from painted.views import ListState, list_view
+
+        items = [Line.plain(f"e{i}-payload") for i in range(5)]
+        state = ListState(cursor=Cursor(count=5))
+        exact = list_view(state, items, visible_height=5)  # N == F
+        slack = list_view(state, items, visible_height=6)  # N < F, surely fits
+        assert exact.height == 5
+        for i in range(5):
+            assert exact.row(i) == slack.row(i), f"exact-fit row {i} diverged (a row was reserved)"
+        assert "…" not in "\n".join(row_text(exact, y) for y in range(5)), "false evidence at N==F"
+        # ASCII arm: same byte comparison, both renders inside the ASCII context —
+        # a mode-specific fitting-path alteration (with or without a marker) is
+        # caught, not just the presence of "...".
+        with use_icons(ASCII_ICONS):
+            ascii_exact = list_view(state, items, visible_height=5)
+            ascii_slack = list_view(state, items, visible_height=6)
+        assert ascii_exact.height == 5
+        for i in range(5):
+            assert ascii_exact.row(i) == ascii_slack.row(i), f"ASCII exact-fit row {i} diverged"
+
+    def test_table_exact_fit_does_not_overflow(self):
+        from painted import ASCII_ICONS, use_icons
+        from painted.core.span import Line
+        from painted.views import Column, TableState, table
+
+        cols = [Column(header=Line.plain("Item"), width=10)]
+        rows = [[Line.plain(f"v{i}")] for i in range(5)]
+        exact = table(TableState(), cols, rows, visible_height=5)  # 5 body rows == F
+        slack = table(TableState(), cols, rows, visible_height=6)
+        assert exact.height == 7  # header + separator + 5 rows
+        for y in range(7):
+            assert exact.row(y) == slack.row(y), f"exact-fit row {y} diverged (a row was reserved)"
+        assert "…" not in "\n".join(row_text(exact, y) for y in range(7)), "false evidence at N==F"
+        with use_icons(ASCII_ICONS):
+            ascii_exact = table(TableState(), cols, rows, visible_height=5)
+            ascii_slack = table(TableState(), cols, rows, visible_height=6)
+        assert ascii_exact.height == 7
+        for y in range(7):
+            assert ascii_exact.row(y) == ascii_slack.row(y), f"ASCII exact-fit row {y} diverged"
+
+    def test_data_explorer_exact_fit_does_not_overflow(self):
+        from painted import ASCII_ICONS, use_icons
+        from painted.views import DataExplorerState, data_explorer
+
+        data = {f"k{i}": i for i in range(5)}
+        exact = data_explorer(DataExplorerState(data=data), width=20, height=5)  # N == F
+        slack = data_explorer(DataExplorerState(data=data), width=20, height=6)
+        assert exact.height == 5
+        for i in range(5):
+            assert exact.row(i) == slack.row(i), f"exact-fit row {i} diverged (a row was reserved)"
+        assert "…" not in "\n".join(row_text(exact, y) for y in range(5)), "false evidence at N==F"
+        with use_icons(ASCII_ICONS):
+            ascii_exact = data_explorer(DataExplorerState(data=data), width=20, height=5)
+            ascii_slack = data_explorer(DataExplorerState(data=data), width=20, height=6)
+        assert ascii_exact.height == 5
+        for i in range(5):
+            assert ascii_exact.row(i) == ascii_slack.row(i), f"ASCII exact-fit row {i} diverged"
+
+    def test_components_mark_overflow_at_degenerate_heights(self):
+        """F=0 waives evidence (no body row exists); F=1 under overflow makes the
+        single body row the evidence row (the assemble_frame / InPlaceRenderer
+        precedent). Pinned per component so the boundary can't drift."""
+        from painted import Cursor
+        from painted.core.span import Line
+        from painted.views import (
+            Column,
+            DataExplorerState,
+            ListState,
+            TableState,
+            data_explorer,
+            list_view,
+            table,
+        )
+
+        # list_view — zero-height at F=0, single evidence row at F=1.
+        items = [Line.plain(f"n{i}") for i in range(8)]
+        z = list_view(ListState(cursor=Cursor(count=8)), items, visible_height=0)
+        assert z.height == 0, "F=0 list_view must be zero-height (evidence waived)"
+        one = list_view(ListState(cursor=Cursor(count=8)), items, visible_height=1)
+        assert one.height == 1 and "…" in row_text(one, 0), "F=1 list_view: the row is evidence"
+
+        # table — header + separator always render; F=0 has no body row (no
+        # evidence), F=1 under overflow makes the one body row the evidence row.
+        cols = [Column(header=Line.plain("V"), width=8)]
+        rows = [[Line.plain(f"n{i}")] for i in range(8)]
+        z = table(TableState(), cols, rows, visible_height=0)
+        assert z.height == 2, "F=0 table: header + separator only"
+        assert "…" not in "\n".join(row_text(z, y) for y in range(2)), (
+            "F=0 table marked nothing shown"
+        )
+        one = table(TableState(), cols, rows, visible_height=1)
+        assert one.height == 3 and "…" in row_text(one, 2), (
+            "F=1 table: the one body row is evidence"
+        )
+
+        # data_explorer — zero-height at F=0, single evidence row at F=1.
+        data = {f"k{i}": i for i in range(8)}
+        z = data_explorer(DataExplorerState(data=data), width=20, height=0)
+        assert z.height == 0, "F=0 data_explorer must be zero-height"
+        one = data_explorer(DataExplorerState(data=data), width=20, height=1)
+        assert one.height == 1 and "…" in row_text(one, 0), "F=1 data_explorer: the row is evidence"
+
+    def test_resize_keeps_selection_above_evidence(self):
+        """Finding-1 regression: with_visible (a resize) reconciles through the
+        capacity like scroll_into_view — shrinking the frame so the selection
+        would fall behind the reserved evidence row re-scrolls it into view."""
+        from painted import Cursor
+        from painted.core.span import Line
+        from painted.views import Column, ListState, TableState, list_view, table
+
+        # list_view: select item 9/10, scroll into a height-3 window, resize to 4.
+        items = [Line.plain(f"n{i}") for i in range(10)]
+        lst = ListState(cursor=Cursor(index=9, count=10)).scroll_into_view(3).with_visible(4)
+        lblock = list_view(lst, items, visible_height=4)
+        assert "n9" in row_text(lblock, 2), "list resize hid the selected final item"
+        assert "…" in row_text(lblock, 3), "list resize dropped its evidence row"
+
+        # table: same repro over the body window.
+        cols = [Column(header=Line.plain("V"), width=6)]
+        rows = [[Line.plain(f"n{i}")] for i in range(10)]
+        tstate = TableState(cursor=Cursor(index=9, count=10)).scroll_into_view(3).with_visible(4)
+        tblock = table(tstate, cols, rows, visible_height=4)
+        assert "n9" in row_text(tblock, 2 + 2), "table resize hid the selected final row"
+        assert "…" in row_text(tblock, 2 + 3), "table resize dropped its evidence row"
