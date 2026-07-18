@@ -36,7 +36,7 @@ from painted.views import (
     record_map,
     record_timeline,
 )
-from tests.helpers import block_to_text
+from tests.helpers import block_to_text, row_text
 
 _BASE = datetime(2025, 1, 15, 10, 0, 0, tzinfo=timezone.utc)
 
@@ -193,6 +193,78 @@ class TestRecordLineWidth:
         block = record_line(_ts(), "task", {"name": "x"}, Zoom.SUMMARY, 40, payload_lens=wide_lens)
         # Total block should not exceed requested width
         assert block.width <= 40
+
+
+class TestRecordLineMinimalMark:
+    """MINIMAL's Block.text cut is a knowing drop — the caller marks it (0.14 S5)."""
+
+    def test_marks_the_cut(self):
+        payload = {"topic": "A" * 200}
+        block = record_line(_ts(), "decision", payload, Zoom.MINIMAL, 20)
+        assert block.width == 20
+        assert block_to_text(block).rstrip().endswith("…")
+
+    def test_byte_identical_when_it_fits(self):
+        payload = {"name": "short"}
+        with_room = record_line(_ts(), "task", payload, Zoom.MINIMAL, 40)
+        natural = record_line(_ts(), "task", payload, Zoom.MINIMAL, None)
+        assert block_to_text(with_room).rstrip() == block_to_text(natural).rstrip()
+        assert "…" not in block_to_text(with_room)
+
+
+class TestFitIndentedRow:
+    """``_fit_indented_row`` — the shared indent/degrade shape record_timeline and
+    record_map both fold their per-row width arithmetic through (0.14 S5)."""
+
+    def test_normal_path_pads_the_render_at_content_width(self):
+        from painted.views.record import _fit_indented_row
+
+        seen = {}
+
+        def render(cw):
+            seen["cw"] = cw
+            return Block.text("x" * cw, Style())
+
+        row = _fit_indented_row(10, 3, render)
+        assert seen["cw"] == 7
+        assert row.width == 10
+        assert row_text(row, 0) == "   xxxxxxx"
+
+    def test_content_width_zero_degrades_to_bare_marker(self):
+        from painted.views.record import _fit_indented_row
+
+        row = _fit_indented_row(
+            4, 4, lambda cw: (_ for _ in ()).throw(AssertionError("not called"))
+        )
+        assert row is not None
+        assert row.width == 4
+        assert block_to_text(row).startswith("…")
+
+    def test_indent_exceeding_width_also_degrades(self):
+        from painted.views.record import _fit_indented_row
+
+        row = _fit_indented_row(
+            3, 5, lambda cw: (_ for _ in ()).throw(AssertionError("not called"))
+        )
+        assert row is not None
+        assert block_to_text(row).startswith("…")
+        assert row.width == 3
+
+    def test_degenerate_width_waives_rather_than_fabricate(self):
+        from painted.views.record import _fit_indented_row
+
+        assert _fit_indented_row(0, 2, lambda cw: Block.text("x", Style())) is None
+
+    def test_ascii_marker_needs_more_room_before_waiving(self):
+        from painted import ASCII_ICONS, use_icons
+        from painted.views.record import _fit_indented_row
+
+        with use_icons(ASCII_ICONS):
+            # Unicode "…" (1 col) fits at width 2; ASCII "..." (3 cols) does not.
+            assert _fit_indented_row(2, 2, lambda cw: Block.text("x", Style())) is None
+            row = _fit_indented_row(3, 3, lambda cw: Block.text("x", Style()))
+            assert row is not None
+            assert row_text(row, 0) == "..."
 
 
 class TestRecordLineNaturalWidth:

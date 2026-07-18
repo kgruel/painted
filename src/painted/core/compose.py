@@ -11,6 +11,7 @@ from .block import Block, _ALIAS_UNSET, _cells_from_text, _resolve_ref_alias
 from .borders import ROUNDED, BorderChars
 from .cell import Cell, Style
 from ._row_ops import blank_cell, take_row_prefix
+from ..icon_set import current_icons
 
 
 class Align(Enum):
@@ -236,6 +237,27 @@ def pad(
     return Block(rows, new_width, refs=refs_rows)
 
 
+def _paint_title_run(top_row: list[Cell], text: str, style: Style, pos: int, limit: int) -> int:
+    """Paint ``text`` into ``top_row`` starting at ``pos``, stopping at ``limit`` (inclusive).
+
+    Returns the position just past the last painted cell, so the caller can
+    place a trailing space when room remains.
+    """
+    for ch in text:
+        w = char_width(ch)
+        if w == 0:
+            continue
+        if pos > limit:
+            break
+        if w == 2 and pos + 1 > limit:
+            break
+        top_row[pos] = _border_cell(ch, style)
+        if w == 2:
+            top_row[pos + 1] = _border_cell(" ", style)
+        pos += w
+    return pos
+
+
 def border(
     block: Block,
     chars: BorderChars = ROUNDED,
@@ -282,21 +304,54 @@ def border(
         space_cell = _border_cell(" ", ts)
         top_row[pos] = space_cell
         pos += 1
-        for ch in title:
-            w = char_width(ch)
-            if w == 0:
-                continue
-            if pos > block.width:
-                break
-            if w == 2 and pos + 1 > block.width:
-                break
-            top_row[pos] = _border_cell(ch, ts)
-            if w == 2:
-                top_row[pos + 1] = space_cell
-            pos += w
+        pos = _paint_title_run(top_row, title, ts, pos, block.width)
         # Space after title
         if pos <= block.width:
             top_row[pos] = space_cell
+    elif title:
+        # Both chrome spaces don't fit (that's the branch above) — a supplied
+        # title is declared content, so silence here would be a knowing drop
+        # (law 6). Degrade by title_width against the same interior capacity
+        # (positions 2..block.width, one horizontal cell always left intact
+        # before it) the full-fit branch uses, never by how much room the
+        # marker needs — a chrome space must never be kept at the cost of a
+        # real title cell when the complete title would otherwise fit whole.
+        ts = title_style if title_style is not None else style
+        capacity = block.width - 1
+        if capacity >= title_width + 1:
+            # The complete title fits with a leading space, just not a
+            # trailing one.
+            pos = 2
+            top_row[pos] = _border_cell(" ", ts)
+            pos += 1
+            _paint_title_run(top_row, title, ts, pos, block.width)
+        elif capacity >= title_width:
+            # The complete title fits, but there's no room for any chrome.
+            _paint_title_run(top_row, title, ts, 2, block.width)
+        else:
+            # The title itself must be cut — no chrome to spare either, so
+            # ellipsize into the full remaining capacity. The physical-space
+            # waiver applies when not even one title cell + the mark fits —
+            # but "one title cell" isn't always one column: a wide (2-col)
+            # leading character needs two, and truncate_ellipsis silently
+            # drops a glyph it can't fit half of, returning the bare marker
+            # with no title content behind it (evidence of nothing). A
+            # leading zero-width combiner defeats a plain string-inequality
+            # check the same way: truncate_ellipsis keeps the combiner (it
+            # occupies zero display columns, so it always "fits"), producing
+            # a result that differs from the marker as a string while still
+            # painting no visible title glyph. So measure the *display width*
+            # of the non-marker portion, not string equality.
+            marker = current_icons().ellipsis
+            marker_w = display_width(marker)
+            if capacity >= 1 + marker_w:
+                ellipsized = truncate_ellipsis(title, capacity, ellipsis=marker)
+                content = ellipsized[: -len(marker)] if marker else ellipsized
+                if display_width(content) > 0:
+                    _paint_title_run(top_row, ellipsized, ts, 2, block.width)
+                # else: the cut left no paintable title glyph — waive rather
+                # than paint a mark with nothing visible behind it.
+            # else: bare border — the physical-space waiver.
 
     if refs_rows is None and isinstance(top_row, list):
         top_row = tuple(top_row)

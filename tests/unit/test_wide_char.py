@@ -73,11 +73,34 @@ class TestBorderTitleWide:
         assert top[5] == "界"
 
     def test_title_guard_uses_display_width(self):
+        # One column short of the both-spaces full fit (title_width + 3 == 7):
+        # since 0.14 S5 (law 6), border() ellipsizes rather than omitting, and
+        # display_width correctly finds the title still fits without the
+        # trailing chrome space — no mark, since nothing was cut.
         b = Block.empty(6, 1)
         framed = border(b, title="世界")
         top = _row_chars(framed, 0)
-        assert "世" not in top
-        assert "界" not in top
+        assert top[3] == "世"
+        assert top[5] == "界"
+
+    def test_title_guard_fits_with_no_chrome_by_display_width(self):
+        # capacity (block.width - 1 == 4) == title_width (4): the complete
+        # title fits with no chrome space at all — still no mark, since
+        # nothing was cut. display_width (not code-point count) drives this.
+        b = Block.empty(5, 1)
+        framed = border(b, title="世界")
+        top = _row_chars(framed, 0)
+        assert top[2] == "世"
+        assert top[4] == "界"
+
+    def test_title_guard_ellipsizes_wide_chars_by_display_width(self):
+        # One column narrower still: capacity (3) < title_width (4) — the
+        # title itself must be cut. truncate_ellipsis must respect the
+        # 2-column char boundary rather than code-point counting.
+        b = Block.empty(4, 1)
+        framed = border(b, title="世界")
+        top = _row_chars(framed, 0)
+        assert "".join(top) == "╭─世 …╮"
 
 
 class TestTextInputWide:

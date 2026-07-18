@@ -213,6 +213,27 @@ def _fit(block: Block, width: int | None) -> Block:
     return block if width is None else fit_to_width(block, width)
 
 
+def _fit_indented_row(width: int, indent: int, render: Callable[[int], Block]) -> Block | None:
+    """Render an indented content row, degrading honestly when indent exhausts the budget.
+
+    ``render(content_width)`` builds the row's content at the width remaining
+    after ``indent``; the result is left-padded by ``indent``. At narrow
+    widths ``width - indent`` can be <= 0 — passing that straight through
+    silently collapses the row (RENDER_MODEL_AUDIT path 15). When indent alone
+    leaves no cell for content, the row degrades to a single ambient ellipsis
+    marker sized to ``width``; when not even one marker cell fits, returns
+    ``None`` (the physical-space waiver) and the caller drops the row rather
+    than emit a blank line stamped with false content.
+    """
+    content_width = width - indent
+    if content_width >= 1:
+        return pad(render(content_width), left=indent)
+    marker = current_icons().ellipsis
+    if width >= display_width(marker):
+        return Block.text(marker, current_palette().muted, width=width)
+    return None
+
+
 def record_line(
     ts: datetime,
     kind: str,
@@ -240,6 +261,11 @@ def record_line(
             # MINIMAL is a single-line text summary; if a lens returns a Block,
             # we intentionally drop it and fall back to the default summary.
             summary = result if isinstance(result, str) else summary
+        # Block.text's Wrap.NONE default clips silently; a cut summary is a
+        # knowing drop at this caller's seam, so mark it with the ambient
+        # ellipsis (byte-identical to the old clip when the summary fits).
+        if width is not None and display_width(summary) > width:
+            summary = truncate_ellipsis(summary, width)
         return Block.text(summary, Style(), width=width)
 
     # --- Build structured line ---
@@ -422,17 +448,30 @@ def record_timeline(
 
     all_blocks: list[Block] = []
     for date_key, group_records in groups.items():
-        # Date header
-        header = Block.text(f"{date_key}:", p.muted.merge(Style(bold=True)))
+        # Date header. Fit to width now, individually — every row composed
+        # below is already width-exact, so the trailing fit_to_width over the
+        # whole stack has nothing left to clip. Deferring this fit (as the
+        # natural-width header used to) meant the final call widened every
+        # already-exact row back out via join_vertical's padding, then
+        # re-marked it on the way back down: a second, spurious ellipsis
+        # stacked onto a row that had already marked its own cut honestly.
+        header = fit_to_width(Block.text(f"{date_key}:", p.muted.merge(Style(bold=True))), width)
         all_blocks.append(header)
 
         # Record lines, indented
         for ts, kind, payload in group_records:
-            line = record_line(ts, kind, payload, zoom, width - 2, payload_lens=payload_lens)
-            indented = pad(line, left=2)
-            all_blocks.append(indented)
+            row = _fit_indented_row(
+                width,
+                2,
+                lambda cw, ts=ts, kind=kind, payload=payload: record_line(
+                    ts, kind, payload, zoom, cw, payload_lens=payload_lens
+                ),
+            )
+            if row is not None:
+                all_blocks.append(row)
 
-    # Date headers are natural-width; fit the stack to the exact requested width.
+    # Every block above is already exactly `width` wide; this join (and the
+    # fit_to_width around it) is a defensive no-op, not a clipper.
     return fit_to_width(join_vertical(*all_blocks, gap=0), width)
 
 
@@ -655,12 +694,18 @@ def record_map(
         subtree = tree[top_key]
         total_count = sum(len(v) for v in subtree.values())
 
-        # Top-level group header
+        # Top-level group header. Fit to width now, individually — every row
+        # composed below is already width-exact, so the trailing fit_to_width
+        # over the whole stack has nothing left to clip. Deferring this fit
+        # (as the natural-width header used to) meant the final call widened
+        # every already-exact row back out via join_vertical's padding, then
+        # re-marked it on the way back down: a second, spurious ellipsis
+        # stacked onto a row that had already marked its own cut honestly.
         header_parts = [
             Block.text(f"  {top_key}", Style(bold=True)),
             Block.text(f" ({total_count})", p.muted),
         ]
-        all_blocks.append(join_horizontal(*header_parts))
+        all_blocks.append(fit_to_width(join_horizontal(*header_parts), width))
 
         for sub_key, sub_records in subtree.items():
             # Sort by timestamp within group
@@ -669,7 +714,7 @@ def record_map(
             if sub_key:
                 # Sub-group header
                 sub_header = Block.text(f"    {sub_key} ({len(sub_records)})", p.accent)
-                all_blocks.append(sub_header)
+                all_blocks.append(fit_to_width(sub_header, width))
                 indent = 6
             else:
                 indent = 4
@@ -677,38 +722,48 @@ def record_map(
             if zoom <= Zoom.SUMMARY:
                 # Show only the latest record per group
                 latest_ts, latest_kind, latest_payload = sub_records[-1]
-                line = record_line_composed(
-                    latest_ts,
-                    latest_kind,
-                    latest_payload,
-                    Zoom.SUMMARY,
-                    width - indent,
-                    payload_lens=payload_lens,
-                    gutter_fn=gutter_fn,
-                    attention_fn=attention_fn,
+                row = _fit_indented_row(
+                    width,
+                    indent,
+                    lambda cw: record_line_composed(
+                        latest_ts,
+                        latest_kind,
+                        latest_payload,
+                        Zoom.SUMMARY,
+                        cw,
+                        payload_lens=payload_lens,
+                        gutter_fn=gutter_fn,
+                        attention_fn=attention_fn,
+                    ),
                 )
-                all_blocks.append(pad(line, left=indent))
+                if row is not None:
+                    all_blocks.append(row)
             else:
                 # Show all records
                 record_zoom = Zoom.DETAILED if zoom <= Zoom.DETAILED else Zoom.FULL
                 for ts, kind, payload in sub_records:
-                    line = record_line_composed(
-                        ts,
-                        kind,
-                        payload,
-                        record_zoom,
-                        width - indent,
-                        payload_lens=payload_lens,
-                        gutter_fn=gutter_fn,
-                        attention_fn=attention_fn,
+                    row = _fit_indented_row(
+                        width,
+                        indent,
+                        lambda cw, ts=ts, kind=kind, payload=payload: record_line_composed(
+                            ts,
+                            kind,
+                            payload,
+                            record_zoom,
+                            cw,
+                            payload_lens=payload_lens,
+                            gutter_fn=gutter_fn,
+                            attention_fn=attention_fn,
+                        ),
                     )
-                    all_blocks.append(pad(line, left=indent))
+                    if row is not None:
+                        all_blocks.append(row)
 
         # Gap between top-level groups
-        all_blocks.append(Block.text("", Style()))
+        all_blocks.append(Block.text("", Style(), width=width))
 
-    # Group/sub-group headers are natural-width and composed lines carry modifier
-    # columns; fit the assembled map to the exact requested width.
+    # Every block above is already exactly `width` wide; this join (and the
+    # fit_to_width around it) is a defensive no-op, not a clipper.
     return fit_to_width(join_vertical(*all_blocks), width)
 
 

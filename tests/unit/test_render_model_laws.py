@@ -1250,3 +1250,259 @@ class TestLaw6EvidencePins:
             "remainder rendered as a reverse-video segment, not muted evidence"
         )
         assert "background-color" in html, "real segments lost their reverse-video fill"
+
+    # -- Caller-owned width fixes (0.14 S5) --------------------------------
+    #
+    # Three sites pass a semantic cut straight to Block.text's Wrap.NONE (or
+    # let indent-subtraction go negative) with no mark — RENDER_MODEL.md law
+    # 6's exemption never transfers to a caller that knowingly cuts content.
+
+    def test_record_minimal_marks_the_cut_and_is_clean_when_it_fits(self):
+        from datetime import datetime
+
+        from painted import ASCII_ICONS, Zoom, use_icons
+        from painted.core._text_width import display_width
+        from painted.views import record_line
+
+        ts = datetime(2026, 1, 1)
+        message = "a rather long summary that will not fit"  # 40 cols, all ASCII
+        payload = {"message": message}
+
+        fits = record_line(ts, "log", payload, Zoom.MINIMAL, width=60)
+        assert row_text(fits, 0).rstrip() == message
+        assert "…" not in row_text(fits, 0)
+
+        # Exact-fit boundary: width == content width stays unmarked.
+        exact = record_line(ts, "log", payload, Zoom.MINIMAL, width=len(message))
+        assert row_text(exact, 0) == message
+
+        # One column short: marked, exact width honored.
+        cut = record_line(ts, "log", payload, Zoom.MINIMAL, width=len(message) - 1)
+        text = row_text(cut, 0)
+        assert text.endswith("…")
+        assert display_width(text) == len(message) - 1
+
+        with use_icons(ASCII_ICONS):
+            ascii_cut = record_line(ts, "log", payload, Zoom.MINIMAL, width=10)
+        assert row_text(ascii_cut, 0).rstrip().endswith("...")
+
+        # Degenerate width: not even the mark fits alongside content —
+        # truncate_ellipsis's own physical-space waiver, no mark.
+        waived = record_line(ts, "log", payload, Zoom.MINIMAL, width=1)
+        assert row_text(waived, 0) == message[0]
+
+    def test_record_timeline_narrow_indent_degrades_honestly(self):
+        from datetime import datetime
+
+        from painted import ASCII_ICONS, Zoom, use_icons
+        from painted.views import record_timeline
+
+        records = [(datetime(2026, 1, 1, 12, 0), "log", {"message": "hello world"})]
+
+        # Boundary: content width 1 (width - indent(2) == 1) still takes the
+        # normal indent+render path (a 2-col pad prefix), not the fallback's
+        # bare full-width marker — only content width <= 0 degrades.
+        normal = record_timeline(records, Zoom.SUMMARY, width=3)
+        assert normal.height == 2
+        assert row_text(normal, 1).startswith("  "), "content width 1 should still indent"
+
+        # content width 0 (width == indent(2)): the Unicode marker (1 col)
+        # fits, and it's exactly one mark, not two — headers are now fit to
+        # width individually before composition, so the trailing fit_to_width
+        # over the whole stack has nothing left to clip (the double-mark bug:
+        # a natural-width header forced every already-exact row to be widened
+        # back out by join_vertical's padding, then re-marked by the outer
+        # fit on the way back down).
+        marked = record_timeline(records, Zoom.SUMMARY, width=2)
+        assert marked.height == 2
+        assert row_text(marked, 1) == "… "
+
+        # width 1: the Unicode marker still fits exactly, one mark.
+        tight = record_timeline(records, Zoom.SUMMARY, width=1)
+        assert tight.height == 2
+        assert row_text(tight, 1) == "…"
+
+        # width 0: not even the marker fits — physical-space waiver drops the
+        # record row entirely (only the date header remains) rather than the
+        # old behavior of an unmarked, fabricated blank row (both rows empty
+        # strings pre-fix: width-2 went negative, fit_to_width clamped it to
+        # 0, and pad(left=2) turned that into pure blank filler).
+        waived = record_timeline(records, Zoom.SUMMARY, width=0)
+        assert waived.height == 1, "only the date header remains, no fabricated blank row"
+
+        with use_icons(ASCII_ICONS):
+            # ASCII's marker is 3 cols wide; timeline's indent is only 2, so
+            # content width is already <= 0 by the time width reaches the
+            # marker branch at all (width <= 2) — "..." can never fit at
+            # widths 1-2, and the physical-space waiver holds at both.
+            ascii_w2 = record_timeline(records, Zoom.SUMMARY, width=2)
+            assert ascii_w2.height == 1
+            ascii_w1 = record_timeline(records, Zoom.SUMMARY, width=1)
+            assert ascii_w1.height == 1
+            ascii_w0 = record_timeline(records, Zoom.SUMMARY, width=0)
+            assert ascii_w0.height == 1
+
+    def test_record_map_narrow_indent_degrades_honestly(self):
+        from datetime import datetime
+
+        from painted import ASCII_ICONS, Zoom, use_icons
+        from painted.views import record_map
+
+        records = [(datetime(2026, 1, 1, 12, 0), "log", {"message": "hello world"})]
+
+        # Boundary: content width 1 (width - indent(4) == 1) still indents
+        # normally rather than falling back to the bare marker.
+        normal = record_map(records, Zoom.SUMMARY, width=5)
+        assert row_text(normal, 1).startswith("    "), "content width 1 should still indent"
+
+        # content width 0 (width == indent(4)): the Unicode marker fires —
+        # exactly one mark, not two (same double-mark fix as timeline) — and
+        # the SUMMARY (latest-only) and DETAILED (all-records) branches share
+        # the same indent shape, so both degrade identically.
+        marked_summary = record_map(records, Zoom.SUMMARY, width=4)
+        assert row_text(marked_summary, 1) == "…   "
+        marked_detailed = record_map(records, Zoom.DETAILED, width=4)
+        assert row_text(marked_detailed, 1) == "…   "
+
+        with use_icons(ASCII_ICONS):
+            # map's indent (4) is wide enough for the ASCII marker (3 cols)
+            # at widths 3-4 — unlike timeline's narrower indent (2), which
+            # can never show it. Width 4 pads after the marker; width 3 is
+            # the exact-fit boundary (no pad); width 2 waives.
+            ascii_w4 = record_map(records, Zoom.SUMMARY, width=4)
+            assert row_text(ascii_w4, 1) == "... "
+            ascii_w3 = record_map(records, Zoom.SUMMARY, width=3)
+            assert row_text(ascii_w3, 1) == "..."
+            ascii_w2 = record_map(records, Zoom.SUMMARY, width=2)
+            assert ascii_w2.height == 2, "the record row waives; only header + gap remain"
+
+        # width 2: the Unicode marker (1 col) still fits under an indent of
+        # 4 (unlike the ASCII case above), and it's exactly one mark, not two.
+        unicode_narrow = record_map(records, Zoom.SUMMARY, width=2)
+        assert row_text(unicode_narrow, 1) == "… "
+
+    def test_border_title_ellipsizes_and_waives(self):
+        from painted import Block, border
+        from painted.core.compose import border as compose_border
+
+        assert compose_border is border
+
+        # "report" is 6 display cols; full fit needs block.width >= 9.
+
+        # Full fit: byte-identical to the existing full-fit path (both chrome
+        # spaces present, one horizontal cell of padding before the space).
+        full = border(Block.empty(9, 1), title="report")
+        assert row_text(full, 0) == "╭─ report ╮"
+
+        # One column short of the full-fit threshold: the title still fits
+        # with a leading chrome space but no trailing one — no mark, nothing
+        # was cut.
+        squeezed = border(Block.empty(8, 1), title="report")
+        assert row_text(squeezed, 0) == "╭─ report╮"
+
+        # One column narrower still: the complete title fits with NO chrome
+        # space at all. Degradation order matters here — deciding chrome
+        # retention from marker capacity alone (the bug Sol flagged) would
+        # have sacrificed a real title cell to an unneeded leading space and
+        # ellipsized "report" down to "repo…"; title_width-driven tiering
+        # shows the whole word instead.
+        no_chrome = border(Block.empty(7, 1), title="report")
+        assert row_text(no_chrome, 0) == "╭─report╮"
+
+        # Narrow enough that the title itself must be cut: ellipsized, marked.
+        cut = border(Block.empty(4, 1), title="report")
+        row = row_text(cut, 0)
+        assert row.endswith("…╮")
+        assert "…" in row
+
+        # Degenerate width: not even one title cell + the mark fits — the
+        # physical-space waiver, bare border, title silently absent by design
+        # (there is nothing honest left to show).
+        waived = border(Block.empty(1, 1), title="report")
+        assert "…" not in row_text(waived, 0)
+        assert "r" not in row_text(waived, 0)
+
+        from painted import ASCII_ICONS, use_icons
+
+        with use_icons(ASCII_ICONS):
+            # ASCII ellipsis is 3 cols wide — needs more room than the
+            # Unicode marker to show even one title cell + the mark.
+            ascii_cut = border(Block.empty(6, 1), title="report")
+            assert row_text(ascii_cut, 0).rstrip("╮").rstrip().endswith("...")
+            ascii_waived = border(Block.empty(4, 1), title="report")
+            assert "." not in row_text(ascii_waived, 0)
+
+    def test_border_title_wide_leading_char_waives_rather_than_bare_mark(self):
+        # Sol's re-review: the waiver guard assumed one title CELL always
+        # means one COLUMN, but a wide (2-col) leading character needs two.
+        # capacity 2 (block.width 3) satisfies the old "capacity >= 1 +
+        # marker_w" check (2 >= 1 + 1) yet truncate_ellipsis can't fit half
+        # of "世" in a 1-col content budget — it silently drops the glyph and
+        # returns the bare marker, evidence of nothing. Must waive instead.
+        from painted import Block, border
+
+        waived = border(Block.empty(3, 1), title="世界")
+        row = row_text(waived, 0)
+        assert "…" not in row
+        assert row == "╭───╮", "no title content survives the cut, so waive to a bare border"
+
+        # One column of slack resolves it: capacity 3 can hold the wide
+        # glyph's 2 columns plus the 1-column mark.
+        fits = border(Block.empty(4, 1), title="世界")
+        assert "世" in row_text(fits, 0)
+        assert "…" in row_text(fits, 0)
+
+        from painted import ASCII_ICONS, use_icons
+
+        with use_icons(ASCII_ICONS):
+            # Same shape under the wider (3-col) ASCII marker: a 3-wide-char
+            # title where capacity (4) satisfies the old "1 + marker_w == 4"
+            # check but can't actually fit the leading wide glyph (needs 2
+            # cols) alongside the mark — waive.
+            ascii_waived = border(Block.empty(5, 1), title="世界人")
+            row = row_text(ascii_waived, 0)
+            assert "." not in row
+            assert row == "╭─────╮"
+
+            # One more column of slack fits the wide glyph + the mark.
+            ascii_fits = border(Block.empty(6, 1), title="世界人")
+            row = row_text(ascii_fits, 0)
+            assert "世" in row
+            assert "..." in row
+
+    def test_border_title_leading_combiner_waives_not_string_inequality(self):
+        # Sol's round-3: a leading zero-width combining mark defeats a plain
+        # "ellipsized != marker" check — the combiner occupies zero display
+        # columns, so truncate_ellipsis keeps it and produces a string that
+        # differs from the bare marker while still painting no *visible*
+        # title glyph ("╭─…─╮", the same evidence-of-nothing). The waiver
+        # must measure the non-marker portion's display width, not compare
+        # strings.
+        from painted import Block, border
+
+        combining_title = "́世界"  # combining acute accent + 2 wide chars
+        waived = border(Block.empty(3, 1), title=combining_title)
+        row = row_text(waived, 0)
+        assert "…" not in row
+        assert row == "╭───╮", "the combiner alone is not paintable content"
+
+        # One column of slack: the combiner rides along with 世 (both at
+        # cell 0 in the grid), and the mark follows.
+        fits = border(Block.empty(4, 1), title=combining_title)
+        row = row_text(fits, 0)
+        assert "世" in row
+        assert "…" in row
+
+        from painted import ASCII_ICONS, use_icons
+
+        with use_icons(ASCII_ICONS):
+            ascii_combining_title = "́世界人"
+            ascii_waived = border(Block.empty(5, 1), title=ascii_combining_title)
+            row = row_text(ascii_waived, 0)
+            assert "." not in row
+            assert row == "╭─────╮"
+
+            ascii_fits = border(Block.empty(6, 1), title=ascii_combining_title)
+            row = row_text(ascii_fits, 0)
+            assert "世" in row
+            assert "..." in row
