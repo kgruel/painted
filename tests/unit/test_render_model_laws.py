@@ -23,6 +23,7 @@ gate. Law 5's height arm and law 7's signature wait on their milestones.
 from __future__ import annotations
 
 import ast
+import re
 
 import pytest
 
@@ -1028,3 +1029,224 @@ class TestLaw6EvidencePins:
             # ASCII ellipsis is 3 cols wide: the waiver holds until content + "..."
             # both fit — a plain cut (no mark) below that width.
             assert "..." not in row_text(tree_lens(label, zoom=1, width=3), 0)
+
+    # -- Flame: merged-remainder evidence + label ellipsis (0.14 S4) ------------
+    #
+    # A positive-valued segment allocated zero cells vanishes — the viewer cannot
+    # tell zero from below-raster, and the label sort silently decides which tail
+    # segment disappears. Ruled: dropped positives merge into a muted REMAINDER
+    # segment at the row's tail (the aggregate IS the evidence, chart-shaped);
+    # zeros owe nothing; labels wider than their segment ellipsize. Same rule at
+    # every orientation and recursion depth.
+
+    @staticmethod
+    def _flame_equal(n: int) -> dict[str, int]:
+        # ``a``..: n equal unit segments, in the label-sorted order the lens uses.
+        return {chr(ord("a") + i): 1 for i in range(n)}
+
+    def test_flame_remainder_marks_exact_merged_count(self):
+        from painted.views import flame_lens
+
+        # 20 unit segments into width 12: ``a``/``b`` seat, the other 18 merge.
+        # The remainder's footprint is its combined share (int(12*18/20)=10 cells),
+        # wide enough to spell the exact ``+18`` count.
+        blk = flame_lens(self._flame_equal(20), zoom=1, width=12)
+        assert blk.width == 12 and blk.height == 1
+        assert row_text(blk, 0) == "ab+18       ", row_text(blk, 0)
+
+    def test_flame_no_remainder_is_byte_identical_when_all_render(self):
+        from painted.views import flame_lens
+        from painted.views.lens.flame import _flame_allocate_widths, _flame_row_layout
+
+        # Every positive segment seats with a fitting label: no remainder, no mark,
+        # and the survivor widths equal the pre-0.14 allocate+clamp exactly (a
+        # remainder never appears without loss, and never shifts a rendered width).
+        data = {"render": 45, "diff": 30, "flush": 25}
+        segments = sorted((str(k), v) for k, v in data.items())
+        total = float(sum(data.values()))
+        for w in (20, 30, 60):
+            widths, remainder = _flame_row_layout(segments, total, w)
+            assert remainder is None, f"false remainder at width {w}"
+            raw, ref, used = _flame_allocate_widths(segments, total, w), [], 0
+            for x in raw:
+                c = max(0, min(x, w - used))
+                ref.append(c)
+                used += c
+            assert widths == ref, f"survivor widths shifted at width {w}"
+        blk = flame_lens(data, zoom=1, width=20)
+        blob = row_text(blk, 0)
+        assert "…" not in blob and "+" not in blob, "a mark without loss is false evidence"
+        for label in data:
+            assert label in blob
+
+    def test_flame_zero_segments_never_produce_a_remainder(self):
+        from painted.views import flame_lens
+
+        # The false-evidence arm: a zero-valued segment that drops owes nothing —
+        # zero cells for zero value is the proportional truth, not an omission.
+        blk = flame_lens({"a": 10, "b": 10, "z": 0}, zoom=1, width=2)
+        assert row_text(blk, 0) == "ab", row_text(blk, 0)
+
+    def test_flame_remainder_membership_is_order_independent(self):
+        from painted.views import flame_lens
+        from tests.helpers import assert_blocks_equal
+
+        # Membership is taken over the label-sorted order, so dict/iteration order
+        # cannot decide which tail segment merges.
+        forward = {chr(ord("a") + i): 1 for i in range(20)}
+        reverse = {chr(ord("a") + i): 1 for i in reversed(range(20))}
+        assert_blocks_equal(
+            flame_lens(forward, zoom=1, width=12), flame_lens(reverse, zoom=1, width=12)
+        )
+
+    def test_flame_remainder_and_label_degrade_with_ascii_icons(self):
+        from painted import ASCII_ICONS, use_icons
+        from painted.views import flame_lens
+
+        with use_icons(ASCII_ICONS):
+            # A spellable count is glyph-free — degradation only touches the marks.
+            assert row_text(flame_lens(self._flame_equal(20), 1, 12), 0) == "ab+18       "
+            # Too narrow to spell ``+N``: the ellipsis is the minimal mark, and it
+            # degrades to ASCII. At width 3 (rem cell = 1) the 3-col "..." cannot
+            # fit either, so the physical-space waiver clips it to a single ".".
+            assert "…" not in row_text(flame_lens(self._flame_equal(5), 1, 3), 0)
+            assert row_text(flame_lens(self._flame_equal(5), 1, 3), 0) == "ab."
+            # A label that overflows its segment degrades its ellipsis too.
+            assert row_text(flame_lens({"alpha": 50, "beta": 50}, 1, 10), 0).startswith("alph")
+
+    def test_flame_remainder_ellipsis_fallback_unicode(self):
+        from painted.views import flame_lens
+
+        # Unicode: a one-cell remainder cannot spell ``+3`` (2 cols) so it carries
+        # the ambient ellipsis — the below-raster loss is still marked.
+        assert row_text(flame_lens(self._flame_equal(5), 1, 3), 0) == "ab…"
+
+    def test_flame_label_ellipsis_both_orientations_and_waiver(self):
+        from painted.views import flame_lens
+
+        # Horizontal: a label wider than its segment ellipsizes; at one cell the
+        # physical-space waiver leaves a bare cut.
+        assert row_text(flame_lens({"alpha": 50, "beta": 50}, 1, 8), 0) == "alp…beta"
+        assert row_text(flame_lens({"alpha": 1}, 1, 2), 0) == "a…"  # boundary: marks
+        assert row_text(flame_lens({"alpha": 1}, 1, 1), 0) == "a"  # waiver: no mark
+        # Vertical: the label row (bottom) ellipsizes the same way, with the same
+        # one-cell waiver.
+        v = flame_lens({"alpha": 1}, 1, 4, height=3)
+        assert row_text(v, v.height - 1) == "alp…"
+        v1 = flame_lens({"alpha": 1}, 1, 1, height=3)
+        assert row_text(v1, v1.height - 1) == "a"
+
+    def test_flame_vertical_remainder_seats_dropped_positives(self):
+        from painted.views import flame_lens
+
+        # Vertical columns are equal-width, so vanishing is a seating loss: with
+        # more segments than the width can seat, the dropped positives merge into a
+        # muted tail column (here a one-cell ellipsis), never a silent drop.
+        blk = flame_lens(self._flame_equal(5), zoom=1, width=3, height=4)
+        assert blk.width == 3
+        assert row_text(blk, blk.height - 1) == "ab…", row_text(blk, blk.height - 1)
+
+    def test_flame_remainder_recurses_at_every_depth(self):
+        from painted.views import flame_lens
+
+        # The ruling applies at every depth: each parent's vanished children merge
+        # into that parent's own remainder, same rule and same style. Two parents
+        # (each with 20 children) at width 24 → each child row carries its own
+        # ``+18`` remainder, independently.
+        data = {"P": self._flame_equal(20), "Q": self._flame_equal(20)}
+        blk = flame_lens(data, zoom=3, width=24)
+        child = row_text(blk, 1)
+        assert child == "ab+18       ab+18       ", child
+
+    def test_flame_remainder_renders_at_the_fourth_depth(self):
+        from painted.views import flame_lens
+
+        # A deep chain P->C->G->{20 unit children}: the fourth-depth children and
+        # their remainder must render, not be silently discarded after three
+        # levels (a pre-existing rendering drop the milestone's flame audit brings
+        # into scope — a rendering fix, not only evidence). At width 12 the G
+        # footprint seats a/b and merges the other 18 into a ``+18`` remainder, so
+        # the deepest row carries evidence at depth 4.
+        data = {"P": {"C": {"G": self._flame_equal(20)}}}
+        blk = flame_lens(data, zoom=5, width=12)
+        assert blk.height == 4, blk.height
+        assert row_text(blk, 3) == "ab+18       ", row_text(blk, 3)
+        # zoom 4 reaches the same fourth depth; zoom 3 stops one level short of it,
+        # so the fix adds depth only where the zoom budget already reached.
+        assert flame_lens(data, zoom=4, width=12).height == 4
+        assert flame_lens(data, zoom=3, width=12).height == 3
+
+    def test_flame_deep_expansion_pads_absent_branches(self):
+        from painted.views import flame_lens
+
+        # When sibling branches bottom out at different depths, the deeper branch's
+        # rows compose under its own footprint while the shallower sibling is
+        # padded with blanks — no column bleeds across footprints. ``P`` descends
+        # to a 20-child level; ``Q`` ends at a leaf, so ``Q``'s columns are blank
+        # at that depth.
+        data = {"P": {"x": self._flame_equal(20)}, "Q": {"y": 5}}
+        blk = flame_lens(data, zoom=5, width=24)
+        # Deepest row: P's 20 children fill P's 19-col footprint (a..r + ellipsis
+        # remainder); Q's 5-col footprint is blank. Exact bytes, so a bleed or a
+        # missing pad is a diff — not a tautology.
+        assert row_text(blk, blk.height - 1) == "abcdefghijklmnopqr…     "
+        # The P|Q boundary is column 19 at every depth: Q's header and its blank
+        # deep footprint start at the same column.
+        assert row_text(blk, 0).index("Q") == 19
+        assert row_text(blk, blk.height - 1)[19:] == "     "
+
+    def test_flame_underfilling_recursive_band_holds_its_boundary(self):
+        from painted.views import flame_lens
+
+        # An earlier parent whose recursive row floors NARROWER than its footprint
+        # must still occupy exactly that footprint, or every later parent's columns
+        # shift left. ``A``'s children are eight units plus a trailing zero: at a
+        # 10-col footprint the band renders 9 columns of content and owes one pad
+        # column. The next parent ``B`` must start at its own boundary, not one
+        # early. (The pre-fix ``…pads_absent_branches`` case cannot catch this: its
+        # shallow branch is an exact-width blank, never an underfilling render.)
+        #
+        # Child-row site (zoom 2): A's footprint is int(12*8/9)=10, B's is 2.
+        child = flame_lens({"A": self._flame_equal(8) | {"z": 0}, "B": {"R": 1}}, zoom=2, width=12)
+        assert row_text(child, 0).index("B") == 10
+        assert row_text(child, 1) == "abcdefghz R ", row_text(child, 1)
+        assert row_text(child, 1)[10] == "R", "B's band bled one column left"
+
+        # Deeper-row site (zoom 3): the underfill sits at the grandchild depth, so
+        # this pins the fit on the deeper composition, not just the child row.
+        # A's footprint is int(14*8/9)=12, B's is 2.
+        deep = flame_lens(
+            {"A": {"k": self._flame_equal(8) | {"z": 0}}, "B": {"m": {"R": 1}}},
+            zoom=3,
+            width=14,
+        )
+        assert row_text(deep, 0).index("B") == 12
+        assert row_text(deep, 2) == "abcdefghz   R ", row_text(deep, 2)
+        assert row_text(deep, 2)[12] == "R", "B's deep band bled left"
+
+    def test_flame_remainder_muted_role_survives_ansi_and_html(self):
+        import io
+
+        from painted.core.html import render_html
+        from painted.core.writer import print_block
+        from painted.views import flame_lens
+
+        # The remainder is styled by the ambient ``muted`` role (dim), not a
+        # reverse-video series color — and that distinction must survive both
+        # writers, so the evidence reads as evidence in ANSI and HTML alike.
+        blk = flame_lens(self._flame_equal(20), zoom=1, width=12)  # "ab+18       "
+
+        buf = io.StringIO()
+        print_block(blk, buf, use_ansi=True, no_color=False)
+        ansi = buf.getvalue()
+        assert "\x1b[7m" in ansi, "real segments lost their reverse-video styling"
+        assert "\x1b[2m+18" in ansi, "the +18 remainder did not carry the dim muted role"
+
+        html = render_html(blk)
+        marker = re.search(r'<span style="([^"]*)">\+18', html)
+        assert marker is not None, "no styled span wraps the +18 remainder"
+        assert "opacity" in marker.group(1), "remainder lost the dim muted role in HTML"
+        assert "background-color" not in marker.group(1), (
+            "remainder rendered as a reverse-video segment, not muted evidence"
+        )
+        assert "background-color" in html, "real segments lost their reverse-video fill"

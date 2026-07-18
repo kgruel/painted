@@ -180,3 +180,86 @@ class TestFlameEmptySeriesRamp:
     def test_empty_colors_argument_renders(self):
         block = flame_lens({"a": 1}, 1, 20, colors=[])
         assert "a" in block_to_text(block)
+
+
+class TestFlameMergedRemainder:
+    """Lens-local coverage of the S4 merged-remainder layout (RENDER_MODEL law 6).
+
+    The render-model law gate (``test_render_model_laws.py``) pins the black-box
+    evidence contract; these exercise the ``_flame_row_layout`` partition and the
+    muted styling directly."""
+
+    @staticmethod
+    def _clamp_reference(alloc, width):
+        ref, used = [], 0
+        for x in alloc:
+            c = max(0, min(x, width - used))
+            ref.append(c)
+            used += c
+        return ref
+
+    def test_layout_is_reference_clamp_when_all_render(self):
+        """No positive segment vanishes → the partition is the pre-0.14
+        allocate+clamp, with no remainder (byte-identical guarantee at the seam)."""
+        from painted.views.lens.flame import _flame_allocate_widths, _flame_row_layout
+
+        segments = [("a", 30), ("b", 50), ("c", 20)]
+        total = 100.0
+        for w in (10, 25, 40):
+            widths, remainder = _flame_row_layout(segments, total, w)
+            assert remainder is None
+            assert widths == self._clamp_reference(_flame_allocate_widths(segments, total, w), w)
+
+    def test_layout_footprint_is_the_merged_share(self):
+        """The remainder occupies its merged members' combined proportional share
+        (existing arithmetic), not more — survivors keep the rest."""
+        from painted.views.lens.flame import _flame_row_layout
+
+        segments = [(chr(ord("a") + i), 1) for i in range(20)]
+        widths, remainder = _flame_row_layout(segments, 20.0, 12)
+        assert remainder is not None
+        rem_w, count = remainder
+        # 18 of 20 merged; combined share int(12*18/20) == 10 cells.
+        assert count == 18
+        assert rem_w == 10
+        # Survivors + remainder never exceed the contract width.
+        assert sum(widths) + rem_w <= 12
+
+    def test_layout_zero_segments_owe_no_remainder(self):
+        """A dropped zero-valued segment produces no remainder (false-evidence)."""
+        from painted.views.lens.flame import _flame_row_layout
+
+        widths, remainder = _flame_row_layout([("a", 10), ("b", 10), ("z", 0)], 20.0, 2)
+        assert remainder is None
+        assert widths == [1, 1, 0]
+
+    def test_remainder_cells_are_muted_not_reversed(self):
+        """The remainder is evidence, not data: its cells carry the ambient
+        ``muted`` role (dim), never a reverse-video series color."""
+        from painted.views import flame_lens
+
+        block = flame_lens({chr(ord("a") + i): 1 for i in range(20)}, 1, 12)
+        row = block.row(0)
+        # The "+18" marker cells sit past the two seated segments.
+        marker_cells = [c for c in row if c.char in "+18"]
+        assert marker_cells, "remainder marker not found"
+        assert all(not c.style.reverse for c in marker_cells)
+        assert all(c.style.dim for c in marker_cells)
+
+    def test_remainder_does_not_shift_survivor_series_colors(self):
+        """A survivor's series color is label-derived and unchanged by the
+        remainder's appearance (the remainder takes no series index)."""
+        from painted.views import flame_lens
+
+        no_loss = flame_lens({"a": 1, "b": 1}, 1, 40)
+        with_loss = flame_lens({chr(ord("a") + i): 1 for i in range(20)}, 1, 12)
+
+        def first_fg(block, ch):
+            for c in block.row(0):
+                if c.char == ch:
+                    return c.style.fg
+            return None
+
+        # ``a`` and ``b`` seat in both renders and keep their label-derived hue.
+        assert first_fg(no_loss, "a") == first_fg(with_loss, "a")
+        assert first_fg(no_loss, "b") == first_fg(with_loss, "b")

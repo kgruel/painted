@@ -187,38 +187,159 @@ def _flame_allocate_widths(
     return seg_widths
 
 
+def _flame_row_layout(
+    segments: list[tuple[str, Any]],
+    total: float,
+    width: int,
+) -> tuple[list[int], tuple[int, int] | None]:
+    """Partition a row into rendered segment widths + an optional tail remainder.
+
+    RENDER_MODEL law 6: a positive-valued segment allocated zero cells vanishes,
+    and the viewer cannot tell a zero from a below-raster value — worse, the
+    label sort silently decides *which* tail segment disappears. Such dropped
+    positives merge into a single REMAINDER segment at the tail of the row; the
+    aggregate IS the evidence, preserving the chart's proportional shape rather
+    than an added row.
+
+    Returns ``(widths, remainder)``:
+
+    - ``widths`` — cell width per segment, parallel to ``segments`` (0 for a
+      segment merged into the remainder, or an honestly-absent zero/negative).
+    - ``remainder`` — ``(width, count)`` for the tail aggregate: its reserved
+      cells and the number of positive segments folded in. ``None`` when every
+      positive segment renders — then the layout is byte-identical to pre-0.14
+      (no remainder without loss).
+
+    Allocation reasoning: the remainder's footprint is the proportional share its
+    merged members' combined value earns under the lens's existing arithmetic
+    (``int(width * merged_value / total)``, floored to >= 1 as the minimal
+    evidence cell). It is reserved off the top, so survivors allocate into the
+    rest and surrender no more than that combined share. Determination is a fixed
+    point: reserve the current remainder, allocate survivors, and fold any
+    positive survivor still starved of a cell into the remainder — repeating
+    until the partition is stable (each round folds >= 1 segment, so it
+    terminates). Membership is taken over the label-sorted segment order
+    (``_flame_extract``), so it never depends on dict/iteration order.
+    Zero/negative segments owe nothing — their absence is the proportional truth.
+    """
+    n = len(segments)
+    values = [_seg_value(v) for _, v in segments]
+    merged: list[int] = []
+    merged_set: set[int] = set()
+
+    while True:
+        keep = [i for i in range(n) if i not in merged_set]
+        if merged:
+            rem_value = sum(values[i] for i in merged)
+            rem_w = max(1, int(width * rem_value / total)) if total > 0 else 1
+            rem_w = min(rem_w, width)
+        else:
+            rem_w = 0
+        avail = width - rem_w
+
+        if keep and avail > 0:
+            alloc = _flame_allocate_widths([segments[i] for i in keep], total, avail)
+        else:
+            alloc = [0] * len(keep)
+
+        # Mirror the render clamp: earlier segments consume the available width.
+        cells = [0] * len(keep)
+        used = 0
+        for j, w in enumerate(alloc):
+            c = max(0, min(w, avail - used))
+            cells[j] = c
+            used += c
+
+        newly = [keep[j] for j in range(len(keep)) if cells[j] <= 0 and values[keep[j]] > 0]
+        if newly:
+            merged.extend(newly)
+            merged_set.update(newly)
+            continue
+
+        widths = [0] * n
+        for j, i in enumerate(keep):
+            widths[i] = cells[j]
+        remainder = (rem_w, len(merged)) if merged else None
+        return widths, remainder
+
+
+def _flame_fit_label(label: str, width: int) -> str:
+    """Fit a segment label to ``width`` cells, marking the cut with the ambient
+    ellipsis where the segment is wider than one cell (RENDER_MODEL law 6); at
+    one cell the physical-space waiver stands (no room for content + mark)."""
+    if display_width(label) <= width:
+        return label
+    return truncate_ellipsis(label, width) if width > 1 else truncate(label, width)
+
+
+def _flame_remainder_text(count: int, width: int) -> str:
+    """The remainder marker: ``+N`` where the cells can spell it, else the ambient
+    ellipsis as the minimal resolution-loss mark (physical-space waiver)."""
+    from ...icon_set import current_icons
+
+    label = f"+{count}"
+    if display_width(label) <= width:
+        return label
+    ellipsis = current_icons().ellipsis
+    if display_width(ellipsis) <= width:
+        return ellipsis
+    return truncate(ellipsis, width)
+
+
+def _flame_remainder_block(count: int, width: int) -> Block:
+    """A muted tail segment marking the merged positives — evidence, not data
+    (its own ``muted`` role, never a series color)."""
+    from ...palette import current_palette
+
+    text = _flame_remainder_text(count, width)
+    text = text + " " * max(0, width - display_width(text))
+    return Block.text(text, current_palette().muted)
+
+
+def _flame_build_row(
+    segments: list[tuple[str, Any]],
+    widths: list[int],
+    remainder: tuple[int, int] | None,
+    width: int,
+    palette: tuple[Style, ...],
+) -> Block:
+    """Assemble one flame row from a computed layout (segments + optional remainder)."""
+    blocks: list[Block] = []
+    prev_color_idx = -1
+    for (label, _v), seg_w in zip(segments, widths):
+        if seg_w <= 0:
+            continue
+        color_idx = _flame_color_for_label(label, prev_color_idx, palette)
+        prev_color_idx = color_idx
+        style = palette[color_idx].merge(Style(reverse=True))
+        text = _flame_fit_label(label, seg_w)
+        text = text + " " * max(0, seg_w - display_width(text))
+        blocks.append(Block.text(text, style))
+
+    if remainder is not None:
+        blocks.append(_flame_remainder_block(remainder[1], remainder[0]))
+
+    if not blocks:
+        return Block.empty(width, 1)
+    return join_horizontal(*blocks)
+
+
 def _flame_render_row(
     segments: list[tuple[str, Any]],
     total: float,
     width: int,
     palette: tuple[Style, ...],
 ) -> Block:
-    """Build one row of proportional segments with per-label coloring."""
+    """Build one row of proportional segments with per-label coloring.
+
+    Positive segments starved of a cell merge into a muted tail remainder
+    (``_flame_row_layout``); labels wider than their segment ellipsize.
+    """
     if width <= 0:
         return Block.empty(0, 1)
 
-    seg_widths = _flame_allocate_widths(segments, total, width)
-
-    # Build segment blocks with per-label color
-    blocks: list[Block] = []
-    prev_color_idx = -1
-    used_width = 0
-    for (label, _v), seg_w in zip(segments, seg_widths):
-        seg_w = max(0, min(seg_w, width - used_width))
-        used_width += seg_w
-        if seg_w <= 0:
-            continue
-        color_idx = _flame_color_for_label(label, prev_color_idx, palette)
-        prev_color_idx = color_idx
-        style = palette[color_idx].merge(Style(reverse=True))
-        text = truncate(label, seg_w) if display_width(label) > seg_w else label
-        pad_needed = seg_w - display_width(text)
-        text = text + " " * max(0, pad_needed)
-        blocks.append(Block.text(text, style))
-
-    if not blocks:
-        return Block.empty(width, 1)
-    return join_horizontal(*blocks)
+    widths, remainder = _flame_row_layout(segments, total, width)
+    return _flame_build_row(segments, widths, remainder, width, palette)
 
 
 def _flame_render_levels(
@@ -233,40 +354,45 @@ def _flame_render_levels(
     if not segments or width <= 0:
         return
 
-    # Render this level
-    rows.append(_flame_render_row(segments, total, width, palette=palette))
+    # Render this level. The same layout drives the child expansion below, so a
+    # parent folded into the remainder is skipped consistently in both rows.
+    widths, remainder = _flame_row_layout(segments, total, width)
+    rows.append(_flame_build_row(segments, widths, remainder, width, palette))
 
     if remaining_zoom <= 1:
         return
 
-    # Expand children: each parent's children occupy that parent's proportional width
-    seg_widths = _flame_allocate_widths(segments, total, width)
+    # Expand children: each rendered parent's children occupy that parent's width.
     child_blocks: list[Block] = []
-    used_width = 0
     prev_color_idx = -1
 
-    for (label, v), seg_w in zip(segments, seg_widths):
-        seg_w = max(0, min(seg_w, width - used_width))
-        used_width += seg_w
-
+    for (label, v), seg_w in zip(segments, widths):
         if seg_w <= 0:
             continue
 
         if isinstance(v, dict) and v:
             child_segments = sorted([(str(ck), cv) for ck, cv in v.items()], key=lambda x: x[0])
             child_total = _flame_total(child_segments)
+            # Fit to the parent's exact footprint: a child row can floor narrower
+            # than seg_w (e.g. a trailing zero-valued child), and an unfitted band
+            # would shift every later parent's columns left.
             child_blocks.append(
-                _flame_render_row(child_segments, child_total, seg_w, palette=palette)
+                fit_to_width(
+                    _flame_render_row(child_segments, child_total, seg_w, palette=palette), seg_w
+                )
             )
         else:
             # Leaf at this level — per-label color
             color_idx = _flame_color_for_label(label, prev_color_idx, palette)
             prev_color_idx = color_idx
             child_style = palette[color_idx].merge(Style(reverse=True))
-            text = truncate(label, seg_w) if display_width(label) > seg_w else label
-            pad_needed = seg_w - display_width(text)
-            text = text + " " * max(0, pad_needed)
+            text = _flame_fit_label(label, seg_w)
+            text = text + " " * max(0, seg_w - display_width(text))
             child_blocks.append(Block.text(text, child_style))
+
+    # The remainder holds no children — reserve its tail columns to stay aligned.
+    if remainder is not None:
+        child_blocks.append(Block.empty(remainder[0], 1))
 
     if child_blocks:
         rows.append(join_horizontal(*child_blocks))
@@ -284,19 +410,28 @@ def _flame_expand_deeper(
     rows: list[Block],
     palette: tuple[Style, ...],
 ) -> None:
-    """Expand deeper levels for segments with grandchildren."""
-    seg_widths = _flame_allocate_widths(segments, total, width)
-    child_blocks: list[Block] = []
-    used_width = 0
-    has_content = False
+    """Render every level below the child row, one row per depth.
 
-    for (_label, v), seg_w in zip(segments, seg_widths):
-        seg_w = max(0, min(seg_w, width - used_width))
-        used_width += seg_w
+    Each rendered parent's subtree is expanded to its full remaining depth
+    (``sub_rows[1:]`` — every row *below* the child row already emitted at the
+    caller's level, not just the first). The per-parent depth lists are then
+    composed side by side, depth by depth, under each parent's footprint —
+    padding a parent that bottoms out early with blank columns and reserving the
+    remainder's tail columns — so a deeply-nested branch (and any remainder it
+    carries at that depth) renders instead of being discarded after one level.
+    """
+    # Same deterministic layout as the level row, so deeper rows stay aligned and
+    # a remainder-folded parent is skipped here too.
+    widths, remainder = _flame_row_layout(segments, total, width)
 
+    # For each rendered parent, collect its rows below the child row (depths >= 2
+    # relative to this level). Leaves and childless branches contribute nothing.
+    per_parent: list[tuple[int, list[Block]]] = []
+    for (_label, v), seg_w in zip(segments, widths):
         if seg_w <= 0:
             continue
 
+        deeper: list[Block] = []
         if isinstance(v, dict) and v:
             child_segments = sorted([(str(ck), cv) for ck, cv in v.items()], key=lambda x: x[0])
             child_total = _flame_total(child_segments)
@@ -312,19 +447,31 @@ def _flame_expand_deeper(
                     sub_rows,
                     palette=palette,
                 )
-                # Skip the first row (already rendered at this level); take the second
-                if len(sub_rows) > 1:
-                    has_content = True
-                    child_blocks.append(sub_rows[1])
-                else:
-                    child_blocks.append(Block.empty(seg_w, 1))
-            else:
-                child_blocks.append(Block.empty(seg_w, 1))
-        else:
-            child_blocks.append(Block.empty(seg_w, 1))
+                # Skip the child row (already rendered at this level); keep every
+                # row below it so the full remaining depth reaches the output.
+                deeper = sub_rows[1:]
+        per_parent.append((seg_w, deeper))
 
-    if has_content and child_blocks:
-        rows.append(join_horizontal(*child_blocks))
+    rem_w = remainder[0] if remainder is not None else 0
+    depth = max((len(d) for _, d in per_parent), default=0)
+
+    for di in range(depth):
+        row_blocks: list[Block] = []
+        for seg_w, deeper in per_parent:
+            # Present branch at this depth, or blank columns for an absent one.
+            # Fit every present recursive row to its parent's exact footprint:
+            # proportional flooring can leave it narrower, and an unfitted row
+            # would shift every later parent's columns left (the outer fit only
+            # pads the right edge — it cannot restore an internal boundary).
+            if di < len(deeper):
+                row_blocks.append(fit_to_width(deeper[di], seg_w))
+            else:
+                row_blocks.append(Block.empty(seg_w, 1))
+        # Reserve the remainder's tail columns at every depth for alignment.
+        if rem_w:
+            row_blocks.append(Block.empty(rem_w, 1))
+        if row_blocks:
+            rows.append(join_horizontal(*row_blocks))
 
 
 def _flame_render_vertical(
@@ -335,39 +482,70 @@ def _flame_render_vertical(
     zoom: int,
     palette: tuple[Style, ...],
 ) -> Block:
-    """Render segments as vertical columns (height = cost)."""
+    """Render segments as vertical columns (height = cost).
+
+    Columns are equal-width, so vanishing here is a *seating* loss: when there
+    are more segments than the width can seat at >= 1 column each, the dropped
+    positives merge into a muted remainder column at the tail (RENDER_MODEL law
+    6, the same ruling as the horizontal row). Dropped zeros owe nothing.
+    """
     n = len(segments)
     if n == 0 or height <= 0:
         return Block.empty(width, 1)
 
-    col_width = width // n
-    if col_width < 1:
-        col_width = 1
+    # Column specs: (label, value, is_remainder, count). A tail remainder appears
+    # only when the segments cannot all be seated (n > width, so col_width == 1
+    # cannot hold them). Membership follows the label-sorted order, deterministic.
+    if n <= width:
+        specs: list[tuple[str, float, bool, int]] = [
+            (label, _seg_value(v), False, 0) for label, v in segments
+        ]
+    else:
+        shown = segments[: width - 1]
+        tail = segments[width - 1 :]
+        merged_positive = [(label, _seg_value(v)) for label, v in tail if _seg_value(v) > 0]
+        if merged_positive:
+            specs = [(label, _seg_value(v), False, 0) for label, v in shown]
+            rem_value = sum(val for _, val in merged_positive)
+            specs.append(("", rem_value, True, len(merged_positive)))
+        else:
+            # The unseatable tail is all zero — honest absence, no remainder.
+            specs = [(label, _seg_value(v), False, 0) for label, v in segments[:width]]
 
+    m = len(specs)
+    col_width = max(1, width // m)
     chart_height = max(1, height - 1)  # reserve 1 row for labels
-    max_value = max(_seg_value(v) for _, v in segments)
+    max_value = max((val for _, val, _, _ in specs), default=0.0)
     if max_value <= 0:
         max_value = 1.0
 
     columns: list[Block] = []
     prev_color_idx = -1
 
-    for i, (label, v) in enumerate(segments):
+    for i, (label, val, is_rem, count) in enumerate(specs):
         # Actual column width — last column absorbs remainder
-        cw = col_width if i < n - 1 else width - col_width * (n - 1)
+        cw = col_width if i < m - 1 else width - col_width * (m - 1)
         if cw <= 0:
             continue
 
-        val = _seg_value(v)
         bar_height = max(1, round(val / max_value * chart_height))
         empty_height = chart_height - bar_height
 
-        color_idx = _flame_color_for_label(label, prev_color_idx, palette)
-        prev_color_idx = color_idx
-        bar_style = palette[color_idx].merge(Style(reverse=True))
+        if is_rem:
+            from ...palette import current_palette
+
+            muted = current_palette().muted
+            bar_style = muted
+            label_style = muted
+            label_text = _flame_remainder_text(count, cw)
+        else:
+            color_idx = _flame_color_for_label(label, prev_color_idx, palette)
+            prev_color_idx = color_idx
+            bar_style = palette[color_idx].merge(Style(reverse=True))
+            label_style = Style(dim=True)
+            label_text = _flame_fit_label(label, cw)
 
         # Label row (bottom)
-        label_text = truncate(label, cw) if display_width(label) > cw else label
         if display_width(label_text) == len(label_text):
             label_centered = label_text.center(cw)[:cw]
         else:
@@ -375,7 +553,7 @@ def _flame_render_vertical(
             left = pad_total // 2
             right = pad_total - left
             label_centered = " " * left + label_text + " " * right
-        label_block = Block.text(label_centered, Style(dim=True), width=cw)
+        label_block = Block.text(label_centered, label_style, width=cw)
 
         parts: list[Block] = []
         if empty_height > 0:
