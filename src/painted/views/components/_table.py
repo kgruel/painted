@@ -60,7 +60,9 @@ class Overflow(Enum):
 
     - ``CLIP`` (default, historical): columns keep their resolved widths and the
       assembled block is truncated at the right edge if it exceeds the budget —
-      trailing columns can disappear.
+      trailing columns can disappear, but a wholly-hidden column is counted by
+      the ``+Nc`` badge folded into the right-edge marker (law-6 evidence, 0.14),
+      so the loss is never silent.
     - ``FIT``: size columns to content, but when the table is over budget shrink
       the ``Fill`` columns (ellipsized per their ``ellipsis``/``ellipsis_side``)
       to bring it within the budget, and *never stretch* a ``Fill`` past its

@@ -286,7 +286,7 @@ The laws share one umbrella, stated plainly rather than coined:
 | 3 | **Facet independence** — enabling a facet does not change the *selection or meaning* of unrelated information; layout may reflow to accommodate it. | Sibling of the honesty rule (FIDELITY_DESIGN §1); testable per app — semantically, not byte-literally: a literal unchanged-output assertion would fail on legitimate reflow. |
 | 4 | **Destination independence** — no destination capability or terminal geometry participates in fidelity resolution. | **Verified 2026-07-10** (§8): every `Fidelity` construction site in `src/` is argv/declaration-pure; `detect_context` computes TTY/geometry into separate `CliContext` fields and never writes into the fidelity it's handed. Two gaps: ungated (a regression reading terminal size in `parse_fidelity` would pass today's suite), and FIDELITY_DESIGN documents `build_fidelity`'s *position* but not the keep-geometry-out obligation on its *content*. The hatch stays app territory. |
 | 5 | **Allocation safety** — a passed width is exact, never exceeded; a height accepted by a *final* renderer is likewise exact (§2). | Width: ratified contract, property-tested. Height: r5 extension, not yet implemented — components document their height semantics (exact / maximum / viewport, §7 Q4). |
-| 6 | **Omission evidence** — the layer that *knowingly* discards requested semantic content must preserve evidence of that loss where the format permits; allocation-driven loss never silently masquerades as user intent. | **Audited 2026-07-10 (§8): target invariant, not current fact.** The marked/silent split tracks the *layer*, not the axis: width loss in the lens/compose layer is mostly marked; primitive width loss and **all height loss are silent** — no height-overflow evidence primitive, no rendered scroll affordance in the package. The r4 ownership form (below) shrinks the remediation surface: mechanisms may clip silently; *deciders* must mark. |
+| 6 | **Omission evidence** — the layer that *knowingly* discards requested semantic content must preserve evidence of that loss where the format permits; allocation-driven loss never silently masquerades as user intent. | **Audited 2026-07-10 (§8): target invariant, not current fact.** The marked/silent split tracks the *layer*, not the axis: width loss in the lens/compose layer is mostly marked; primitive width loss and **all height loss are silent** — no height-overflow evidence primitive, no rendered scroll affordance in the package. The r4 ownership form (below) shrinks the remediation surface: mechanisms may clip silently; *deciders* must mark. *(Dated annotation 2026-07-18: **now current fact** as of 0.14. The honesty-remediation milestone (S1–S5, store decision `design/honesty-remediation-scope`) closed every open decider: the windowed components and the host viewport reserve a "N more rows" evidence row (§7 Q2's list_view/table scroll windows), the table exposes a `+Nc` wholly-hidden-column badge, `tree`/`flame` mark their semantic drops, and `record`/`border` own their caller-side cuts — each pinned in `tests/unit/test_render_model_laws.py::TestLaw6EvidencePins`. What stays silent is the ruled mechanism/default set, EXEMPT under the ownership rule and pinned shrink-only by `test_law6_silent_exemptions_are_real_and_shrink_only`. The 2026-07-10 status is preserved above as the audit finding, not rewritten.)* |
 | 7 | **Host independence** — equivalent semantic inputs, allocation, presentation policy, and render capabilities produce equivalent Blocks regardless of host *lifecycle*; a semantic renderer never consumes lifecycle or mode. | **Target invariant, not current fact — but closer than r3 reported (corrected r4).** 23 of 25 in-repo `CliContext` renderers read only fidelity + allocation; 2 (`raymarch`, `starmap`) additionally consume output *capabilities* via the `use_ansi` proxy — legitimate under this law's r4 form, pending the capability vocabulary (§7 Q3); **0** dispatch on lifecycle inside a semantic renderer (r3 miscounted: `responsive.py`/`table.py` read `is_tty` in `_handle_interactive`, which is host territory). `views/` is clean and arch-enforced. The friction evidence stands: `ResponsiveSurface` fabricates a fake `CliContext` (`is_tty=True, mode=INTERACTIVE`) to reuse its renderer. Loops adoption + `run_cli` optional-render is the acceptance test. *(Dated annotation 2026-07-14: the fabricated-`CliContext` friction was swept in 0.11 — `run_cli`'s `renderer=` seam, RENDERER_CONTRACT_DESIGN §9 — and the two `use_ansi` capability readers (`raymarch`, `starmap`) converted to `current_capabilities()` in 0.12 (§9.5), resolving §7 Q3. The status text above is preserved as the 2026-07-10 finding, not rewritten.)* |
 | 8 | **No downstream policy** — `Block`, composition, `Buffer`, `Writer` carry no disclosure policy. Composition never asks *why* a row exists. | **Verified 2026-07-10** (§8) for the named modules — but held by *discipline*, not construction: no gate forbids `compose.py` importing fidelity, and the arch tests only check cross-layer direction. One sanctioned exception one file over: `core/doc.py` hosts the shared disclosure walk (deliberate, documented in its docstring, kept out of `core.__all__`) — any future gate must name it, `_CLI_SEAMS`-style. |
 
@@ -327,7 +327,9 @@ explicit clipping contract does not. Consequences:
   having offered exactly (§2), has no reason to crop further.
 - A table dropping semantic columns owes a mark or an exposed count.
 - Explicit `Wrap.NONE` may stay silent — clipping is its declared contract
-  (whether the *default* counts as "declared" is §7 Q2).
+  (whether the *default* counts as "declared" was §7 Q2's residual (a);
+  ruled 2026-07-18 — the default IS the declared contract, EXEMPT per the
+  0.14 silent-cut exemption ratchet).
 - Fidelity-requested omission may stay silent.
 
 **The interaction boundary (r5).** The dynamic form of laws 6–8:
@@ -435,7 +437,17 @@ former optional-render question: they turned out to be the same question.)*
    `StreamSurface`. Today's answer — tear silently — is the only one the
    model forbids. *(b resolved 0.10, ratified 2026-07-11: clip with
    evidence — LIVE_DELIVERY_DESIGN §10; pinned with the law-6 evidence
-   gates.)*
+   gates.)* *(Q2 resolved 0.14, ratified 2026-07-18 — store decision
+   `design/honesty-remediation-scope`: the remediation shipped as S1–S5.
+   The named owners now mark — hosts viewporting natural-height content and
+   the `list_view`/`table`/`data_explorer` scroll windows via the shared
+   `evidence_row`/`assemble_frame` "N more rows" row (S1); `table` column
+   drops via the `+Nc` badge (S2); `tree` subtree drops (S3) and `flame`
+   sub-minimum segments (S4) as semantic-drop evidence; `record`/`border`
+   caller-owned cuts (S5). Residual (a) is ruled: the `Wrap.NONE` default
+   IS a declared clipping contract, EXEMPT. Primitives stay silent by
+   contract — the closed exempt set is pinned shrink-only by
+   `test_law6_silent_exemptions_are_real_and_shrink_only`.)*
 3. **The capability vocabulary** — what replaces the `use_ansi` proxy:
    color / glyph / link facets? And where exactly the fence sits against
    the two existing capability mechanisms (ambient `IconSet` fallback,
@@ -474,12 +486,12 @@ for keeping the full reproducible inventory in-repo.
 |-----|--------------|-------|
 | 1 Determinism | ambient list "(palette, theme, icons, refs)" | List corrected (r4): **palette, icons, borders, vocabulary registry, role overrides** — five content-affecting ContextVar channels. `Theme` atomically sets four (not the vocabulary registry). Core-path `refs` resolve only in `Writer` ANSI emission (`core/writer.py:209`) — serialization-side, like `NO_COLOR`; `starmap`'s render-time probe is a capability read. *(Dated annotation 2026-07-14: six channels as of RENDERER_CONTRACT_DESIGN §9 — `capabilities.py`'s `Capabilities` ships as the sixth, distinguished from the other five as a logical renderer **input** that happens to travel ambiently, not a content-affecting presentation policy channel. The five-channel finding above is unchanged as of 2026-07-10; this note doesn't rewrite it.)* |
 | 4 Destination independence | holds by construction | **Confirmed by reading**, all `Fidelity(...)` sites. Ungated; hatch obligation undocumented in FIDELITY_DESIGN. |
-| 6 Omission evidence | needs audit | **Does not hold.** See below. |
+| 6 Omission evidence | needs audit | **Does not hold** (2026-07-10). See below. *(Dated annotation 2026-07-18: **holds** as of 0.14 — the honesty-remediation milestone (S1–S5) marked every decider; the layer-not-axis table below carries per-path disposition. The 2026-07-10 verdict is preserved as the audit finding.)* |
 | 7 Host independence | target invariant | Confirmed target; gap quantified (corrected r4): 23/25 renderers use fidelity + allocation only, 2/25 add capability reads, 0/25 lifecycle-dispatch inside a renderer — plus the taught signature + `Surface.render()` convention. *(Dated annotation 2026-07-14: the fabricated-`CliContext` friction evidence below (`ResponsiveSurface`) was swept in 0.11 — `run_cli`'s `renderer=` seam, RENDERER_CONTRACT_DESIGN §9 — and the two capability-reading renderers (`raymarch`, `starmap`) converted from the `use_ansi` proxy to `current_capabilities()` in 0.12 (§9.5). The "target invariant, not current fact" caveat narrows accordingly; the 2026-07-10 gap count above is the historical baseline, not current status.)* |
 | 8 No downstream policy | holds by construction | **Confirmed for the named modules** (the "depth" in `writer.py` is `ColorDepth` — unrelated). Held by discipline: ungated. `core/doc.py` is the one deliberate exception (the shared disclosure walk lives there for import-order reasons; unexported). |
 
-**Law 6, the layer-not-axis finding.** 25 geometry-loss paths inventoried.
-The pattern:
+**Law 6, the layer-not-axis finding (2026-07-10).** 25 geometry-loss paths
+inventoried. The pattern:
 
 | Layer | Width loss | Height loss |
 |-------|-----------|-------------|
@@ -487,6 +499,14 @@ The pattern:
 | primitives (`Block.text` `Wrap.NONE` default, `Line.truncate`, `Line.to_block`) | **silent** | — |
 | paint targets (`Block.paint`, `Buffer.put`, `Surface`) | **silent** | **silent** |
 | scroll windows (`list_view`, `table` visible-height) | — | **silent** (no affordance) |
+
+*Disposition 2026-07-18 (0.14 S1–S5): the deciders in the bottom two rows now
+mark — the scroll windows reserve a "N more rows" evidence row, and the paint
+targets' loss is owned by whatever host viewports them. The remaining silent
+cells are the ruled mechanisms/defaults (primitives row + `Block.paint`/
+`Buffer.put`), EXEMPT under the ownership rule. Full per-path verdict/pin
+table: `docs/RENDER_MODEL_AUDIT.md` §"Law 6"; the ranked list below is the
+2026-07-10 finding, preserved.*
 
 Ranked silent paths: (1) `Block.paint`/`Surface` clipping whole rows with
 nothing emitted — the same renderer that marks under `print_block` loses
@@ -531,3 +551,8 @@ left as historical evidence.)*
 - *Law 6*: today the "+N more" footer is the **only** geometry-adjacent
   evidence behavior with test coverage, and it's fidelity-driven. Any
   remediation should land with evidence pins, or the marks will rot.
+  *(Done 2026-07-18: the 0.14 remediation landed exactly this way —
+  `tests/unit/test_render_model_laws.py::TestLaw6EvidencePins` pins every
+  marked path (Unicode + ASCII, exact-fit byte comparisons), and
+  `test_law6_silent_exemptions_are_real_and_shrink_only` pins the ruled
+  silent set shrink-only.)*

@@ -4,6 +4,7 @@ import ast
 import sys
 from dataclasses import is_dataclass
 from pathlib import Path
+from typing import NamedTuple
 
 import pytest
 
@@ -833,3 +834,377 @@ def test_demos_render_paths_do_not_read_use_ansi() -> None:
             )
 
     assert not violations, "use_ansi read on a render path:\n" + "\n".join(violations)
+
+
+# =============================================================================
+# Law 6 — the silent-cut exemption ratchet (0.14 honesty-remediation close-out)
+#
+# RENDER_MODEL.md law 6: the layer that *knowingly* discards requested semantic
+# content owes evidence of the loss. The 0.14 milestone (honesty-remediation,
+# S1–S5) remediated the open silent-cut sites the 2026-07-10 audit found —
+# viewport windows (list_view/table/data_explorer), the table column badge,
+# tree subtree drops, flame sub-minimum segments, and the record/border
+# caller-owned marks — each now MARKS, pinned in
+# ``tests/unit/test_render_model_laws.py::TestLaw6EvidencePins``.
+#
+# What is left SILENT is now a *closed, ruled* set (store decision
+# ``design/honesty-remediation-scope``, Kyle 2026-07-18): mechanisms that merely
+# EXECUTE an explicit clipping contract (RENDER_MODEL §4's ownership rule — a
+# ``Buffer`` cannot invent a "12 more records" marker) and fidelity-driven
+# SELECTION (§4's intentional-omission face). This test encodes that set as a
+# shrink-only allowlist, each entry anchored to a *code fact* — a parameter
+# default, the absence of a mark call, a ``width > 1`` waiver guard — so the
+# enumeration cannot drift into prose.
+#
+# SHRINK-ONLY. Removing an entry is always fine: it means the site was
+# remediated (now marks — its evidence pin lives one file over) or dissolved.
+# ADDING an entry is a law-6 *ownership decision*, never a convenience: a NEW
+# path that discards requested content must leave evidence and join the marked
+# pins, not silently join this set — unless it is a mechanism/selection ruled
+# exempt under §4. The reality check below fails when a listed site starts
+# marking (delete the stale entry) OR when an added entry's silent-fact does not
+# hold (the site already marks, or does not exist) — both failures point back at
+# the ownership rule, which is where the add/remove call is made.
+# =============================================================================
+
+
+class _Law6Exemption(NamedTuple):
+    key: str  # stable slug (the allowlist identity)
+    rel: str  # module file, relative to src/painted/
+    qualname: str  # the exempt symbol (``Class.method`` or ``func``)
+    anchor: str  # which reality check proves the site still cuts silently
+    why: str  # the §4 classification that earns the exemption
+
+
+# Ambient-marker call names: a site that emits any of these is NOT silent, so a
+# listed exemption asserting silence and finding one of these has been
+# remediated and must be removed.
+_LAW6_MARK_NAMES = frozenset({"truncate_ellipsis", "_truncate_ellipsis", "ellipsize_line"})
+
+# The eight ruled silent-cut identities (store decision
+# design/honesty-remediation-scope, Kyle 2026-07-18). This mapping IS the ruling
+# encoded in the test — ``key → (rel, qualname, anchor)`` — and the live
+# allowlist below may only be a SUBSET of it. That is what makes the ratchet
+# shrink-only: removing an entry keeps the subset relation and passes, while
+# EVERY addition fails — a brand-new key is not in this map, and an entry
+# reusing a ruled key but pointing at a different (rel, qualname, anchor) target
+# (e.g. a ninth site borrowing ``silent_mechanism``) mismatches the ruled
+# identity. A genuinely new exemption is a new RULING: it means editing this map
+# (a deliberate, reviewed diff against §4's ownership rule), never appending to
+# the allowlist.
+_LAW6_RULED_IDENTITIES: dict[str, tuple[str, str, str]] = {
+    "block-text-wrap-none-default": ("core/block.py", "Block.text", "wrap_default_none"),
+    "buffer-put-silent": ("core/buffer.py", "Buffer.put", "silent_mechanism"),
+    "block-paint-silent": ("core/block.py", "Block.paint", "silent_mechanism"),
+    "line-truncate-silent": ("core/span.py", "Line.truncate", "silent_mechanism"),
+    "line-to-block-silent": ("core/span.py", "Line.to_block", "silent_mechanism"),
+    "column-ellipsis-false-default": (
+        "views/components/_table.py",
+        "Column",
+        "column_ellipsis_default",
+    ),
+    "record-line-detailed-field-selection": (
+        "views/record.py",
+        "record_line",
+        "detailed_field_selection",
+    ),
+    "tree-width1-label-clip": ("views/lens/tree.py", "_truncate_ellipsis", "tree_width1_waiver"),
+}
+
+_LAW6_SILENT_EXEMPTIONS: tuple[_Law6Exemption, ...] = (
+    _Law6Exemption(
+        "block-text-wrap-none-default",
+        "core/block.py",
+        "Block.text",
+        "wrap_default_none",
+        "primitive default: Wrap.NONE clips at the width contract; a mechanism "
+        "executing an explicit (defaulted) clipping contract, not a decider",
+    ),
+    _Law6Exemption(
+        "buffer-put-silent",
+        "core/buffer.py",
+        "Buffer.put",
+        "silent_mechanism",
+        "paint target: an out-of-bounds cell write is silently ignored — a "
+        "mechanism cannot invent evidence about a subject it does not know",
+    ),
+    _Law6Exemption(
+        "block-paint-silent",
+        "core/block.py",
+        "Block.paint",
+        "silent_mechanism",
+        "paint target: clips to buffer bounds; delivery, not a decider",
+    ),
+    _Law6Exemption(
+        "line-truncate-silent",
+        "core/span.py",
+        "Line.truncate",
+        "silent_mechanism",
+        "primitive: cuts to max_width; the caller that CHOSE the width owes any "
+        "mark (list_view/table row tails do — S1), the primitive does not",
+    ),
+    _Law6Exemption(
+        "line-to-block-silent",
+        "core/span.py",
+        "Line.to_block",
+        "silent_mechanism",
+        "primitive: the exact-width Line→Block conversion clips its tail; same "
+        "ownership split as Line.truncate",
+    ),
+    _Law6Exemption(
+        "column-ellipsis-false-default",
+        "views/components/_table.py",
+        "Column",
+        "column_ellipsis_default",
+        "declared contract: Column(ellipsis=False) opts a column into silent "
+        "right-cut; the S2 wholly-hidden-column badge marks the *column drop*, "
+        "the per-cell clip stays the declared default",
+    ),
+    _Law6Exemption(
+        "record-line-detailed-field-selection",
+        "views/record.py",
+        "record_line",
+        "detailed_field_selection",
+        "intentional omission (fidelity face): DETAILED selects well-known / "
+        "long secondary fields; the unshown fields are a disclosure choice, not "
+        "an allocation loss — no dropped-field count owed",
+    ),
+    _Law6Exemption(
+        "tree-width1-label-clip",
+        "views/lens/tree.py",
+        "_truncate_ellipsis",
+        "tree_width1_waiver",
+        "physical-space waiver: at width 1 there is no room for content and a "
+        "marker, so the plain cut stands (the same one-cell waiver S1–S4 pin)",
+    ),
+)
+
+
+def _law6_module_ast(painted_root: Path, rel: str) -> ast.Module:
+    return ast.parse((painted_root / rel).read_text(encoding="utf-8"), filename=rel)
+
+
+def _law6_find_def(tree: ast.Module, qualname: str) -> ast.AST | None:
+    """Resolve ``Class.method`` / ``func`` to its def node, or None."""
+    scope: list[ast.stmt] = list(tree.body)
+    node: ast.AST | None = None
+    for name in qualname.split("."):
+        node = None
+        for stmt in scope:
+            if (
+                isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+                and stmt.name == name
+            ):
+                node = stmt
+                break
+        if node is None:
+            return None
+        scope = list(getattr(node, "body", []))
+    return node
+
+
+def _law6_arg_default(fn: ast.FunctionDef | ast.AsyncFunctionDef, argname: str) -> ast.expr | None:
+    positional = [*fn.args.posonlyargs, *fn.args.args]
+    offset = len(positional) - len(fn.args.defaults)
+    for i, arg in enumerate(positional):
+        if arg.arg == argname:
+            di = i - offset
+            return fn.args.defaults[di] if di >= 0 else None
+    for arg, default in zip(fn.args.kwonlyargs, fn.args.kw_defaults):
+        if arg.arg == argname:
+            return default
+    return None
+
+
+def _law6_own_scope_nodes(fn: ast.AST):
+    """Yield the nodes in ``fn``'s OWN scope — descends into its body but never
+    into a nested ``FunctionDef``/``AsyncFunctionDef``/``Lambda`` (a separate
+    scope, unrelated to whether ``fn`` itself emits a mark). Keeps a helper
+    defined *inside* a silent mechanism from tainting the mechanism's verdict."""
+
+    def _is_nested_scope(n: ast.AST) -> bool:
+        return isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda))
+
+    # Filter nested defs out of the seed AND at every push, so their subtrees are
+    # neither yielded nor descended.
+    stack: list[ast.AST] = [s for s in getattr(fn, "body", []) if not _is_nested_scope(s)]
+    while stack:
+        node = stack.pop()
+        yield node
+        for child in ast.iter_child_nodes(node):
+            if _is_nested_scope(child):
+                continue  # separate scope — not fn's emission
+            stack.append(child)
+
+
+def _law6_marks_in(node: ast.AST) -> list[str]:
+    """Ambient-marker *emissions* inside ``node``'s own scope — empty means it
+    cuts silently. Matches actual marker USE, not any mention of the name: a
+    CALL to a ``truncate_ellipsis``-family helper (``foo()`` or ``x.foo()``), or
+    a read of the ambient ``.ellipsis`` glyph. A local variable/binding that
+    merely shares the name ``truncate_ellipsis`` is not an emission and does not
+    count (Sol review finding 3)."""
+    hits: list[str] = []
+    for sub in _law6_own_scope_nodes(node):
+        if isinstance(sub, ast.Call):
+            func = sub.func
+            if isinstance(func, ast.Name) and func.id in _LAW6_MARK_NAMES:
+                hits.append(f"{func.id}() call (line {sub.lineno})")
+            elif isinstance(func, ast.Attribute) and func.attr in _LAW6_MARK_NAMES:
+                hits.append(f".{func.attr}() call (line {sub.lineno})")
+        elif (
+            isinstance(sub, ast.Attribute)
+            and sub.attr == "ellipsis"
+            and isinstance(sub.ctx, ast.Load)
+        ):
+            hits.append(f".ellipsis glyph read (line {sub.lineno})")
+    return hits
+
+
+def _law6_check(painted_root: Path, entry: _Law6Exemption) -> str | None:
+    """Verify the code fact that earns ``entry`` its exemption. Returns an error
+    message (the entry has drifted — remediated, or never held) or None."""
+    tree = _law6_module_ast(painted_root, entry.rel)
+    node = _law6_find_def(tree, entry.qualname)
+    if node is None:
+        return f"{entry.qualname} not found in {entry.rel} (site moved/renamed)"
+
+    if entry.anchor == "wrap_default_none":
+        assert isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        default = _law6_arg_default(node, "wrap")
+        ok = (
+            isinstance(default, ast.Attribute)
+            and default.attr == "NONE"
+            and isinstance(default.value, ast.Name)
+            and default.value.id == "Wrap"
+        )
+        if not ok:
+            return f"{entry.qualname} `wrap` default is no longer Wrap.NONE — it now marks"
+        return None
+
+    if entry.anchor == "silent_mechanism":
+        marks = _law6_marks_in(node)
+        if marks:
+            return (
+                f"{entry.qualname} now emits a mark ({', '.join(marks)}) — it is no longer silent"
+            )
+        return None
+
+    if entry.anchor == "column_ellipsis_default":
+        assert isinstance(node, ast.ClassDef)
+        for stmt in node.body:
+            if (
+                isinstance(stmt, ast.AnnAssign)
+                and isinstance(stmt.target, ast.Name)
+                and stmt.target.id == "ellipsis"
+            ):
+                if isinstance(stmt.value, ast.Constant) and stmt.value.value is False:
+                    return None
+                return f"{entry.qualname}.ellipsis default is no longer False — it now marks by default"
+        return f"{entry.qualname}.ellipsis field not found (Column shape changed)"
+
+    if entry.anchor == "detailed_field_selection":
+        # The exemption anchors to the DETAILED secondary-field selection: the
+        # well-known-key membership test. If the selection literal is gone the
+        # field-disclosure policy changed and the exemption must be re-examined.
+        selection = {"description", "message", "body", "response", "output"}
+        found = {
+            sub.value
+            for sub in ast.walk(node)
+            if isinstance(sub, ast.Constant) and sub.value in selection
+        }
+        if found != selection:
+            return (
+                f"{entry.qualname} well-known-field selection changed "
+                f"(missing {sorted(selection - found)}) — re-examine the exemption"
+            )
+        return None
+
+    if entry.anchor == "tree_width1_waiver":
+        # Both tree width-cut helpers must gate the ellipsis behind ``width > 1``,
+        # falling back to the plain (marker-free) ``truncate`` at width 1.
+        for helper in ("_truncate_ellipsis", "_tree_truncate"):
+            hnode = _law6_find_def(tree, helper)
+            if hnode is None:
+                return f"{helper} not found in {entry.rel} (tree width-cut path changed)"
+            guarded = any(
+                isinstance(sub, ast.IfExp)
+                and isinstance(sub.test, ast.Compare)
+                and isinstance(sub.test.left, ast.Name)
+                and sub.test.left.id == "width"
+                and len(sub.test.ops) == 1
+                and isinstance(sub.test.ops[0], ast.Gt)
+                and isinstance(sub.test.comparators[0], ast.Constant)
+                and sub.test.comparators[0].value == 1
+                and isinstance(sub.orelse, ast.Call)
+                and isinstance(sub.orelse.func, ast.Name)
+                and sub.orelse.func.id == "truncate"
+                for sub in ast.walk(hnode)
+            )
+            if not guarded:
+                return f"{helper} no longer waives the marker at width 1 (guard changed)"
+        return None
+
+    raise AssertionError(f"unknown law-6 anchor {entry.anchor!r} for {entry.key}")
+
+
+def test_law6_silent_exemptions_are_real_and_shrink_only() -> None:
+    """Every law-6 silent-cut exemption is anchored to a live code fact.
+
+    A failure here means the ruled exempt set (store decision
+    ``design/honesty-remediation-scope``) and the code have diverged: either a
+    listed site now MARKS (remediated — delete the entry, this set only shrinks)
+    or an entry never held (the site already marks, or moved). Both are ownership
+    calls under RENDER_MODEL.md §4 — a decider owes evidence; only a mechanism
+    executing an explicit contract, or a fidelity-driven selection, may cut
+    silently. A genuinely new silent path belongs in the marked pins
+    (tests/unit/test_render_model_laws.py::TestLaw6EvidencePins), not here.
+    """
+    painted_root = _painted_root()
+
+    keys = [e.key for e in _LAW6_SILENT_EXEMPTIONS]
+    assert len(keys) == len(set(keys)), f"duplicate exemption key(s): {sorted(keys)}"
+
+    # No two entries may claim the same (rel, qualname, anchor) target — a second
+    # entry pointing at an already-listed site is an addition wearing a new key.
+    targets = [(e.rel, e.qualname, e.anchor) for e in _LAW6_SILENT_EXEMPTIONS]
+    dup_targets = sorted({t for t in targets if targets.count(t) > 1})
+    assert not dup_targets, f"duplicate exemption target(s) (rel, qualname, anchor): {dup_targets}"
+
+    # SHRINK-ONLY: the live allowlist must be a SUBSET of the eight ruled
+    # identities, matched exactly. Removal keeps the subset relation (passes);
+    # every addition fails — an unruled key, or a ruled key retargeted at a new
+    # site (the anchor-reuse hole Sol review finding 1 named). Widening the set is
+    # a ruling change: edit _LAW6_RULED_IDENTITIES deliberately, not this tuple.
+    ratchet: list[str] = []
+    for entry in _LAW6_SILENT_EXEMPTIONS:
+        ruled = _LAW6_RULED_IDENTITIES.get(entry.key)
+        identity = (entry.rel, entry.qualname, entry.anchor)
+        if ruled is None:
+            ratchet.append(
+                f"[{entry.key}] is not one of the eight ruled silent-cut identities "
+                "— a new silent path must leave evidence (TestLaw6EvidencePins), or be "
+                "ratified into _LAW6_RULED_IDENTITIES; it may not be appended here"
+            )
+        elif identity != ruled:
+            ratchet.append(
+                f"[{entry.key}] retargeted to {identity}, but the ruled identity is "
+                f"{ruled} — an exemption cannot reuse a ruled key for a different site"
+            )
+    assert not ratchet, (
+        "law-6 exemption ratchet is SHRINK-ONLY (design/honesty-remediation-scope):\n"
+        + "\n".join(ratchet)
+    )
+
+    failures: list[str] = []
+    for entry in _LAW6_SILENT_EXEMPTIONS:
+        problem = _law6_check(painted_root, entry)
+        if problem is not None:
+            failures.append(f"[{entry.key}] {problem}\n    (§4 ownership: {entry.why})")
+
+    assert not failures, (
+        "law-6 silent-cut exemption(s) drifted from the ruled set "
+        "(design/honesty-remediation-scope). This allowlist is SHRINK-ONLY — a "
+        "remediated site marks and leaves this set; a new silent-cut path must "
+        "leave evidence (see TestLaw6EvidencePins), not join here:\n" + "\n".join(failures)
+    )

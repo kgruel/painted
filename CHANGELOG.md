@@ -4,6 +4,109 @@ All notable changes to painted are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/); pre-1.0, minor versions may carry
 breaking changes.
 
+## [0.14.0] — 2026-07-18
+
+The **honesty remediation** (0.14) — RENDER_MODEL.md law 6 ("the layer that
+*knowingly* discards requested semantic content owes evidence of the loss")
+becomes **current fact** rather than target invariant. The 2026-07-10 render-
+model audit found the open silent-cut sites; this milestone closes them,
+component by component, and rules the residual silent set closed. No new design
+doc — the design is law 6; the ruling of record is the store decision
+`design/honesty-remediation-scope` (Kyle, 2026-07-18). Built as five slices
+(S1–S5) plus this close-out. The renderer contract is untouched: evidence is a
+reserved *row* on the vertical axis, never a width-perturbing rail, so a
+height-only re-slice still needs no re-render.
+
+Semver-minor. One deliberate contract tightening is called out under Changed
+(the tree `node_renderer` one-row offer). The added evidence changes what
+overflowing content renders — a marker now appears where content was silently
+cut — but a render that *fits* is byte-identical to before (a mark without loss
+would be false evidence), pinned by exact-fit byte comparisons.
+
+### Changed
+
+- **Windowed components mark viewport overflow** (`list_view`, `table`,
+  `data_explorer`; `painted.views`, RENDER_MODEL law 6 / S1). When content
+  overflows the visible window, the last body row is reserved for the shared
+  `evidence_row` ("N more rows"); a fitting window renders full-height and
+  markerless. The three hosts adopt one shared `frame_capacity` (the private
+  `_content_capacity` dissolved), and that capacity governs cursor/offset/paging
+  so the selected final item stays visible above the reserved mark. Over-wide
+  list rows get a row-tail ellipsis (the component owns the cut) with a
+  one-cell physical-space waiver; `data_explorer` deep prefixes ellipsize the
+  same way.
+
+- **`table` exposes wholly-hidden columns under `Overflow.CLIP`** (`painted.views`
+  / S2). A CLIP cut that drops whole trailing columns now folds a `+Nc` badge
+  into the right-edge ellipsis (RENDER_MODEL law 6's own table example) — the
+  exact count of columns cut away, computed by a fixed-point marker feed into
+  the existing truncation path (no new truncation path). A partial clip of the
+  last visible column stays a plain uncounted ellipsis; the badge is waived only
+  when the marker cannot fit. `Column(ellipsis=False)`'s per-cell right-cut stays
+  the declared (silent) contract.
+
+- **`tree_lens` marks subtree drops** (`painted.views` / S3). When indentation
+  exhausts the width budget and a child row plus its whole subtree are dropped,
+  the lens emits a `… N nodes hidden` evidence line — with `N` the exact count
+  of nodes the renderer *would* have drawn for that subtree at the current zoom
+  (cyclic nodes redrawn per level until the zoom budget runs out, mirroring the
+  renderer). Evidence for a contiguous dropped run flushes at the run's position
+  (no equal-prefix-width assumption across siblings). A tree that fits renders
+  markerless.
+
+- **`tree_lens` `node_renderer` is a one-row offer — the ruled contract
+  tightening** (`painted.views` / S3). A custom `node_renderer` callback that
+  returns a block taller than one row now raises `ContractError` (naming the
+  offending height), where before a taller block would silently corrupt the
+  tree's row layout. This is a deliberate semver-minor tightening of the
+  callback contract: the callback's *actual* cells are fitted content-aware to
+  the node's column (real-content cuts mark; trailing-padding cuts stay clean;
+  refs travel with their cells), never label-substituted.
+
+- **`flame_lens` marks merged remainders** (`painted.views` / S4). A positive-
+  valued segment that would be allocated zero cells (below-raster) no longer
+  silently vanishes: dropped positives fold into a muted `+N` remainder segment
+  at the row's tail — the aggregate *is* the evidence, chart-shaped — with a
+  fixed-point reserve-and-fold on the merged share. Zero-valued segments owe
+  nothing (zero cells for zero value is the proportional truth). Labels wider
+  than their segment ellipsize in both orientations. The rule recurses at every
+  depth; the muted role is pinned through ANSI (dim) and HTML (opacity).
+
+- **`record_line`, `record_timeline`, `record_map`, and `border` own their
+  caller-side cuts** (`painted.views` / `painted.core` / S5). `record_line`
+  MINIMAL marks its own summary cut (the caller owns the mark — `Block.text`'s
+  `Wrap.NONE` exemption does not transfer to it). `record_timeline`/`record_map`
+  degrade non-negatively at narrow width (an exact-width marker row; a row-drop
+  waiver only when the marker itself cannot fit). `border()` ellipsizes an
+  over-long title into the top-border's capacity via explicit content-before-
+  chrome capacity tiers (robust to wide-leading and zero-width-combiner titles).
+
+- **The law-6 invariant is now gated, not disciplined** (`tests/`). Every marked
+  path is pinned in `tests/unit/test_render_model_laws.py::TestLaw6EvidencePins`
+  (Unicode + ASCII degradation, exact-fit byte comparisons, degenerate widths),
+  and the ruled silent-cut exempt set — `Block.text` `Wrap.NONE` default,
+  `Buffer.put`/`Block.paint`/`Line.truncate`/`Line.to_block`,
+  `Column(ellipsis=False)`, `record_line` DETAILED field selection, and the tree
+  width-1 label clip — is encoded as a **shrink-only allowlist ratchet** in the
+  architecture tier (`test_law6_silent_exemptions_are_real_and_shrink_only`).
+  Each exemption is anchored to a verifiable code fact (a parameter/field
+  default, the absence of a mark call, the width-1 waiver guard); a listed site
+  that starts marking, or a new silent path added without an evidence mark,
+  fails the gate.
+
+### Fixed
+
+- **Deep flame rows (depth 4+) now render** (`views/lens/flame.py` / S4). A
+  pre-existing bug discarded all but `sub_rows[1]`, so flame graphs never drew
+  below the fourth depth — the deep bands were silently absent. Surfaced by the
+  law-6 audit; fixed independently of the evidence work.
+
+- **Flame recursive-band footprint no longer bleeds** (`views/lens/flame.py` /
+  S4). Two sites where a recursive band overran its footprint are pinned: a
+  trailing zero-valued segment floored a band under its footprint, and a missing
+  `fit_to_width` before a join let a child band exceed its parent's width.
+  Red/green-verified boundary pins.
+
 ## [0.13.0] — 2026-07-18
 
 The **host rung** (0.13, M6) — the interactive delivery rung, ratified as
