@@ -17,6 +17,12 @@ breaking changes.
   so piping or capturing stdout never mistakes an error for data; scripts that
   parsed errors from stdout must read stderr instead (exit codes are
   unchanged). ([782e269](https://github.com/kgruel/painted/commit/782e269))
+- **`Block.text` honors newlines as declared line structure.** A `\n` (or CRLF
+  pair) is a hard break — the wrap mode applies within each line — where it was
+  previously scrubbed to a space; a block built from multi-line text is now as
+  tall as its line count, so callers relying on the old silent flattening must
+  pre-flatten themselves.
+  ([ac6c72b](https://github.com/kgruel/painted/commit/ac6c72b))
 
 ## [0.14.0] — 2026-08-13
 
