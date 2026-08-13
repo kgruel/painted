@@ -79,6 +79,49 @@ class TestBlockTextEdgeCases:
         assert b.ref == "label"
 
 
+# --- Block.text() newlines as declared line structure ---
+# (decision practice/block-text-honors-newlines: hard break first, wrap mode
+# applies within each segment — never scrubbed to a space)
+
+
+class TestBlockTextNewlines:
+    def test_natural_width_multiline(self):
+        b = Block.text("a\nbb", S)
+        assert b.height == 2
+        assert b.width == 2
+        assert _chars(b, 0) == ["a", " "]
+        assert _chars(b, 1) == ["b", "b"]
+
+    def test_none_wrap_clips_each_segment(self):
+        b = Block.text("hello\nhi", S, width=3)
+        assert b.height == 2
+        assert _chars(b, 0) == ["h", "e", "l"]
+        assert _chars(b, 1) == ["h", "i", " "]
+
+    def test_word_wrap_reflows_each_segment_independently(self):
+        b = Block.text("aa bb\ncc", S, width=3, wrap=Wrap.WORD)
+        assert b.height == 3
+        assert _chars(b, 0) == ["a", "a", " "]
+        assert _chars(b, 1) == ["b", "b", " "]
+        assert _chars(b, 2) == ["c", "c", " "]
+
+    def test_ellipsis_marks_each_overflowing_segment(self):
+        b = Block.text("hello\nhi", S, width=4, wrap=Wrap.ELLIPSIS)
+        assert b.height == 2
+        assert _chars(b, 0) == ["h", "e", "l", "…"]
+        assert _chars(b, 1) == ["h", "i", " ", " "]
+
+    def test_trailing_newline_is_a_blank_row(self):
+        b = Block.text("a\n", S, width=2)
+        assert b.height == 2
+        assert _chars(b, 1) == [" ", " "]
+
+    def test_ref_applies_to_whole_block(self):
+        b = Block.text("a\nb", S, ref="label")
+        assert b.ref == "label"
+        assert b.height == 2
+
+
 # --- Block.text() Wrap.ELLIPSIS ---
 
 

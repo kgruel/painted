@@ -397,8 +397,7 @@ def _render_code(code: Code, width: int | None) -> Block:
         # Deferred docgen resolution — placeholder until the src seam lands.
         label = f"[code: {code.src}]" if code.src else "[code]"
         return _line(label, Style(dim=True), width)
-    lines = code.text.split("\n")
-    return join_vertical(*(_line(ln, Style(), width) for ln in lines), gap=0)
+    return _line(code.text, Style(), width)
 
 
 def _render_figure(fig: Figure, width: int | None) -> Block:

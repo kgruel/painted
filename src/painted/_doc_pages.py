@@ -611,7 +611,7 @@ def _prompt_record_gallery() -> Block:
         session.ask("force")
         session.ask("scope")
     lines = [line for line in captured.getvalue().splitlines() if line]
-    return join_vertical(*(Block.text(line, Style()) for line in lines))
+    return Block.text("\n".join(lines), Style())
 
 
 def _prompt_refusal_gallery() -> Block:
