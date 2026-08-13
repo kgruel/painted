@@ -1,8 +1,4 @@
 #!/usr/bin/env python3
-# /// script
-# requires-python = ">=3.11"
-# dependencies = ["painted"]
-# ///
 """Harmonograph Lab — play the four-pendulum score as an instrument.
 
 The companion to the harmonograph showcase. The showcase keeps a pure

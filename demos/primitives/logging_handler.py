@@ -1,8 +1,4 @@
 #!/usr/bin/env python3
-# /// script
-# requires-python = ">=3.11"
-# dependencies = ["painted"]
-# ///
 """PaintedHandler — log levels as declared severities.
 
 A logging.Handler that renders records instead of formatting strings: the

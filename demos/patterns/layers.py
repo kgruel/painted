@@ -1,8 +1,4 @@
 #!/usr/bin/env python3
-# /// script
-# requires-python = ">=3.11"
-# dependencies = ["painted"]
-# ///
 """Layer stack — modal push/pop and Action flow.
 
 Layers are a small, composable pattern for building modal UIs:

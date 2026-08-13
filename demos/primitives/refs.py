@@ -1,8 +1,4 @@
 #!/usr/bin/env python3
-# /// script
-# requires-python = ">=3.11"
-# dependencies = ["painted"]
-# ///
 """Refs — the denotation channel becomes a link.
 
 A ref is an opaque per-cell annotation: "what does this cell refer to?" A

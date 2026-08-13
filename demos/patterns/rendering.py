@@ -1,8 +1,4 @@
 #!/usr/bin/env python3
-# /// script
-# requires-python = ">=3.11"
-# dependencies = ["painted"]
-# ///
 """Rendering patterns — three ways to control how data becomes output.
 
 uv run demos/patterns/rendering.py               # show available patterns

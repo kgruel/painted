@@ -1,8 +1,4 @@
 #!/usr/bin/env python3
-# /// script
-# requires-python = ">=3.11"
-# dependencies = ["painted"]
-# ///
 """Cell and Style — the visual atom.
 
 Style controls how a character looks: color, weight, emphasis.

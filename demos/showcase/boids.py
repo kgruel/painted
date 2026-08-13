@@ -1,8 +1,4 @@
 #!/usr/bin/env python3
-# /// script
-# requires-python = ">=3.11"
-# dependencies = ["painted"]
-# ///
 """Boids — agents in a continuous world, projected onto cells.
 
 Life and fire lived on the grid; boids don't. The flock flies through a

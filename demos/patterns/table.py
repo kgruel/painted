@@ -1,8 +1,4 @@
 #!/usr/bin/env python3
-# /// script
-# requires-python = ">=3.11"
-# dependencies = ["painted"]
-# ///
 """Table construction — one table, grown from a fixed grid to a responsive layout.
 
 A column's width is a track-sizing function: a fixed ``int``, ``AUTO`` (hug

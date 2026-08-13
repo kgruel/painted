@@ -1,8 +1,4 @@
 #!/usr/bin/env python3
-# /// script
-# requires-python = ">=3.11"
-# dependencies = ["painted"]
-# ///
 """Responsive layout — width drives layout; zoom drives detail.
 
 Demonstrate width adaptation (three breakpoints):

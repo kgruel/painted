@@ -1,8 +1,4 @@
 #!/usr/bin/env python3
-# /// script
-# requires-python = ">=3.11"
-# dependencies = ["painted"]
-# ///
 """Replay testing — emission capture and observation traces.
 
 TestSurface replays scripted inputs and captures both frames and emissions.

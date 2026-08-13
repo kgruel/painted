@@ -1,8 +1,4 @@
 #!/usr/bin/env python3
-# /// script
-# requires-python = ">=3.11"
-# dependencies = ["painted"]
-# ///
 """Animation — update() + mark_dirty() driven rendering.
 
 This demo shows the other half of the Surface render loop: timer-driven state

@@ -1,8 +1,4 @@
 #!/usr/bin/env python3
-# /// script
-# requires-python = ">=3.11"
-# dependencies = ["painted"]
-# ///
 """Starmap — the night sky, every star a link.
 
 The catalog is frozen data: sixty-four bright stars with real coordinates,

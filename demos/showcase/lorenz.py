@@ -1,8 +1,4 @@
 #!/usr/bin/env python3
-# /// script
-# requires-python = ">=3.11"
-# dependencies = ["painted"]
-# ///
 """Lorenz — the butterfly, with time accumulated in the state.
 
 Every demo so far rendered a moment; lorenz renders a *history*. Each

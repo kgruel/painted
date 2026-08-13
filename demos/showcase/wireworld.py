@@ -1,8 +1,4 @@
 #!/usr/bin/env python3
-# /// script
-# requires-python = ">=3.11"
-# dependencies = ["painted"]
-# ///
 """Wireworld — a cellular automaton that computes, seeded from ASCII art.
 
 Life's seeds were a handful of coordinates; wireworld's are *circuits*.

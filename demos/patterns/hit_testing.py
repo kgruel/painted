@@ -1,8 +1,4 @@
 #!/usr/bin/env python3
-# /// script
-# requires-python = ">=3.11"
-# dependencies = ["painted"]
-# ///
 """Hit testing — Block.ref propagation through composition to Buffer.hit().
 
 Builds a service dashboard with four named panels, composes them into a 2x2

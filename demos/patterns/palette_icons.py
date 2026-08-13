@@ -1,8 +1,4 @@
 #!/usr/bin/env python3
-# /// script
-# requires-python = ">=3.11"
-# dependencies = ["painted"]
-# ///
 """Palette + IconSet — ambient configuration via ContextVar switching.
 
 The lesson: same render function, different aesthetics. Components and lenses

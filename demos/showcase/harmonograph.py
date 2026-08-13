@@ -1,8 +1,4 @@
 #!/usr/bin/env python3
-# /// script
-# requires-python = ">=3.11"
-# dependencies = ["painted"]
-# ///
 """Harmonograph — four pendulums drawing in eight-dot terminal cells.
 
 The score is frozen data: two damped oscillators for x, two for y. Their

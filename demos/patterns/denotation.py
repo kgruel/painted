@@ -1,8 +1,4 @@
 #!/usr/bin/env python3
-# /// script
-# requires-python = ">=3.11"
-# dependencies = ["painted"]
-# ///
 """Denotation — refed record lines: one ref channel, two readers.
 
 A store activity feed rendered with ``record_line``: the payload lens stamps

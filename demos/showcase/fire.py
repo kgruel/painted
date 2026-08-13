@@ -1,8 +1,4 @@
 #!/usr/bin/env python3
-# /// script
-# requires-python = ">=3.11"
-# dependencies = ["painted"]
-# ///
 """Fire — the Doom PSX flame, with randomness as frozen data.
 
 Plasma was a pure function of time; fire needs *chance* — each cell cools

@@ -1,8 +1,4 @@
 #!/usr/bin/env python3
-# /// script
-# requires-python = ">=3.11"
-# dependencies = ["painted"]
-# ///
 """Plasma — a colored field, where every cell's color is data.
 
 Life animated glyphs and donut tiered an ASCII ramp through font weight;

@@ -1,8 +1,4 @@
 #!/usr/bin/env python3
-# /// script
-# requires-python = ">=3.11"
-# dependencies = ["painted"]
-# ///
 """render_traceback — an exception as a record tree.
 
 A traceback is structured data, not a wall of text: frames are records on a

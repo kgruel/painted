@@ -1,8 +1,4 @@
 #!/usr/bin/env python3
-# /// script
-# requires-python = ">=3.11"
-# dependencies = ["painted"]
-# ///
 """paint() — the single entry point.
 
 paint(subject) transcribes what a value *declares*: scalars print directly,

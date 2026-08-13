@@ -13,7 +13,7 @@ because it exists.
 
 ## Demo Rules
 
-1. **PEP 723** — `# /// script` metadata, runnable via `uv run demos/primitives/foo.py`
+1. **Runnable two ways** — `painted demos <name>` (the first-party runner, and how `--help` advertises itself) or `uv run demos/primitives/foo.py` from a checkout. No PEP 723 header: it promised each file was a standalone script, and once demos began importing private siblings (`_harness`, `_plaque`) that promise was false for a whole tier. Every loader — `painted demos`, `uv run`, `tools/capture.py`, the test suite — puts a demo's own directory on `sys.path`, so sibling imports resolve identically under all four.
 2. **Visual, not explanatory** — no `print()` commentary. The output is the lesson. Use styled Block headers (dim) for section labels.
 3. **Own layer only** — use exactly the API you're demonstrating. Don't reach up the stack. Output primitives (`print_block`, `join_vertical`, `Block.text()` for headers) are the baseline display mechanism.
 4. **`to_X` bridges are fair game** — each demo can use its type's bridge to the next layer (e.g. `Line.to_block()`). The ladder shows the manual version of what the next step automates.

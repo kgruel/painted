@@ -1,8 +1,4 @@
 #!/usr/bin/env python3
-# /// script
-# requires-python = ">=3.11"
-# dependencies = ["painted"]
-# ///
 """Conway's Life — a pure pattern, animated by the harness.
 
 The world is frozen data, the step is a pure function, the render is a pure

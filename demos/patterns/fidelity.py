@@ -1,8 +1,4 @@
 #!/usr/bin/env python3
-# /// script
-# requires-python = ">=3.11"
-# dependencies = ["painted"]
-# ///
 """Fidelity spectrum — the whole disclosure ladder, one render fn.
 
 Disk usage rendered at every zoom level through run_cli. The flags drive the

@@ -1,8 +1,4 @@
 #!/usr/bin/env python3
-# /// script
-# requires-python = ">=3.11"
-# dependencies = ["painted"]
-# ///
 """Self-profiling — painted introspects its own rendering performance.
 
 TestSurface profiles a mini TUI app, then renders the results at every

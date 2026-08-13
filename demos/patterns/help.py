@@ -1,8 +1,4 @@
 #!/usr/bin/env python3
-# /// script
-# requires-python = ">=3.11"
-# dependencies = ["painted"]
-# ///
 """Help is a document — authored as a doc-IR node tree, projected at each zoom.
 
 There is no bespoke help renderer: a help screen is a ``Doc`` (title, prose,

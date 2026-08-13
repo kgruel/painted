@@ -1,8 +1,4 @@
 #!/usr/bin/env python3
-# /// script
-# requires-python = ">=3.11"
-# dependencies = ["painted"]
-# ///
 """The exception hierarchy — painted's faults have names, and painted renders them.
 
 PaintedError is the root a consumer catches; its three subclasses each name a

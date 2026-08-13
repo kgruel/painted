@@ -1,8 +1,4 @@
 #!/usr/bin/env python3
-# /// script
-# requires-python = ">=3.11"
-# dependencies = ["painted"]
-# ///
 """Span and Line — mixed styles in a single line.
 
 Span is a run of text with one style. Line combines spans,

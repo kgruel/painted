@@ -1,8 +1,4 @@
 #!/usr/bin/env python3
-# /// script
-# requires-python = ">=3.11"
-# dependencies = ["painted"]
-# ///
 """Mandelbrot — escape time, and an honest black.
 
 The classic renderer paints every cell that outlives the iteration cap

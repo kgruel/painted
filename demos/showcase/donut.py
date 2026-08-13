@@ -1,8 +1,4 @@
 #!/usr/bin/env python3
-# /// script
-# requires-python = ">=3.11"
-# dependencies = ["painted"]
-# ///
 """donut.c — a spinning torus, state reduced to a frame counter.
 
 The companion piece to life.py in the churn pair: Life's changes scatter

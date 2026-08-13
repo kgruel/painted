@@ -1,8 +1,4 @@
 #!/usr/bin/env python3
-# /// script
-# requires-python = ">=3.11"
-# dependencies = ["painted"]
-# ///
 """Declared prompts — the DECLARED rung's real output, as content.
 
 `--force` and `Are you sure? [y/N]` are the same declaration at different

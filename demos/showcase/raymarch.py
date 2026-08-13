@@ -1,8 +1,4 @@
 #!/usr/bin/env python3
-# /// script
-# requires-python = ">=3.11"
-# dependencies = ["painted"]
-# ///
 """SDF raymarcher — donut generalized into a renderer.
 
 The curriculum's summit re-derives its rung zero: donut.c's hardcoded torus

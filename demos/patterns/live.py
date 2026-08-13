@@ -1,8 +1,4 @@
 #!/usr/bin/env python3
-# /// script
-# requires-python = ">=3.11"
-# dependencies = ["painted"]
-# ///
 """Live streaming — parallel health checks with animated spinners.
 
 fetch_stream yields frozen snapshots as async results arrive.
