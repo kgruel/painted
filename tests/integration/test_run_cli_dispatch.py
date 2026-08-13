@@ -180,6 +180,50 @@ class TestCliRunner:
         assert received_ctx.mode == OutputMode.INTERACTIVE
         assert result == 42
 
+    def test_fetch_failure_preserves_multiline_message(self, capsys, monkeypatch):
+        """A consumer's error message owns its line structure — a three-line
+        did-you-mean block arrives on stderr as three lines, never flattened
+        to one run-on line (friction: cli-error-multiline-flattening)."""
+        monkeypatch.setattr("sys.stdout.isatty", lambda: False)
+
+        def fetch() -> str:
+            raise ValueError("vertex not found: projcets\nDid you mean: projects?\nKnown: a, b")
+
+        result = run_cli([], renderer=lambda d, f, w: Block.text("x", Style()), fetch=fetch)
+
+        assert result == 1
+        captured = capsys.readouterr()
+        assert captured.out == ""
+        lines = [ln.rstrip() for ln in captured.err.splitlines() if ln.strip()]
+        assert lines == [
+            "vertex not found: projcets",
+            "Did you mean: projects?",
+            "Known: a, b",
+        ]
+
+    def test_fetch_failure_stderr_ansi_follows_stderr_plane(self, capsys, monkeypatch):
+        """Error ANSI gates on stderr's own TTY-ness overridden by the --plain
+        request — never the resolved stdout format (same rule as the refusal
+        seam). Piped stdout with a TTY stderr still styles the error; --plain
+        suppresses it."""
+        monkeypatch.setattr("sys.stdout.isatty", lambda: False)
+        monkeypatch.setattr("sys.stderr.isatty", lambda: True)
+
+        def fetch() -> str:
+            raise ValueError("styled nope")
+
+        renderer = lambda d, f, w: Block.text("x", Style())  # noqa: E731
+
+        assert run_cli([], renderer=renderer, fetch=fetch) == 1
+        styled = capsys.readouterr().err
+        assert "styled nope" in styled
+        assert "\x1b[" in styled  # stderr is a TTY: the error renders styled
+
+        assert run_cli(["--plain"], renderer=renderer, fetch=fetch) == 1
+        plain = capsys.readouterr().err
+        assert "styled nope" in plain
+        assert "\x1b[" not in plain  # the --plain request wins on the stderr plane
+
     def test_fetch_failure_static_renders_error_and_returns_1(self, capsys, monkeypatch):
         monkeypatch.setattr("sys.stdout.isatty", lambda: False)
         render_called = False
@@ -197,8 +241,9 @@ class TestCliRunner:
         assert result == 1
         assert render_called is False
         captured = capsys.readouterr()
-        assert "nope" in captured.out
-        assert "Traceback" not in captured.out
+        assert "nope" in captured.err
+        assert "Traceback" not in captured.err
+        assert captured.out == ""  # stdout stays a clean data channel on failure
 
     def test_fetch_failure_json_outputs_error_object_and_returns_1(self, capsys, monkeypatch):
         monkeypatch.setattr("sys.stdout.isatty", lambda: False)
@@ -214,8 +259,9 @@ class TestCliRunner:
 
         assert result == 1
         captured = capsys.readouterr()
-        payload = json.loads(captured.out)
+        payload = json.loads(captured.err)
         assert payload == {"error": "badness"}
+        assert captured.out == ""  # `tool --json > file` never writes an error as data
 
     def test_render_failure_static_renders_minimal_error_and_returns_2(self, capsys, monkeypatch):
         monkeypatch.setattr("sys.stdout.isatty", lambda: False)
@@ -227,9 +273,10 @@ class TestCliRunner:
 
         assert result == 2
         captured = capsys.readouterr()
-        assert "KeyError" in captured.out
-        assert "kaboom" in captured.out
-        assert "Traceback" not in captured.out
+        assert "KeyError" in captured.err
+        assert "kaboom" in captured.err
+        assert "Traceback" not in captured.err
+        assert captured.out == ""
 
 
 def _renderer(data, fidelity, width):
@@ -917,9 +964,9 @@ class TestRefSchemes:
         )
         code = runner._run_static(_ansi_ctx())
         assert code == 2
-        out = capsys.readouterr().out
-        assert "ContractError" in out
-        assert "Sequence of RefScheme" in out
+        err = capsys.readouterr().err
+        assert "ContractError" in err
+        assert "Sequence of RefScheme" in err
 
     def test_static_ref_schemes_installs_around_render_and_serialize(self, capsys):
         def rnd(data, fidelity, width):
@@ -993,9 +1040,9 @@ class TestRefSchemes:
         )
         code = runner._run_static(_ansi_ctx())
         assert code == 2  # the render-error exit code, not a special one
-        out = capsys.readouterr().out
-        assert "RuntimeError: app boom" in out
-        assert "ContractError" not in out  # unwrapped — an app fault, not painted's
+        err = capsys.readouterr().err
+        assert "RuntimeError: app boom" in err
+        assert "ContractError" not in err  # unwrapped — an app fault, not painted's
 
     def test_callable_invalid_element_faults_contracterror(self, capsys):
         def bad(state):
@@ -1008,7 +1055,7 @@ class TestRefSchemes:
         )
         code = runner._run_static(_ansi_ctx())
         assert code == 2  # same render-error path as a renderer fault
-        assert "ContractError" in capsys.readouterr().out
+        assert "ContractError" in capsys.readouterr().err
 
     def test_callable_duplicate_names_faults_contracterror(self, capsys):
         def bad(state):
@@ -1021,9 +1068,9 @@ class TestRefSchemes:
         )
         code = runner._run_static(_ansi_ctx())
         assert code == 2
-        out = capsys.readouterr().out
-        assert "ContractError" in out
-        assert "declared twice" in out
+        err = capsys.readouterr().err
+        assert "ContractError" in err
+        assert "declared twice" in err
 
     def test_callable_result_is_validated_before_any_use_refs_call(self):
         """A bad result faults ContractError directly — never use_refs's own
@@ -1293,7 +1340,8 @@ class TestCliRunnerJsonPath:
         )
         assert result == 1
         captured = capsys.readouterr()
-        assert json.loads(captured.out) == {"error": "disk full"}
+        assert json.loads(captured.err) == {"error": "disk full"}
+        assert captured.out == ""
 
 
 class TestCliRunnerErrorBlocks:

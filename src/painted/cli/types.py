@@ -173,6 +173,11 @@ class CliContext:
     args: ArgsView = field(default_factory=ArgsView)
     stdin_is_tty: bool = False
     stderr_is_tty: bool = False
+    # The --plain *request* (not the resolved stdout format): the stderr
+    # plane's plainness gate. Prompt UI and error emission both draw on stderr
+    # at stderr's own fidelity — stderr_is_tty overridden by this request —
+    # never the resolved stdout format (design §8).
+    plain_requested: bool = False
     # The memoized prompt resolver behind ctx.ask. A plain object (not a
     # dataclass), referenced by one field, so the frozen-collection invariant
     # sees an opaque holder, not a mutable dict. Excluded from eq/repr — it is
@@ -339,6 +344,7 @@ def detect_context(
         args=args if args is not None else ArgsView(),
         stdin_is_tty=stdin_is_tty,
         stderr_is_tty=stderr_is_tty,
+        plain_requested=bool(plain_requested),
         _session=session,
     )
 

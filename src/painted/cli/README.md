@@ -259,8 +259,15 @@ so a domain completer scopes candidates to what's already typed. Full design:
   Three planes, kept separate.
 - **Errors** follow `docs/ERRORS_DESIGN.md`: `DeclarationError` (author fault, at
   construction), `ContractError` (runtime contract breach), and
-  `PromptContractError`, whose refusal routes to stderr with a clean stdout
-  through the single seam in `CliRunner.run`.
+  `PromptContractError`, whose refusal routes through the single seam in
+  `CliRunner.run`.
+- **Errors never ride stdout.** Every mode's error emission — rendered blocks
+  through `_emit_error`, the `--json` `{"error": …}` object, the refusal seam —
+  targets stderr, leaving stdout a clean data channel on failure in every
+  format. ANSI on that emission follows the stderr plane (`stderr_is_tty`
+  overridden by the `--plain` request), never the resolved stdout format. Error
+  messages keep their newlines: a consumer's multi-line message is declared
+  structure, not whitespace.
 
 ## Design docs (cite, don't copy)
 
