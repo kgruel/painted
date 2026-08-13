@@ -156,6 +156,11 @@ APPS = [
     ("apps/viewport.py", "ViewportInspectorApp", ["down", "down", "q"]),
     ("apps/widgets.py", "WidgetsApp", ["right", "tab", "down", "q"]),
     ("examples/big_text.py", "BigTextDemo", ["q"]),
+    (
+        "examples/harmonograph_lab.py",
+        "HarmonographLab",
+        ["right", "down", "space", "?", "escape", "q"],
+    ),
     ("examples/lenses.py", "LensesApp", ["v", "q"]),
     ("examples/theme_carnival.py", "PaletteCarnival", ["q"]),
 ]
