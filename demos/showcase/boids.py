@@ -31,7 +31,6 @@ flight.
 
 from __future__ import annotations
 
-import argparse
 import asyncio
 import math
 import sys
@@ -42,16 +41,14 @@ from painted import (
     Block,
     Fidelity,
     Style,
-    border,
     join_horizontal,
     join_vertical,
-    run_cli,
     truncate,
-    ROUNDED,
 )
-from painted.cli import HelpArg
 from painted.palette import current_palette
 from painted.views import sparkline
+
+from _harness import ShowcaseArg, plate, showcase_main
 
 
 # --- Randomness as data (the pattern fire.py settled) ---
@@ -260,7 +257,7 @@ def _window(flock: Flock, width: int | None, *extra: Block) -> Block:
     w = _COLS if width is None else min(width - 4, _COLS)
     rows = [_grid(flock, w), truncate(_census(flock), w)]
     rows += [truncate(b, w) for b in extra]
-    return border(join_vertical(*rows), title="boids", chars=ROUNDED)
+    return plate(*rows, title="boids")
 
 
 # --- Zoom renderers ---
@@ -306,28 +303,21 @@ def _render(flock: Flock, fidelity: Fidelity, width: int | None) -> Block:
 
 
 def main() -> int:
-    pre = argparse.ArgumentParser(add_help=False)
-    pre.add_argument("--seed", type=int, default=DEFAULT_SEED)
-    pre.add_argument("--frame", type=int, default=DEFAULT_FRAME)
-    ns, rest = pre.parse_known_args(sys.argv[1:])
-
-    return run_cli(
-        rest,
+    return showcase_main(
+        doc=__doc__,
+        file=__file__,
         renderer=_render,
-        fetch=lambda: _fetch(ns.seed, ns.frame),
-        fetch_stream=lambda: _fetch_stream(ns.seed),
-        live_delivery="surface",
-        live_meter=True,
-        description=__doc__,
-        prog="boids.py",
-        help_args=[
-            HelpArg("--seed", "LCG seed — same seed, same flight", default=str(DEFAULT_SEED)),
-            HelpArg(
+        fetch=lambda ns: _fetch(ns.seed, ns.frame),
+        fetch_stream=lambda ns: _fetch_stream(ns.seed),
+        args=(
+            ShowcaseArg("--seed", "LCG seed — same seed, same flight", DEFAULT_SEED, type=int),
+            ShowcaseArg(
                 "--frame",
                 "frame shown by static output (live flies from 0)",
-                default=str(DEFAULT_FRAME),
+                DEFAULT_FRAME,
+                type=int,
             ),
-        ],
+        ),
     )
 
 

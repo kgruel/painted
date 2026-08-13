@@ -35,17 +35,16 @@ from painted import (
     Fidelity,
     RefScheme,
     Style,
-    border,
     join_horizontal,
     join_vertical,
     resolve_ref,
-    run_cli,
     truncate,
     use_refs,
-    ROUNDED,
 )
 from painted.capabilities import current_capabilities
 from painted.palette import current_palette
+
+from _harness import plate, showcase_main
 
 # Declared in main() around the delivery, never at module scope (a module-scope
 # use_refs would leak into every later render in this process). The render never
@@ -438,7 +437,7 @@ def _window(
         tip = Block.text("⌘-click a star → wikipedia", Style(dim=True))
         pad_w = max(0, w - tip.width)
         rows.append(join_horizontal(Block.text(" " * pad_w, _PLAIN), tip))
-    framed = border(join_vertical(*rows), title="the night sky", chars=ROUNDED)
+    framed = plate(*rows, title="the night sky")
     return framed, visible
 
 
@@ -513,16 +512,15 @@ def _render(sky: Sky, fidelity: Fidelity, width: int | None) -> Block:
 
 
 def main() -> int:
+    # The scheme stays here, not in the harness: resolving a star id to a URL is
+    # this demo's whole lesson, and a harness that owned it would be teaching it.
     with use_refs(STAR_SCHEME):
-        return run_cli(
-            sys.argv[1:],
+        return showcase_main(
+            doc=__doc__,
+            file=__file__,
             renderer=_render,
-            fetch=_fetch,
-            fetch_stream=_fetch_stream,
-            live_delivery="surface",
-            live_meter=True,
-            description=__doc__,
-            prog="starmap.py",
+            fetch=lambda ns: _fetch(),
+            fetch_stream=lambda ns: _fetch_stream(),
         )
 
 

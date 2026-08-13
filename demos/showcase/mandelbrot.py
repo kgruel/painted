@@ -45,7 +45,6 @@ legend says so by counting zero.
 
 from __future__ import annotations
 
-import argparse
 import asyncio
 import math
 import sys
@@ -62,19 +61,17 @@ from painted import (
     Span,
     Style,
     Vocabulary,
-    border,
     join_horizontal,
     join_vertical,
     mark_style,
-    run_cli,
     truncate,
     use_vocabularies,
-    ROUNDED,
 )
 from painted.capabilities import current_capabilities
-from painted.cli import HelpArg, Tag
+from painted.cli import Tag
 from painted.palette import current_palette
 
+from _harness import ShowcaseArg, plate, showcase_main
 from _plaque import NOTE_TAG, Plaque, render_plaque
 
 
@@ -486,7 +483,7 @@ def _window(view: View, width: int | None, flat: bool, *extra: Block) -> Block:
     w = _W if width is None else min(width - 4, _W)
     rows = [_grid(view, w, flat), truncate(_census(view), w)]
     rows += [truncate(b, w) for b in extra]
-    return border(join_vertical(*rows), title="mandelbrot", chars=ROUNDED)
+    return plate(*rows, title="mandelbrot")
 
 
 # --- The note ---
@@ -586,27 +583,21 @@ def _render(view: View, fidelity: Fidelity, width: int | None) -> Block:
 
 
 def main() -> int:
-    pre = argparse.ArgumentParser(add_help=False)
-    pre.add_argument("--frame", type=int, default=DEFAULT_FRAME)
-    ns, rest = pre.parse_known_args(sys.argv[1:])
-
-    return run_cli(
-        rest,
+    return showcase_main(
+        doc=__doc__,
+        file=__file__,
         renderer=_render,
-        fetch=lambda: _fetch(ns.frame),
-        fetch_stream=lambda: _fetch_stream(),
-        live_delivery="surface",
-        live_meter=True,
-        description=__doc__,
-        prog="mandelbrot.py",
-        tags=_TAGS,
-        help_args=[
-            HelpArg(
+        fetch=lambda ns: _fetch(ns.frame),
+        fetch_stream=lambda ns: _fetch_stream(),
+        args=(
+            ShowcaseArg(
                 "--frame",
                 "pose shown by static output (live descends from 0)",
-                default=str(DEFAULT_FRAME),
+                DEFAULT_FRAME,
+                type=int,
             ),
-        ],
+        ),
+        tags=_TAGS,
     )
 
 

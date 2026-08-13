@@ -60,9 +60,20 @@ the code is reference material. Same test shape as apps (TestSurface).
 at every zoom, surface-delivered animation) — they are *not* a new boundary. They
 live in their own `showcase/` directory because pedagogically they're spectacle,
 not teaching: full-screen, animated, "look what painted can do." The defining
-property is `live_delivery="surface"` in their `run_cli` call. `painted demos`
+property is entry through `showcase_main` (`demos/showcase/_harness.py`), which
+fixes surface delivery for the tier. `painted demos`
 renders them as a distinct fifth column (the finale); the liveness smoke exercises
 them via `test_showcase_demo_renders`, identical assertions to patterns.
+
+Because showcases are spectacle rather than teaching, their **entry point is
+scaffolding and is shared** — `showcase_main` + `ShowcaseArg` + `plate`, with
+`_plaque` for the maker's note. A demo declares each argument once and the
+harness spends it on both the parser and `--help`. This stops at the showcase
+boundary on purpose: a pattern's `run_cli` call *is* its lesson (rule 3, and
+"the invocation IS the lesson" above), so harnessing it there would delete the
+curriculum. Conventions are held by `tests/unit/test_showcase_harness.py` — a
+shrink-only allowlist for unmigrated files, and the rule that a `stats` facet
+is implied at `-vv`.
 
 The test shape *is* the boundary between primitive / pattern / app. If you can
 test the full lesson by calling `_render(data, fidelity, width)`, it's a pattern

@@ -35,7 +35,6 @@ pipe receives the pose carried honestly by the classic luminance ramp
 
 from __future__ import annotations
 
-import argparse
 import asyncio
 import math
 import sys
@@ -49,16 +48,15 @@ from painted import (
     Line,
     Span,
     Style,
-    border,
     join_horizontal,
     join_vertical,
-    run_cli,
     truncate,
-    ROUNDED,
 )
 from painted.capabilities import current_capabilities
-from painted.cli import HelpArg, Tag
+from painted.cli import Tag
 from painted.palette import current_palette
+
+from _harness import ShowcaseArg, plate, showcase_main
 
 
 # --- Data: the pose is time plus an ambition ---
@@ -510,7 +508,7 @@ def _window(shot: Shot, width: int | None, *extra: Block) -> Block:
     w = _W if width is None else min(width - 4, _W)
     rows = [_grid(shot, w), truncate(_census(shot), w)]
     rows += [truncate(b, w) for b in extra]
-    return border(join_vertical(*rows), title="raymarch", chars=ROUNDED)
+    return plate(*rows, title="raymarch")
 
 
 # --- Zoom renderers ---
@@ -573,27 +571,21 @@ def _render(shot: Shot, fidelity: Fidelity, width: int | None) -> Block:
 
 
 def main() -> int:
-    pre = argparse.ArgumentParser(add_help=False)
-    pre.add_argument("--frame", type=int, default=DEFAULT_FRAME)
-    ns, rest = pre.parse_known_args(sys.argv[1:])
-
-    return run_cli(
-        rest,
+    return showcase_main(
+        doc=__doc__,
+        file=__file__,
         renderer=_render,
-        fetch=lambda: _fetch(ns.frame),
-        fetch_stream=lambda: _fetch_stream(),
-        live_delivery="surface",
-        live_meter=True,
-        description=__doc__,
-        prog="raymarch.py",
-        tags=_TAGS,
-        help_args=[
-            HelpArg(
+        fetch=lambda ns: _fetch(ns.frame),
+        fetch_stream=lambda ns: _fetch_stream(),
+        args=(
+            ShowcaseArg(
                 "--frame",
                 "pose shown by static output (live orbits from 0)",
-                default=str(DEFAULT_FRAME),
+                DEFAULT_FRAME,
+                type=int,
             ),
-        ],
+        ),
+        tags=_TAGS,
     )
 
 
