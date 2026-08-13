@@ -146,24 +146,78 @@ def test_natural_window_uses_the_compact_plate_width() -> None:
     assert block.width == hm._NATURAL_COLUMNS + 2
 
 
+def test_quiet_is_a_one_line_microplate() -> None:
+    with use_capabilities(Capabilities(color=False, glyph=True, link=False)):
+        block = hm._render(hm._fetch(), Fidelity(depth=int(Zoom.MINIMAL)), 80)
+    text = block_to_text(block)
+    assert block.height == 1
+    assert "harmonograph" in text and "f180" in text
+    assert any(0x2800 < ord(ch) <= 0x28FF for ch in text)
+    assert len(set(ch for ch in text if 0x2800 < ord(ch) <= 0x28FF)) > 3
+
+
+def test_summary_is_only_the_24_line_gallery_plate() -> None:
+    block = hm._render(hm._fetch(), Fidelity(depth=int(Zoom.SUMMARY)), 80)
+    text = block_to_text(block)
+    assert block.height == 24  # 22 rows of ink + the border
+    assert "harmonograph" in text
+    assert "Why this one" not in text
+    assert "frame 180" not in text
+
+
+def test_detailed_adds_the_signed_makers_note() -> None:
+    text = block_to_text(hm._render(hm._fetch(), Fidelity(depth=int(Zoom.DETAILED)), 80))
+    assert "Why this one" in text
+    assert "eight-point plotter" in text
+    assert "— Sol" in text
+    assert "Score" not in text and "Raster" not in text
+
+
+def test_full_adds_the_mechanical_and_raster_record() -> None:
+    text = block_to_text(hm._render(hm._fetch(), Fidelity(depth=int(Zoom.FULL)), 80))
+    assert "— Sol" in text
+    assert "Score" in text and "3.013 Hz" in text
+    assert "Raster" in text and "unique dots" in text and "carrier" in text
+
+
+def test_annotation_moves_beside_the_plate_at_the_wide_breakpoint() -> None:
+    detailed = Fidelity(depth=int(Zoom.DETAILED))
+    stacked = hm._render(hm._fetch(), detailed, hm._RESPONSIVE_BREAKPOINT - 1)
+    beside = hm._render(hm._fetch(), detailed, hm._RESPONSIVE_BREAKPOINT)
+    assert stacked.height > 24
+    assert beside.height == 24
+    assert "Why this one" in block_to_text(beside).splitlines()[0]
+
+
+def test_narrow_verbose_output_marks_instead_of_exploding() -> None:
+    for width in (0, 1, 2, 8, 20):
+        block = hm._render(hm._fetch(), Fidelity(depth=int(Zoom.FULL)), width)
+        assert block.width == width
+        assert block.height <= 26
+
+
 def test_named_facets_change_output_at_minimal_depth() -> None:
     performance = hm._fetch()
     base = block_to_text(hm._render(performance, Fidelity(depth=0), 80))
+    note = block_to_text(
+        hm._render(performance, Fidelity(depth=0, visible=frozenset({"note"})), 80)
+    )
     score = block_to_text(
         hm._render(performance, Fidelity(depth=0, visible=frozenset({"score"})), 80)
     )
     stats = block_to_text(
         hm._render(performance, Fidelity(depth=0, visible=frozenset({"stats"})), 80)
     )
-    assert "Hz" not in base and "ink " not in base
+    assert "Hz" not in base and "ink " not in base and "Why this one" not in base
+    assert "— Sol" in note
     assert "Hz" in score
     assert "ink " in stats and "carrier" in stats
 
 
 def test_facet_implications_match_the_zoom_ladder() -> None:
     assert implied_visible(hm._TAGS, int(Zoom.SUMMARY)) == frozenset()
-    assert implied_visible(hm._TAGS, int(Zoom.DETAILED)) == frozenset({"score"})
-    assert implied_visible(hm._TAGS, int(Zoom.FULL)) == frozenset({"score", "stats"})
+    assert implied_visible(hm._TAGS, int(Zoom.DETAILED)) == frozenset({"note"})
+    assert implied_visible(hm._TAGS, int(Zoom.FULL)) == frozenset({"note", "score", "stats"})
 
 
 def test_stream_advances_from_the_requested_frame() -> None:

@@ -16,12 +16,13 @@ Unicode-only destinations keep the full Braille geometry without color;
 an ASCII destination receives density marks instead. Same score, three
 honest carriers, selected from declared render capabilities.
 
-    uv run demos/showcase/harmonograph.py                  # one finished plate
+    uv run demos/showcase/harmonograph.py                  # gallery plate, nothing else
     uv run demos/showcase/harmonograph.py --live           # let the figure breathe
-    uv run demos/showcase/harmonograph.py --frame 300 -v   # later phase + score
+    uv run demos/showcase/harmonograph.py -v               # + maker's note
+    uv run demos/showcase/harmonograph.py -vv              # + score and raster facts
+    uv run demos/showcase/harmonograph.py --score          # the score by name
     uv run demos/showcase/harmonograph.py --stats          # raster facts by name
-    uv run demos/showcase/harmonograph.py -vv              # score + raster facts
-    uv run demos/showcase/harmonograph.py -q               # one-line census
+    uv run demos/showcase/harmonograph.py -q               # one-line microplate
     uv run demos/showcase/harmonograph.py --json           # the score as data
 """
 
@@ -32,7 +33,7 @@ import asyncio
 import math
 import sys
 from collections.abc import AsyncIterator
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import lru_cache
 
 from painted import (
@@ -42,6 +43,7 @@ from painted import (
     ROUNDED,
     Span,
     Style,
+    Wrap,
     border,
     fit_to_width,
     join_horizontal,
@@ -50,6 +52,7 @@ from painted import (
 )
 from painted.capabilities import current_capabilities
 from painted.cli import HelpArg, Tag
+from painted.core.doc import Def, Defs, Doc, Prose, Section, doc_lens
 from painted.palette import current_palette
 
 
@@ -262,8 +265,8 @@ def _ink_style(mask: int, shade: int, *, color: bool) -> Style:
     return accent
 
 
-def _plate(performance: Performance, columns: int) -> Block:
-    raster = _raster(performance, columns)
+def _plate(performance: Performance, columns: int, cell_rows: int = _DOT_ROWS // 4) -> Block:
+    raster = _raster(performance, columns, cell_rows)
     caps = current_capabilities()
     rows: list[Block] = []
     for masks, shades in zip(raster.masks, raster.shades):
@@ -286,75 +289,254 @@ def _plate(performance: Performance, columns: int) -> Block:
     return join_vertical(*rows)
 
 
-# --- Composition and fidelity ---
+# --- Composition: microplate, gallery plate, annotated plate ---
 
 
-def _census(performance: Performance) -> Block:
+_MICRO_NATURAL_WIDTH = 42
+_RESPONSIVE_BREAKPOINT = 96  # 64-column plate + gap + 30-column annotation
+
+
+def _micro_parts(performance: Performance, width: int | None) -> tuple[str, int, str, int]:
+    """Label, plot columns, suffix, and exact outer width for the quiet row."""
+    target = _MICRO_NATURAL_WIDTH if width is None else max(0, width)
+    if target <= 0:
+        return "", 0, "", 0
+    label = "harmonograph " if target >= 28 else ("h " if target >= 8 else "")
+    suffix = f"  f{performance.frame}" if target >= 18 else ""
+    columns = max(0, target - len(label) - len(suffix))
+    return label, columns, suffix, target
+
+
+def _microplate(performance: Performance, width: int | None) -> Block:
+    """One row: x and y each occupy one dot-column of every Braille cell."""
+    label, columns, suffix, target = _micro_parts(performance, width)
+    if target == 0:
+        return Block.empty(0, 1)
     p = current_palette()
-    return join_horizontal(
-        Block.text("harmonograph", p.accent.merge(Style(bold=True))),
-        Block.text(
-            f"  frame {performance.frame:>3}  pendulums 4  samples {_SAMPLES}",
-            Style(dim=True),
-        ),
+    parts: list[Block] = []
+    if label:
+        parts.append(Block.text(label, p.accent.merge(Style(bold=True))))
+    if columns:
+        masks: list[int] = []
+        for column in range(columns):
+            t = column * 8.0 / max(1, columns - 1)
+            x, y = _point(performance, t)
+            dot_x = min(3, max(0, round((0.5 - 0.45 * x) * 3)))
+            dot_y = min(3, max(0, round((0.5 - 0.45 * y) * 3)))
+            masks.append(_BRAILLE_BITS[dot_x][0] | _BRAILLE_BITS[dot_y][1])
+        caps = current_capabilities()
+        spans = tuple(
+            Span(
+                _carrier(mask, glyph=caps.glyph),
+                _ink_style(
+                    mask,
+                    min(_INK_SHADES - 1, column * _INK_SHADES // len(masks)),
+                    color=caps.color,
+                ),
+            )
+            for column, mask in enumerate(masks)
+        )
+        parts.append(Line(spans=spans).to_block(columns))
+    if suffix:
+        parts.append(Block.text(suffix, Style(dim=True)))
+    if not parts:  # a width too small for the labelled signature
+        parts.append(Block.text("h", p.accent.merge(Style(bold=True))))
+    return fit_to_width(join_horizontal(*parts), target)
+
+
+def _gallery(performance: Performance, width: int | None) -> Block:
+    """The default exhibit: 22 rows of ink and its frame — exactly 24 rows."""
+    outer_width = _NATURAL_COLUMNS + 2 if width is None else max(0, width)
+    columns = max(1, outer_width - 2)
+    gallery = border(_plate(performance, columns), title="harmonograph", chars=ROUNDED)
+    return gallery if width is None else fit_to_width(gallery, outer_width)
+
+
+_NOTE = (
+    "I wanted a subject where the terminal was not impersonating another canvas. "
+    "A Braille cell is already an eight-point plotter, so painted's smallest unit "
+    "becomes both canvas and ink."
+)
+_NOTE_2 = (
+    "Four simple oscillators supply the complexity. Painted composes the plate, "
+    "adapts it to the offered width, and chooses an honest carrier for each destination."
+)
+
+
+def _carrier_name() -> str:
+    caps = current_capabilities()
+    if not caps.glyph:
+        return "ASCII density"
+    return "truecolor Braille" if caps.color else "Braille"
+
+
+def _score_defs(performance: Performance) -> Defs:
+    x0, x1 = performance.score.x
+    y0, y1 = performance.score.y
+    return Defs(
+        (
+            Def(
+                "x",
+                f"{x0.frequency:.3f} Hz + {x1.frequency:.3f} Hz",
+                detail=(
+                    f"amplitude {x0.amplitude:.2f}/{x1.amplitude:.2f}; "
+                    f"damping {x0.damping:.4f}/{x1.damping:.4f}; "
+                    f"drift {x0.drift:+.4f}/{x1.drift:+.4f}"
+                ),
+            ),
+            Def(
+                "y",
+                f"{y0.frequency:.3f} Hz + {y1.frequency:.3f} Hz",
+                detail=(
+                    f"amplitude {y0.amplitude:.2f}/{y1.amplitude:.2f}; "
+                    f"damping {y0.damping:.4f}/{y1.damping:.4f}; "
+                    f"drift {y0.drift:+.4f}/{y1.drift:+.4f}"
+                ),
+            ),
+        )
     )
 
 
-def _score(performance: Performance) -> Block:
-    p = current_palette()
-    spans: list[Span] = [Span("score  ", Style(dim=True))]
-    for axis, voices, style in (
-        ("x", performance.score.x, p.accent),
-        ("y", performance.score.y, p.warning),
-    ):
-        spans.append(Span(f"{axis} ", style.merge(Style(bold=True))))
-        spans.append(Span(" + ".join(f"{voice.frequency:.3f}Hz" for voice in voices), style))
-        spans.append(Span("   ", Style()))
-    return Line(spans=tuple(spans)).to_block(52)
-
-
-def _stats(performance: Performance, columns: int) -> Block:
-    raster = _raster(performance, columns)
+def _raster_defs(performance: Performance, columns: int, rows: int) -> Defs:
+    raster = _raster(performance, max(1, columns), max(1, rows))
     occupied = sum(mask != 0 for row in raster.masks for mask in row)
-    cells = columns * len(raster.masks)
-    carrier = "braille" if current_capabilities().glyph else "ascii"
-    return Block.text(
-        f"ink {raster.plotted}  ·  cross {raster.collisions}  ·  "
-        f"cells {occupied}/{cells} {occupied / cells:.0%}  ·  carrier {carrier}",
-        Style(dim=True),
+    cells = max(1, columns) * max(1, rows)
+    return Defs(
+        (
+            Def("ink", f"{raster.plotted} unique dots", detail=f"{_SAMPLES} joined samples"),
+            Def("crossings", str(raster.collisions), detail="newest passage owns the ink"),
+            Def("occupancy", f"{occupied}/{cells} cells · {occupied / cells:.0%}"),
+            Def("carrier", _carrier_name()),
+        )
     )
 
 
-def _window(performance: Performance, width: int | None, *extra: Block) -> Block:
-    # A supplied width is an exact allocation. The natural plate remains a
-    # compact 64 columns; an offered terminal grows or shrinks its subpixel grid.
-    columns = _NATURAL_COLUMNS if width is None else max(1, width - 2)
-    rows = [_plate(performance, columns), fit_to_width(_census(performance), columns)]
-    rows.extend(fit_to_width(block, columns) for block in extra)
-    window = border(join_vertical(*rows), title="harmonograph", chars=ROUNDED)
-    return window if width is None else fit_to_width(window, width)
+def _annotation(
+    performance: Performance,
+    fidelity: Fidelity,
+    width: int,
+    *,
+    note: bool,
+    score: bool,
+    stats: bool,
+    raster_columns: int,
+    raster_rows: int,
+) -> Block:
+    if width < 24:
+        named = [
+            name
+            for name, visible in (("maker note", note), ("score", score), ("raster facts", stats))
+            if visible
+        ]
+        return Block.text(
+            "details: " + ", ".join(named),
+            Style(dim=True),
+            width=width,
+            wrap=Wrap.ELLIPSIS,
+        )
+    body: list[Prose | Section] = []
+    if note:
+        body.extend((Prose(_NOTE), Prose(_NOTE_2), Prose("— Sol")))
+    if score:
+        body.append(Section("Score", body=(_score_defs(performance),)))
+    if stats:
+        body.append(
+            Section(
+                "Raster",
+                body=(_raster_defs(performance, raster_columns, raster_rows),),
+            )
+        )
+    title = "Why this one" if note else "Inside the plate"
+    # An explicitly named facet at MINIMAL still deserves its summaries. Lift
+    # the doc's local density floor without changing the renderer's Fidelity.
+    doc_fidelity = replace(fidelity, depth=max(1, fidelity.depth))
+    return doc_lens(Doc(title, tuple(body)), fidelity=doc_fidelity, width=width)
+
+
+def _annotated(
+    performance: Performance,
+    fidelity: Fidelity,
+    width: int | None,
+    *,
+    note: bool,
+    score: bool,
+    stats: bool,
+) -> Block:
+    outer_width = _NATURAL_COLUMNS + 2 if width is None else max(0, width)
+    if width is not None and outer_width >= _RESPONSIVE_BREAKPOINT:
+        side_width = min(40, max(30, outer_width - 68))
+        art_width = outer_width - 2 - side_width
+        gallery = _gallery(performance, art_width)
+        annotation = _annotation(
+            performance,
+            fidelity,
+            side_width,
+            note=note,
+            score=score,
+            stats=stats,
+            raster_columns=max(1, art_width - 2),
+            raster_rows=_DOT_ROWS // 4,
+        )
+        return fit_to_width(join_horizontal(gallery, annotation, gap=2), outer_width)
+
+    gallery = _gallery(performance, width)
+    annotation = _annotation(
+        performance,
+        fidelity,
+        outer_width,
+        note=note,
+        score=score,
+        stats=stats,
+        raster_columns=max(1, outer_width - 2),
+        raster_rows=_DOT_ROWS // 4,
+    )
+    return fit_to_width(join_vertical(gallery, annotation, gap=1), outer_width)
+
+
+# --- Fidelity: signature → gallery → annotation → full record ---
 
 
 _TAGS = [
-    Tag("score", "Show the four-pendulum score", implied_at=2),
+    Tag("note", "Show Sol's maker note", implied_at=2),
+    Tag("score", "Show the four-pendulum score", implied_at=3),
     Tag("stats", "Show raster occupancy and carrier facts", implied_at=3),
 ]
 
 
 def _render(performance: Performance, fidelity: Fidelity, width: int | None) -> Block:
     depth = fidelity.depth
-    extra: list[Block] = []
-    if depth >= 2 or fidelity.shows("score"):
-        extra.append(_score(performance))
-    if fidelity.shows("stats"):
-        columns = _NATURAL_COLUMNS if width is None else max(1, width - 2)
-        extra.append(_stats(performance, columns))
-    if depth >= 1:
-        return _window(performance, width, *extra)
+    note = depth >= 2 or fidelity.shows("note")
+    score = depth >= 3 or fidelity.shows("score")
+    stats = depth >= 3 or fidelity.shows("stats")
 
-    rows = [_census(performance), *extra]
-    block = join_vertical(*rows)
-    return block if width is None else fit_to_width(block, width)
+    if depth <= 0:
+        micro = _microplate(performance, width)
+        if not (note or score or stats):
+            return micro
+        outer_width = _MICRO_NATURAL_WIDTH if width is None else max(0, width)
+        _label, columns, _suffix, _target = _micro_parts(performance, width)
+        annotation = _annotation(
+            performance,
+            fidelity,
+            outer_width,
+            note=note,
+            score=score,
+            stats=stats,
+            raster_columns=max(1, columns),
+            raster_rows=1,
+        )
+        return fit_to_width(join_vertical(micro, annotation, gap=1), outer_width)
+
+    if note or score or stats:
+        return _annotated(
+            performance,
+            fidelity,
+            width,
+            note=note,
+            score=score,
+            stats=stats,
+        )
+    return _gallery(performance, width)
 
 
 # --- Entry point ---
