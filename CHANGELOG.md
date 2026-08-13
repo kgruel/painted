@@ -4,7 +4,7 @@ All notable changes to painted are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/); pre-1.0, minor versions may carry
 breaking changes.
 
-## [0.14.0] — 2026-07-18
+## [0.14.0] — 2026-08-13
 
 The **honesty remediation** (0.14) — RENDER_MODEL.md law 6 ("the layer that
 *knowingly* discards requested semantic content owes evidence of the loss")
@@ -22,6 +22,32 @@ Semver-minor. One deliberate contract tightening is called out under Changed
 overflowing content renders — a marker now appears where content was silently
 cut — but a render that *fits* is byte-identical to before (a mark without loss
 would be false evidence), pinned by exact-fit byte comparisons.
+
+Riding along, because the demo curriculum ships inside the wheel: the
+**showcase** tier grew two demos and an interactive example while this release
+sat uncut, plus a shared harness, a maker's plaque, and one library-visible
+change to the `painted demos` runner. Those are listed below beside the
+remediation.
+
+### Added
+
+- **Showcase: `harmonograph` and `mandelbrot`** (`painted demos harmonograph`,
+  `painted demos mandelbrot`). The harmonograph draws four pendulums into
+  eight-dot Braille subpixels, declaring its color/glyph carriers rather than
+  probing the terminal; the Mandelbrot renders escape time with an *honest*
+  black — the unknown (still-bounded) interior is declared as unknown, not
+  colored as if resolved, and `--proof` is honored in the colorless carrier too.
+
+- **Example: `harmonograph_lab`** (`painted demos harmonograph_lab`) — the
+  harmonograph score as an instrument: an interactive Surface app for playing
+  the four-pendulum parameters and watching the figure answer.
+
+- **The showcase harness and the maker's plaque** (`demos/showcase/_harness.py`,
+  `demos/showcase/_plaque.py`). The harness carries the animation loop and CLI
+  shape so a showcase file can be just its demo; the plaque gives a maker's note
+  one form (`Plaque` + `render_plaque` + the shared `NOTE_TAG`) — named-only
+  (`--note`, implied at no depth), capped, and signed, with those conventions
+  held by tests rather than by review.
 
 ### Changed
 
@@ -93,6 +119,21 @@ would be false evidence), pinned by exact-fit byte comparisons.
   default, the absence of a mark call, the width-1 waiver guard); a listed site
   that starts marking, or a new silent path added without an evidence mark,
   fails the gate.
+
+- **`painted demos <name>` puts a demo's own directory on `sys.path`**
+  (`_demo_cli.py`). The first-party runner now gives a demo the third thing a
+  real `uv run` of the script gives it — its own directory as an import root —
+  so a demo can import a private sibling (`from _plaque import Plaque`). The
+  path is *appended*, never inserted, so a demo directory cannot shadow the
+  stdlib, and it is restored beside `argv` and `sys.modules` in `finally`. Every
+  loader (this runner, `uv run`, the capture tool, the test suite) now resolves
+  sibling imports identically.
+
+- **Demos drop their PEP 723 headers** (`demos/`). The header promised each file
+  was a standalone script; once demos began importing private siblings that
+  promise was false for a whole tier. Loader parity replaces it — the guarantee
+  is now that every loader offers the same import path, pinned by a smoke test,
+  rather than that every file stands alone.
 
 ### Fixed
 
