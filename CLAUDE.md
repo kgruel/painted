@@ -170,6 +170,15 @@ Key patterns:
 
 **Git**: never commit directly to `main` — branch first, always. On a feature branch, commit as you go (one logical unit per commit) without asking; pushing needs an explicit ask every time.
 
+**Changelog**: `CHANGELOG.md`'s `## [Unreleased]` is the release container — each slice adds its line **as it lands**, appended to the end of its subsection, never reconstructed archaeologically at cut time. The cut renames that heading to `## [X.Y.Z] — YYYY-MM-DD` and stamps `pyproject.toml` + `uv.lock` in the same commit, so the date is written once, when it's true. One line per change:
+
+```markdown
+- **What the user can now do (or stop hitting).** One clause of scope if the blast
+  radius isn't obvious. ([9bbc7e9](https://github.com/kgruel/painted/commit/9bbc7e9))
+```
+
+The reader is deciding whether to upgrade, not learning the mechanism — mechanism lives in the linked merge commit's diff, rationale in `docs/*_DESIGN.md` and the store, prose in the GitHub release page. A paragraph is the exception, earned by a breaking change, a stated trade, or a migration the reader must act on. **The invariant** (gated, tier 0): the newest *released* section names the version this tree is stamped as, and there is at most one `[Unreleased]`, always on top — so main may carry unshipped work, but only *declared* as unshipped, never as a version someone else already installed.
+
 **Procedures** with a trigger moment live in `.claude/skills/`: `design-arc` (mint/amend a design doc, deliberate, ratify, flip at ship), `build-slice` (dispatch implementation through subtask with the ratified model tiers and standing sol review), `release` (merge → tag → publish → verify).
 
 **Where knowledge lives** — place new knowledge by its load time; duplication without a drift gate rots:

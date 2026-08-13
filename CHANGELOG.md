@@ -1,6 +1,9 @@
 # Changelog
 
-All notable changes to painted are documented here. This project adheres to
+All notable changes to painted are documented here. The format is based on
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/) — `[Unreleased]` is the
+release container, one line per change, linked to its merge commit; the prose
+lives on the release page. This project adheres to
 [Semantic Versioning](https://semver.org/); pre-1.0, minor versions may carry
 breaking changes.
 
