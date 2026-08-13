@@ -107,6 +107,7 @@ SHOWCASE = [
     "boids",
     "donut",
     "fire",
+    "harmonograph",
     "life",
     "lorenz",
     "plasma",
