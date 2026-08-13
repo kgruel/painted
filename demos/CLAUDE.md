@@ -118,6 +118,7 @@ showcase/           (pattern test shape; surface-delivered animated spectacle)
   wireworld.py      Wireworld: ASCII-art circuits, laws verify computing  ✓
   raymarch.py       SDF raymarcher: scene as expression tree, donut re-derived ✓
   starmap.py        The night sky: real catalog, refs make every star a link ✓
+  mandelbrot.py     Escape time: proof vs presumption, the unknown declared ✓
 ```
 
 Old stepping stones (`block.py`, `buffer.py`, `buffer_view.py`) deleted —

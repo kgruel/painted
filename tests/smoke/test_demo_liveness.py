@@ -109,6 +109,7 @@ SHOWCASE = [
     "fire",
     "life",
     "lorenz",
+    "mandelbrot",
     "plasma",
     "raymarch",
     "starmap",
