@@ -1,6 +1,8 @@
 """Root test configuration — suite-wide flags and ambient-state isolation."""
 
 import os
+import sys
+from pathlib import Path
 
 import pytest
 
@@ -8,6 +10,18 @@ from painted.capabilities import reset_capabilities
 from painted.refs import reset_refs
 from painted.theme import reset_theme
 from painted.vocabulary import reset_vocabularies
+
+# Showcase demos may import a private sibling (`from _plaque import Plaque`).
+# Every real run provides that — `uv run demos/showcase/x.py` puts the script's
+# directory first on sys.path, and `painted demos <name>` / tools/capture.py do
+# the same around their exec — but the ~20 hand-rolled `spec_from_file_location`
+# loaders across tests/ do not. Setting it once here beats patching each of
+# them, and beats a demo carrying import boilerplate to survive its own tests.
+#
+# Appended, never inserted: nothing in demos/showcase/ may shadow the stdlib.
+# Not popped, deliberately — a demo loaded in one test and used in another must
+# not find its siblings gone.
+sys.path.append(str(Path(__file__).resolve().parent.parent / "demos" / "showcase"))
 
 
 def pytest_addoption(parser):
