@@ -43,7 +43,7 @@ styled output). Same subject, three tiers, because three shapes.
 
 | # | Tier | Dir | Catches | Test shape |
 |---|------|-----|---------|-----------|
-| 0 | **Arch** | `tests/unit/test_architecture_invariants.py` | layering/import violations, unfrozen state dataclasses, boundary leaks | AST-parses source; **never imports or executes** — pure structure |
+| 0 | **Arch** | `tests/unit/test_architecture_invariants.py` | layering/import violations, unfrozen state dataclasses, boundary leaks, release-stamp/changelog drift | AST-parses source or reads a repo manifest; **never imports or executes** — pure structure |
 | — | **Lint** | (`ty` + `ruff` over `src/`, `tests/typing/`) | type errors, format drift | static analysis; no tests |
 | 1 | **Smoke** | `tests/smoke/` | import cycles, broken lazy-facade entries, a demo/tour/slide that raises at all | cheapest thing that can *fail*; imports run, often in a **fresh subprocess** |
 | 2 | **Unit** | `tests/unit/` | a specific behavior or regression of one unit | `f(fixed input) → assert exact output` |
@@ -78,7 +78,7 @@ tier either: it's the curated tree `ty` type-checks (see below), executed by not
 | CLI flag surface, mode dispatch, `run_cli`/`run_app`, exit codes, JSON/live/plain delivery | `tests/integration/` | the assembled path, not a piece of it |
 | a TUI Surface/Layer (keys, navigation, modal layers, emissions) | `tests/unit/test_<name>_app.py` via **TestSurface** | app behavior graduated out of demos into unit tests driven by replay |
 | a new public export on `painted.core`/`views`/`display`/`publish` | `tests/unit/test_public_api.py` (add to the snapshot) | the semver-major tripwire is bidirectional — a new stable name must be a conscious entry |
-| an import/layering rule, or a new frozen state type | `tests/unit/test_architecture_invariants.py` | AST-level structural law |
+| an import/layering rule, a new frozen state type, or a repo-level consistency rule (the version stamp vs the changelog's newest released section) | `tests/unit/test_architecture_invariants.py` | structural law, decided without executing anything |
 | a render-model law (destination independence, omission evidence, no downstream policy) | `tests/unit/test_render_model_laws.py` (+ `tests/integration/test_cross_host_content.py` for law 1) | the laws the audit verified by reading are pinned by test |
 | a new demo | nothing per-demo — the liveness smoke (`tests/smoke/test_demo_liveness.py`) renders every demo at every zoom; styled/invariant contracts go to the appearance/property tiers | see `demos/CLAUDE.md` |
 | a new *published overload* / typed surface | `tests/typing/` (type-checked, never run) | pins guarantees `assert_type` can see but runtime can't |
