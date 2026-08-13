@@ -193,7 +193,7 @@ def test_the_colorless_grid_is_ascii_only() -> None:
     """
     view = mb.View(frame=mb.DEFAULT_FRAME, settled=True)
     with use_vocabularies(mb.MEMBERSHIP), use_capabilities(Capabilities(color=False, glyph=False)):
-        grid = block_to_text(mb._grid_glyphs(view, mb._W))
+        grid = block_to_text(mb._grid_glyphs(view, mb._W, False))
     assert grid.isascii(), "the ASCII carrier emitted a non-ASCII glyph"
 
 
@@ -213,14 +213,36 @@ def test_every_status_is_a_declared_value() -> None:
             assert mark_style("membership", mb._STATUS_NAMES[status]) is not None
 
 
-def test_proof_lens_and_default_lens_differ() -> None:
-    """A declared facet must change output — the honesty rule, as a test."""
+def test_proof_lens_changes_output_in_every_carrier() -> None:
+    """A declared facet must change output — the honesty rule, as a test.
+
+    Both carriers, because the first version of this demo honored `--proof`
+    only in color: piped, the flag was in `--help`, compiled into the
+    fidelity, and changed not one cell. A declared capability that does
+    nothing is the failure this demo is about, so the pin covers the carrier
+    where it hid.
+    """
     view = mb.View(frame=mb.DEFAULT_FRAME, settled=True)
-    with use_capabilities(Capabilities(color=True, glyph=True)):
-        plain = _render(view, Zoom.SUMMARY)
-        proof = _render(view, Zoom.SUMMARY, proof=True)
-    assert plain.width == proof.width
-    assert plain != proof, "--proof rendered the same cells as the default lens"
+    for caps in (
+        Capabilities(color=True, glyph=True),
+        Capabilities(color=False, glyph=False),
+        Capabilities(color=False, glyph=True),
+    ):
+        with use_capabilities(caps):
+            plain = _render(view, Zoom.SUMMARY)
+            proof = _render(view, Zoom.SUMMARY, proof=True)
+        assert plain.width == proof.width
+        assert plain != proof, f"--proof changed nothing under {caps}"
+
+
+def test_proof_lens_withholds_escape_time_not_status() -> None:
+    """The flat lens drops the gradient's information, keeps the statuses."""
+    view = mb.View(frame=mb.DEFAULT_FRAME, settled=True)
+    with use_vocabularies(mb.MEMBERSHIP), use_capabilities(Capabilities(color=False, glyph=False)):
+        flat = block_to_text(mb._grid_glyphs(view, mb._W, True))
+    drawn = set(flat) - {"\n"}
+    assert drawn <= {mb._GLYPH_ESCAPED, mb._GLYPH_INTERIOR, mb._GLYPH_UNRESOLVED}
+    assert mb._GLYPH_UNRESOLVED in drawn, "the admission did not survive the flat lens"
 
 
 def test_render_honors_the_offered_width_at_every_zoom() -> None:

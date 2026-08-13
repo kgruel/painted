@@ -328,6 +328,9 @@ def _pixel_rgb(status: int, rank: float, flat: bool) -> _RGB:
 _GLYPH_RAMP = " .,-~:;=!*"
 _GLYPH_INTERIOR = "@"
 _GLYPH_UNRESOLVED = "?"
+# What an escaped cell looks like when escape time is not being shown: the
+# middle of its own ramp, which is also the swatch the legend gives it.
+_GLYPH_ESCAPED = _GLYPH_RAMP[len(_GLYPH_RAMP) // 2]
 
 
 def _grid_color(view: View, width: int, flat: bool) -> Block:
@@ -355,7 +358,7 @@ def _grid_color(view: View, width: int, flat: bool) -> Block:
     return join_vertical(*rows)
 
 
-def _grid_glyphs(view: View, width: int) -> Block:
+def _grid_glyphs(view: View, width: int, flat: bool) -> Block:
     """Meaning by character: one sample per cell, status by glyph.
 
     The ramp is the same information the gradient carries, coarsened. The
@@ -363,6 +366,12 @@ def _grid_glyphs(view: View, width: int) -> Block:
     is the point: a pipe loses the picture's beauty, never its claims.
     Chosen whenever hue is unavailable, and ASCII-only so it also serves the
     no-glyph case; half of a cell cannot be colored without both facets.
+
+    `flat` is the --proof lens, and it has to reach this carrier too: a
+    declared facet that changed nothing without color would be a flag the
+    demo does not honor, which is the exact failure the demo is about. Here
+    it means what it means in color — every cell drawn as its own legend
+    swatch, escape time withheld.
     """
     t = trace(view)
     rows: list[Block] = []
@@ -374,6 +383,8 @@ def _grid_glyphs(view: View, width: int) -> Block:
                 spans.append(Span(_GLYPH_INTERIOR, mark_style("membership", "interior")))
             elif status == UNRESOLVED:
                 spans.append(Span(_GLYPH_UNRESOLVED, mark_style("membership", "unresolved")))
+            elif flat:
+                spans.append(Span(_GLYPH_ESCAPED, mark_style("membership", "escaped")))
             else:
                 idx = min(len(_GLYPH_RAMP) - 1, int(t.rank(nu) * len(_GLYPH_RAMP)))
                 spans.append(Span(_GLYPH_RAMP[idx], mark_style("membership", "escaped")))
@@ -386,7 +397,7 @@ def _grid(view: View, width: int, flat: bool) -> Block:
     caps = current_capabilities()
     if caps.color and caps.glyph:
         return _grid_color(view, width, flat)
-    return _grid_glyphs(view, width)
+    return _grid_glyphs(view, width, flat)
 
 
 # --- Rows ---
