@@ -38,6 +38,7 @@ legend says so by counting zero.
     uv run demos/showcase/mandelbrot.py --proof               # color by what is proved
     uv run demos/showcase/mandelbrot.py -v                    # + the status legend
     uv run demos/showcase/mandelbrot.py -vv                   # + trace internals
+    uv run demos/showcase/mandelbrot.py --note                # + the maker's note
     uv run demos/showcase/mandelbrot.py -q                    # one-line census
     uv run demos/showcase/mandelbrot.py --json                # the view as data
 """
@@ -61,6 +62,7 @@ from painted import (
     Span,
     Style,
     Vocabulary,
+    Wrap,
     border,
     join_horizontal,
     join_vertical,
@@ -72,6 +74,7 @@ from painted import (
 )
 from painted.capabilities import current_capabilities
 from painted.cli import HelpArg, Tag
+from painted.core.doc import Doc, Prose, doc_lens
 from painted.palette import current_palette
 
 
@@ -486,13 +489,61 @@ def _window(view: View, width: int | None, flat: bool, *extra: Block) -> Block:
     return border(join_vertical(*rows), title="mandelbrot", chars=ROUNDED)
 
 
-# --- Zoom renderers ---
+# --- The note ---
 
+_NOTE_1 = (
+    "A cell holds one status. That is why this subject belongs in a terminal: "
+    "a pixel renderer can dither the boundary and anti-alias the disagreement "
+    "away, and sixty-four columns cannot. Every cell has to commit to a claim, "
+    "and at this resolution you can watch it commit."
+)
+_NOTE_2 = (
+    "So there are three claims here instead of two. The black in every other "
+    "Mandelbrot is two facts wearing one color — proved to belong, and merely "
+    "outlived the budget. The second is not a cell we have yet to reach; "
+    "membership is semi-decidable, so it is the answer, and the answer is "
+    "unknown. Amber is that admission, and it is the only warm thing on screen "
+    "because it is the only thing the picture cannot stand behind."
+)
+_NOTE_3 = (
+    "painted already had the mechanism. A declared vocabulary binds each status "
+    "to a role, and every carrier asks the declaration what a status looks like: "
+    "the half-blocks, the flat lens, the pipe's glyphs, the census. The three "
+    "colors are chosen once, where the three meanings are named, and nothing "
+    "downstream is free to disagree with them."
+)
+
+
+def _note(width: int) -> Block:
+    """The maker's note — prose through the doc lens, not hand-set rows.
+
+    Narrow deliveries get a marker instead of a squeezed paragraph: the note
+    is content, and content dropped for want of room owes evidence that it
+    was dropped (RENDER_MODEL law 6) rather than a silent absence.
+    """
+    if width < 28:
+        return Block.text("note withheld: too narrow", Style(dim=True), width=width, wrap=Wrap.ELLIPSIS)
+    body = (Prose(_NOTE_1), Prose(_NOTE_2), Prose(_NOTE_3), Prose("— Claude"))
+    return doc_lens(Doc("Why the third color", body), fidelity=Fidelity(depth=1), width=width)
+
+
+# --- Fidelity: claim → field → key → ledger ---
+
+# Each rung answers a different question about one trace. The claim is what
+# the frame asserts (how deep, how much budget, how much of it unproved); the
+# field is that assertion drawn; the key is what the marks are allowed to
+# mean; the ledger is what the assertion cost.
+#
 # `proof` is a lens on the same trace, not a layer of detail — named at any
-# depth, implied at none. `stats` is the conventional -vv facet.
+# depth, implied at none. `stats` is the conventional -vv facet. `note` is
+# named-only *by argument*: depth is anonymous detail about the subject, and
+# who made a thing is not more detail about it. Harmonograph implies its note
+# at -v under a gallery reading, where wall text is the next rung after the
+# picture; both are defensible and the difference is one keyword.
 _TAGS = [
     Tag("proof", "Color by what is proved, not by escape time"),
     Tag("stats", "Show trace internals (span, samples, iterations)", implied_at=3),
+    Tag("note", "Show the maker's note"),
 ]
 
 
@@ -510,15 +561,22 @@ def _render(view: View, fidelity: Fidelity, width: int | None) -> Block:
         if fidelity.shows("stats"):
             extra.append(_stats(view))
         if depth >= 1:
-            return _window(view, width, flat, *extra)
-        census = _census(view)
-        if width is not None:
-            census = truncate(census, width)
-        if not extra:
-            return census
-        if width is None:
-            return join_vertical(census, *extra)
-        return join_vertical(census, *(truncate(b, width) for b in extra))
+            plate = _window(view, width, flat, *extra)
+        else:
+            census = _census(view)
+            if width is not None:
+                census = truncate(census, width)
+            if not extra:
+                plate = census
+            elif width is None:
+                plate = join_vertical(census, *extra)
+            else:
+                plate = join_vertical(census, *(truncate(b, width) for b in extra))
+        if not fidelity.shows("note"):
+            return plate
+        # The note sits under the frame, not inside it: the legend and the
+        # ledger are captions on the picture, the note is about the work.
+        return join_vertical(plate, _note(plate.width), gap=1)
 
 
 # --- Entry point ---

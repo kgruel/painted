@@ -245,6 +245,30 @@ def test_proof_lens_withholds_escape_time_not_status() -> None:
     assert mb._GLYPH_UNRESOLVED in drawn, "the admission did not survive the flat lens"
 
 
+def test_the_note_is_a_named_facet_at_every_depth() -> None:
+    """Authorship is not depth, so the note answers only to its own name.
+
+    The pin is the shape of the claim: `--note` adds the note at any depth
+    including MINIMAL, and no depth alone ever produces it.
+    """
+    view = mb.View(frame=mb.DEFAULT_FRAME, settled=True)
+    for zoom in Zoom:
+        without = _render(view, zoom, 80)
+        with_note = _render(view, zoom, 80, note=True)
+        assert with_note != without, f"--note changed nothing at {zoom.name}"
+        assert "Why the third color" in block_to_text(with_note)
+        assert "Why the third color" not in block_to_text(without), (
+            f"depth {zoom.name} produced the note without being asked"
+        )
+
+
+def test_a_note_too_narrow_to_render_says_so() -> None:
+    """Content dropped for want of room owes evidence (RENDER_MODEL law 6)."""
+    narrow = block_to_text(mb._note(20))
+    assert "note withheld" in narrow
+    assert len(narrow.splitlines()) == 1
+
+
 def test_render_honors_the_offered_width_at_every_zoom() -> None:
     view = mb.View(frame=mb.DEFAULT_FRAME, settled=True)
     for zoom in Zoom:
