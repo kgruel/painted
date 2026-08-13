@@ -30,7 +30,6 @@ periods, pulses beyond the open diode, silence beyond the closed one.
 
 from __future__ import annotations
 
-import argparse
 import asyncio
 import sys
 from collections.abc import AsyncIterator
@@ -42,16 +41,14 @@ from painted import (
     Line,
     Span,
     Style,
-    border,
     join_horizontal,
     join_vertical,
-    run_cli,
     truncate,
-    ROUNDED,
 )
-from painted.cli import HelpArg
 from painted.palette import current_palette
 from painted.views import sparkline
+
+from _harness import ShowcaseArg, plate, showcase_main
 
 
 # --- Data: copper and charge, frozen ---
@@ -277,7 +274,7 @@ def _window(circuit: Circuit, width: int | None, *extra: Block) -> Block:
     w = _bounds(circuit)[0] if width is None else min(width - 4, _bounds(circuit)[0])
     rows = [_grid(circuit, w), truncate(_census(circuit), w)]
     rows += [truncate(b, w) for b in extra]
-    return border(join_vertical(*rows), title="wireworld", chars=ROUNDED)
+    return plate(*rows, title="wireworld")
 
 
 # --- Zoom renderers ---
@@ -326,32 +323,26 @@ def _render(circuit: Circuit, fidelity: Fidelity, width: int | None) -> Block:
 
 
 def main() -> int:
-    pre = argparse.ArgumentParser(add_help=False)
-    pre.add_argument("--circuit", choices=sorted(CIRCUITS), default=DEFAULT_CIRCUIT)
-    pre.add_argument("--gen", type=int, default=DEFAULT_GEN)
-    ns, rest = pre.parse_known_args(sys.argv[1:])
-
-    return run_cli(
-        rest,
+    return showcase_main(
+        doc=__doc__,
+        file=__file__,
         renderer=_render,
-        fetch=lambda: _fetch(ns.circuit, ns.gen),
-        fetch_stream=lambda: _fetch_stream(ns.circuit),
-        live_delivery="surface",
-        live_meter=True,
-        description=__doc__,
-        prog="wireworld.py",
-        help_args=[
-            HelpArg(
+        fetch=lambda ns: _fetch(ns.circuit, ns.gen),
+        fetch_stream=lambda ns: _fetch_stream(ns.circuit),
+        args=(
+            ShowcaseArg(
                 "--circuit",
                 f"machine to run: {', '.join(sorted(CIRCUITS))}",
-                default=DEFAULT_CIRCUIT,
+                DEFAULT_CIRCUIT,
+                choices=tuple(sorted(CIRCUITS)),
             ),
-            HelpArg(
+            ShowcaseArg(
                 "--gen",
                 "generation shown by static output (live computes from 0)",
-                default=str(DEFAULT_GEN),
+                DEFAULT_GEN,
+                type=int,
             ),
-        ],
+        ),
     )
 
 

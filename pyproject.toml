@@ -82,3 +82,7 @@ python-version = "3.11"
 venvPath = "."
 venv = ".venv"
 pythonVersion = "3.11"
+# Showcase demos import private siblings (`from _plaque import Plaque`), which
+# every demo loader supports by putting the demo's own directory on sys.path.
+# The editor has no loader, so tell it where to look.
+extraPaths = ["demos/showcase"]

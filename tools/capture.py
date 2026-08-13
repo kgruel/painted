@@ -20,7 +20,14 @@ CaptureResult = Block | str
 
 
 def import_module_by_path(path: str | Path, *, module_name: str | None = None) -> ModuleType:
-    """Import a Python module from a file path without mutating sys.path."""
+    """Import a Python module from a file path, as if it had been run as a script.
+
+    The module's own directory joins sys.path for the duration of the exec —
+    the one thing a by-path load otherwise withholds that `uv run` provides —
+    so a demo can import a private sibling (`from _plaque import Plaque`) and
+    capture sees the same module a real run does. Appended, never inserted, so
+    the imported directory cannot shadow the stdlib; restored afterwards.
+    """
     p = Path(path)
     if not p.exists():
         raise FileNotFoundError(p)
@@ -33,7 +40,12 @@ def import_module_by_path(path: str | Path, *, module_name: str | None = None) -
         raise ImportError(f"Failed to create module spec for {p}")
     mod = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = mod  # required for dataclass module lookup
-    spec.loader.exec_module(mod)
+    saved_path = sys.path[:]
+    sys.path.append(str(p.resolve().parent))
+    try:
+        spec.loader.exec_module(mod)
+    finally:
+        sys.path[:] = saved_path
     return mod
 
 

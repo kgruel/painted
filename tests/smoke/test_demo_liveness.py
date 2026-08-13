@@ -110,6 +110,7 @@ SHOWCASE = [
     "harmonograph",
     "life",
     "lorenz",
+    "mandelbrot",
     "plasma",
     "raymarch",
     "starmap",

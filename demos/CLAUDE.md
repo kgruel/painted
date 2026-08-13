@@ -19,6 +19,7 @@ because it exists.
 4. **`to_X` bridges are fair game** — each demo can use its type's bridge to the next layer (e.g. `Line.to_block()`). The ladder shows the manual version of what the next step automates.
 5. **Sections as `join_vertical` groups** — dim header, spacer, content. Consistent visual rhythm.
 6. **Real-ish sample text** — terminal output, deploy messages, status lines. Not "Hello world".
+7. **Maker's notes go through the plaque** (`demos/showcase/_plaque.py`) — `Plaque` + `render_plaque` + the shared `NOTE_TAG`. A note is named-only (`--note`, implied at no depth), capped, and signed; those three conventions are held by `tests/unit/test_plaque.py`, not by review. Demos may import private siblings: every loader puts a demo's own directory on `sys.path`.
 
 ## Demo Tiers
 
@@ -59,9 +60,20 @@ the code is reference material. Same test shape as apps (TestSurface).
 at every zoom, surface-delivered animation) — they are *not* a new boundary. They
 live in their own `showcase/` directory because pedagogically they're spectacle,
 not teaching: full-screen, animated, "look what painted can do." The defining
-property is `live_delivery="surface"` in their `run_cli` call. `painted demos`
+property is entry through `showcase_main` (`demos/showcase/_harness.py`), which
+fixes surface delivery for the tier. `painted demos`
 renders them as a distinct fifth column (the finale); the liveness smoke exercises
 them via `test_showcase_demo_renders`, identical assertions to patterns.
+
+Because showcases are spectacle rather than teaching, their **entry point is
+scaffolding and is shared** — `showcase_main` + `ShowcaseArg` + `plate`, with
+`_plaque` for the maker's note. A demo declares each argument once and the
+harness spends it on both the parser and `--help`. This stops at the showcase
+boundary on purpose: a pattern's `run_cli` call *is* its lesson (rule 3, and
+"the invocation IS the lesson" above), so harnessing it there would delete the
+curriculum. Conventions are held by `tests/unit/test_showcase_harness.py` — a
+shrink-only allowlist for unmigrated files, and the rule that a `stats` facet
+is implied at `-vv`.
 
 The test shape *is* the boundary between primitive / pattern / app. If you can
 test the full lesson by calling `_render(data, fidelity, width)`, it's a pattern
@@ -118,6 +130,7 @@ showcase/           (pattern test shape; surface-delivered animated spectacle)
   wireworld.py      Wireworld: ASCII-art circuits, laws verify computing  ✓
   raymarch.py       SDF raymarcher: scene as expression tree, donut re-derived ✓
   starmap.py        The night sky: real catalog, refs make every star a link ✓
+  mandelbrot.py     Escape time: proof vs presumption, the unknown declared ✓
   harmonograph.py   Damped pendulums: Braille subpixels + capability carriers ✓
 ```
 

@@ -23,7 +23,6 @@ tricks — it survives `| cat` untouched.
 
 from __future__ import annotations
 
-import argparse
 import asyncio
 import sys
 from collections.abc import AsyncIterator
@@ -33,16 +32,14 @@ from painted import (
     Block,
     Fidelity,
     Style,
-    border,
     join_horizontal,
     join_vertical,
-    run_cli,
     truncate,
-    ROUNDED,
 )
-from painted.cli import HelpArg
 from painted.palette import current_palette
 from painted.views import sparkline
+
+from _harness import ShowcaseArg, plate, showcase_main
 
 
 # --- Data: a frozen world ---
@@ -203,7 +200,7 @@ def _window(world: LifeWorld, width: int | None, *extra: Block) -> Block:
     w = world.cols if width is None else min(width - 4, world.cols)
     rows = [_grid(world, w), truncate(_census(world), w)]
     rows += [truncate(b, w) for b in extra]
-    return border(join_vertical(*rows), title="Conway's Life", chars=ROUNDED)
+    return plate(*rows, title="Conway's Life")
 
 
 # --- Zoom renderers ---
@@ -250,32 +247,26 @@ def _render(world: LifeWorld, fidelity: Fidelity, width: int | None) -> Block:
 
 
 def main() -> int:
-    # Demo-specific args are peeled off before run_cli; help_args puts them
-    # back in --help. The closures below freeze the choice into fetch/stream.
-    pre = argparse.ArgumentParser(add_help=False)
-    pre.add_argument("--seed", choices=sorted(SEEDS), default=DEFAULT_SEED)
-    pre.add_argument("--gen", type=int, default=DEFAULT_GEN)
-    ns, rest = pre.parse_known_args(sys.argv[1:])
-
-    return run_cli(
-        rest,
+    return showcase_main(
+        doc=__doc__,
+        file=__file__,
         renderer=_render,
-        fetch=lambda: _fetch(ns.seed, ns.gen),
-        fetch_stream=lambda: _fetch_stream(ns.seed),
-        live_delivery="surface",
-        live_meter=True,
-        description=__doc__,
-        prog="life.py",
-        help_args=[
-            HelpArg(
-                "--seed", f"starting pattern: {', '.join(sorted(SEEDS))}", default=DEFAULT_SEED
+        fetch=lambda ns: _fetch(ns.seed, ns.gen),
+        fetch_stream=lambda ns: _fetch_stream(ns.seed),
+        args=(
+            ShowcaseArg(
+                "--seed",
+                f"starting pattern: {', '.join(sorted(SEEDS))}",
+                DEFAULT_SEED,
+                choices=tuple(sorted(SEEDS)),
             ),
-            HelpArg(
+            ShowcaseArg(
                 "--gen",
                 "generation shown by static output (live plays from 0)",
-                default=str(DEFAULT_GEN),
+                DEFAULT_GEN,
+                type=int,
             ),
-        ],
+        ),
     )
 
 

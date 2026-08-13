@@ -223,9 +223,16 @@ def run_demo(name: str, args: list[str]) -> int:
 
     module = importlib.util.module_from_spec(spec)
     saved_argv = sys.argv[:]
+    saved_path = sys.path[:]
     saved_mod = sys.modules.get(mod_name)
     try:
         sys.argv = [str(match.path)] + args
+        # The third thing a script gets that a by-path load does not: its own
+        # directory on sys.path, so a demo can import a private sibling
+        # (`from _plaque import Plaque`). Appended, not inserted, so a demo
+        # directory can never shadow the stdlib; restored in `finally` beside
+        # argv and modules, which this function already simulates.
+        sys.path.append(str(match.path.parent))
         sys.modules[mod_name] = module
         spec.loader.exec_module(module)
         if not match.has_main:
@@ -244,6 +251,7 @@ def run_demo(name: str, args: list[str]) -> int:
         return result if isinstance(result, int) else 0
     finally:
         sys.argv = saved_argv
+        sys.path[:] = saved_path
         if saved_mod is None:
             sys.modules.pop(mod_name, None)
         else:

@@ -29,7 +29,6 @@ frame, measured in the frame.
 
 from __future__ import annotations
 
-import argparse
 import asyncio
 import math
 import sys
@@ -42,15 +41,13 @@ from painted import (
     Line,
     Span,
     Style,
-    border,
     join_horizontal,
-    run_cli,
     truncate,
     join_vertical,
-    ROUNDED,
 )
-from painted.cli import HelpArg
 from painted.palette import current_palette
+
+from _harness import ShowcaseArg, plate, showcase_main
 
 
 # --- Data: the pose is just time ---
@@ -196,7 +193,7 @@ def _window(pose: Plasma, width: int | None, *extra: Block) -> Block:
     w = _W if width is None else min(width - 4, _W)
     rows = [_grid(pose, w), truncate(_census(pose), w)]
     rows += [truncate(b, w) for b in extra]
-    return border(join_vertical(*rows), title="plasma", chars=ROUNDED)
+    return plate(*rows, title="plasma")
 
 
 # --- Zoom renderers ---
@@ -242,26 +239,20 @@ def _render(pose: Plasma, fidelity: Fidelity, width: int | None) -> Block:
 
 
 def main() -> int:
-    pre = argparse.ArgumentParser(add_help=False)
-    pre.add_argument("--frame", type=int, default=DEFAULT_FRAME)
-    ns, rest = pre.parse_known_args(sys.argv[1:])
-
-    return run_cli(
-        rest,
+    return showcase_main(
+        doc=__doc__,
+        file=__file__,
         renderer=_render,
-        fetch=lambda: _fetch(ns.frame),
-        fetch_stream=lambda: _fetch_stream(),
-        live_delivery="surface",
-        live_meter=True,
-        description=__doc__,
-        prog="plasma.py",
-        help_args=[
-            HelpArg(
+        fetch=lambda ns: _fetch(ns.frame),
+        fetch_stream=lambda ns: _fetch_stream(),
+        args=(
+            ShowcaseArg(
                 "--frame",
                 "pose shown by static output (live swirls from 0)",
-                default=str(DEFAULT_FRAME),
+                DEFAULT_FRAME,
+                type=int,
             ),
-        ],
+        ),
     )
 
 
