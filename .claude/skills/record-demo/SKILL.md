@@ -27,6 +27,7 @@ Set Padding 14
 Set Framerate 60
 Hide
 Type "cd /Users/kaygee/Code/painted" Enter
+Type "unset NO_COLOR" Enter
 Type "clear" Enter
 Show
 Type "uv run demos/showcase/raymarch.py --live" Enter
@@ -43,7 +44,7 @@ ffmpeg -framerate 60 -i "frames/frame-text-%05d.png" \
 `frames/` holds `frame-text-*` and `frame-cursor-*`; use `frame-text-*` unless
 you want the cursor drawn.
 
-## The four traps
+## The five traps
 
 1. **`Output out.mp4` is hard-capped at 25fps**, whatever `Set Framerate`
    says — vhs re-encodes. A 30fps demo silently loses frames. Render to
@@ -65,6 +66,15 @@ you want the cursor drawn.
    animation — usually what you want. For a still, pass `--static`; `--frame N`
    only affects static output, since live always starts at frame 0. `-q`,
    `--json`, and `--plain` also collapse to STATIC.
+
+5. **vhs inherits `NO_COLOR` from the launching shell.** Even with
+   `COLORTERM=truecolor`, painted deliberately chooses and serializes its
+   color-free form while `NO_COLOR` is set. For an artifact intended to show
+   the demo's palette, clear it in the hidden setup with
+   `Type "unset NO_COLOR" Enter`; preserve it for deliberately monochrome
+   captures. Extract and visually inspect at least one representative frame
+   before hand-off — a successful encode and its metadata cannot reveal that
+   the entire capture is monochrome.
 
 ## Framing a showcase demo
 
