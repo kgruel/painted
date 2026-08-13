@@ -7,6 +7,17 @@ lives on the release page. This project adheres to
 [Semantic Versioning](https://semver.org/); pre-1.0, minor versions may carry
 breaking changes.
 
+## [Unreleased]
+
+### Changed
+
+- **CLI errors no longer ride stdout, and multi-line error messages keep their
+  line structure.** Every format — rendered, `--plain`, `--json` (the
+  `{"error": …}` object included) — now emits fetch/render errors on stderr,
+  so piping or capturing stdout never mistakes an error for data; scripts that
+  parsed errors from stdout must read stderr instead (exit codes are
+  unchanged). ([782e269](https://github.com/kgruel/painted/commit/782e269))
+
 ## [0.14.0] — 2026-08-13
 
 The **honesty remediation** (0.14) — RENDER_MODEL.md law 6 ("the layer that
