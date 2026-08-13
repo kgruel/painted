@@ -62,7 +62,18 @@ def _load_showcase() -> ModuleType:
         raise RuntimeError(f"cannot load harmonograph showcase: {path}")
     module = importlib.util.module_from_spec(spec)
     sys.modules[name] = module
-    spec.loader.exec_module(module)
+    # The showcase's own directory, for the duration of the exec — this file is
+    # itself a demo loader, and every other one (painted demos, uv run,
+    # tools/capture.py, the test suite) provides exactly this, so a showcase can
+    # import a private sibling. Without it, harmonograph's `from _plaque import
+    # NOTE_TAG` raises here and the lab dies at import. Appended, never
+    # inserted; restored, so the lab's own directory keeps precedence.
+    saved_path = sys.path[:]
+    sys.path.append(str(path.parent))
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        sys.path[:] = saved_path
     return module
 
 
