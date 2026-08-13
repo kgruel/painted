@@ -991,6 +991,11 @@ class CliRunner(Generic[T]):
                             try:
                                 schemes = self._resolve_ref_schemes(state)
                             except Exception as exc:
+                                # The stated exception to errors-ride-stderr:
+                                # inside an in-place live region (styled TTY
+                                # only), the error renders as the final frame —
+                                # the region is the display the user is
+                                # watching, and finalize() keeps it visible.
                                 renderer.render(self._render_error_block(ctx, exc))
                                 renderer.finalize()
                                 return 2
@@ -1014,6 +1019,9 @@ class CliRunner(Generic[T]):
                                     # propagate to the outer finalize + the seam.
                                     raise
                                 except Exception as exc:
+                                    # Same stated stderr exception as the
+                                    # resolution fault above: the error is the
+                                    # live region's final frame.
                                     renderer.render(self._render_error_block(ctx, exc))
                                     renderer.finalize()
                                     return 2
@@ -1295,11 +1303,10 @@ class CliRunner(Generic[T]):
             raise exc
         from ..core.writer import print_block
 
-        use_ansi = ctx.stderr_is_tty and not ctx.plain_requested
         print_block(
             block,
             sys.stderr,
-            use_ansi=use_ansi,
+            use_ansi=ctx.stderr_use_ansi,
             no_color=self._delivery_no_color,
         )
 
@@ -1317,8 +1324,7 @@ class CliRunner(Generic[T]):
         """
         from ..core.writer import print_block
 
-        use_ansi = ctx.stderr_is_tty and not ctx.plain_requested
-        print_block(self._fetch_error_block(ctx, exc), sys.stderr, use_ansi=use_ansi)
+        print_block(self._fetch_error_block(ctx, exc), sys.stderr, use_ansi=ctx.stderr_use_ansi)
         return 1
 
     @staticmethod
@@ -1338,7 +1344,7 @@ class CliRunner(Generic[T]):
             style = Style(fg="red")
 
         message = CliRunner._exception_message(exc)
-        return CliRunner._multiline_error_block(message, style, max(1, ctx.width))
+        return CliRunner._multiline_error_block(message, style, ctx.width)
 
     @staticmethod
     def _render_error_block(ctx: CliContext, exc: Exception) -> Block:
@@ -1350,7 +1356,7 @@ class CliRunner(Generic[T]):
         else:
             text = type(exc).__name__
 
-        return CliRunner._multiline_error_block(text, Style(), max(1, ctx.width))
+        return CliRunner._multiline_error_block(text, Style(), ctx.width)
 
     @staticmethod
     def _multiline_error_block(message: str, style: Style, width: int) -> Block:
@@ -1364,11 +1370,11 @@ class CliRunner(Generic[T]):
         from ..core.block import Block, Wrap
         from ..core.compose import join_vertical
 
+        width = max(1, width)
         lines = message.split("\n")
-        blocks = [Block.text(line, style, width=width, wrap=Wrap.WORD) for line in lines]
-        if len(blocks) == 1:
-            return blocks[0]
-        return join_vertical(*blocks)
+        return join_vertical(
+            *(Block.text(line, style, width=width, wrap=Wrap.WORD) for line in lines)
+        )
 
 
 # Four published call forms — the truth type checkers carry, so no caller ever
