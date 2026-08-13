@@ -131,6 +131,7 @@ showcase/           (pattern test shape; surface-delivered animated spectacle)
   raymarch.py       SDF raymarcher: scene as expression tree, donut re-derived ✓
   starmap.py        The night sky: real catalog, refs make every star a link ✓
   mandelbrot.py     Escape time: proof vs presumption, the unknown declared ✓
+  harmonograph.py   Damped pendulums: Braille subpixels + capability carriers ✓
 ```
 
 Old stepping stones (`block.py`, `buffer.py`, `buffer_view.py`) deleted —
