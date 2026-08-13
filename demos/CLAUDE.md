@@ -19,6 +19,7 @@ because it exists.
 4. **`to_X` bridges are fair game** — each demo can use its type's bridge to the next layer (e.g. `Line.to_block()`). The ladder shows the manual version of what the next step automates.
 5. **Sections as `join_vertical` groups** — dim header, spacer, content. Consistent visual rhythm.
 6. **Real-ish sample text** — terminal output, deploy messages, status lines. Not "Hello world".
+7. **Maker's notes go through the plaque** (`demos/showcase/_plaque.py`) — `Plaque` + `render_plaque` + the shared `NOTE_TAG`. A note is named-only (`--note`, implied at no depth), capped, and signed; those three conventions are held by `tests/unit/test_plaque.py`, not by review. Demos may import private siblings: every loader puts a demo's own directory on `sys.path`.
 
 ## Demo Tiers
 

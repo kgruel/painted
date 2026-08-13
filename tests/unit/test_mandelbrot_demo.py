@@ -35,6 +35,16 @@ def _load():
 
 mb = _load()
 
+
+def _render_plaque(plaque, *, width: int):
+    """The demo's plaque at a width, with its own facet asked for."""
+    from _plaque import render_plaque
+
+    return render_plaque(
+        plaque, fidelity=Fidelity(depth=1, visible=frozenset({"note"})), width=width
+    )
+
+
 # A deterministic lattice over the interesting region: the set lives inside
 # |c| < 2, and this spans it densely enough to catch a sign flip anywhere.
 _PROBES = [(-2.2 + 0.05 * i, -1.25 + 0.05 * j) for i in range(61) for j in range(51)]
@@ -263,9 +273,15 @@ def test_the_note_is_a_named_facet_at_every_depth() -> None:
 
 
 def test_a_note_too_narrow_to_render_says_so() -> None:
-    """Content dropped for want of room owes evidence (RENDER_MODEL law 6)."""
-    narrow = block_to_text(mb._note(20))
-    assert "note withheld" in narrow
+    """Content dropped for want of room owes evidence (RENDER_MODEL law 6).
+
+    The degrade now lives in the shared plaque (its own laws are in
+    test_plaque.py); what this pins is that *this* demo's note still goes
+    through it and still says so.
+    """
+    narrow = block_to_text(_render_plaque(mb.PLAQUE, width=20))
+    assert "withheld" in narrow
+    assert "maker note" in narrow
     assert len(narrow.splitlines()) == 1
 
 

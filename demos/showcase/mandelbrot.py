@@ -62,7 +62,6 @@ from painted import (
     Span,
     Style,
     Vocabulary,
-    Wrap,
     border,
     join_horizontal,
     join_vertical,
@@ -74,8 +73,9 @@ from painted import (
 )
 from painted.capabilities import current_capabilities
 from painted.cli import HelpArg, Tag
-from painted.core.doc import Doc, Prose, doc_lens
 from painted.palette import current_palette
+
+from _plaque import NOTE_TAG, Plaque, render_plaque
 
 
 # --- Data: a pose is a frame plus how much it may spend ---
@@ -491,6 +491,11 @@ def _window(view: View, width: int | None, flat: bool, *extra: Block) -> Block:
 
 # --- The note ---
 
+# The shape is shared (demos/showcase/_plaque.py); only the words are mine.
+# The rule, the margin, the right-aligned signature, the too-narrow marker and
+# the cap on how long a note may run all live there, so a third showcase
+# inherits them rather than re-deriving them a fourth way.
+
 _NOTE_1 = (
     "A cell holds one status. That is why this subject belongs in a terminal: "
     "a pixel renderer can dither the boundary and anti-alias the disagreement "
@@ -514,17 +519,14 @@ _NOTE_3 = (
 )
 
 
-def _note(width: int) -> Block:
-    """The maker's note — prose through the doc lens, not hand-set rows.
-
-    Narrow deliveries get a marker instead of a squeezed paragraph: the note
-    is content, and content dropped for want of room owes evidence that it
-    was dropped (RENDER_MODEL law 6) rather than a silent absence.
-    """
-    if width < 28:
-        return Block.text("note withheld: too narrow", Style(dim=True), width=width, wrap=Wrap.ELLIPSIS)
-    body = (Prose(_NOTE_1), Prose(_NOTE_2), Prose(_NOTE_3), Prose("— Claude"))
-    return doc_lens(Doc("Why the third color", body), fidelity=Fidelity(depth=1), width=width)
+PLAQUE = Plaque(
+    title="Why the third color",
+    note=(_NOTE_1, _NOTE_2, _NOTE_3),
+    maker="Claude",
+    # No sections: this demo's legend and ledger are captions on the picture
+    # and belong inside the frame. The plaque carries only what is about the
+    # work rather than in it.
+)
 
 
 # --- Fidelity: claim → field → key → ledger ---
@@ -535,15 +537,15 @@ def _note(width: int) -> Block:
 # mean; the ledger is what the assertion cost.
 #
 # `proof` is a lens on the same trace, not a layer of detail — named at any
-# depth, implied at none. `stats` is the conventional -vv facet. `note` is
-# named-only *by argument*: depth is anonymous detail about the subject, and
-# who made a thing is not more detail about it. Harmonograph implies its note
-# at -v under a gallery reading, where wall text is the next rung after the
-# picture; both are defensible and the difference is one keyword.
+# depth, implied at none. `stats` is the conventional -vv facet. `note` comes
+# from the plaque, which owns the ruling that a note is named-only: depth is
+# anonymous detail about the subject, and who made a thing is not more detail
+# about it. Taking the shared Tag object is what keeps that from drifting one
+# demo at a time.
 _TAGS = [
     Tag("proof", "Color by what is proved, not by escape time"),
     Tag("stats", "Show trace internals (span, samples, iterations)", implied_at=3),
-    Tag("note", "Show the maker's note"),
+    NOTE_TAG,
 ]
 
 
@@ -572,11 +574,12 @@ def _render(view: View, fidelity: Fidelity, width: int | None) -> Block:
                 plate = join_vertical(census, *extra)
             else:
                 plate = join_vertical(census, *(truncate(b, width) for b in extra))
-        if not fidelity.shows("note"):
-            return plate
-        # The note sits under the frame, not inside it: the legend and the
-        # ledger are captions on the picture, the note is about the work.
-        return join_vertical(plate, _note(plate.width), gap=1)
+        # The plaque sits under the frame, not inside it: the legend and the
+        # ledger are captions on the picture, the note is about the work. It
+        # decides its own visibility from the same fidelity — no second gate
+        # here to disagree with the one inside it.
+        label = render_plaque(PLAQUE, fidelity=fidelity, width=plate.width)
+        return plate if label is None else join_vertical(plate, label, gap=1)
 
 
 # --- Entry point ---
