@@ -165,23 +165,34 @@ def test_summary_is_only_the_24_line_gallery_plate() -> None:
     assert "frame 180" not in text
 
 
-def test_detailed_adds_the_signed_makers_note() -> None:
-    text = block_to_text(hm._render(hm._fetch(), Fidelity(depth=int(Zoom.DETAILED)), 80))
-    assert "Why this one" in text
-    assert "eight-point plotter" in text
-    assert "— Sol" in text
-    assert "Score" not in text and "Raster" not in text
+def test_the_signed_makers_note_answers_only_to_its_own_name() -> None:
+    """Named-only, per the ruling NOTE_TAG carries (see tests/unit/test_plaque.py).
+
+    The gallery register put wall text at -v. Depth is anonymous detail about
+    the subject, though, and the maker is not more subject — so the note is
+    asked for by name at any depth and implied at none.
+    """
+    for depth in range(4):
+        plain = block_to_text(hm._render(hm._fetch(), Fidelity(depth=depth), 80))
+        assert "— Sol" not in plain, f"depth {depth} produced the note without being asked"
+        named = block_to_text(
+            hm._render(hm._fetch(), Fidelity(depth=depth, visible=frozenset({"note"})), 80)
+        )
+        assert "Why this one" in named
+        assert "eight-point plotter" in named
+        assert "— Sol" in named
 
 
 def test_full_adds_the_mechanical_and_raster_record() -> None:
     text = block_to_text(hm._render(hm._fetch(), Fidelity(depth=int(Zoom.FULL)), 80))
-    assert "— Sol" in text
     assert "Score" in text and "3.013 Hz" in text
     assert "Raster" in text and "unique dots" in text and "carrier" in text
 
 
 def test_annotation_moves_beside_the_plate_at_the_wide_breakpoint() -> None:
-    detailed = Fidelity(depth=int(Zoom.DETAILED))
+    # The layout law is unchanged; only how the annotation is *asked for* moved,
+    # so the note is named here rather than implied by -v.
+    detailed = Fidelity(depth=int(Zoom.DETAILED), visible=frozenset({"note"}))
     stacked = hm._render(hm._fetch(), detailed, hm._RESPONSIVE_BREAKPOINT - 1)
     beside = hm._render(hm._fetch(), detailed, hm._RESPONSIVE_BREAKPOINT)
     assert stacked.height > 24
@@ -216,8 +227,10 @@ def test_named_facets_change_output_at_minimal_depth() -> None:
 
 def test_facet_implications_match_the_zoom_ladder() -> None:
     assert implied_visible(hm._TAGS, int(Zoom.SUMMARY)) == frozenset()
-    assert implied_visible(hm._TAGS, int(Zoom.DETAILED)) == frozenset({"note"})
-    assert implied_visible(hm._TAGS, int(Zoom.FULL)) == frozenset({"note", "score", "stats"})
+    # -v implies nothing since the note went named-only: the register's
+    # annotation rung is now reached by --note/--score/--stats, not by depth.
+    assert implied_visible(hm._TAGS, int(Zoom.DETAILED)) == frozenset()
+    assert implied_visible(hm._TAGS, int(Zoom.FULL)) == frozenset({"score", "stats"})
 
 
 def test_stream_advances_from_the_requested_frame() -> None:

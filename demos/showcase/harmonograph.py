@@ -18,7 +18,7 @@ honest carriers, selected from declared render capabilities.
 
     uv run demos/showcase/harmonograph.py                  # gallery plate, nothing else
     uv run demos/showcase/harmonograph.py --live           # let the figure breathe
-    uv run demos/showcase/harmonograph.py -v               # + maker's note
+    uv run demos/showcase/harmonograph.py --note           # + maker's note
     uv run demos/showcase/harmonograph.py -vv              # + score and raster facts
     uv run demos/showcase/harmonograph.py --score          # the score by name
     uv run demos/showcase/harmonograph.py --stats          # raster facts by name
@@ -54,6 +54,8 @@ from painted.capabilities import current_capabilities
 from painted.cli import HelpArg, Tag
 from painted.core.doc import Def, Defs, Doc, Prose, Section, doc_lens
 from painted.palette import current_palette
+
+from _plaque import NOTE_TAG
 
 
 # --- Data: a mechanical score, frozen ---
@@ -496,8 +498,14 @@ def _annotated(
 # --- Fidelity: signature → gallery → annotation → full record ---
 
 
+# The gallery reading put the maker's note at -v, where wall text follows the
+# picture. The ruling went the other way and applies to every showcase: depth is
+# anonymous detail about the *subject*, and who made a thing is not more detail
+# about it. NOTE_TAG carries that decision, so it cannot drift back one demo at
+# a time. The rest of the register — signature, gallery, annotation, full record
+# — is unchanged; only the rung the note answers to moved.
 _TAGS = [
-    Tag("note", "Show Sol's maker note", implied_at=2),
+    NOTE_TAG,
     Tag("score", "Show the four-pendulum score", implied_at=3),
     Tag("stats", "Show raster occupancy and carrier facts", implied_at=3),
 ]
@@ -505,7 +513,9 @@ _TAGS = [
 
 def _render(performance: Performance, fidelity: Fidelity, width: int | None) -> Block:
     depth = fidelity.depth
-    note = depth >= 2 or fidelity.shows("note")
+    # Named-only: no depth branch here, or the note would arrive at -v anyway
+    # and the shared Tag would be a decoration over a live disagreement.
+    note = fidelity.shows("note")
     score = depth >= 3 or fidelity.shows("score")
     stats = depth >= 3 or fidelity.shows("stats")
 
