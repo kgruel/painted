@@ -116,6 +116,16 @@ class TestBlockTextNewlines:
         assert b.height == 2
         assert _chars(b, 1) == [" ", " "]
 
+    def test_crlf_is_one_break_no_phantom_column(self):
+        b = Block.text("a\r\nb", S)
+        assert b.height == 2
+        assert b.width == 1
+
+    def test_width_zero_collapses_before_the_split(self):
+        b = Block.text("a\nb", S, width=0)
+        assert b.width == 0
+        assert b.height == 1
+
     def test_ref_applies_to_whole_block(self):
         b = Block.text("a\nb", S, ref="label")
         assert b.ref == "label"

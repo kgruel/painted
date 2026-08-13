@@ -278,7 +278,7 @@ def doc_lens(
         doc: The document node tree.
         fidelity: Disclosure spec (depth / visible tags / density budgets).
         width: Available width in columns. ``None`` renders at natural width
-            (prose stays single-line). A given width is honored exactly per the
+            (prose does not reflow). A given width is honored exactly per the
             width contract; prose word-wraps to it.
     """
     blocks: list[Block] = []

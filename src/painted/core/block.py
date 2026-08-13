@@ -203,12 +203,14 @@ class Block:
     ) -> Block:
         """Create a block from text content with optional wrapping.
 
-        A newline in ``content`` is declared line structure, honored as a hard
-        break: segments split first, the wrap mode applies *within* each
-        segment, and the segment blocks stack vertically (decision
-        practice/block-text-honors-newlines). Without this split a ``\\n``
-        would reach ``Cell`` and be scrubbed to a space — the renderer
-        silently rewriting declared meaning.
+        A newline (``\\n``, or a ``\\r\\n`` pair) in ``content`` is declared
+        line structure, honored as a hard break: segments split first, the
+        wrap mode applies *within* each segment, and the segment blocks stack
+        vertically (decision practice/block-text-honors-newlines). Without
+        this split the control chars would reach ``Cell`` and be scrubbed to
+        spaces — the renderer silently rewriting declared meaning. The
+        ``width <= 0`` degenerate case keeps its empty-block contract and
+        collapses before the split.
         """
         ref = _resolve_ref_alias(ref, id, spelling="Block.text(id=)")
         if width is not None and width <= 0:
@@ -217,13 +219,15 @@ class Block:
         if "\n" in content:
             seg_blocks = [
                 Block.text(segment, style, width=width, wrap=wrap)
-                for segment in content.split("\n")
+                for segment in content.replace("\r\n", "\n").split("\n")
             ]
             if width is None:
-                w = max(b.width for b in seg_blocks)
-                rows = [_pad_row(list(row), w, style) for b in seg_blocks for row in b._rows]
-                return Block(rows, w, ref=ref)
-            rows_t = tuple(row for b in seg_blocks for row in b._rows)
+                width = max(b.width for b in seg_blocks)
+            rows_t = tuple(
+                row if len(row) == width else tuple(_pad_row(list(row), width, style))
+                for b in seg_blocks
+                for row in b._rows
+            )
             return Block._create(rows_t, width, ref=ref)
 
         if width is None:
