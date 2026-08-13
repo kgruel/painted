@@ -39,6 +39,7 @@ if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
     from ..core.block import Block
+    from ..core.cell import Style
     from ..core.renderer import HeightRenderer, Renderer
     from ..host import HostEventSink
     from ..refs import RefScheme
@@ -474,7 +475,7 @@ class CliRunner(Generic[T]):
                 return self._export_json(ctx)
             return self._dispatch(ctx)
         except PromptContractError as exc:
-            return self._emit_refusal(ctx, exc, plain=plain_requested)
+            return self._emit_refusal(ctx, exc)
 
     def _get_parser(self) -> argparse.ArgumentParser:
         """Build and cache the parser for repeated invocations.
@@ -798,8 +799,12 @@ class CliRunner(Generic[T]):
             # stderr with nothing on stdout, so `tool --json | jq` stays clean.
             raise
         except Exception as exc:
+            # The error object keeps its machine-readable shape but rides
+            # stderr like every other error — stdout stays a clean data
+            # channel on failure, so `tool --json > file` never writes an
+            # error that looks like data (ruled 2026-08-13, unconditional).
             message = self._exception_message(exc)
-            print(json.dumps({"error": message}))
+            print(json.dumps({"error": message}), file=sys.stderr)
             return 1
         try:
             data = asdict(state)  # type: ignore[arg-type]  # T may be dataclass
@@ -953,9 +958,7 @@ class CliRunner(Generic[T]):
                                     )
                                 last_schemes = schemes
                             except Exception as exc:
-                                self._emit_error(
-                                    ctx, self._render_error_block(ctx, exc), exc, use_ansi=False
-                                )
+                                self._emit_error(ctx, self._render_error_block(ctx, exc), exc)
                                 return 2
                     except PromptAbort:
                         # A prompt abort is not a graceful stop — propagate it
@@ -964,9 +967,7 @@ class CliRunner(Generic[T]):
                     except (KeyboardInterrupt, asyncio.CancelledError):
                         return 0
                     except Exception as exc:
-                        self._emit_error(
-                            ctx, self._fetch_error_block(ctx, exc), exc, use_ansi=False
-                        )
+                        self._emit_error(ctx, self._fetch_error_block(ctx, exc), exc)
                         return 1
                     if last_block is not None:
                         with self._ref_scope(last_schemes):
@@ -990,6 +991,11 @@ class CliRunner(Generic[T]):
                             try:
                                 schemes = self._resolve_ref_schemes(state)
                             except Exception as exc:
+                                # The stated exception to errors-ride-stderr:
+                                # inside an in-place live region (styled TTY
+                                # only), the error renders as the final frame —
+                                # the region is the display the user is
+                                # watching, and finalize() keeps it visible.
                                 renderer.render(self._render_error_block(ctx, exc))
                                 renderer.finalize()
                                 return 2
@@ -1013,6 +1019,9 @@ class CliRunner(Generic[T]):
                                     # propagate to the outer finalize + the seam.
                                     raise
                                 except Exception as exc:
+                                    # Same stated stderr exception as the
+                                    # resolution fault above: the error is the
+                                    # live region's final frame.
                                     renderer.render(self._render_error_block(ctx, exc))
                                     renderer.finalize()
                                     return 2
@@ -1137,20 +1146,13 @@ class CliRunner(Generic[T]):
             # A refusal captured inside the surface routes through the seam too.
             if isinstance(surface.error, PromptContractError):
                 raise surface.error
-            # These error serializers are opened inside _host_scope too, so they
-            # carry the delivery's one NO_COLOR snapshot (§9.1), never a fresh read.
+            # Funnel through _emit_error like every other mode: stderr, at
+            # stderr's own fidelity, under the delivery's one NO_COLOR
+            # snapshot (§9.1).
             if surface.error_kind == "render":
-                print_block(
-                    self._render_error_block(ctx, surface.error),
-                    use_ansi=ctx.use_ansi,
-                    no_color=self._delivery_no_color,
-                )
+                self._emit_error(ctx, self._render_error_block(ctx, surface.error), surface.error)
                 return 2
-            print_block(
-                self._fetch_error_block(ctx, surface.error),
-                use_ansi=ctx.use_ansi,
-                no_color=self._delivery_no_color,
-            )
+            self._emit_error(ctx, self._fetch_error_block(ctx, surface.error), surface.error)
             return 1
 
         # Gate on frame *presence*, not the state payload: renderer data is
@@ -1185,11 +1187,7 @@ class CliRunner(Generic[T]):
                 except PromptContractError:
                     raise
                 except Exception as exc:
-                    print_block(
-                        self._render_error_block(ctx, exc),
-                        use_ansi=ctx.use_ansi,
-                        no_color=self._delivery_no_color,
-                    )
+                    self._emit_error(ctx, self._render_error_block(ctx, exc), exc)
                     return 2
                 if self.live_meter:
                     # The deposit carries the run's final gauge — what this show cost.
@@ -1281,20 +1279,23 @@ class CliRunner(Generic[T]):
                 on_host_event=self.on_host_event,
             )
 
-    def _emit_error(
-        self, ctx: CliContext, block: Block, exc: Exception, *, use_ansi: bool | None = None
-    ) -> None:
-        """Print an ordinary fetch/render error block to stdout.
+    def _emit_error(self, ctx: CliContext, block: Block, exc: Exception) -> None:
+        """Render a fetch/render error to stderr — errors never ride stdout.
+
+        The one funnel every mode's error rendering goes through: stdout stays
+        a clean data channel on failure in every format (the same contract the
+        refusal seam established for prompts, design §8), so ``tool | jq`` and
+        ``output=$(tool)`` never parse an error as data. ANSI follows stderr's
+        own plane — ``stderr_is_tty`` overridden by the ``--plain`` request —
+        never the resolved stdout format, exactly like ``_emit_refusal``.
 
         A prompt refusal is *not* ordinary: it re-raises here so the single
-        refusal seam in ``run()`` routes it to stderr with a clean stdout
-        (design §8). Every other error keeps the existing stdout path unchanged,
-        so this is the one place mode handlers funnel error rendering through.
+        refusal seam in ``run()`` routes it (with its exit-1 contract) instead.
 
-        The error writer is a stdout serializer opened inside ``_host_scope``, so
-        it serializes under the delivery's one NO_COLOR snapshot (§9.1) — never a
-        second env read that a mid-run env change (a renderer that flips NO_COLOR
-        and then raises) could desync from the delivery's own policy.
+        The error writer serializes under the delivery's one NO_COLOR snapshot
+        (§9.1) — never a second env read that a mid-run env change (a renderer
+        that flips NO_COLOR and then raises) could desync from the delivery's
+        own policy.
         """
         from .prompts import PromptContractError
 
@@ -1304,11 +1305,12 @@ class CliRunner(Generic[T]):
 
         print_block(
             block,
-            use_ansi=ctx.use_ansi if use_ansi is None else use_ansi,
+            sys.stderr,
+            use_ansi=ctx.stderr_use_ansi,
             no_color=self._delivery_no_color,
         )
 
-    def _emit_refusal(self, ctx: CliContext, exc: Exception, *, plain: bool) -> int:
+    def _emit_refusal(self, ctx: CliContext, exc: Exception) -> int:
         """Route a prompt refusal to stderr, leaving stdout a clean data channel.
 
         The single seam every mode funnels a ``PromptContractError`` through
@@ -1322,8 +1324,7 @@ class CliRunner(Generic[T]):
         """
         from ..core.writer import print_block
 
-        use_ansi = ctx.stderr_is_tty and not plain
-        print_block(self._fetch_error_block(ctx, exc), sys.stderr, use_ansi=use_ansi)
+        print_block(self._fetch_error_block(ctx, exc), sys.stderr, use_ansi=ctx.stderr_use_ansi)
         return 1
 
     @staticmethod
@@ -1333,7 +1334,6 @@ class CliRunner(Generic[T]):
 
     @staticmethod
     def _fetch_error_block(ctx: CliContext, exc: Exception) -> Block:
-        from ..core.block import Block, Wrap
         from ..core.cell import Style
 
         try:
@@ -1344,12 +1344,10 @@ class CliRunner(Generic[T]):
             style = Style(fg="red")
 
         message = CliRunner._exception_message(exc)
-        width = max(1, ctx.width)
-        return Block.text(message.replace("\n", " "), style, width=width, wrap=Wrap.WORD)
+        return CliRunner._multiline_error_block(message, style, ctx.width)
 
     @staticmethod
     def _render_error_block(ctx: CliContext, exc: Exception) -> Block:
-        from ..core.block import Block, Wrap
         from ..core.cell import Style
 
         message = str(exc).strip()
@@ -1358,8 +1356,25 @@ class CliRunner(Generic[T]):
         else:
             text = type(exc).__name__
 
-        width = max(1, ctx.width)
-        return Block.text(text.replace("\n", " "), Style(), width=width, wrap=Wrap.WORD)
+        return CliRunner._multiline_error_block(text, Style(), ctx.width)
+
+    @staticmethod
+    def _multiline_error_block(message: str, style: Style, width: int) -> Block:
+        """An error message as a Block, newlines preserved.
+
+        A consumer's error message owns its line structure (a did-you-mean
+        block is three lines by design) — flattening it is the framework
+        rewriting declared meaning. Each line word-wraps within the width;
+        ``Block.text`` is single-line by design, so multi-line is composed.
+        """
+        from ..core.block import Block, Wrap
+        from ..core.compose import join_vertical
+
+        width = max(1, width)
+        lines = message.split("\n")
+        return join_vertical(
+            *(Block.text(line, style, width=width, wrap=Wrap.WORD) for line in lines)
+        )
 
 
 # Four published call forms — the truth type checkers carry, so no caller ever

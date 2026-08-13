@@ -846,7 +846,9 @@ def test_deposits_fetch_error(monkeypatch, capsys):
     monkeypatch.setattr(StreamSurface, "run", fake_run)
     code = _runner()._run_live_surface(static_ctx(Zoom.SUMMARY))
     assert code == 1
-    assert "kaboom" in capsys.readouterr().out
+    captured = capsys.readouterr()
+    assert "kaboom" in captured.err
+    assert captured.out == ""  # errors never ride stdout
 
 
 def test_deposit_installs_the_last_states_schemes(monkeypatch, capsys):
@@ -915,7 +917,7 @@ def test_deposit_ref_resolution_fault_returns_2(monkeypatch, capsys):
 
     code = _runner(ref_schemes=boom)._run_live_surface(static_ctx(Zoom.SUMMARY))
     assert code == 2
-    assert "RuntimeError: deposit scheme boom" in capsys.readouterr().out
+    assert "RuntimeError: deposit scheme boom" in capsys.readouterr().err
 
 
 def test_deposits_render_error(monkeypatch, capsys):
@@ -926,7 +928,7 @@ def test_deposits_render_error(monkeypatch, capsys):
     monkeypatch.setattr(StreamSurface, "run", fake_run)
     code = _runner()._run_live_surface(static_ctx(Zoom.SUMMARY))
     assert code == 2
-    assert "rkaboom" in capsys.readouterr().out
+    assert "rkaboom" in capsys.readouterr().err
 
 
 # --- The delivery gate in _run_live ---
@@ -1119,7 +1121,7 @@ def test_surface_error_output_retains_the_snapshot(monkeypatch, capsys):
         live_delivery="surface",
     )
     code = _run_surface_under_env_flip(runner, _tty_ctx(), monkeypatch)
-    out = capsys.readouterr().out
+    err = capsys.readouterr().err
     assert code == 1
-    assert "kaboom" in out
-    assert "\x1b[31m" not in out  # the palette error color suppressed by the snapshot
+    assert "kaboom" in err
+    assert "\x1b[31m" not in err  # the palette error color suppressed by the snapshot

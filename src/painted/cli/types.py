@@ -173,6 +173,9 @@ class CliContext:
     args: ArgsView = field(default_factory=ArgsView)
     stdin_is_tty: bool = False
     stderr_is_tty: bool = False
+    # The --plain *request* (not the resolved stdout format): the stderr
+    # plane's plainness input. Read through ``stderr_use_ansi`` below.
+    plain_requested: bool = False
     # The memoized prompt resolver behind ctx.ask. A plain object (not a
     # dataclass), referenced by one field, so the frozen-collection invariant
     # sees an opaque holder, not a mutable dict. Excluded from eq/repr — it is
@@ -188,6 +191,16 @@ class CliContext:
         ``ContractError``. An undeclared name raises ``DeclarationError``.
         """
         return self._session.ask(prompt)
+
+    @property
+    def stderr_use_ansi(self) -> bool:
+        """The stderr plane's one ANSI rule: its own TTY-ness, overridden by
+        the ``--plain`` request — never the resolved stdout format (design §8).
+
+        The single home of the rule prompt refusals and error emission share;
+        derived, not stored, so it can never desync from its inputs.
+        """
+        return self.stderr_is_tty and not self.plain_requested
 
     @property
     def zoom(self) -> Zoom:
@@ -339,6 +352,7 @@ def detect_context(
         args=args if args is not None else ArgsView(),
         stdin_is_tty=stdin_is_tty,
         stderr_is_tty=stderr_is_tty,
+        plain_requested=bool(plain_requested),
         _session=session,
     )
 
