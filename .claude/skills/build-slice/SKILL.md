@@ -35,6 +35,12 @@ review HOLDs caught real defects, all merged same-day).
   equals base, reviewed the working diff" is the tell. Send
   `subtask send <task> "Commit your changes."` first.
 - After each merge: `./dev check` on the branch before dispatching the next slice.
+- After each merge, add the slice's **changelog line** to `CHANGELOG.md`'s
+  `## [Unreleased]` (create it above the newest version heading if a release was
+  just cut) — one line, user-facing, linked to the merge commit, appended to the
+  end of its subsection (CLAUDE.md, Working practices). The line is written while
+  the slice is fresh; the cut renames the container and stamps the version, and
+  never reconstructs what the lines should have said.
 
 ## Authorization and wording
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import re
 import sys
 from dataclasses import is_dataclass
 from pathlib import Path
@@ -1207,4 +1208,104 @@ def test_law6_silent_exemptions_are_real_and_shrink_only() -> None:
         "(design/honesty-remediation-scope). This allowlist is SHRINK-ONLY — a "
         "remediated site marks and leaves this set; a new silent-cut path must "
         "leave evidence (see TestLaw6EvidencePins), not join here:\n" + "\n".join(failures)
+    )
+
+
+# ---------------------------------------------------------------------------
+# Release consistency: the changelog's newest RELEASED section names the
+# version this tree is stamped as, and unreleased work lives in exactly one
+# `[Unreleased]` container at the top.
+#
+# The 0.14 cut (2026-08-13) is why this is a gate rather than a habit: the
+# arc's slices landed on main carrying a written `## [0.14.0]` section while
+# pyproject still read 0.13.0, so main served 0.14 behavior labeled as an
+# already-published version for four weeks. Nothing caught it — the detector
+# was a human reading the store against git. The invariant that would have
+# failed the moment those slices merged is below.
+# ---------------------------------------------------------------------------
+
+_RELEASE_HEADING = re.compile(r"^## \[(?P<name>[^\]]+)\](?:\s+—\s+(?P<date>\S+))?\s*$")
+
+
+class _ChangelogHeading(NamedTuple):
+    name: str  # "Unreleased" or a version string
+    date: str | None
+    index: int  # 0-based position among the file's section headings
+
+
+def _changelog_headings() -> list[_ChangelogHeading]:
+    repo_root = Path(__file__).resolve().parents[2]
+    text = (repo_root / "CHANGELOG.md").read_text(encoding="utf-8")
+    headings: list[_ChangelogHeading] = []
+    for line in text.splitlines():
+        match = _RELEASE_HEADING.match(line)
+        if match is not None:
+            headings.append(
+                _ChangelogHeading(
+                    name=match.group("name"),
+                    date=match.group("date"),
+                    index=len(headings),
+                )
+            )
+    return headings
+
+
+def _stamped_version() -> str:
+    repo_root = Path(__file__).resolve().parents[2]
+    for line in (repo_root / "pyproject.toml").read_text(encoding="utf-8").splitlines():
+        if line.startswith("version = "):
+            return line.split("=", 1)[1].strip().strip('"')
+    raise AssertionError("pyproject.toml declares no version")
+
+
+def test_changelog_unreleased_container_is_singular_and_first() -> None:
+    """`[Unreleased]` is the release container — at most one, always on top.
+
+    A second container, or one buried under a released section, means work is
+    accumulating somewhere the cut will not find it.
+    """
+    headings = _changelog_headings()
+    unreleased = [h for h in headings if h.name.lower() == "unreleased"]
+
+    assert len(unreleased) <= 1, (
+        f"CHANGELOG.md has {len(unreleased)} [Unreleased] sections — the release "
+        "container is singular; a second one is work the cut will miss"
+    )
+    if unreleased:
+        assert unreleased[0].index == 0, (
+            "CHANGELOG.md's [Unreleased] section is not the first section — the "
+            "container holds what has not shipped, so it sits above every released "
+            "version"
+        )
+        assert unreleased[0].date is None, (
+            "CHANGELOG.md's [Unreleased] section carries a date — the date is "
+            "written once, at the cut, when it becomes true"
+        )
+
+
+def test_stamped_version_matches_newest_released_changelog_section() -> None:
+    """The version this tree is stamped as names the newest *released* section.
+
+    Unreleased work is legal and expected on main; it lives under `[Unreleased]`,
+    which this invariant deliberately skips. What is illegal is a *dated version*
+    section for a version the tree is not stamped as — that is a release that was
+    written but never cut, and it makes `main` claim a published version's name
+    while behaving as a different one.
+    """
+    headings = _changelog_headings()
+    released = [h for h in headings if h.name.lower() != "unreleased"]
+    assert released, "CHANGELOG.md declares no released version section"
+
+    newest = released[0]
+    stamped = _stamped_version()
+
+    assert newest.name == stamped, (
+        f"pyproject.toml is stamped {stamped!r} but the newest released CHANGELOG "
+        f"section is [{newest.name}]. Either the cut never happened (stamp the "
+        "version + uv.lock, per the release skill), or work that has not shipped "
+        "was written under a version heading instead of [Unreleased]."
+    )
+    assert newest.date is not None, (
+        f"CHANGELOG section [{newest.name}] carries no release date — a released "
+        "section is dated at the cut; an undated container is spelled [Unreleased]"
     )

@@ -5,7 +5,7 @@ description: Cut and ship a painted release — merge the feature branch, tag, p
 
 # Release painted
 
-The release path is: merge → gate → push → tag → GitHub release → PyPI (CI).
+The release path is: merge → **cut** → gate → push → tag → GitHub release → PyPI (CI).
 The PyPI publish is triggered by **publishing a GitHub release** (`.github/workflows/release.yml`),
 not by the tag alone.
 
@@ -13,11 +13,13 @@ not by the tag alone.
 
 1. **The branch is done**: `./dev check` green at head (10/10), and Kyle has read
    the branch diff. Merging is Kyle's call — never merge to main unprompted.
-2. **Version + changelog already on the branch**: `pyproject.toml` version bumped,
-   `CHANGELOG.md` has a `## [X.Y.Z] — YYYY-MM-DD` section with an intro paragraph
-   (it becomes the release notes). These land as part of the branch's final
-   "reconcile + cut" slice, not at release time. If missing, stop and add them
-   on the branch first.
+2. **The changelog lines are already there**: `CHANGELOG.md`'s `## [Unreleased]`
+   section carries a line per change, added as each slice landed (CLAUDE.md,
+   Working practices). Read it as the record of what belongs in this release —
+   don't reconstruct it here. If a landed change left no line, add it *before*
+   cutting; that's a lapse to repair, not an invitation to write the changelog
+   archaeologically. The version stamp is NOT on the branch — it belongs to the
+   cut (step 2), so main is stamped as a released version only while it is one.
 3. **Design doc status flipped** (PLANNED → IMPLEMENTED) and the store amended,
    if the release closes a design arc.
 4. **Removing or renaming a public name?** Grep the consumers first:
@@ -36,27 +38,41 @@ not by the tag alone.
 git checkout main
 git merge --no-ff <branch> -m "Merge <branch>: <one-line arc summary> (X.Y.Z)"
 
-# 2. Re-run the gate ON MAIN post-merge — the merge itself must be green
+# 2. Cut, on its own branch (never commit to main directly) — three edits, one commit:
+#    (a) CHANGELOG: rename `## [Unreleased]` to `## [X.Y.Z] — <today>`; today's
+#        date, not the date the work finished
+#    (b) pyproject.toml version -> X.Y.Z
+#    (c) uv lock          # restamps uv.lock; 0.12.0 needed a follow-up commit for this miss
+git checkout -b cut-X.Y.Z
+git commit -am "chore(release): cut X.Y.Z — <arc name>"
+git checkout main && git merge --no-ff cut-X.Y.Z -m "Merge cut-X.Y.Z: <arc name> (X.Y.Z)"
+
+# 3. Re-run the gate ON MAIN post-merge — the merge itself must be green. The arch
+#    tier asserts the stamp matches the newest released section, so a half-cut fails here.
 ./dev check
 
-# 3. Push, tag, push the tag (both remotes go via origin's push URLs)
+# 4. Push, tag, push the tag (both remotes go via origin's push URLs)
 git push origin main
 git tag vX.Y.Z
+git rev-parse vX.Y.Z HEAD                      # MUST match — the workflow builds the TAG's commit
 git push origin vX.Y.Z
 
-# 4. Extract release notes = the changelog section body (between this version's
+# 5. Extract release notes = the changelog section body (between this version's
 #    header and the previous version's header)
-awk '/^## \[X.Y.Z\]/{f=1;next}/^## \[/{f=0}f' CHANGELOG.md > /tmp/relnotes.md
+awk '/^## \[X\.Y\.Z\]/{f=1;next}/^## \[/{f=0}f' CHANGELOG.md > "$SCRATCH/relnotes.md"
 
-# 5. Publish the GitHub release — THIS triggers the PyPI workflow
-gh release create vX.Y.Z --title "painted X.Y.Z — <arc name>" --notes-file /tmp/relnotes.md
+# 6. Publish the GitHub release — THIS triggers the PyPI workflow. The changelog is
+#    one line per change; the release page is where the arc gets its prose — open the
+#    notes with a paragraph naming what the release is for.
+gh release create vX.Y.Z --title "painted X.Y.Z — <arc name>" --notes-file "$SCRATCH/relnotes.md"
 
-# 6. Verify the publish went through
+# 7. Verify the publish went through
 gh run list --workflow release.yml -L 1        # expect: completed success
 curl -s https://pypi.org/pypi/painted/json | python3 -c "import json,sys; print(json.load(sys.stdin)['info']['version'])"
+uv run --no-project --with painted==X.Y.Z python -c "import painted"   # the published wheel imports
 
-# 7. Clean up
-git branch -d <branch>
+# 8. Clean up (local only — remote branches are Kyle's call)
+git branch -d <branch> cut-X.Y.Z
 ```
 
 Title convention: `painted X.Y.Z — <arc name>` (e.g. "painted 0.7.0 — ref
@@ -84,3 +100,12 @@ deliveries", "painted 0.8.0 — paint(), the single entry").
   major — check the action's actual latest); and the `release: published`
   workflow checks out the **tag's commit**, not HEAD — anything committed after
   tagging is not in the published artifact.
+- The cut that never happened (0.14, four weeks): the arc's slices landed on main
+  carrying a *dated version* section while `pyproject.toml` still read the previous
+  version, so main served new behavior under an already-published name. This is
+  why the version stamp belongs to the cut and unshipped work belongs under
+  `[Unreleased]` — and why the arch tier now gates both
+  (`test_stamped_version_matches_newest_released_changelog_section`).
+- The wheel ships `demos/` (`force-include: demos → painted/demos`), so demo
+  changes are release notes, not repo trivia — check `git diff <last-tag>..HEAD --
+  demos/ src/painted/_demo_cli.py` before writing the notes.
