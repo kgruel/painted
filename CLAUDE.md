@@ -179,7 +179,7 @@ Key patterns:
 
 The reader is deciding whether to upgrade, not learning the mechanism — mechanism lives in the linked merge commit's diff, rationale in `docs/*_DESIGN.md` and the store, prose in the GitHub release page. A paragraph is the exception, earned by a breaking change, a stated trade, or a migration the reader must act on. **The invariant** (gated, tier 0): the newest *released* section names the version this tree is stamped as, and there is at most one `[Unreleased]`, always on top — so main may carry unshipped work, but only *declared* as unshipped, never as a version someone else already installed.
 
-**Procedures** with a trigger moment live in `.claude/skills/`: `design-arc` (mint/amend a design doc, deliberate, ratify, flip at ship), `build-slice` (dispatch implementation through subtask with the ratified model tiers and standing sol review), `release` (merge → tag → publish → verify).
+**Procedures** with a trigger moment live in `.claude/skills/`: `design-arc` (mint/amend a design doc, deliberate, ratify, flip at ship), `build-slice` (dispatch implementation through subtask with the ratified model tiers and standing sol review), `friction-fix` (a store friction from triage to merged fix: rule → branch → /simplify → codex review → merge → resolution emits), `release` (merge → tag → publish → verify).
 
 **Where knowledge lives** — place new knowledge by its load time; duplication without a drift gate rots:
 
