@@ -398,15 +398,13 @@ def record_line(
     for k, v in payload.items():
         if v is None or v == "":
             continue
-        sv = str(v)
         # Each value line wraps to the exact width; Wrap.WORD hard-breaks over-long
-        # tokens, so no data is lost.
-        value_lines = sv.splitlines()
+        # tokens, so no data is lost. Block.text honors the value's newlines;
+        # splitlines-then-join normalizes exotic breaks and drops a trailing one.
+        sv = "\n".join(str(v).splitlines())
         # width=None → natural sizing, no wrap (nothing to reflow against).
         wrap = Wrap.WORD if width is not None else Wrap.NONE
-        lines.append(Block.text(f"{indent}{k}: {value_lines[0]}", p.muted, width=width, wrap=wrap))
-        for vl in value_lines[1:]:
-            lines.append(Block.text(vl, p.muted, width=width, wrap=wrap))
+        lines.append(Block.text(f"{indent}{k}: {sv}", p.muted, width=width, wrap=wrap))
 
     return _fit(join_vertical(*lines), width)
 

@@ -213,8 +213,7 @@ class PaintedHandler(logging.Handler):
             rows.append(render_traceback(exc, tb_zoom, self._width))
 
         if record.stack_info:
-            for sline in str(record.stack_info).split("\n"):
-                rows.append(self._line_block(Line((Span(sline, p.muted),))))
+            rows.append(Block.text(str(record.stack_info), p.muted, width=self._width))
 
         return join_vertical(*rows) if rows else Block.text("", p.muted)
 

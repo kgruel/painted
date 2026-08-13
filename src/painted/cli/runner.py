@@ -1343,8 +1343,11 @@ class CliRunner(Generic[T]):
         except Exception:
             style = Style(fg="red")
 
+        from ..core.block import Block, Wrap
+
         message = CliRunner._exception_message(exc)
-        return CliRunner._multiline_error_block(message, style, ctx.width)
+        # Block.text honors the message's newlines; each line word-wraps.
+        return Block.text(message, style, width=max(1, ctx.width), wrap=Wrap.WORD)
 
     @staticmethod
     def _render_error_block(ctx: CliContext, exc: Exception) -> Block:
@@ -1356,25 +1359,9 @@ class CliRunner(Generic[T]):
         else:
             text = type(exc).__name__
 
-        return CliRunner._multiline_error_block(text, Style(), ctx.width)
-
-    @staticmethod
-    def _multiline_error_block(message: str, style: Style, width: int) -> Block:
-        """An error message as a Block, newlines preserved.
-
-        A consumer's error message owns its line structure (a did-you-mean
-        block is three lines by design) — flattening it is the framework
-        rewriting declared meaning. Each line word-wraps within the width;
-        ``Block.text`` is single-line by design, so multi-line is composed.
-        """
         from ..core.block import Block, Wrap
-        from ..core.compose import join_vertical
 
-        width = max(1, width)
-        lines = message.split("\n")
-        return join_vertical(
-            *(Block.text(line, style, width=width, wrap=Wrap.WORD) for line in lines)
-        )
+        return Block.text(text, Style(), width=max(1, ctx.width), wrap=Wrap.WORD)
 
 
 # Four published call forms — the truth type checkers carry, so no caller ever

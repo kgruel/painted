@@ -278,7 +278,7 @@ def doc_lens(
         doc: The document node tree.
         fidelity: Disclosure spec (depth / visible tags / density budgets).
         width: Available width in columns. ``None`` renders at natural width
-            (prose stays single-line). A given width is honored exactly per the
+            (prose does not reflow). A given width is honored exactly per the
             width contract; prose word-wraps to it.
     """
     blocks: list[Block] = []
@@ -397,8 +397,7 @@ def _render_code(code: Code, width: int | None) -> Block:
         # Deferred docgen resolution — placeholder until the src seam lands.
         label = f"[code: {code.src}]" if code.src else "[code]"
         return _line(label, Style(dim=True), width)
-    lines = code.text.split("\n")
-    return join_vertical(*(_line(ln, Style(), width) for ln in lines), gap=0)
+    return _line(code.text, Style(), width)
 
 
 def _render_figure(fig: Figure, width: int | None) -> Block:
