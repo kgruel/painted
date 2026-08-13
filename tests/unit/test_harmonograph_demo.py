@@ -91,14 +91,14 @@ def test_plotted_count_is_the_number_of_unique_lit_dots() -> None:
 
 def test_braille_carrier_uses_only_spaces_and_braille() -> None:
     with use_capabilities(Capabilities(color=False, glyph=True, link=False)):
-        text = block_to_text(hm._plate(hm._fetch(), 48))
+        text = block_to_text(hm.render_plate(hm._fetch(), 48))
     assert all(ch in " \n" or 0x2800 < ord(ch) <= 0x28FF for ch in text)
     assert any(0x2800 < ord(ch) <= 0x28FF for ch in text)
 
 
 def test_ascii_carrier_is_strict_ascii_and_non_degenerate() -> None:
     with use_capabilities(Capabilities(color=False, glyph=False, link=False)):
-        text = block_to_text(hm._plate(hm._fetch(), 48))
+        text = block_to_text(hm.render_plate(hm._fetch(), 48))
     assert text.isascii()
     assert set(text) <= set(hm._ASCII_DENSITY) | {"\n"}
     assert any(ch not in " \n" for ch in text)
@@ -106,7 +106,7 @@ def test_ascii_carrier_is_strict_ascii_and_non_degenerate() -> None:
 
 def test_truecolor_ink_comes_only_from_the_gradient() -> None:
     with use_capabilities(Capabilities(color=True, glyph=True, link=False)):
-        block = hm._plate(hm._fetch(), 48)
+        block = hm.render_plate(hm._fetch(), 48)
     gradient = {style.fg for style in hm._INK_STYLES}
     seen = {
         block.row(y)[x].style.fg

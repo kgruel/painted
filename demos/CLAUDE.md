@@ -107,6 +107,7 @@ examples/
   big_text.py       Block character rendering (multiple sizes)
   lenses.py         Tree and chart data visualization
   theme_carnival.py Interactive palette explorer
+  harmonograph_lab.py Editable four-pendulum instrument, shared showcase plate ✓
 
 showcase/           (pattern test shape; surface-delivered animated spectacle)
   life.py           Conway's Life: pure step + fetch_stream animation     ✓

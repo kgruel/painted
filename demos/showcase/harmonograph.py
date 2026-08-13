@@ -265,7 +265,13 @@ def _ink_style(mask: int, shade: int, *, color: bool) -> Style:
     return accent
 
 
-def _plate(performance: Performance, columns: int, cell_rows: int = _DOT_ROWS // 4) -> Block:
+def render_plate(performance: Performance, columns: int, cell_rows: int = _DOT_ROWS // 4) -> Block:
+    """Render a performance as a terminal plate.
+
+    This is the showcase's small reuse seam: the companion harmonograph-lab
+    example supplies an editable ``Score`` but uses this exact raster and
+    capability-carrier implementation. It is demo API, not painted library API.
+    """
     raster = _raster(performance, columns, cell_rows)
     caps = current_capabilities()
     rows: list[Block] = []
@@ -275,6 +281,7 @@ def _plate(performance: Performance, columns: int, cell_rows: int = _DOT_ROWS //
         run_style: Style | None = None
         for mask, shade in (*zip(masks, shades), (None, None)):
             if mask is not None:
+                assert shade is not None
                 style = _ink_style(mask, shade, color=caps.color)
                 char = _carrier(mask, glyph=caps.glyph)
                 if run_style is None or style == run_style:
@@ -348,7 +355,7 @@ def _gallery(performance: Performance, width: int | None) -> Block:
     """The default exhibit: 22 rows of ink and its frame — exactly 24 rows."""
     outer_width = _NATURAL_COLUMNS + 2 if width is None else max(0, width)
     columns = max(1, outer_width - 2)
-    gallery = border(_plate(performance, columns), title="harmonograph", chars=ROUNDED)
+    gallery = border(render_plate(performance, columns), title="harmonograph", chars=ROUNDED)
     return gallery if width is None else fit_to_width(gallery, outer_width)
 
 
