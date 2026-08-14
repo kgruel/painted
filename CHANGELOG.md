@@ -23,6 +23,11 @@ breaking changes.
   tall as its line count, so callers relying on the old silent flattening must
   pre-flatten themselves.
   ([ac6c72b](https://github.com/kgruel/painted/commit/ac6c72b))
+- **The styled path honors newlines too: `Line.to_block`/`Line.wrap` and
+  `Block.column`.** A `\n` inside a `Span` or a column entry is the same hard
+  break (refs survive on every fragment; natural width is the widest line);
+  `callout` keeps its one-row-per-slot contract by flattening explicitly.
+  ([30cac32](https://github.com/kgruel/painted/commit/30cac32))
 
 ## [0.14.0] — 2026-08-13
 
