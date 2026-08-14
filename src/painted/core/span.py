@@ -131,24 +131,6 @@ class Line:
         count. `Line.width` remains the single-line measure; natural sizing of
         a multi-line Line takes the widest segment.
         """
-        from .block import Block, Wrap, _runs_width, _split_runs_newlines, _wrap_runs
+        from .block import Wrap, _wrap_runs
 
-        runs = self._styled_runs()
-
-        if any("\n" in span.text for span in self.spans):
-            if width is None:
-                segments = _split_runs_newlines(runs)
-                width = max(_runs_width(s) for s in segments)
-                if width <= 0:
-                    # All segments blank: structure survives as zero-width rows
-                    # (matching Block.text("\n")); only an explicitly supplied
-                    # nonpositive width collapses to the degenerate block.
-                    return Block([[] for _ in segments], 0)
-            return _wrap_runs(runs, width, wrap=Wrap.NONE, pad_style=self.style)
-
-        if width is None:
-            width = self.width
-        if width <= 0:
-            return Block([[]], 0)
-
-        return _wrap_runs(runs, width, wrap=Wrap.NONE, pad_style=self.style)
+        return _wrap_runs(self._styled_runs(), width, wrap=Wrap.NONE, pad_style=self.style)

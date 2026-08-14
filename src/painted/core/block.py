@@ -9,7 +9,7 @@ from enum import Enum
 from typing import cast
 
 from ._row_ops import blank_cell, iter_row_spans
-from ._text_width import char_width, display_width, take_prefix
+from ._text_width import char_width, display_width
 from .buffer import Buffer, BufferView
 from .cell import Cell, Style
 from .errors import ContractError
@@ -45,7 +45,7 @@ def _ascii_row_tuple(chars: str, width: int, style: Style) -> tuple[Cell, ...]:
 
 def _split_lines(text: str) -> list[str]:
     """Split text on declared line breaks — the str sibling of
-    ``_split_styled_newlines``: ``\\n`` breaks, a ``\\r\\n`` pair is one break."""
+    ``_split_runs_newlines``: ``\\n`` breaks, a ``\\r\\n`` pair is one break."""
     return text.replace("\r\n", "\n").split("\n")
 
 
@@ -198,16 +198,8 @@ class Block:
 
         if width is None:
             if "\n" in content:
-                # Natural sizing of multi-line text: no reflow, so the wrap
-                # mode is moot — the widest declared line sets the width and
-                # NONE clips nothing. All-blank lines keep their zero-width
-                # rows (structure survives natural zero width).
-                segments = _split_lines(content)
-                width = max(map(_run_width, segments))
-                if width <= 0:
-                    return Block._create(tuple(() for _ in segments), 0, ref=ref)
                 return _wrap_runs(
-                    [(content, style, None)], width, wrap=Wrap.NONE, pad_style=style, ref=ref
+                    [(content, style, None)], None, wrap=Wrap.NONE, pad_style=style, ref=ref
                 )
             cells = _cells_from_text(content, style)
             return Block._create((tuple(cells),), len(cells), ref=ref)
@@ -512,7 +504,13 @@ _StyledRuns = list[tuple[str, Style, str | None]]
 
 def _run_width(text: str) -> int:
     """Display width of one run's text — the cell count its materialization
-    produces (zero-width chars contribute nothing, wide chars two columns)."""
+    produces (zero-width chars contribute nothing, wide chars two columns).
+
+    Deliberately not `display_width`: that falls back to ``len(text)`` when
+    ``wcswidth`` reports non-printables, which would diverge from the cell
+    count `_cells_from_text` actually produces. This is the engine's measure;
+    it must predict materialization exactly.
+    """
     if text.isascii():
         return len(text)
     return sum(w for w in map(char_width, text) if w > 0)
@@ -549,7 +547,7 @@ def _cells_from_runs(
             refs.extend([ref] * len(run_cells))
         if remaining is not None:
             remaining -= len(run_cells)
-            if remaining <= 0 or (not text.isascii() and len(run_cells) < _run_width(text)):
+            if remaining <= 0 or len(run_cells) < _run_width(text):
                 break
     return cells, refs
 
@@ -561,16 +559,20 @@ def _pad_refs(refs: list[str | None], width: int) -> list[str | None]:
     return refs
 
 
-def _take_runs_prefix(runs: _StyledRuns, width: int) -> tuple[_StyledRuns, _StyledRuns]:
-    """Split a run stream at a display-column boundary; returns (prefix, rest).
+def _take_runs_prefix(runs: _StyledRuns, width: int) -> tuple[_StyledRuns, _StyledRuns, int]:
+    """Split a run stream at a display-column boundary.
 
-    Zero-width chars ride with the character before them; a char wider than
-    the remaining budget ends the take before it. An empty prefix means the
-    lead char is wider than ``width`` itself (unrepresentable) — the caller
-    decides whether to drop it (see ``_drop_first_char``).
+    Returns ``(prefix, rest, consumed)`` — ``consumed`` counts display columns
+    removed from the stream (taken plus dropped), so a caller measuring the
+    whole stream once can subtract instead of re-scanning ``rest``. Zero-width
+    chars ride with the character before them; a char wider than the remaining
+    budget ends the take before it. A lead char wider than ``width`` itself is
+    unrepresentable at this width and dropped here, so the take always makes
+    progress: an empty prefix means the stream is exhausted (``rest == []``).
     """
     prefix: _StyledRuns = []
     remaining = width
+    consumed = 0
     for idx, run in enumerate(runs):
         text = run[0]
         if not text:
@@ -579,28 +581,52 @@ def _take_runs_prefix(runs: _StyledRuns, width: int) -> tuple[_StyledRuns, _Styl
         if w <= remaining:
             prefix.append(run)
             remaining -= w
+            consumed += w
             if remaining == 0:
-                return prefix, [r for r in runs[idx + 1 :] if r[0]]
+                return prefix, [r for r in runs[idx + 1 :] if r[0]], consumed
             continue
-        head, consumed = take_prefix(text, remaining)
-        if head:
-            prefix.append((head, run[1], run[2]))
+        # Boundary run: char-scan what fits, dropping fresh-row lead chars
+        # too wide to fit at any row of this width.
+        head_chars: list[str] = []
+        pos = 0
+        for ch in text:
+            cw = char_width(ch)
+            if cw == 0:
+                # Zero-width (combining) chars ride with the preceding prefix.
+                head_chars.append(ch)
+                pos += 1
+                continue
+            if cw > width and not prefix and not head_chars:
+                consumed += cw
+                pos += 1
+                continue
+            if cw > remaining:
+                break
+            head_chars.append(ch)
+            remaining -= cw
+            consumed += cw
+            pos += 1
+            if remaining == 0:
+                break
+        if head_chars:
+            prefix.append(("".join(head_chars), run[1], run[2]))
+        if pos >= len(text) and remaining > 0:
+            continue
         rest: _StyledRuns = []
-        tail = text[consumed:]
+        tail = text[pos:]
         if tail:
             rest.append((tail, run[1], run[2]))
         rest.extend(r for r in runs[idx + 1 :] if r[0])
-        return prefix, rest
-    return prefix, []
+        return prefix, rest, consumed
+    return prefix, [], consumed
 
 
-def _drop_first_char(runs: _StyledRuns) -> _StyledRuns:
-    """Drop the lead character of a run stream (an unrepresentable char)."""
-    text, style, ref = runs[0]
-    rest = runs[1:]
-    if len(text) > 1:
-        return [(text[1:], style, ref), *rest]
-    return rest
+def _ref_grid(lanes: list[list[str | None] | None], width: int) -> list[list[str | None]] | None:
+    """Collapse per-row ref lanes into a full grid — ``None`` when no row has
+    refs, so the common case allocates nothing."""
+    if any(lane is not None for lane in lanes):
+        return [lane if lane is not None else [None] * width for lane in lanes]
+    return None
 
 
 def _char_wrap_runs(
@@ -608,27 +634,23 @@ def _char_wrap_runs(
 ) -> tuple[list[list[Cell]], list[list[str | None]] | None]:
     """Wrap a styled-run stream at any character boundary by display width.
 
-    Returns the cell rows plus a parallel grid of ref rows — ``None`` when no
-    run carries a ref, so the common case allocates nothing. A char wider
-    than ``width`` itself is unrepresentable and dropped.
+    Returns the cell rows plus a parallel grid of ref rows (see `_ref_grid`).
+    A char wider than ``width`` itself is unrepresentable and dropped.
     """
-    has_refs = any(ref is not None and text for text, _style, ref in runs)
     rows: list[list[Cell]] = []
-    ref_rows: list[list[str | None]] = []
+    lanes: list[list[str | None] | None] = []
     rest = [r for r in runs if r[0]]
     while rest:
-        prefix, rest = _take_runs_prefix(rest, width)
+        prefix, rest, _consumed = _take_runs_prefix(rest, width)
         if not prefix:
-            if rest:
-                rest = _drop_first_char(rest)
-            continue
+            break  # stream drained by unrepresentable chars — no phantom row
         cells, refs = _cells_from_runs(prefix)
         rows.append(_pad_row(cells, width, pad_style))
-        if has_refs:
-            ref_rows.append(_pad_refs(refs, width) if refs is not None else [None] * width)
+        lanes.append(_pad_refs(refs, width) if refs is not None else None)
     if not rows:
         rows.append(_pad_row([], width, pad_style))
-    return rows, ref_rows if has_refs else None
+        lanes.append(None)
+    return rows, _ref_grid(lanes, width)
 
 
 _SPACE_RE = re.compile(r"( +)")
@@ -670,7 +692,9 @@ def _word_wrap_runs(runs: _StyledRuns, width: int) -> list[_StyledRuns]:
         if line:
             sp_w = _runs_width(pending)
             if line_w + sp_w + word_w <= width:
-                line = line + pending + seg
+                # `line` is always a freshly owned list here — safe to extend.
+                line.extend(pending)
+                line.extend(seg)
                 line_w += sp_w + word_w
                 pending = []
                 continue
@@ -686,16 +710,15 @@ def _word_wrap_runs(runs: _StyledRuns, width: int) -> list[_StyledRuns]:
             line_w = word_w
         else:
             rest = seg
-            while rest and _runs_width(rest) > width:
-                prefix, rest = _take_runs_prefix(rest, width)
+            rest_w = word_w
+            while rest and rest_w > width:
+                prefix, rest, consumed = _take_runs_prefix(rest, width)
+                rest_w -= consumed
                 if not prefix:
-                    # Unrepresentable lead char (e.g. width=1, wide char).
-                    if rest:
-                        rest = _drop_first_char(rest)
-                    continue
+                    break  # stream drained by unrepresentable chars
                 lines.append(prefix)
             line = list(rest)
-            line_w = _runs_width(rest)
+            line_w = rest_w
 
     # Emit the trailing line, but only if it carries content or is the sole row.
     # A final word that is entirely unrepresentable (e.g. a width-2 char in a
@@ -737,43 +760,67 @@ def _split_runs_newlines(runs: _StyledRuns) -> list[_StyledRuns]:
     return segments
 
 
+def _row_block(
+    cells: list[Cell],
+    refs: list[str | None] | None,
+    width: int,
+    pad_style: Style,
+    ref: str | None,
+) -> Block:
+    """Pad one materialized row to width and freeze it as a single-row Block."""
+    cells = _pad_row(cells, width, pad_style)
+    if refs is not None:
+        return Block._create((tuple(cells),), width, ref=ref, refs=(tuple(_pad_refs(refs, width)),))
+    return Block._create((tuple(cells),), width, ref=ref)
+
+
 def _wrap_runs(
     runs: _StyledRuns,
-    width: int,
+    width: int | None,
     *,
     wrap: Wrap = Wrap.WORD,
     pad_style: Style = Style(),
     ref: str | None = None,
 ) -> Block:
-    """Wrap a styled-run stream into a Block — the seam behind `Line.wrap`
-    and `Block.text`'s width-honoring modes.
+    """Wrap a styled-run stream into a Block — the seam behind `Line.wrap`,
+    `Line.to_block`, and `Block.text`'s width-honoring modes.
 
     `pad_style` styles the trailing pad cells (and the ellipsis marker); it is
     the reflowing generalization of `Line.to_block` (which is `Wrap.NONE` per
     segment). A newline in any run is a hard break: segments split first, the
     wrap mode applies within each segment, and the segment rows stack
     (decision practice/block-text-honors-newlines). `ref` is the block-level
-    denotation (`Block.text(ref=)`); per-run refs ride the ref lane. The
-    ``width <= 0`` degenerate case keeps its empty-block contract and
-    collapses before the split.
+    denotation (`Block.text(ref=)`); per-run refs ride the ref lane.
+
+    ``width=None`` sizes naturally (the width contract: absent is natural) —
+    the widest declared line sets the width, nothing reflows or clips, and
+    all-blank lines keep their zero-width rows (structure survives natural
+    zero width). An explicitly nonpositive ``width`` keeps the empty-block
+    contract and collapses before the split.
     """
-    if width <= 0:
+    if width is not None and width <= 0:
         return Block([[]], 0, ref=ref)
 
     if any("\n" in run[0] for run in runs):
-        seg_blocks = [
-            _wrap_runs(segment, width, wrap=wrap, pad_style=pad_style)
-            for segment in _split_runs_newlines(runs)
-        ]
-        rows_t = tuple(row for b in seg_blocks for row in b._rows)
-        if any(b._refs is not None for b in seg_blocks):
-            refs_t = tuple(
-                ref_row
-                for b in seg_blocks
-                for ref_row in (b._refs if b._refs is not None else ((None,) * width,) * b.height)
-            )
-            return Block._create(rows_t, width, ref=ref, refs=refs_t)
-        return Block._create(rows_t, width, ref=ref)
+        from .compose import join_vertical
+
+        segments = _split_runs_newlines(runs)
+        if width is None:
+            width = max(_runs_width(segment) for segment in segments)
+            if width <= 0:
+                return Block([[] for _ in segments], 0, ref=ref)
+        stacked = join_vertical(
+            *(_wrap_runs(segment, width, wrap=wrap, pad_style=pad_style) for segment in segments)
+        )
+        if ref is None:
+            return stacked
+        return Block._create(stacked._rows, stacked.width, ref=ref, refs=stacked._refs)
+
+    if width is None:
+        # Natural sizing of one declared line: materialize in full — no
+        # budget, so the wrap mode is moot.
+        cells, refs = _cells_from_runs(runs)
+        return _row_block(cells, refs, len(cells), pad_style, ref)
 
     if wrap == Wrap.CHAR:
         char_rows, ref_rows = _char_wrap_runs(runs, width, pad_style)
@@ -782,24 +829,17 @@ def _wrap_runs(
     if wrap == Wrap.WORD:
         lines = _word_wrap_runs(runs, width)
         word_rows = []
-        line_refs: list[list[str | None] | None] = []
+        lanes: list[list[str | None] | None] = []
         for line in lines:
-            cells, refs = _cells_from_runs(line, max_width=width)
+            # Each wrapped line fits the width by construction — no budget.
+            cells, refs = _cells_from_runs(line)
             word_rows.append(_pad_row(cells, width, pad_style))
-            line_refs.append(_pad_refs(refs, width) if refs is not None else None)
-        if any(r is not None for r in line_refs):
-            ref_grid = [r if r is not None else [None] * width for r in line_refs]
-            return Block(word_rows, width, ref=ref, refs=ref_grid)
-        return Block(word_rows, width, ref=ref)
+            lanes.append(_pad_refs(refs, width) if refs is not None else None)
+        return Block(word_rows, width, ref=ref, refs=_ref_grid(lanes, width))
 
     if wrap == Wrap.NONE:
         cells, refs = _cells_from_runs(runs, max_width=width)
-        cells = _pad_row(cells, width, pad_style)
-        if refs is not None:
-            return Block._create(
-                (tuple(cells),), width, ref=ref, refs=(tuple(_pad_refs(refs, width)),)
-            )
-        return Block._create((tuple(cells),), width, ref=ref)
+        return _row_block(cells, refs, width, pad_style, ref)
 
     if wrap == Wrap.ELLIPSIS:
         if _runs_width(runs) <= width:
@@ -819,11 +859,6 @@ def _wrap_runs(
                     # The marker denotes nothing — it is loss evidence, not content.
                     refs.extend([None] * len(ell_cells))
                 cells.extend(ell_cells)
-        cells = _pad_row(cells, width, pad_style)
-        if refs is not None:
-            return Block._create(
-                (tuple(cells),), width, ref=ref, refs=(tuple(_pad_refs(refs, width)),)
-            )
-        return Block._create((tuple(cells),), width, ref=ref)
+        return _row_block(cells, refs, width, pad_style, ref)
 
     raise ContractError(f"Unknown wrap mode: {wrap}")

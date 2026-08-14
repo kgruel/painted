@@ -345,11 +345,11 @@ removal — one deprecation horizon, stated in the changelog.
 
 ## 10. Deferrals — named, with triggers
 
-- **`Line`/`Span` refs**: the styled-span composition path (`Line.wrap`,
-  `_wrap_styled`) has no ref concept and produces ref-less Blocks.
-  Trigger: the first consumer composing ref-carrying text through spans.
-  (`Line.paint` clearing refs on overwrite is correct behavior, not part
-  of this gap.)
+- **`Line`/`Span` refs**: CLOSED — `Span.ref` rides the wrap engine's ref
+  lane (`Line.wrap`/`Line.to_block` through `_wrap_runs`): a wrapped span
+  keeps its ref on every fragment, the same way its style rides its
+  characters. (`Line.paint` clearing refs on overwrite is correct behavior,
+  not part of the closed gap.)
 - **Mark persistence**: own design, riding the seams shaped in §7.
   Trigger: already ratified as a want (`roadmap/mark-persistence`);
   sequencing after 0.7 was Kyle's scope call for this release.

@@ -437,32 +437,43 @@ class TestWordWrapRuns:
 
 class TestTakeRunsPrefix:
     def test_basic_prefix(self):
-        prefix, rest = _take_runs_prefix(_runs("hello"), 3)
+        prefix, rest, consumed = _take_runs_prefix(_runs("hello"), 3)
         assert _line_text(prefix) == "hel"
         assert _line_text(rest) == "lo"
+        assert consumed == 3
 
     def test_exact_fit(self):
-        prefix, rest = _take_runs_prefix(_runs("abc"), 3)
+        prefix, rest, consumed = _take_runs_prefix(_runs("abc"), 3)
         assert _line_text(prefix) == "abc"
         assert rest == []
+        assert consumed == 3
 
     def test_boundary_mid_run_preserves_style_and_ref(self):
         bold = Style(bold=True)
-        prefix, rest = _take_runs_prefix([("ab", S, "x"), ("cd", bold, "y")], 3)
+        prefix, rest, _consumed = _take_runs_prefix([("ab", S, "x"), ("cd", bold, "y")], 3)
         assert prefix == [("ab", S, "x"), ("c", bold, "y")]
         assert rest == [("d", bold, "y")]
 
     def test_zero_width_chars_included(self):
         # Combining char after 'a'
-        prefix, _rest = _take_runs_prefix(_runs("a\u0301bc"), 2)
+        prefix, _rest, _consumed = _take_runs_prefix(_runs("a\u0301bc"), 2)
         assert "a" in _line_text(prefix)
         assert "\u0301" in _line_text(prefix)
 
-    def test_wide_char_too_big(self):
-        # Width=1, wide char needs 2: nothing fits, nothing consumed
-        prefix, rest = _take_runs_prefix(_runs("世abc"), 1)
+    def test_unrepresentable_lead_char_dropped(self):
+        # Width=1, wide lead char needs 2: it can never fit at this width, so
+        # the take drops it (consumed counts its columns) and keeps going —
+        # progress is guaranteed, an empty prefix means an exhausted stream.
+        prefix, rest, consumed = _take_runs_prefix(_runs("世abc"), 1)
+        assert _line_text(prefix) == "a"
+        assert _line_text(rest) == "bc"
+        assert consumed == 3  # 2 dropped + 1 taken
+
+    def test_all_unrepresentable_exhausts_stream(self):
+        prefix, rest, consumed = _take_runs_prefix(_runs("世"), 1)
         assert prefix == []
-        assert _line_text(rest) == "世abc"
+        assert rest == []
+        assert consumed == 2
 
 
 # --- Block.empty() natural width ---
