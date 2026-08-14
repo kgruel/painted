@@ -6,7 +6,12 @@ import pytest
 
 from painted import Block, Style, Wrap
 from painted.core._text_width import display_width
-from painted.core.block import _char_wrap, _word_wrap, _take_word_prefix, _cells_from_text
+from painted.core.block import (
+    _cells_from_text,
+    _char_wrap_runs,
+    _take_runs_prefix,
+    _word_wrap_runs,
+)
 from painted.core.buffer import Buffer
 from painted.core.cell import Cell
 from painted.core.errors import ContractError
@@ -360,24 +365,33 @@ class TestCellsFromText:
         assert len(cells) == 3
 
 
-# --- _char_wrap internals ---
+# --- run-engine internals ---
 
 
-class TestCharWrap:
+def _runs(text: str) -> list[tuple[str, Style, str | None]]:
+    return [(text, S, None)]
+
+
+def _line_text(line):
+    return "".join(text for text, _style, _ref in line)
+
+
+class TestCharWrapRuns:
     def test_empty_text_gives_padded_row(self):
-        rows = _char_wrap("", 5, S)
+        rows, refs = _char_wrap_runs(_runs(""), 5, S)
+        assert refs is None
         assert len(rows) == 1
         assert len(rows[0]) == 5
 
     def test_char_wider_than_width_skipped(self):
         # Width=1, but a wide char needs 2 columns
-        rows = _char_wrap("世", 1, S)
+        rows, _refs = _char_wrap_runs(_runs("世"), 1, S)
         assert len(rows) == 1
         # The wide char can't fit; row is padded spaces
         assert all(c.char == " " for c in rows[0])
 
     def test_exact_width_wraps(self):
-        rows = _char_wrap("abcd", 2, S)
+        rows, _refs = _char_wrap_runs(_runs("abcd"), 2, S)
         assert len(rows) == 2
         assert rows[0][0].char == "a"
         assert rows[0][1].char == "b"
@@ -385,60 +399,70 @@ class TestCharWrap:
         assert rows[1][1].char == "d"
 
 
-# --- _word_wrap internals ---
+# --- _word_wrap_runs internals ---
 
 
-class TestWordWrap:
+class TestWordWrapRuns:
     def test_empty_text(self):
-        assert _word_wrap("", 10) == [""]
+        assert _word_wrap_runs(_runs(""), 10) == [[]]
 
     def test_zero_width(self):
-        assert _word_wrap("hello", 0) == [""]
+        assert _word_wrap_runs(_runs("hello"), 0) == [[]]
 
     def test_single_long_word_broken(self):
-        lines = _word_wrap("abcdefgh", 3)
+        lines = [_line_text(ln) for ln in _word_wrap_runs(_runs("abcdefgh"), 3)]
         assert all(len(l) <= 3 for l in lines)
         assert "".join(lines) == "abcdefgh"
 
     def test_second_word_too_long(self):
-        lines = _word_wrap("hi abcdefgh end", 3)
+        lines = [_line_text(ln) for ln in _word_wrap_runs(_runs("hi abcdefgh end"), 3)]
         assert lines[0] == "hi"
         # "abcdefgh" gets broken
         assert all(len(l) <= 3 for l in lines)
 
     def test_word_wrap_preserves_all_text(self):
         text = "the quick brown fox"
-        lines = _word_wrap(text, 10)
-        reconstructed = " ".join(lines)
-        assert reconstructed == text
+        lines = [_line_text(ln) for ln in _word_wrap_runs(_runs(text), 10)]
+        assert " ".join(lines) == text
+
+    def test_word_split_across_runs_is_one_segment(self):
+        # A word split across two styled runs must not wrap between them.
+        bold = Style(bold=True)
+        lines = _word_wrap_runs([("hel", S, None), ("lo world", bold, None)], 6)
+        assert [_line_text(ln) for ln in lines] == ["hello", "world"]
 
 
-# --- _take_word_prefix internals ---
+# --- _take_runs_prefix internals ---
 
 
-class TestTakeWordPrefix:
+class TestTakeRunsPrefix:
     def test_basic_prefix(self):
-        prefix, consumed = _take_word_prefix("hello", 3)
-        assert prefix == "hel"
-        assert consumed == 3
+        prefix, rest = _take_runs_prefix(_runs("hello"), 3)
+        assert _line_text(prefix) == "hel"
+        assert _line_text(rest) == "lo"
 
     def test_exact_fit(self):
-        prefix, consumed = _take_word_prefix("abc", 3)
-        assert prefix == "abc"
-        assert consumed == 3
+        prefix, rest = _take_runs_prefix(_runs("abc"), 3)
+        assert _line_text(prefix) == "abc"
+        assert rest == []
+
+    def test_boundary_mid_run_preserves_style_and_ref(self):
+        bold = Style(bold=True)
+        prefix, rest = _take_runs_prefix([("ab", S, "x"), ("cd", bold, "y")], 3)
+        assert prefix == [("ab", S, "x"), ("c", bold, "y")]
+        assert rest == [("d", bold, "y")]
 
     def test_zero_width_chars_included(self):
         # Combining char after 'a'
-        prefix, consumed = _take_word_prefix("a\u0301bc", 2)
-        assert "a" in prefix
-        assert "\u0301" in prefix
+        prefix, _rest = _take_runs_prefix(_runs("a\u0301bc"), 2)
+        assert "a" in _line_text(prefix)
+        assert "\u0301" in _line_text(prefix)
 
     def test_wide_char_too_big(self):
-        # Width=1, wide char needs 2
-        prefix, consumed = _take_word_prefix("世abc", 1)
-        # Can't fit the wide char; returns empty
-        assert prefix == ""
-        assert consumed == 0
+        # Width=1, wide char needs 2: nothing fits, nothing consumed
+        prefix, rest = _take_runs_prefix(_runs("世abc"), 1)
+        assert prefix == []
+        assert _line_text(rest) == "世abc"
 
 
 # --- Block.empty() natural width ---

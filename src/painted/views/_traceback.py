@@ -420,18 +420,11 @@ _CONTEXT = "During handling of the above exception, another exception occurred:"
 
 
 def _header(node: _Node, width: int | None) -> Block:
-    """The ``Type: message`` header — type in the error role, message split into rows."""
+    """The ``Type: message`` header — type in the error role, the message's
+    declared newlines honored as rows (``Line.to_block`` splits ``\\n``/CRLF;
+    natural width takes the widest declared line)."""
     p = current_palette()
-    msg_lines = node.message.splitlines() or [""]
-    first = Line((Span(f"{node.type_name}: ", p.error), Span(msg_lines[0])))
-    if width is None:
-        w = max([first.width, *(display_width(m) for m in msg_lines[1:])], default=0)
-    else:
-        w = width
-    rows: list[Block] = [first.to_block(w)]
-    for extra in msg_lines[1:]:
-        rows.append(_text(extra, Style(), w))
-    return join_vertical(*rows)
+    return Line((Span(f"{node.type_name}: ", p.error), Span(node.message))).to_block(width)
 
 
 def _connective(text: str, style: Style, width: int | None) -> Block:

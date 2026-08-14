@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 from wcwidth import wcswidth
 
-from ._text_width import char_width
 from .buffer import BufferView
-from .cell import Cell, Style
+from .cell import Style
 
 if TYPE_CHECKING:
     from .block import Block, Wrap
@@ -106,18 +105,16 @@ class Line:
         `Wrap.WORD`. Pad cells and the ELLIPSIS marker inherit the Line's base
         style.
         """
-        from .block import Wrap, _wrap_styled
+        from .block import Wrap, _wrap_runs
 
         if wrap is None:
             wrap = Wrap.WORD
 
-        return _wrap_styled(self._styled_chars(), width, wrap=wrap, pad_style=self.style)
+        return _wrap_runs(self._styled_runs(), width, wrap=wrap, pad_style=self.style)
 
-    def _styled_chars(self) -> list[tuple[str, Style, str | None]]:
-        """Expand spans into the styled-char stream the wrap engine consumes."""
-        return [
-            (ch, self.style.merge(span.style), span.ref) for span in self.spans for ch in span.text
-        ]
+    def _styled_runs(self) -> list[tuple[str, Style, str | None]]:
+        """Project spans into the styled-run stream the wrap engine consumes."""
+        return [(span.text, self.style.merge(span.style), span.ref) for span in self.spans]
 
     def to_block(self, width: int | None) -> Block:
         """Convert this Line to a Block of the given width.
@@ -134,68 +131,24 @@ class Line:
         count. `Line.width` remains the single-line measure; natural sizing of
         a multi-line Line takes the widest segment.
         """
-        from .block import Block, Wrap, _split_styled_newlines, _styled_width, _wrap_styled
+        from .block import Block, Wrap, _runs_width, _split_runs_newlines, _wrap_runs
+
+        runs = self._styled_runs()
 
         if any("\n" in span.text for span in self.spans):
-            chars = self._styled_chars()
             if width is None:
-                segments = _split_styled_newlines(chars)
-                width = max(_styled_width(s) for s in segments)
+                segments = _split_runs_newlines(runs)
+                width = max(_runs_width(s) for s in segments)
                 if width <= 0:
                     # All segments blank: structure survives as zero-width rows
                     # (matching Block.text("\n")); only an explicitly supplied
                     # nonpositive width collapses to the degenerate block.
                     return Block([[] for _ in segments], 0)
-            return _wrap_styled(chars, width, wrap=Wrap.NONE, pad_style=self.style)
+            return _wrap_runs(runs, width, wrap=Wrap.NONE, pad_style=self.style)
 
         if width is None:
             width = self.width
         if width <= 0:
             return Block([[]], 0)
 
-        cells: list[Cell] = []
-        refs: list[str | None] | None = None
-        used = 0
-        done = False
-        for span in self.spans:
-            merged = self.style.merge(span.style)
-            if span.ref is not None and refs is None:
-                refs = cast("list[str | None]", [None] * len(cells))
-            for ch in span.text:
-                w = char_width(ch)
-                if w == 0:
-                    # Zero-width (combining) characters aren't representable as separate cells.
-                    continue
-                if used + w > width:
-                    done = True
-                    break
-                cells.append(Cell(ch, merged))
-                if refs is not None:
-                    refs.append(span.ref)
-                if w == 2:
-                    # Placeholder cell for wide characters.
-                    if used + 2 > width:
-                        cells.pop()
-                        if refs is not None:
-                            refs.pop()
-                        done = True
-                        break
-                    cells.append(Cell(" ", merged))
-                    if refs is not None:
-                        refs.append(span.ref)
-                used += w
-                if used >= width:
-                    done = True
-                    break
-            if done:
-                break
-
-        # Pad to width
-        if used < width:
-            pad = Cell(" ", self.style)
-            cells.extend([pad] * (width - used))
-
-        if refs is not None:
-            refs.extend([None] * (width - len(refs)))
-            return Block([cells], width, refs=[refs])
-        return Block([cells], width)
+        return _wrap_runs(runs, width, wrap=Wrap.NONE, pad_style=self.style)

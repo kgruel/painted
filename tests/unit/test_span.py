@@ -451,6 +451,16 @@ class TestLineNewlines:
         assert block.cell_ref(0, 0) == "fact:01X"
         assert block.cell_ref(0, 1) == "fact:01X"
 
+    def test_crlf_split_across_spans_is_one_break(self):
+        # The \r ends one span, the \n starts the next: still one CRLF break,
+        # no phantom column from the \r (the run engine trims it across the
+        # run boundary, as the per-char engine did across entries).
+        line = Line(spans=(Span("a\r", Style()), Span("\nb", Style())))
+        block = line.to_block(None)
+        assert block.height == 2
+        assert block.width == 1
+        assert [block.row(y)[0].char for y in range(2)] == ["a", "b"]
+
     def test_to_block_natural_width_is_widest_segment(self):
         line = Line(spans=(Span("a\nbbb", Style()),))
         block = line.to_block(None)

@@ -31,6 +31,10 @@ _SUSPICIOUS_ARG_RE = re.compile(
 # Allowlist of len() calls that are intentionally about indices or collection sizes.
 # Keys are (path, lineno, source_snippet).
 ALLOWLIST = {
+    # _run_width: len() is the display width for text proven ASCII one line up.
+    ("src/painted/core/block.py", 517, "len(text)"),
+    # _drop_first_char: codepoint slicing on purpose (drop one source char).
+    ("src/painted/core/block.py", 601, "len(text)"),
     ("src/painted/views/components/_text_input.py", 23, "len(ch)"),
     ("src/painted/views/components/_text_input.py", 34, "len(self.text)"),
     ("src/painted/views/components/_text_input.py", 47, "len(self.text)"),
