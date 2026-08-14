@@ -139,7 +139,13 @@ class Line:
         if any("\n" in span.text for span in self.spans):
             chars = self._styled_chars()
             if width is None:
-                width = max(_styled_width(s) for s in _split_styled_newlines(chars))
+                segments = _split_styled_newlines(chars)
+                width = max(_styled_width(s) for s in segments)
+                if width <= 0:
+                    # All segments blank: structure survives as zero-width rows
+                    # (matching Block.text("\n")); only an explicitly supplied
+                    # nonpositive width collapses to the degenerate block.
+                    return Block([[] for _ in segments], 0)
             return _wrap_styled(chars, width, wrap=Wrap.NONE, pad_style=self.style)
 
         if width is None:

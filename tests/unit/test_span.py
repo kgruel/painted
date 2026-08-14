@@ -476,3 +476,8 @@ class TestLineNewlines:
         block = line.to_block(None)
         assert block.height == 2
         assert block.row(1)[0].style == red
+
+    def test_all_blank_segments_keep_their_rows_at_natural_width(self):
+        block = Line(spans=(Span("\n", Style()),)).to_block(None)
+        assert block.height == 2
+        assert block.width == 0
