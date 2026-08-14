@@ -122,8 +122,26 @@ class Line:
         Truncates if Line is longer than width.
         ``width=None`` sizes naturally (the width contract: absent is natural) —
         the Block takes the Line's own display width.
+
+        A newline inside a span is declared line structure: the row splits
+        there (each segment clipped/padded per this method's single-line
+        contract), so `to_block` of a multi-line Line is as tall as its line
+        count. `Line.width` remains the single-line measure; natural sizing of
+        a multi-line Line takes the widest segment.
         """
-        from .block import Block
+        from .block import Block, Wrap, _split_styled_newlines, _styled_width, _wrap_styled
+
+        if any("\n" in span.text for span in self.spans):
+            chars = [
+                (ch, self.style.merge(span.style), span.ref)
+                for span in self.spans
+                for ch in span.text
+            ]
+            if width is None:
+                width = max(_styled_width(s) for s in _split_styled_newlines(chars))
+            if width <= 0:
+                return Block([[]], 0)
+            return _wrap_styled(chars, width, wrap=Wrap.NONE, pad_style=self.style)
 
         if width is None:
             width = self.width

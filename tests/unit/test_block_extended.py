@@ -470,3 +470,17 @@ class TestBlockEmptyNaturalWidth:
         assert b.width == 3
         assert b.height == 2
         assert b.row(0)[0].char == " "
+
+
+class TestBlockColumnNewlines:
+    def test_entry_with_newline_becomes_multiple_rows(self):
+        b = Block.column([("a\nbb", S), ("c", S_RED)])
+        assert b.height == 3
+        assert b.width == 2
+        assert b.row(1)[0].char == "b"
+        assert b.row(2)[0].style == S_RED
+
+    def test_crlf_is_one_break(self):
+        b = Block.column([("a\r\nb", S)])
+        assert b.height == 2
+        assert b.width == 1
