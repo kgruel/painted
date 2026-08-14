@@ -6,7 +6,7 @@ not code points (len()).
 
 from __future__ import annotations
 
-from wcwidth import wcswidth, wcwidth
+from wcwidth import wcwidth
 
 from ..icon_set import current_icons
 
@@ -19,18 +19,20 @@ def display_width(text: str) -> int:
     materialization produces (zero-width chars contribute nothing, wide chars
     two columns, non-printables one: they scrub to a space cell).
 
-    When wcswidth reports non-printable characters the width is summed
-    per-char instead — never a ``len()`` fallback, which would miscount any
-    wide or zero-width char sharing the string with the non-printable.
+    Summed per character, matching the cell model exactly — deliberately NOT
+    ``wcswidth``, which is sequence-aware: it measures a ZWJ emoji cluster as
+    one glyph (2 columns) while painted materializes one Cell per character
+    (4 columns for a two-emoji cluster). A sequence-aware measure over
+    per-char cells under-counts, corrupting layout math; the ``len()``
+    fallback it needed for non-printables miscounted too. One model: what
+    ``Cell`` renders is what every measure counts.
     """
     if text.isascii():
         return len(text)
     cached = _display_width_cache.get(text)
     if cached is not None:
         return cached
-    w = wcswidth(text)
-    if w < 0:
-        w = sum(cw for cw in map(char_width, text) if cw > 0)
+    w = sum(cw for cw in map(char_width, text) if cw > 0)
     if len(_display_width_cache) < 4096:
         _display_width_cache[text] = w
     return w

@@ -69,6 +69,32 @@ class TestWordWrapWide:
         return ["".join(t for t, _s, _r in line) for line in _word_wrap_runs(runs, width)]
 
 
+class TestZwjSequenceCellModel:
+    """wcswidth is sequence-aware (a ZWJ emoji cluster measures 2) but painted
+    materializes one Cell per character (4 columns for a two-emoji cluster).
+    Every measure counts the cell model — a sequence-aware measure would
+    under-count and corrupt layout math (regression: ContractError from the
+    wrap engine on valid emoji input)."""
+
+    ZWJ = "\U0001f469\u200d\U0001f4bb"  # woman technologist
+
+    def test_char_wrap_does_not_raise(self):
+        b = Block.text(self.ZWJ, Style(), width=2, wrap=Wrap.CHAR)
+        assert b.width == 2
+        assert b.height == 2  # two wide chars, one per row
+
+    def test_word_wrap_does_not_raise(self):
+        b = Block.text(self.ZWJ, Style(), width=2, wrap=Wrap.WORD)
+        assert b.width == 2
+
+    def test_line_width_matches_natural_block(self):
+        from painted import Line, Span
+
+        line = Line((Span(self.ZWJ, Style()),))
+        assert line.width == 4
+        assert line.to_block(None).width == 4
+
+
 class TestBorderTitleWide:
     def test_title_painted_with_wide_chars(self):
         b = Block.empty(7, 1)

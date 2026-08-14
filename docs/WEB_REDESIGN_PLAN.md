@@ -1,6 +1,6 @@
 # Painted web redesign plan
 
-Status: proposed  
+Status: Wave 0 complete; Wave 1 ready
 Scope: `web/`, its generated inputs, and the documentation/demo metadata needed to publish it  
 Execution model: root agent owns judgment and integration; Sol and Terra agents implement bounded work packages
 
@@ -183,6 +183,141 @@ a specimen card, guide link, API entry, or explicitly documented omission:
 
 This is a coverage audit, not a requirement to produce a large bespoke panel for
 every public name in the first pass.
+
+## Wave 0 contract
+
+Frozen by root review on 2026-08-13. Additive optional fields may be proposed by
+an implementation package, but agents must not change these identities, ownership
+boundaries, or route decisions without root review.
+
+### Baseline evidence
+
+- `npm run build` succeeds under Astro 6.4.3 and emits eight static pages:
+  `/`, `/reference/`, `/walkthrough/`, `/walkthrough/fidelity/`, and four
+  `/docs/{slug}/` pages (`completion`, `diagnostics`, `primitives`, `prompts`).
+- `uv run python -m tools.outputgen --check` succeeds with the committed panels
+  and Doc-IR fragments unchanged.
+- Demo discovery finds 49 entries: 48 tiered demos (8 primitives, 16 patterns,
+  8 apps, 5 examples, 11 showcase pieces) plus the root `tour`.
+- The current reference registry contains 21 genuine Painted specimens; the
+  Doc-IR registry contains four published documents.
+- Desktop (1440×1000) and mobile (390×844) screenshots of the homepage,
+  walkthrough, reference, and `/docs/primitives/` are captured under
+  `/tmp/painted-web-wave0-baseline/`. They are local review evidence, not
+  repository or release artifacts.
+
+The visual baseline confirms the redesign targets: the homepage wordmark dominates
+the first viewport; provenance copy is repeated; the reference is organized as an
+old design-system gallery; and narrow layouts squeeze the global navigation and
+clip wide code/specimen content. The existing semantic Doc-IR output remains a
+strong foundation and should be restyled rather than flattened or rewritten.
+
+### First-release routes
+
+The new information architecture is canonical, but the first release uses rendered
+compatibility pages rather than deployment-specific redirects:
+
+```text
+/
+/learn/
+/learn/altitude/
+/learn/internals/
+/learn/{step}/                 step = paint | compose | lens | cli | live | surface
+/guides/
+/guides/{slug}/
+/demos/
+/demos/{tier}/{name}/          tier = primitives | patterns | apps | examples | showcase
+/reference/
+/about/rendered-by-painted/
+```
+
+`/reference/{capability}/` remains optional and is not a Wave 1 dependency.
+`/walkthrough/`, `/walkthrough/fidelity/`, and `/docs/{slug}/` remain buildable
+compatibility routes in the first release. The new shell should point primary
+navigation and progression links at the canonical routes. Host redirects can
+replace compatibility pages only after the deployment platform is known; until
+then, preserving useful URLs is more reliable than assuming redirect support.
+
+Demo identity is always tier-qualified. The stable public identity is
+`{tier}/{name}`, and the public route mirrors it. This avoids route instability
+when two tiers contain the same filename. It also exposes an existing CLI defect:
+`patterns/layers.py` and `apps/layers.py` both discover as `layers`, while the
+current unqualified runner selects the first. The manifest must not claim an
+installed command uniquely runs the app entry until discovery/dispatch provides a
+unique selector; its checkout command remains publishable meanwhile.
+
+### Website catalog schema v1
+
+The generated website catalog lives at `web/src/generated/catalog.json`. It is a
+deterministic build artifact: no timestamp, machine-specific absolute path, or
+hand-authored HTML belongs in it.
+
+```text
+CatalogV1
+  schema_version: 1
+  demo_tiers: DemoTier[]
+  demos: DemoRecord[]
+  specimens: SpecimenRecord[]
+
+DemoTier
+  id: "primitives" | "patterns" | "apps" | "examples" | "showcase"
+  order: integer
+
+DemoRecord
+  id: "{tier}/{name}"                 # stable identity
+  tier: DemoTier.id
+  name: string                        # runner/source name
+  slug: string                        # initially equal to name
+  title: string                       # human-facing, deterministic
+  summary: string                     # current first docstring line
+  source: repo-relative POSIX path
+  command: string | null              # only if it uniquely selects this demo
+  checkout_command: string
+  invocations: string[]               # declared docstring examples
+  has_main: boolean
+
+SpecimenRecord
+  id: string                          # current PANELS key
+  fragment: "panels/{id}.html"
+  source: repo-relative POSIX path
+  render_as: "block" | "plain" | "json"
+  width: integer
+```
+
+`painted._demo_discovery` remains the authority for demo membership and tier
+ordering. The catalog generator consumes `discover_demos()`; it does not rescan
+the tree independently. `tools.outputgen.PANELS` and its focused specimen
+registries remain the authority for specimen membership. The current
+`generated/docs/index.json` remains the Doc-IR registry and is not duplicated in
+`catalog.json`.
+
+The v1 catalog deliberately omits guide relationships, capability tags,
+progression rungs, and media recipes. Those fields require curated declarations,
+not filename inference, and may be added as optional fields only when a page or
+recording workflow consumes them. Breaking field or identity changes require a
+schema version bump. The outputgen check must cover the catalog and reject stale,
+missing, or extra generated records.
+
+### Acceptance checklist for delegated packages
+
+- Generated truth: every tiered discovery entry appears exactly once; every
+  published specimen traces to `PANELS`; generation is deterministic and
+  drift-gated.
+- Honest commands: a non-null installed command uniquely selects its record;
+  checkout commands point at existing source files.
+- Route integrity: the canonical routes build, compatibility routes remain, and
+  primary navigation contains no placeholder or orphan destination.
+- Honest lanes: terminal claims use generated fragments, document prose remains
+  semantic Doc-IR HTML, and motion claims use recordings with a static fallback.
+- Responsive fidelity: review at 390px and 1440px; the document must not acquire
+  horizontal overflow, while intentionally wide cell grids scroll within their
+  own specimen container.
+- Accessibility: landmarks and heading order are coherent, keyboard focus is
+  visible, navigation is operable, and motion respects reduced-motion settings.
+- Low-runtime shell: Astro/HTML/CSS is the default; client JavaScript requires a
+  concrete behavior that cannot be expressed by the static shell.
+- Verification: relevant focused Python tests, the outputgen drift check, and
+  `npm run build` pass; visual packages hand back desktop and mobile screenshots.
 
 ## Implementation waves
 

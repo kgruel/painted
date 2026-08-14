@@ -5,9 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from wcwidth import wcswidth
-
-from ._text_width import display_width
+from ._text_width import char_width, display_width
 from .buffer import BufferView
 from .cell import Style
 
@@ -84,9 +82,7 @@ class Line:
                 chars: list[str] = []
                 used = 0
                 for ch in span.text:
-                    cw = wcswidth(ch)
-                    if cw < 0:
-                        cw = 1
+                    cw = char_width(ch)
                     if used + cw > remaining:
                         break
                     chars.append(ch)
