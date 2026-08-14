@@ -106,7 +106,9 @@ def callout(
     muted = palette.muted
 
     def _one_line(text: str) -> str:
-        return text.replace("\r\n", " ").replace("\n", " ")
+        # Same contract and expression as record.py's _oneline: every declared
+        # break form collapses to one space.
+        return " ".join(text.splitlines())
 
     lines: list[Line] = [Line((Span(f"{glyph} ", role), Span(_one_line(subject))))]
     if detail:

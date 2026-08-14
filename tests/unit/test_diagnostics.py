@@ -334,3 +334,18 @@ def test_default_thresholds_is_frozen() -> None:
     # a customization path (pass a custom mapping instead).
     with pytest.raises(TypeError):
         DEFAULT_THRESHOLDS[logging.DEBUG] = Severity.ERROR  # type: ignore[index]
+
+
+def test_extra_field_with_newline_keeps_structure_without_overhang() -> None:
+    """A \n inside an extra= value is declared line structure: it renders as
+    its own row, and natural width is the widest segment — not line.width's
+    single-line measure, which would count the break as a column and over-pad."""
+    out = _emit(
+        _handler(zoom=Zoom.DETAILED),
+        _record(extra={"note": "ab\ncd"}),
+    )
+    lines = out.splitlines()
+    assert any(line.strip().endswith("ab") for line in lines)
+    assert any(line.strip() == "cd" for line in lines)
+    widest = max(len(line.rstrip()) for line in lines)
+    assert all(len(line) <= widest for line in lines)

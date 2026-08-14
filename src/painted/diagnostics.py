@@ -229,7 +229,11 @@ class PaintedHandler(logging.Handler):
         from .core.compose import fit_to_width
 
         if self._width is None:
-            return line.to_block(max(1, line.width))
+            # to_block(None) sizes naturally — including widest-segment width
+            # for a Line whose span carries a newline, where line.width (the
+            # single-line measure) would count the break as a column.
+            block = line.to_block(None)
+            return block if block.width else line.to_block(1)
         return fit_to_width(line.to_block(self._width), self._width)
 
     def _write(self, block: Block) -> None:
