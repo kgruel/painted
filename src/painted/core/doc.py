@@ -446,7 +446,9 @@ def _line(
     spans = (Span(lead, style),) if lead else ()
     line = Line(spans + _spans(content, style))
     if width is None:
-        return line.to_block(line.width)
+        # to_block(None) sizes naturally — widest segment when a span carries
+        # a newline, where line.width would count the break as a column.
+        return line.to_block(None)
     return line.wrap(width, wrap=wrap)
 
 
