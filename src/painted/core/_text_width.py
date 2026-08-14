@@ -15,9 +15,13 @@ _display_width_cache: dict[str, int] = {}
 
 
 def display_width(text: str) -> int:
-    """Return the display width (columns) of a string.
+    """Return the display width (columns) of a string — the cell count its
+    materialization produces (zero-width chars contribute nothing, wide chars
+    two columns, non-printables one: they scrub to a space cell).
 
-    Falls back to len(text) if wcswidth reports non-printable characters.
+    When wcswidth reports non-printable characters the width is summed
+    per-char instead — never a ``len()`` fallback, which would miscount any
+    wide or zero-width char sharing the string with the non-printable.
     """
     if text.isascii():
         return len(text)
@@ -26,7 +30,7 @@ def display_width(text: str) -> int:
         return cached
     w = wcswidth(text)
     if w < 0:
-        w = len(text)
+        w = sum(cw for cw in map(char_width, text) if cw > 0)
     if len(_display_width_cache) < 4096:
         _display_width_cache[text] = w
     return w

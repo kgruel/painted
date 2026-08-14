@@ -35,8 +35,6 @@ _SUSPICIOUS_ARG_RE = re.compile(
 # the exact occurrence count within that function: a duplicate call added
 # under an existing key is a new suspicious call and still trips the ratchet.
 ALLOWLIST: dict[tuple[str, str, str], int] = {
-    # _run_width: len() is the display width for text proven ASCII one line up.
-    ("src/painted/core/block.py", "_run_width", "len(text)"): 1,
     # _take_runs_prefix: codepoint cursor bound, not a width measure.
     ("src/painted/core/block.py", "_take_runs_prefix", "len(text)"): 1,
     ("src/painted/views/components/_text_input.py", "insert", "len(ch)"): 1,

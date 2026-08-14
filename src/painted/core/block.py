@@ -502,23 +502,10 @@ def _cells_from_text(text: str, style: Style, *, max_width: int | None = None) -
 _StyledRuns = list[tuple[str, Style, str | None]]
 
 
-def _run_width(text: str) -> int:
-    """Display width of one run's text — the cell count its materialization
-    produces (zero-width chars contribute nothing, wide chars two columns).
-
-    Deliberately not `display_width`: that falls back to ``len(text)`` when
-    ``wcswidth`` reports non-printables, which would diverge from the cell
-    count `_cells_from_text` actually produces. This is the engine's measure;
-    it must predict materialization exactly.
-    """
-    if text.isascii():
-        return len(text)
-    return sum(w for w in map(char_width, text) if w > 0)
-
-
 def _runs_width(runs: _StyledRuns) -> int:
-    """Display width of a styled-run stream."""
-    return sum(_run_width(text) for text, _style, _ref in runs)
+    """Display width of a styled-run stream — `display_width` is cell-accurate
+    (it predicts exactly the cells `_cells_from_text` produces)."""
+    return sum(display_width(text) for text, _style, _ref in runs)
 
 
 def _cells_from_runs(
@@ -547,7 +534,7 @@ def _cells_from_runs(
             refs.extend([ref] * len(run_cells))
         if remaining is not None:
             remaining -= len(run_cells)
-            if remaining <= 0 or len(run_cells) < _run_width(text):
+            if remaining <= 0 or len(run_cells) < display_width(text):
                 break
     return cells, refs
 
@@ -577,7 +564,7 @@ def _take_runs_prefix(runs: _StyledRuns, width: int) -> tuple[_StyledRuns, _Styl
         text = run[0]
         if not text:
             continue
-        w = _run_width(text)
+        w = display_width(text)
         if w <= remaining:
             prefix.append(run)
             remaining -= w

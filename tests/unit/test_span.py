@@ -451,6 +451,15 @@ class TestLineNewlines:
         assert block.cell_ref(0, 0) == "fact:01X"
         assert block.cell_ref(0, 1) == "fact:01X"
 
+    def test_width_matches_natural_block_for_nonprintable_mix(self):
+        # A span mixing a wide char with a non-printable: wcswidth reports
+        # non-printable, and the old len() fallback undercounted the wide
+        # char (width 2 for a 3-cell row). Span.width is cell-accurate now —
+        # Line.width always agrees with what to_block(None) materializes.
+        line = Line(spans=(Span("世\t", Style()),))
+        assert line.width == 3
+        assert line.to_block(None).width == 3
+
     def test_char_wrap_combining_only_span_no_phantom_row(self):
         # A combining mark in its own span after a row-filling char: it
         # materializes to no cell, so CHAR wrap must not grow a blank row

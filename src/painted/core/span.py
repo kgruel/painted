@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 from wcwidth import wcswidth
 
+from ._text_width import display_width
 from .buffer import BufferView
 from .cell import Style
 
@@ -30,12 +31,13 @@ class Span:
 
     @property
     def width(self) -> int:
-        """Display width, accounting for wide characters."""
-        w = wcswidth(self.text)
-        if w < 0:
-            # Fallback for strings containing non-printable chars
-            return len(self.text)
-        return w
+        """Display width, accounting for wide characters.
+
+        Cell-accurate via `display_width`: it measures exactly the cells this
+        span materializes to (non-printables scrub to one space cell each), so
+        `Line.width` always agrees with `Line.to_block(None).width`.
+        """
+        return display_width(self.text)
 
 
 @dataclass(frozen=True, slots=True)

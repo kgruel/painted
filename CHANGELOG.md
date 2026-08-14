@@ -33,7 +33,11 @@ breaking changes.
   wrapped `Block.text` no longer pay a per-character tax (single-line
   `Block.text` is unchanged within noise). Traceback headers now split message
   lines only on `\n`/CRLF — the declared break vocabulary — not `splitlines`'
-  exotic breaks, and a trailing newline keeps its blank row.
+  exotic breaks, and a trailing newline keeps its blank row. Width measurement
+  is now cell-accurate for text mixing non-printables with wide or combining
+  chars: `Span.width`/`Line.width` (and `display_width`) count the cells that
+  actually render instead of falling back to `len()`, so measuring before
+  materializing always agrees.
   ([8954229](https://github.com/kgruel/painted/commit/8954229))
 
 ## [0.14.0] — 2026-08-13
