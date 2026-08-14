@@ -1,6 +1,6 @@
 # Painted web redesign plan
 
-Status: Wave 1 complete; Wave 2 ready
+Status: Wave 2 complete; Wave 3 ready
 Scope: `web/`, its generated inputs, and the documentation/demo metadata needed to publish it  
 Execution model: root agent owns judgment and integration; Sol and Terra agents implement bounded work packages
 
@@ -374,6 +374,69 @@ but no Wave 2 routes or page migrations were implemented as part of this gate.
 - The media placeholder remains a placeholder until the recording workflow and
   real assets land in Wave 4. The existing homepage and cosmetic React surface
   remain untouched until an accepted replacement is ready.
+
+## Wave 2 gate
+
+Accepted by root review on 2026-08-13. Wave 2 publishes the primary learning and
+guide experiences and promotes the accepted shell to `/`; it does not begin the
+Wave 3 demo gallery or reference redesign.
+
+### Learn and guide publishing
+
+- The canonical Learn routes now build: `/learn/`, `/learn/altitude/`,
+  `/learn/internals/`, and the six altitude rungs from `paint` through `surface`.
+  The altitude and internal spines remain separate, with explicit cross-links
+  rather than one merged tutorial.
+- The direct lens contract is described as `(data, zoom, width) → Block`; the CLI
+  rung separately explains the framework renderer seam
+  `(data, fidelity, width) → Block`. The site does not claim those signatures are
+  identical merely because they form a continuous progression.
+- Four authored Markdown guides load directly from `docs/guides/` through an
+  external Astro content collection. Their frontmatter is the declared source
+  for slug, order, prerequisite, applicable altitudes, and related demo IDs;
+  their prose is not copied into website files.
+- Related guide demos resolve through `catalog.json` and currently link to source
+  rather than nonexistent Wave 3 detail routes. The duplicate `layers` records
+  remain distinct by their tier-qualified IDs.
+- The guide index derives its Published documents group from
+  `generated/docs/index.json` and preserves the existing semantic Doc-IR routes.
+  `/about/rendered-by-painted/` records the four honest media lanes in the
+  accepted shell.
+
+### Homepage implementation
+
+- `/` now uses the accepted responsive shell with a compact wordmark, concise
+  promise, install/GitHub/Learn actions, a genuine monitor specimen, generated
+  disclosure continuum, problem-shaped capability preview, and the four primary
+  destination cards.
+- The homepage no longer imports the cosmetic React surface. The component file
+  remains for compatibility pages until later cleanup.
+- With no committed recording asset, the media component renders a generated
+  later-tick fallback. Its copy claims only continuity of the renderer across
+  another state; timing and input remain explicitly reserved for a real
+  recording.
+- The first guide-detail facts grid and the first mobile capture method were
+  rejected during review. The accepted grid uses balanced columns with full-width
+  related/source rows, and final mobile evidence uses exact DevTools emulation
+  rather than a cropped desktop viewport.
+
+### Gate verification and open edges
+
+- Astro builds 24 static pages, including every Wave 2 canonical route and all
+  compatibility pages. The only missing internal destination is `/demos/`, which
+  belongs to Wave 3 and is not disguised with a placeholder page.
+- `./dev check`, `./dev docs --check`, `npm run build`, and `git diff --check`
+  pass. Reviewed screenshots live under `/tmp/painted-web-wave2-terra/` and
+  `/tmp/painted-web-wave2-sol/`.
+- All reviewed 390px pages report document `scrollWidth === clientWidth`; fixed
+  cell grids and the altitude rail own their local horizontal scrolling.
+- The source-backed guide structure is accepted, but its inherited prose requires
+  a later editorial/API-currentness pass. Known debt includes outdated primitive
+  excerpts, the old `truncate` ellipsis default, and a materially stale CLI guide
+  centered on the legacy renderer and `CliContext` shapes. The TUI guide remains
+  broadly current.
+- A real recording and poster remain Wave 4 work. Demo detail links remain Wave 3
+  work.
 
 ## Implementation waves
 
