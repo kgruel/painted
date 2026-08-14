@@ -31,18 +31,20 @@ _SUSPICIOUS_ARG_RE = re.compile(
 # Allowlist of len() calls that are intentionally about indices or collection
 # sizes. Keys are (path, enclosing_function, source_snippet) — the function
 # name, not a line number, so unrelated edits and reformatting don't churn the
-# ratchet; only touching the named function's own len() moves it.
-ALLOWLIST = {
+# ratchet; only touching the named function's own len() moves it. The value is
+# the exact occurrence count within that function: a duplicate call added
+# under an existing key is a new suspicious call and still trips the ratchet.
+ALLOWLIST: dict[tuple[str, str, str], int] = {
     # _run_width: len() is the display width for text proven ASCII one line up.
-    ("src/painted/core/block.py", "_run_width", "len(text)"),
+    ("src/painted/core/block.py", "_run_width", "len(text)"): 1,
     # _take_runs_prefix: codepoint cursor bound, not a width measure.
-    ("src/painted/core/block.py", "_take_runs_prefix", "len(text)"),
-    ("src/painted/views/components/_text_input.py", "insert", "len(ch)"),
-    ("src/painted/views/components/_text_input.py", "delete_forward", "len(self.text)"),
-    ("src/painted/views/components/_text_input.py", "move_right", "len(self.text)"),
-    ("src/painted/views/components/_text_input.py", "move_end", "len(self.text)"),
-    ("src/painted/views/components/_text_input.py", "set_text", "len(text)"),
-    ("src/painted/views/components/_text_input.py", "_ensure_visible", "len(text)"),
+    ("src/painted/core/block.py", "_take_runs_prefix", "len(text)"): 1,
+    ("src/painted/views/components/_text_input.py", "insert", "len(ch)"): 1,
+    ("src/painted/views/components/_text_input.py", "delete_forward", "len(self.text)"): 1,
+    ("src/painted/views/components/_text_input.py", "move_right", "len(self.text)"): 1,
+    ("src/painted/views/components/_text_input.py", "move_end", "len(self.text)"): 1,
+    ("src/painted/views/components/_text_input.py", "set_text", "len(text)"): 1,
+    ("src/painted/views/components/_text_input.py", "_ensure_visible", "len(text)"): 3,
 }
 
 
@@ -62,7 +64,8 @@ def _enclosing_function(tree: ast.Module, lineno: int) -> str:
 
 
 def test_no_new_len_on_text_variables_in_display_modules():
-    violations: list[tuple[str, str, str]] = []
+    counts: dict[tuple[str, str, str], int] = {}
+    linenos: dict[tuple[str, str, str], list[int]] = {}
 
     for abs_path, rel_key in TARGET_MODULES:
         src = abs_path.read_text(encoding="utf-8")
@@ -83,17 +86,38 @@ def test_no_new_len_on_text_variables_in_display_modules():
             call_src = ast.get_source_segment(src, node) or "len(?)"
             func = _enclosing_function(tree, node.lineno)
             key = (rel_key, func, call_src)
-            if key not in ALLOWLIST:
-                violations.append((rel_key, f"{func}:{node.lineno}", call_src))
+            counts[key] = counts.get(key, 0) + 1
+            linenos.setdefault(key, []).append(node.lineno)
 
+    violations = [
+        (key, count) for key, count in sorted(counts.items()) if count > ALLOWLIST.get(key, 0)
+    ]
     if violations:
-        formatted = "\n".join(f"- {p}:{ln}: {src}" for p, ln, src in violations)
-        allow = "\n".join(f"- {p}:{ln}: {src}" for p, ln, src in sorted(ALLOWLIST))
+        formatted = "\n".join(
+            f"- {p}:{fn}: {src} x{count} (allowed {ALLOWLIST.get((p, fn, src), 0)}; "
+            f"lines {linenos[(p, fn, src)]})"
+            for (p, fn, src), count in violations
+        )
+        allow = "\n".join(
+            f"- {p}:{fn}: {src} x{n}" for (p, fn, src), n in sorted(ALLOWLIST.items())
+        )
         raise AssertionError(
             "Unexpected len() on likely text variables in display-critical modules.\n\n"
             "Violations:\n"
             f"{formatted}\n\n"
-            "If this len() is intentional (non-display), add it to ALLOWLIST.\n"
+            "If this len() is intentional (non-display), add it to ALLOWLIST with its count.\n"
             "Current ALLOWLIST:\n"
             f"{allow}\n"
         )
+
+    # Shrink-only in both dimensions: an allowlist entry whose calls are gone
+    # (or fewer) is stale — ratchet it down rather than leaving headroom a new
+    # suspicious call could hide in.
+    stale = [(key, n) for key, n in sorted(ALLOWLIST.items()) if counts.get(key, 0) < n]
+    assert not stale, (
+        "Stale ALLOWLIST entries (actual count below allowed — remove or lower them):\n"
+        + "\n".join(
+            f"- {p}:{fn}: {src} allowed {n}, found {counts.get((p, fn, src), 0)}"
+            for (p, fn, src), n in stale
+        )
+    )
