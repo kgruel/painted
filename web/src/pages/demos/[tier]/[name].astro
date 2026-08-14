@@ -1,0 +1,79 @@
+---
+import Prototype from "../../../layouts/Prototype.astro";
+import catalog from "../../../generated/catalog.json";
+import "../../../styles/demos.css";
+
+const repository = "https://github.com/kgruel/painted/blob/main/";
+
+const roles = {
+  primitives: "Foundations",
+  patterns: "Reusable workflows",
+  apps: "Interactive behavior",
+  examples: "Complete small applications",
+  showcase: "Visual spectacle",
+} as const;
+
+export function getStaticPaths() {
+  return catalog.demos.map((demo) => ({
+    params: { tier: demo.tier, name: demo.slug },
+    props: { demo },
+  }));
+}
+
+const { demo } = Astro.props;
+const role = roles[demo.tier as keyof typeof roles];
+---
+
+<Prototype
+  title={`${demo.title} demo — Painted`}
+  description={demo.summary}
+  current="demos"
+>
+  <div class="proto-shell demo-page demo-detail-page">
+    <nav class="demo-crumbs" aria-label="Breadcrumb">
+      <a href="/demos/">Demos</a>
+      <span aria-hidden="true">/</span>
+      <a href={`/demos/#${demo.tier}`}>{role}</a>
+      <span aria-hidden="true">/</span>
+      <span aria-current="page">{demo.title}</span>
+    </nav>
+
+    <header class="demo-detail-header">
+      <p class="proto-eyebrow">{role}</p>
+      <p class="demo-identity"><span aria-hidden="true">/</span>{demo.id}</p>
+      <h1>{demo.title}</h1>
+      <p class="proto-page-summary">{demo.summary}</p>
+    </header>
+
+    <section class="demo-facts" aria-label="Demo facts">
+      <div class="demo-fact-source">
+        <p class="demo-fact-label">Source</p>
+        <a href={`${repository}${demo.source}`}>{demo.source} <span aria-hidden="true">↗</span></a>
+      </div>
+      <div class="demo-fact-checkout">
+        <p class="demo-fact-label">Run from a checkout</p>
+        <code>$ {demo.checkout_command}</code>
+      </div>
+      {demo.command && (
+        <div class="demo-fact-installed">
+          <p class="demo-fact-label">Installed command</p>
+          <code>$ {demo.command}</code>
+        </div>
+      )}
+    </section>
+
+    {demo.invocations.length > 0 && (
+      <section class="demo-invocations" aria-labelledby="invocations-heading">
+        <div class="demo-section-heading">
+          <p class="proto-eyebrow">Declared invocations</p>
+          <h2 id="invocations-heading">Ways to run it</h2>
+        </div>
+        <ol>
+          {demo.invocations.map((invocation) => <li><code>{invocation}</code></li>)}
+        </ol>
+      </section>
+    )}
+
+    <p class="demo-back-link"><a href={`/demos/#${demo.tier}`}>← Back to {role}</a></p>
+  </div>
+</Prototype>

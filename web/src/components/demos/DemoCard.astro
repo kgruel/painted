@@ -1,0 +1,28 @@
+---
+interface Demo {
+  id: string;
+  tier: string;
+  slug: string;
+  title: string;
+  summary: string;
+  command: string | null;
+}
+
+interface Props {
+  demo: Demo;
+}
+
+const { demo } = Astro.props;
+---
+
+<article class="demo-card">
+  <div class="demo-card-head">
+    <p class="demo-identity"><span aria-hidden="true">/</span>{demo.id}</p>
+  </div>
+  <h3>{demo.title}</h3>
+  <p>{demo.summary}</p>
+  {demo.command && <code class="demo-card-command">$ {demo.command}</code>}
+  <a class="demo-card-link" href={`/demos/${demo.tier}/${demo.slug}/`}>
+    Open demo <span aria-hidden="true">→</span>
+  </a>
+</article>

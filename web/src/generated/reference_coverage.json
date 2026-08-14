@@ -1,0 +1,801 @@
+{
+  "schema_version": 1,
+  "summary": {
+    "family_count": 9,
+    "capability_count": 49,
+    "entry_count": 39,
+    "mode_counts": {
+      "link": 27,
+      "omission": 0,
+      "specimen": 12
+    },
+    "specimen_count": 19
+  },
+  "families": [
+    {
+      "id": "rendering-model",
+      "index": 1,
+      "title": "Build exact terminal output",
+      "summary": "Start with immutable render values, then compose and fit rectangular output to the available cells.",
+      "capabilities": [
+        "cells",
+        "spans",
+        "lines",
+        "blocks",
+        "buffers",
+        "composition",
+        "borders",
+        "width",
+        "wrapping"
+      ],
+      "entries": [
+        {
+          "id": "render-values",
+          "title": "Cell \u2192 Span \u2192 Line \u2192 Block",
+          "summary": "The immutable values that carry characters, styles, runs, rows, and rectangles.",
+          "covers": [
+            "cells",
+            "spans",
+            "lines",
+            "blocks"
+          ],
+          "mode": "link",
+          "specimen_ids": [],
+          "href": "/guides/primitives-and-blocks/",
+          "link_label": "Read the primitives guide",
+          "omission_reason": null
+        },
+        {
+          "id": "buffers",
+          "title": "Buffers and bounded views",
+          "summary": "Mutable cell destinations sit beneath frame assembly and interactive surfaces.",
+          "covers": [
+            "buffers"
+          ],
+          "mode": "link",
+          "specimen_ids": [],
+          "href": "https://github.com/kgruel/painted/blob/main/src/painted/core/buffer.py",
+          "link_label": "Inspect buffer.py",
+          "omission_reason": null
+        },
+        {
+          "id": "composition-and-borders",
+          "title": "Compose on the cell grid",
+          "summary": "Real blocks joined at integer cell gaps and wrapped with shipped border vocabularies.",
+          "covers": [
+            "composition",
+            "borders"
+          ],
+          "mode": "specimen",
+          "specimen_ids": [
+            "spacing_cells",
+            "chrome_borders"
+          ],
+          "href": null,
+          "link_label": null,
+          "omission_reason": null
+        },
+        {
+          "id": "width",
+          "title": "Fit the available width",
+          "summary": "Width-aware composition and truncation preserve the rectangular contract.",
+          "covers": [
+            "width"
+          ],
+          "mode": "link",
+          "specimen_ids": [],
+          "href": "/guides/composition-layout/",
+          "link_label": "Read the composition guide",
+          "omission_reason": null
+        },
+        {
+          "id": "wrapping",
+          "title": "Wrap block text deliberately",
+          "summary": "Block text declares its wrapping policy and materializes display-width-aware rows.",
+          "covers": [
+            "wrapping"
+          ],
+          "mode": "link",
+          "specimen_ids": [],
+          "href": "/guides/primitives-and-blocks/",
+          "link_label": "Read the block text guide",
+          "omission_reason": null
+        }
+      ]
+    },
+    {
+      "id": "lenses-and-views",
+      "index": 2,
+      "title": "Turn data into views",
+      "summary": "Lenses choose a representation from data, detail, and width; views provide reusable render shapes.",
+      "capabilities": [
+        "lenses",
+        "views"
+      ],
+      "entries": [
+        {
+          "id": "lenses-and-views",
+          "title": "Lenses and reusable views",
+          "summary": "Two genuine lenses render a numeric mapping and a hierarchy as terminal blocks.",
+          "covers": [
+            "lenses",
+            "views"
+          ],
+          "mode": "specimen",
+          "specimen_ids": [
+            "comp_chart",
+            "comp_tree"
+          ],
+          "href": null,
+          "link_label": null,
+          "omission_reason": null
+        }
+      ]
+    },
+    {
+      "id": "data-and-controls",
+      "index": 3,
+      "title": "Present data and control state",
+      "summary": "Use stateful view helpers for dense data, progress, selection, feedback, and text entry.",
+      "capabilities": [
+        "tables",
+        "records",
+        "progress",
+        "meters",
+        "spinners",
+        "callouts",
+        "inputs",
+        "lists"
+      ],
+      "entries": [
+        {
+          "id": "tables",
+          "title": "Tables",
+          "summary": "Columns, alignment, selection state, and visible rows rendered by table().",
+          "covers": [
+            "tables"
+          ],
+          "mode": "specimen",
+          "specimen_ids": [
+            "comp_table"
+          ],
+          "href": null,
+          "link_label": null,
+          "omission_reason": null
+        },
+        {
+          "id": "records",
+          "title": "Record views",
+          "summary": "Timestamped record lines, timelines, and maps adapt detail and content to width.",
+          "covers": [
+            "records"
+          ],
+          "mode": "link",
+          "specimen_ids": [],
+          "href": "https://github.com/kgruel/painted/blob/main/src/painted/views/record.py",
+          "link_label": "Inspect record.py",
+          "omission_reason": null
+        },
+        {
+          "id": "progress",
+          "title": "Progress",
+          "summary": "Determinate progress rendered at several semantic palette roles.",
+          "covers": [
+            "progress"
+          ],
+          "mode": "specimen",
+          "specimen_ids": [
+            "comp_progress"
+          ],
+          "href": null,
+          "link_label": null,
+          "omission_reason": null
+        },
+        {
+          "id": "meters",
+          "title": "Meters",
+          "summary": "Meter state and formatters add labeled measurements beyond a bare progress bar.",
+          "covers": [
+            "meters"
+          ],
+          "mode": "link",
+          "specimen_ids": [],
+          "href": "https://github.com/kgruel/painted/blob/main/src/painted/views/components/_meter.py",
+          "link_label": "Inspect the meter source",
+          "omission_reason": null
+        },
+        {
+          "id": "spinners",
+          "title": "Spinner frame sets",
+          "summary": "A static inventory of shipped frames and one selected frame; animation is not claimed here.",
+          "covers": [
+            "spinners"
+          ],
+          "mode": "specimen",
+          "specimen_ids": [
+            "comp_spinner"
+          ],
+          "href": null,
+          "link_label": null,
+          "omission_reason": null
+        },
+        {
+          "id": "callouts-and-inputs",
+          "title": "Callouts and text input",
+          "summary": "Focused component APIs render message hierarchy and editable input state.",
+          "covers": [
+            "callouts",
+            "inputs"
+          ],
+          "mode": "link",
+          "specimen_ids": [],
+          "href": "https://github.com/kgruel/painted/tree/main/src/painted/views/components",
+          "link_label": "Browse component sources",
+          "omission_reason": null
+        },
+        {
+          "id": "lists",
+          "title": "Selection lists",
+          "summary": "ListState drives cursor position and selected-row styling.",
+          "covers": [
+            "lists"
+          ],
+          "mode": "specimen",
+          "specimen_ids": [
+            "comp_listview"
+          ],
+          "href": null,
+          "link_label": null,
+          "omission_reason": null
+        }
+      ]
+    },
+    {
+      "id": "meaning-and-style",
+      "index": 4,
+      "title": "Keep meaning distinct from styling",
+      "summary": "Semantic roles, themes, icons, marks, and vocabularies let hosts adapt presentation without changing meaning.",
+      "capabilities": [
+        "palette",
+        "theme",
+        "icons",
+        "semantic marks",
+        "vocabularies"
+      ],
+      "entries": [
+        {
+          "id": "palette",
+          "title": "Semantic palettes",
+          "summary": "Five semantic roles and shipped palette presets rendered through their real Style values.",
+          "covers": [
+            "palette"
+          ],
+          "mode": "specimen",
+          "specimen_ids": [
+            "colors_palette",
+            "colors_presets"
+          ],
+          "href": null,
+          "link_label": null,
+          "omission_reason": null
+        },
+        {
+          "id": "theme",
+          "title": "Themes",
+          "summary": "Theme binds semantic roles and component styling; website surface tokens are not a terminal specimen.",
+          "covers": [
+            "theme"
+          ],
+          "mode": "link",
+          "specimen_ids": [],
+          "href": "https://github.com/kgruel/painted/blob/main/src/painted/theme.py",
+          "link_label": "Inspect theme.py",
+          "omission_reason": null
+        },
+        {
+          "id": "icons",
+          "title": "Icon vocabularies",
+          "summary": "The same component swaps between Unicode and ASCII icon sets.",
+          "covers": [
+            "icons"
+          ],
+          "mode": "specimen",
+          "specimen_ids": [
+            "glyphs_iconset",
+            "glyphs_box"
+          ],
+          "href": null,
+          "link_label": null,
+          "omission_reason": null
+        },
+        {
+          "id": "marks-and-vocabularies",
+          "title": "Semantic marks and vocabularies",
+          "summary": "Named marks preserve denotation while a vocabulary selects host-appropriate glyphs and styles.",
+          "covers": [
+            "semantic marks",
+            "vocabularies"
+          ],
+          "mode": "link",
+          "specimen_ids": [],
+          "href": "https://github.com/kgruel/painted/blob/main/src/painted/vocabulary.py",
+          "link_label": "Inspect vocabulary.py",
+          "omission_reason": null
+        }
+      ]
+    },
+    {
+      "id": "cli-disclosure",
+      "index": 5,
+      "title": "Control disclosure and CLI affordances",
+      "summary": "Resolve detail, output budgets, formats, help, completion, and prompts around one rendering contract.",
+      "capabilities": [
+        "fidelity",
+        "budgets",
+        "formats",
+        "help",
+        "completion",
+        "prompts"
+      ],
+      "entries": [
+        {
+          "id": "fidelity-and-budgets",
+          "title": "Fidelity and budgets",
+          "summary": "A declared disclosure ladder and a constrained rendering budget applied to genuine blocks.",
+          "covers": [
+            "fidelity",
+            "budgets"
+          ],
+          "mode": "specimen",
+          "specimen_ids": [
+            "disclosure_q",
+            "disclosure_v",
+            "disclosure_budget"
+          ],
+          "href": null,
+          "link_label": null,
+          "omission_reason": null
+        },
+        {
+          "id": "formats",
+          "title": "Output formats",
+          "summary": "The same monitor data emitted as terminal cells, plain text, and JSON.",
+          "covers": [
+            "formats"
+          ],
+          "mode": "specimen",
+          "specimen_ids": [
+            "monitor_default",
+            "monitor_plain",
+            "monitor_json"
+          ],
+          "href": null,
+          "link_label": null,
+          "omission_reason": null
+        },
+        {
+          "id": "help",
+          "title": "CLI help",
+          "summary": "Help builds structured usage, arguments, and command sections from argparse metadata.",
+          "covers": [
+            "help"
+          ],
+          "mode": "link",
+          "specimen_ids": [],
+          "href": "https://github.com/kgruel/painted/blob/main/src/painted/cli/help.py",
+          "link_label": "Inspect the help source",
+          "omission_reason": null
+        },
+        {
+          "id": "completion",
+          "title": "Completion",
+          "summary": "Shell completion is documented as candidates, actions, and host integration.",
+          "covers": [
+            "completion"
+          ],
+          "mode": "link",
+          "specimen_ids": [],
+          "href": "/docs/completion/",
+          "link_label": "Open the completion document",
+          "omission_reason": null
+        },
+        {
+          "id": "prompts",
+          "title": "Prompts",
+          "summary": "Prompt cells and validation behavior are published as semantic documentation.",
+          "covers": [
+            "prompts"
+          ],
+          "mode": "link",
+          "specimen_ids": [],
+          "href": "/docs/prompts/",
+          "link_label": "Open the prompts document",
+          "omission_reason": null
+        }
+      ]
+    },
+    {
+      "id": "interaction",
+      "index": 6,
+      "title": "Carry denotation into interaction",
+      "summary": "Refs survive rendering; hosts use them for links, hit testing, pointer input, focus, search, cursor, and layered routing.",
+      "capabilities": [
+        "refs",
+        "links",
+        "hit testing",
+        "mouse",
+        "cursor",
+        "focus",
+        "search",
+        "layers"
+      ],
+      "entries": [
+        {
+          "id": "refs-and-links",
+          "title": "Refs become links in HTML",
+          "summary": "Ref-tagged cells resolve through a declared RefScheme to genuine HTML anchors.",
+          "covers": [
+            "refs",
+            "links"
+          ],
+          "mode": "specimen",
+          "specimen_ids": [
+            "refs_anchors"
+          ],
+          "href": null,
+          "link_label": null,
+          "omission_reason": null
+        },
+        {
+          "id": "hit-testing",
+          "title": "Hit testing",
+          "summary": "Refs propagate through composition to coordinate probes and host frame resolution.",
+          "covers": [
+            "hit testing"
+          ],
+          "mode": "link",
+          "specimen_ids": [],
+          "href": "/demos/patterns/hit_testing/",
+          "link_label": "Open the hit-testing demo",
+          "omission_reason": null
+        },
+        {
+          "id": "mouse",
+          "title": "Mouse input",
+          "summary": "Mouse decoding turns terminal escape sequences into bounded button and coordinate events.",
+          "covers": [
+            "mouse"
+          ],
+          "mode": "link",
+          "specimen_ids": [],
+          "href": "https://github.com/kgruel/painted/blob/main/src/painted/mouse.py",
+          "link_label": "Inspect mouse.py",
+          "omission_reason": null
+        },
+        {
+          "id": "cursor",
+          "title": "Cursor state",
+          "summary": "A bounded cursor supports clamp and wrap semantics for navigable domains.",
+          "covers": [
+            "cursor"
+          ],
+          "mode": "link",
+          "specimen_ids": [],
+          "href": "https://github.com/kgruel/painted/blob/main/src/painted/cursor.py",
+          "link_label": "Inspect cursor.py",
+          "omission_reason": null
+        },
+        {
+          "id": "focus",
+          "title": "Focus state",
+          "summary": "Focus distinguishes navigation from widget-owned keyboard capture.",
+          "covers": [
+            "focus"
+          ],
+          "mode": "link",
+          "specimen_ids": [],
+          "href": "https://github.com/kgruel/painted/blob/main/src/painted/focus.py",
+          "link_label": "Inspect focus.py",
+          "omission_reason": null
+        },
+        {
+          "id": "search",
+          "title": "Search state",
+          "summary": "Immutable query and selection state composes with exact, prefix, and fuzzy filtering.",
+          "covers": [
+            "search"
+          ],
+          "mode": "link",
+          "specimen_ids": [],
+          "href": "https://github.com/kgruel/painted/blob/main/src/painted/search.py",
+          "link_label": "Inspect search.py",
+          "omission_reason": null
+        },
+        {
+          "id": "layers",
+          "title": "Layer routing",
+          "summary": "Layers route input top-down and paint modal state bottom-up.",
+          "covers": [
+            "layers"
+          ],
+          "mode": "link",
+          "specimen_ids": [],
+          "href": "/guides/tui-core-surface-layers/",
+          "link_label": "Read the Surface and layers guide",
+          "omission_reason": null
+        }
+      ]
+    },
+    {
+      "id": "delivery",
+      "index": 7,
+      "title": "Choose a delivery surface",
+      "summary": "Publish once, update in place, consume a stream, or run an interactive Surface without pretending those lifecycles are static images.",
+      "capabilities": [
+        "static",
+        "live",
+        "stream-surface",
+        "interactive"
+      ],
+      "entries": [
+        {
+          "id": "static-delivery",
+          "title": "Static delivery",
+          "summary": "One generated Block published as a stable HTML fragment.",
+          "covers": [
+            "static"
+          ],
+          "mode": "specimen",
+          "specimen_ids": [
+            "monitor_default"
+          ],
+          "href": null,
+          "link_label": null,
+          "omission_reason": null
+        },
+        {
+          "id": "live-delivery",
+          "title": "Live delivery",
+          "summary": "In-place updates are lifecycle behavior; the runnable demo and source show the host contract without faking motion.",
+          "covers": [
+            "live"
+          ],
+          "mode": "link",
+          "specimen_ids": [],
+          "href": "/demos/patterns/live/",
+          "link_label": "Open the live-delivery demo",
+          "omission_reason": null
+        },
+        {
+          "id": "stream-surface",
+          "title": "StreamSurface",
+          "summary": "A stream-driven Surface coordinates async values, rendering, and terminal ownership.",
+          "covers": [
+            "stream-surface"
+          ],
+          "mode": "link",
+          "specimen_ids": [],
+          "href": "https://github.com/kgruel/painted/blob/main/src/painted/cli/stream_surface.py",
+          "link_label": "Inspect stream_surface.py",
+          "omission_reason": null
+        },
+        {
+          "id": "interactive-delivery",
+          "title": "Interactive Surface",
+          "summary": "Keyboard, mouse, resize, frame delivery, and teardown belong to the interactive host lifecycle.",
+          "covers": [
+            "interactive"
+          ],
+          "mode": "link",
+          "specimen_ids": [],
+          "href": "/learn/surface/",
+          "link_label": "Learn the Surface rung",
+          "omission_reason": null
+        }
+      ]
+    },
+    {
+      "id": "operations",
+      "index": 8,
+      "title": "Inspect and verify runtime behavior",
+      "summary": "Diagnostics, logs, tracebacks, profiling, and test hosts expose failures and performance without changing application meaning.",
+      "capabilities": [
+        "diagnostics",
+        "logging",
+        "traceback rendering",
+        "profiling",
+        "testing"
+      ],
+      "entries": [
+        {
+          "id": "diagnostics-and-tracebacks",
+          "title": "Diagnostics and traceback rendering",
+          "summary": "Structured diagnostic and exception representations are published in the diagnostics document.",
+          "covers": [
+            "diagnostics",
+            "traceback rendering"
+          ],
+          "mode": "link",
+          "specimen_ids": [],
+          "href": "/docs/diagnostics/",
+          "link_label": "Open the diagnostics document",
+          "omission_reason": null
+        },
+        {
+          "id": "logging",
+          "title": "Logging",
+          "summary": "Host-aware diagnostic plumbing keeps logs usable around terminal-owned output.",
+          "covers": [
+            "logging"
+          ],
+          "mode": "link",
+          "specimen_ids": [],
+          "href": "https://github.com/kgruel/painted/blob/main/src/painted/diagnostics.py",
+          "link_label": "Inspect diagnostics.py",
+          "omission_reason": null
+        },
+        {
+          "id": "profiling",
+          "title": "View profiling",
+          "summary": "The profiling helper measures view calls and reports the most expensive render paths.",
+          "covers": [
+            "profiling"
+          ],
+          "mode": "link",
+          "specimen_ids": [],
+          "href": "https://github.com/kgruel/painted/blob/main/src/painted/views/_profile.py",
+          "link_label": "Inspect the profiling helper",
+          "omission_reason": null
+        },
+        {
+          "id": "testing",
+          "title": "Surface testing",
+          "summary": "A test host captures frames and events without requiring a real interactive terminal.",
+          "covers": [
+            "testing"
+          ],
+          "mode": "link",
+          "specimen_ids": [],
+          "href": "https://github.com/kgruel/painted/blob/main/src/painted/tui/testing.py",
+          "link_label": "Inspect the testing host",
+          "omission_reason": null
+        }
+      ]
+    },
+    {
+      "id": "publishing",
+      "index": 9,
+      "title": "Publish semantic documents",
+      "summary": "Document structure owns prose while Painted figures remain cell-derived islands in HTML.",
+      "capabilities": [
+        "document IR",
+        "HTML publishing"
+      ],
+      "entries": [
+        {
+          "id": "document-ir",
+          "title": "Document IR",
+          "summary": "A semantic document tree models sections, prose, definitions, code, and Painted figures.",
+          "covers": [
+            "document IR"
+          ],
+          "mode": "link",
+          "specimen_ids": [],
+          "href": "https://github.com/kgruel/painted/blob/main/src/painted/core/doc.py",
+          "link_label": "Inspect the document IR",
+          "omission_reason": null
+        },
+        {
+          "id": "html-publishing",
+          "title": "HTML publishing",
+          "summary": "The publisher maps document structure to semantic HTML and delegates terminal figures to render_html.",
+          "covers": [
+            "HTML publishing"
+          ],
+          "mode": "link",
+          "specimen_ids": [],
+          "href": "https://github.com/kgruel/painted/blob/main/src/painted/publish.py",
+          "link_label": "Inspect the HTML publisher",
+          "omission_reason": null
+        }
+      ]
+    }
+  ],
+  "specimens": [
+    {
+      "id": "chrome_borders",
+      "fragment": "panels/chrome_borders.html",
+      "source": "tools/reference_specimens.py"
+    },
+    {
+      "id": "colors_palette",
+      "fragment": "panels/colors_palette.html",
+      "source": "tools/reference_specimens.py"
+    },
+    {
+      "id": "colors_presets",
+      "fragment": "panels/colors_presets.html",
+      "source": "tools/reference_specimens.py"
+    },
+    {
+      "id": "comp_chart",
+      "fragment": "panels/comp_chart.html",
+      "source": "tools/reference_specimens.py"
+    },
+    {
+      "id": "comp_listview",
+      "fragment": "panels/comp_listview.html",
+      "source": "tools/reference_specimens.py"
+    },
+    {
+      "id": "comp_progress",
+      "fragment": "panels/comp_progress.html",
+      "source": "tools/reference_specimens.py"
+    },
+    {
+      "id": "comp_spinner",
+      "fragment": "panels/comp_spinner.html",
+      "source": "tools/reference_specimens.py"
+    },
+    {
+      "id": "comp_table",
+      "fragment": "panels/comp_table.html",
+      "source": "tools/reference_specimens.py"
+    },
+    {
+      "id": "comp_tree",
+      "fragment": "panels/comp_tree.html",
+      "source": "tools/reference_specimens.py"
+    },
+    {
+      "id": "disclosure_budget",
+      "fragment": "panels/disclosure_budget.html",
+      "source": "tools/disclosure_specimens.py"
+    },
+    {
+      "id": "disclosure_q",
+      "fragment": "panels/disclosure_q.html",
+      "source": "tools/disclosure_specimens.py"
+    },
+    {
+      "id": "disclosure_v",
+      "fragment": "panels/disclosure_v.html",
+      "source": "tools/disclosure_specimens.py"
+    },
+    {
+      "id": "glyphs_box",
+      "fragment": "panels/glyphs_box.html",
+      "source": "tools/reference_specimens.py"
+    },
+    {
+      "id": "glyphs_iconset",
+      "fragment": "panels/glyphs_iconset.html",
+      "source": "tools/reference_specimens.py"
+    },
+    {
+      "id": "monitor_default",
+      "fragment": "panels/monitor_default.html",
+      "source": "demos/patterns/monitor.py"
+    },
+    {
+      "id": "monitor_json",
+      "fragment": "panels/monitor_json.html",
+      "source": "demos/patterns/monitor.py"
+    },
+    {
+      "id": "monitor_plain",
+      "fragment": "panels/monitor_plain.html",
+      "source": "demos/patterns/monitor.py"
+    },
+    {
+      "id": "refs_anchors",
+      "fragment": "panels/refs_anchors.html",
+      "source": "demos/primitives/refs.py"
+    },
+    {
+      "id": "spacing_cells",
+      "fragment": "panels/spacing_cells.html",
+      "source": "tools/reference_specimens.py"
+    }
+  ]
+}

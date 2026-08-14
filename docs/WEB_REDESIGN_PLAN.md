@@ -1,6 +1,6 @@
 # Painted web redesign plan
 
-Status: Wave 2 complete; Wave 3 ready
+Status: Wave 3 complete; Wave 4 ready
 Scope: `web/`, its generated inputs, and the documentation/demo metadata needed to publish it  
 Execution model: root agent owns judgment and integration; Sol and Terra agents implement bounded work packages
 
@@ -437,6 +437,77 @@ Wave 3 demo gallery or reference redesign.
   broadly current.
 - A real recording and poster remain Wave 4 work. Demo detail links remain Wave 3
   work.
+
+## Wave 3 gate
+
+Accepted by root review on 2026-08-13. Wave 3 publishes the catalog-backed demo
+experience and replaces the old design-system reference with a checked capability
+index. It does not add recording metadata or assets, infer undeclared media
+relationships, or begin Wave 4 cleanup.
+
+### Demo catalog and command honesty
+
+- `/demos/` presents the five discovery-owned tiers as public learning roles:
+  foundations, reusable workflows, interactive behavior, complete small
+  applications, and visual spectacle. The page imports `catalog.json`; it does
+  not rescan demo sources or maintain a second inventory.
+- All 48 catalog records build at tier-qualified
+  `/demos/{tier}/{name}/` routes. Detail pages publish the declared summary,
+  source, checkout command, non-null installed command, and verbatim invocation
+  examples without exposing discovery flags or internal test-shape language.
+- Both `patterns/layers` and `apps/layers` publish only their distinct source and
+  checkout command. Root rejected an initial explanatory "installed command
+  unavailable" panel because the frozen contract requires the ambiguous command
+  to be omitted, not dramatized.
+- Root also rejected an absent-media/provenance section on every detail page. No
+  demo-to-specimen or demo-to-recording relationship is inferred, and missing
+  media is not represented with a placeholder or "coming soon" treatment.
+
+### Capability reference and generated coverage
+
+- `/reference/` now uses nine problem-shaped capability families instead of the
+  old Components / Colors / Spacing / Type / Brand organization.
+- `tools/reference_specimens.py` keeps `CATALOG` as the specimen authority and
+  adds an explicit pedagogical coverage declaration beside it. The declaration
+  accounts for all 49 frozen capability terms exactly once in 39 entries: 12
+  specimen entries, 27 precise guide/demo/API-source links, and zero omissions.
+- `tools/reference_coverage.py` validates family identity and ordering, exact
+  per-capability coverage, evidence-mode fields, and every static specimen ID
+  against `tools.outputgen.PANELS`. It emits the deterministic
+  `web/src/generated/reference_coverage.json`, which `outputgen --check` now
+  drift-gates.
+- Nineteen existing PANELS specimens support the static entries. No new specimen
+  registry or bespoke panel was added, and CatalogV1 remains unchanged. Live,
+  StreamSurface, interactive, hit-testing, mouse, cursor, focus, search, and
+  layers behavior stays link-backed rather than being claimed by a static frame.
+  The spinner specimen claims only its frame inventory and selected frame.
+- Root rejected a help link to an unrelated primitives document and public copy
+  that exposed the redesign process. The accepted links resolve to semantically
+  relevant guides, demos, published documents, or current source files.
+
+### Visual, route, and verification gate
+
+- The accepted demo gallery is dense but navigable without client JavaScript;
+  its first viewport establishes the five roles before entering the 48-card
+  catalog. Detail pages stay useful without constructing fake media chrome.
+- The accepted reference leads with a bounded coverage claim, exposes evidence
+  modes, and renders genuine Painted fragments in capability-shaped groups.
+  Wide border and view specimens scroll inside their own containers.
+- Exact Chromium DevTools captures report document `clientWidth === scrollWidth`
+  at 1440×1000 and 390×844 for the demo gallery, both ambiguous `layers` pages,
+  and the reference. Demo evidence is under `/tmp/painted-web-wave3-terra/`;
+  reference and scrolled-specimen evidence is under
+  `/tmp/painted-web-wave3-sol/`.
+- Focused catalog/reference/completion tests pass (86 tests). `./dev check`,
+  `uv run python -m tools.outputgen --check`, `npm run build`, and
+  `git diff --check` pass. Astro builds 73 pages: the prior 24 plus the demo index
+  and 48 detail routes. An integrated generated-site audit checks 875 internal
+  links across all 73 routes with no missing page or fragment destination.
+- Wave 4 is ready. Its work remains deliberately explicit: select and record a
+  small media set, add only consumed recording metadata, integrate real assets,
+  and remove dead cosmetic assets after import checks. The inherited guide
+  currentness debt recorded in the Wave 2 gate also remains; Wave 3 did not hide
+  it behind broader reference claims.
 
 ## Implementation waves
 
