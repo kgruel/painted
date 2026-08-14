@@ -432,3 +432,52 @@ class TestLineToBlockNaturalWidth:
         block = line.to_block(None)
         assert block.cell_ref(0, 0) == "fact:01X"
         assert block.cell_ref(1, 0) == "fact:01X"
+
+
+class TestLineNewlines:
+    """A newline inside a span is declared line structure — the styled sibling
+    of Block.text's split (decision practice/block-text-honors-newlines)."""
+
+    def test_wrap_splits_on_newline(self):
+        line = Line(spans=(Span("aa bb\ncc", Style()),))
+        block = line.wrap(3)
+        assert block.height == 3  # "aa" / "bb" (word-wrapped) / "cc"
+        assert [c.char for c in block.row(2)] == ["c", "c", " "]
+
+    def test_wrap_ref_survives_on_both_sides_of_the_break(self):
+        line = Line(spans=(Span("ab\ncd", Style(), ref="fact:01X"),))
+        block = line.wrap(2)
+        assert block.height == 2
+        assert block.cell_ref(0, 0) == "fact:01X"
+        assert block.cell_ref(0, 1) == "fact:01X"
+
+    def test_to_block_natural_width_is_widest_segment(self):
+        line = Line(spans=(Span("a\nbbb", Style()),))
+        block = line.to_block(None)
+        assert block.height == 2
+        assert block.width == 3
+
+    def test_to_block_given_width_clips_each_segment(self):
+        line = Line(spans=(Span("hello\nhi", Style()),))
+        block = line.to_block(3)
+        assert block.height == 2
+        assert [c.char for c in block.row(0)] == ["h", "e", "l"]
+        assert [c.char for c in block.row(1)] == ["h", "i", " "]
+
+    def test_crlf_is_one_break_no_phantom_column(self):
+        line = Line(spans=(Span("a\r\nb", Style()),))
+        block = line.to_block(None)
+        assert block.height == 2
+        assert block.width == 1
+
+    def test_break_between_spans_keeps_styles(self):
+        red = Style(fg="red")
+        line = Line(spans=(Span("a\n", Style()), Span("b", red)))
+        block = line.to_block(None)
+        assert block.height == 2
+        assert block.row(1)[0].style == red
+
+    def test_all_blank_segments_keep_their_rows_at_natural_width(self):
+        block = Line(spans=(Span("\n", Style()),)).to_block(None)
+        assert block.height == 2
+        assert block.width == 0

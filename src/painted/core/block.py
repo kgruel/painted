@@ -69,6 +69,12 @@ def _cached_cell(char: str, style: Style) -> Cell:
     return cell
 
 
+def _split_lines(text: str) -> list[str]:
+    """Split text on declared line breaks — the str sibling of
+    ``_split_styled_newlines``: ``\\n`` breaks, a ``\\r\\n`` pair is one break."""
+    return text.replace("\r\n", "\n").split("\n")
+
+
 class Wrap(Enum):
     NONE = "none"  # single line, truncate at width
     CHAR = "char"  # break at any character
@@ -219,7 +225,7 @@ class Block:
         if "\n" in content:
             seg_blocks = [
                 Block.text(segment, style, width=width, wrap=wrap)
-                for segment in content.replace("\r\n", "\n").split("\n")
+                for segment in _split_lines(content)
             ]
             if width is None:
                 width = max(b.width for b in seg_blocks)
@@ -295,9 +301,13 @@ class Block:
 
         Each entry becomes one row. Width is inferred from the first row's
         display width if not given explicitly; all rows are padded/truncated
-        to match.
+        to match. A newline (or CRLF pair) inside an entry's text is declared
+        line structure: the entry splits into one row per line, each carrying
+        the entry's style (decision practice/block-text-honors-newlines).
         """
         ref = _resolve_ref_alias(ref, id, spelling="Block.column(id=)")
+        if any("\n" in text for text, _style in rows):
+            rows = [(segment, style) for text, style in rows for segment in _split_lines(text)]
         if not rows:
             return Block([], 0, ref=ref)
 
@@ -800,6 +810,24 @@ def _take_word_prefix(word: str, width: int) -> tuple[str, int]:
     return "".join(entry[0] for entry in out), consumed
 
 
+def _split_styled_newlines(chars: _StyledChars) -> list[_StyledChars]:
+    """Split a styled-char stream on newline entries — declared line structure.
+
+    A ``\\n`` entry is a hard break; a ``\\r`` immediately before it is part of
+    the same break (CRLF), not content. Mirrors ``Block.text``'s split one rung
+    up in style richness (decision practice/block-text-honors-newlines).
+    """
+    segments: list[_StyledChars] = [[]]
+    for entry in chars:
+        if entry[0] == "\n":
+            if segments[-1] and segments[-1][-1][0] == "\r":
+                segments[-1].pop()
+            segments.append([])
+        else:
+            segments[-1].append(entry)
+    return segments
+
+
 def _wrap_styled(
     chars: _StyledChars,
     width: int,
@@ -810,11 +838,25 @@ def _wrap_styled(
     """Wrap a styled-char stream into a Block — the seam behind `Line.wrap`.
 
     `pad_style` styles the trailing pad cells (and the ellipsis marker); it is
-    the multi-line generalization of `Line.to_block`, which is itself
-    single-line `Wrap.NONE`. The four `Wrap` modes mirror `Block.text` exactly.
+    the reflowing generalization of `Line.to_block` (which is `Wrap.NONE` per
+    segment). The four `Wrap` modes mirror `Block.text` exactly. A newline
+    entry is a hard break: segments split first, the wrap mode applies within
+    each segment, and the segment rows stack — the styled sibling of
+    `Block.text`'s newline handling. The ``width <= 0`` degenerate case keeps
+    its empty-block contract and collapses before the split.
     """
     if width <= 0:
         return Block([[]], 0)
+
+    if any(entry[0] == "\n" for entry in chars):
+        from .compose import join_vertical
+
+        return join_vertical(
+            *(
+                _wrap_styled(segment, width, wrap=wrap, pad_style=pad_style)
+                for segment in _split_styled_newlines(chars)
+            )
+        )
 
     if wrap == Wrap.CHAR:
         rows, ref_rows = _char_wrap_styled(chars, width, pad_style)

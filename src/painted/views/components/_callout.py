@@ -83,10 +83,12 @@ def callout(
     of that total — the inner content fits to ``width - 4`` — so a boxed callout
     is never wider than its budget. Omitted, the callout sizes to its content.
 
-    ``subject``/``detail``/``hint`` render as clean single rows: control
-    characters (newlines, tabs, raw ANSI) are neutralized to spaces at the cell
-    level (see :class:`~painted.core.cell.Cell`), so no input can split or
-    corrupt the block.
+    ``subject``/``detail``/``hint`` render as clean single rows — each slot is
+    one line by contract, so callout *declares* the flatten: newlines collapse
+    to spaces here (the Line layer would otherwise honor them as line breaks),
+    and remaining control characters (tabs, raw ANSI) are neutralized at the
+    cell level (see :class:`~painted.core.cell.Cell`), so no input can split
+    or corrupt the block.
 
     Raises :class:`~painted.core.errors.ContractError` if ``severity`` is not a
     :class:`Severity` member (no silent fall-through to ``INFO`` — that was the
@@ -103,11 +105,16 @@ def callout(
     role = mark_style("severity", severity.value)
     muted = palette.muted
 
-    lines: list[Line] = [Line((Span(f"{glyph} ", role), Span(subject)))]
+    def _one_line(text: str) -> str:
+        # Same contract and expression as record.py's _oneline: every declared
+        # break form collapses to one space.
+        return " ".join(text.splitlines())
+
+    lines: list[Line] = [Line((Span(f"{glyph} ", role), Span(_one_line(subject))))]
     if detail:
-        lines.append(Line((Span("  ", Style()), Span(detail, muted))))
+        lines.append(Line((Span("  ", Style()), Span(_one_line(detail), muted))))
     if hint:
-        lines.append(Line((Span(f"  {icons.arrow} ", muted), Span(hint, muted))))
+        lines.append(Line((Span(f"  {icons.arrow} ", muted), Span(_one_line(hint), muted))))
 
     if width is None:
         inner_w = max(line.width for line in lines)

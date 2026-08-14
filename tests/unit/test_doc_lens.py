@@ -254,3 +254,12 @@ class TestInlineLink:
         doc = Doc(None, (Prose("no links here"),))
         block = doc_lens(doc, fidelity=Fidelity(depth=Zoom.FULL), width=20)
         assert self._refs(block) == set()
+
+
+def test_styled_inline_with_newline_sizes_naturally_to_widest_segment():
+    """A newline inside a styled Inline honors line structure at natural width:
+    the block is the widest segment wide, not line.width (which would count
+    the break as a column and over-pad every row)."""
+    block = doc_lens(Doc(None, (Prose(("a\n", Link("bc", "fact:1"))),)))
+    assert block.height == 2
+    assert block.width == 2
