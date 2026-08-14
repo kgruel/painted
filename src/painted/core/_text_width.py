@@ -1,7 +1,9 @@
 """Utilities for display-width-aware text measurement and truncation.
 
-Terminal UIs need to measure strings in display columns (wcwidth/wcswidth),
-not code points (len()).
+Terminal UIs need to measure strings in display columns, not code points
+(len()). painted measures in its cell model: per-char wcwidth, summed —
+never sequence-aware wcswidth, which under-counts a ZWJ cluster relative to
+the one-Cell-per-character grid the renderer actually paints.
 """
 
 from __future__ import annotations

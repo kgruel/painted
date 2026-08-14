@@ -34,10 +34,12 @@ breaking changes.
   `Block.text` is unchanged within noise). Traceback headers now split message
   lines only on `\n`/CRLF — the declared break vocabulary — not `splitlines`'
   exotic breaks, and a trailing newline keeps its blank row. Width measurement
-  is now cell-accurate for text mixing non-printables with wide or combining
-  chars: `Span.width`/`Line.width` (and `display_width`) count the cells that
-  actually render instead of falling back to `len()`, so measuring before
-  materializing always agrees.
+  is now cell-accurate everywhere: `Span.width`/`Line.width` (and
+  `display_width`) count the cells that actually render — non-printables no
+  longer fall back to `len()`, and ZWJ/emoji clusters measure per character
+  (`Span("👩‍💻").width` is now 4, matching the two wide cells painted
+  renders, where sequence-aware `wcswidth` said 2 and could crash the wrap
+  engine) — so measuring before materializing always agrees.
   ([8954229](https://github.com/kgruel/painted/commit/8954229))
 
 ## [0.14.0] — 2026-08-13
