@@ -1,0 +1,18 @@
+---
+import Prototype from "./Prototype.astro";
+import "../styles/learning.css";
+
+interface Props {
+  title: string;
+  description: string;
+  current?: "learn" | "guides";
+}
+
+const { title, description, current } = Astro.props;
+---
+
+<Prototype title={title} description={description} current={current}>
+  <div class="proto-shell learn-page">
+    <slot />
+  </div>
+</Prototype>

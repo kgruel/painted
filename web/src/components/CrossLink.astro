@@ -1,0 +1,18 @@
+---
+interface Props {
+  eyebrow?: string;
+  title: string;
+  summary: string;
+  href: string;
+  linkLabel?: string;
+}
+
+const { eyebrow, title, summary, href, linkLabel = "Open" } = Astro.props;
+---
+
+<aside class="proto-cross-link">
+  {eyebrow && <p class="proto-eyebrow">{eyebrow}</p>}
+  <h3>{title}</h3>
+  <p>{summary}</p>
+  <a class="proto-text-link" href={href}>{linkLabel} <span aria-hidden="true">→</span></a>
+</aside>

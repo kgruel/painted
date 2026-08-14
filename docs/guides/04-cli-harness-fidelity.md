@@ -1,3 +1,20 @@
+---
+title: CLI Harness and Fidelity
+summary: Compile disclosure, format, and delivery choices around one renderer contract.
+slug: cli-harness-fidelity
+order: 3
+source: docs/guides/04-cli-harness-fidelity.md
+prerequisite:
+  label: Learn the CLI rung
+  href: /learn/cli/
+altitudes:
+  - cli
+  - live
+relatedDemos:
+  - patterns/fidelity
+  - patterns/live
+---
+
 # CLI Harness (fidelity)
 
 The fidelity layer standardizes a common CLI UI spectrum:

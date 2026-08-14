@@ -1,3 +1,20 @@
+---
+title: Composition and Layout
+summary: Combine immutable blocks with pure layout functions and width-aware composition.
+slug: composition-layout
+order: 2
+source: docs/guides/02-composition-layout.md
+prerequisite:
+  label: Learn composition
+  href: /learn/compose/
+altitudes:
+  - compose
+  - lens
+relatedDemos:
+  - primitives/compose
+  - patterns/responsive
+---
+
 # Composition and Layout
 
 painted’s layout layer is intentionally small: it’s a set of pure functions that transform `Block` → `Block` (or join multiple blocks into one).

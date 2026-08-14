@@ -1,255 +1,128 @@
 ---
-// Landing page — the painted front door, rendered by the REAL library.
-//
-// The hero wordmark and the three "door" cards below are genuine painted output:
-// tools/landing_specimens.py builds each Block, render_html turns it into the
-// committed fragment under generated/panels/, and this page is a pure ?raw
-// consumer. Color is the palette's own categorical ramp (PAINTED_PALETTE.series),
-// one hue per letter of the wordmark, one hue per door.
-//
-// Laning (display ↔ interactivity): painted draws the cells; the browser supplies
-// the click. Each door is its own panel, so clickability is a single <a> wrapping
-// the fragment — no per-cell overlay. The PaintedSurface island lower down is the
-// one honestly-cosmetic piece: a recreation of the live TUI, which a static
-// fragment can't be.
-import Base from "../layouts/Base.astro";
-import PaintedSurface from "../components/PaintedSurface.jsx";
+import Prototype from "../layouts/Prototype.astro";
+import PageHeader from "../components/PageHeader.astro";
+import Specimen from "../components/Specimen.astro";
+import MediaFallback from "../components/MediaFallback.astro";
+import FeatureCard from "../components/FeatureCard.astro";
+import CrossLink from "../components/CrossLink.astro";
 
-import heroHtml from "../generated/panels/hero.html?raw";
-import doorWalkthrough from "../generated/panels/door_walkthrough.html?raw";
-import doorReference from "../generated/panels/door_reference.html?raw";
-import doorGuides from "../generated/panels/door_guides.html?raw";
+import monitorQ from "../generated/panels/monitor_q.html?raw";
+import monitorDefault from "../generated/panels/monitor_default.html?raw";
+import monitorVv from "../generated/panels/monitor_vv.html?raw";
+import monitorLive from "../generated/panels/monitor_live.html?raw";
 
-const REPO = "https://github.com/kgruel/painted";
-
-const DOORS = [
-  {
-    href: "/walkthrough",
-    hue: "var(--cyan)",
-    label: "Walkthrough — one dataset across every surface, print to TUI, never a rewrite",
-    html: doorWalkthrough,
-  },
-  {
-    href: "/reference",
-    hue: "var(--green)",
-    label: "Reference — components, colors and glyphs, every panel real output",
-    html: doorReference,
-  },
-  {
-    href: "#",
-    hue: "var(--orange)",
-    label: "Guides — task-shaped, level by level (coming soon)",
-    html: doorGuides,
-    soon: true,
-  },
-];
+const REPOSITORY = "https://github.com/kgruel/painted";
 ---
 
-<Base title="painted — a semantic renderer for the terminal">
-  <main>
-    <section class="hero">
-      <h1 class="sr-only">painted</h1>
-      <div class="hero-mark" aria-hidden="true" set:html={heroHtml} />
-      <p class="hero-sub">
-        A semantic renderer for the terminal. Declare what your output
-        <strong>means</strong> — painted <em>derives</em> the rest: styling,
-        zoom, format, help, completion. From a one-line print to a full-screen
-        TUI, every rung additive.
-      </p>
-      <div class="hero-cta">
-        <a class="btn" href={REPO}>GitHub&nbsp;↗</a>
-        <span class="cta-hint">or step through the doors&nbsp;↓</span>
+<Prototype
+  title="painted — a semantic renderer for the terminal"
+  description="Painted turns declared meaning into terminal cells, from a quiet print to a responsive CLI, live delivery, and an interactive Surface."
+>
+  <div class="proto-shell proto-page">
+    <div class="proto-hero-grid">
+      <PageHeader
+        eyebrow="Semantic rendering for terminal cells"
+        title="One declared meaning. Every terminal surface."
+        summary="Painted turns semantic data into exact terminal cells — from a quiet line of output to a responsive CLI, live delivery, and an interactive Surface."
+      >
+        <div class="proto-hero-actions">
+          <a class="proto-button" href="/learn/">Start with paint() <span aria-hidden="true">→</span></a>
+          <a class="proto-install" href={REPOSITORY}><span aria-hidden="true">↗</span> View on GitHub</a>
+          <code class="proto-install"><span aria-hidden="true">$</span> pip install painted</code>
+        </div>
+      </PageHeader>
+
+      <div>
+        <Specimen label="Host vitals" detail="a declared lens" source="monitor.py">
+          <Fragment set:html={monitorDefault} />
+        </Specimen>
+        <aside class="proto-hero-note" aria-label="How to read the specimen">
+          <p>Color, bar length, and density are choices declared by the lens — not a separate presentation layer.</p>
+        </aside>
+      </div>
+    </div>
+
+    <section class="proto-section" aria-labelledby="delivery-heading">
+      <div class="proto-section-head">
+        <div>
+          <p class="proto-eyebrow">One rendering model</p>
+          <h2 id="delivery-heading">A lens can render a later state without changing shape.</h2>
+        </div>
+        <p>This published frame confirms what persists at another tick. A recording carries the timing and input behavior.</p>
+      </div>
+      <MediaFallback
+        id="live-frame"
+        title="A later live frame, published as cells"
+        description="The values have moved; the semantic lens and its terminal structure have not."
+        fallbackLabel="Published frame"
+      >
+        <Specimen label="--live" detail="later tick" source="monitor.py">
+          <Fragment set:html={monitorLive} />
+        </Specimen>
+      </MediaFallback>
+    </section>
+
+    <section class="proto-section" aria-labelledby="continuum-heading">
+      <div class="proto-section-head">
+        <div>
+          <p class="proto-eyebrow">Progressive disclosure</p>
+          <h2 id="continuum-heading">Escalate the surface, not the meaning.</h2>
+        </div>
+        <p>One monitor lens receives the same data at three points in the disclosure ladder. Wide grids scroll inside their own frame.</p>
+      </div>
+      <div class="proto-continuum">
+        <div class="proto-continuum-item">
+          <p class="proto-continuum-label"><strong>01</strong> quiet · worst first</p>
+          <Specimen label="-q" detail="single line"><Fragment set:html={monitorQ} /></Specimen>
+        </div>
+        <div class="proto-continuum-item">
+          <p class="proto-continuum-label"><strong>02</strong> default · declared lens</p>
+          <Specimen label="default" detail="host vitals"><Fragment set:html={monitorDefault} /></Specimen>
+        </div>
+        <div class="proto-continuum-item">
+          <p class="proto-continuum-label"><strong>03</strong> verbose · more evidence</p>
+          <Specimen label="-vv" detail="per-metric status"><Fragment set:html={monitorVv} /></Specimen>
+        </div>
       </div>
     </section>
 
-    <nav class="doors" aria-label="Explore the site">
-      {
-        DOORS.map((d) => (
-          <a
-            class="door"
-            class:list={[{ soon: d.soon }]}
-            href={d.href}
-            aria-label={d.label}
-            aria-disabled={d.soon ? "true" : undefined}
-            style={`--door:${d.hue}`}
-          >
-            <span class="door-art" aria-hidden="true" set:html={d.html} />
-          </a>
-        ))
-      }
-    </nav>
-
-    <section class="live">
-      <h2>Live, in your browser</h2>
-      <p class="live-note">
-        Everything above is real <code>render_html</code> output. This panel is a
-        <span class="dim">cosmetic recreation</span> of the interactive alt-screen
-        TUI — the one thing a static fragment can't be. Use it to feel the shape.
-      </p>
-      <div class="live-slot">
-        <PaintedSurface client:visible initialView="Status" />
+    <section class="proto-section" aria-labelledby="capabilities-heading">
+      <div class="proto-section-head">
+        <div>
+          <p class="proto-eyebrow">Use Painted when you need to</p>
+          <h2 id="capabilities-heading">Make terminal behavior fit the job.</h2>
+        </div>
+        <p>Enter through the capability you need, then follow the matching path into the library.</p>
+      </div>
+      <div class="proto-capability-grid">
+        <FeatureCard index="01" title="Show what matters" summary="Turn declared roles, marks, and relationships into cells that remain legible at a glance." href="/learn/paint/" linkLabel="Begin with paint()" />
+        <FeatureCard index="02" title="Fit the available width" summary="Compose blocks, borders, tables, and lenses without losing the terminal’s exact cell contract." href="/guides/" linkLabel="Read responsive guides" />
+        <FeatureCard index="03" title="Escalate delivery" summary="Carry one rendering model from a command invocation to live updates and an interactive Surface." href="/learn/altitude/" linkLabel="Follow the altitude path" />
       </div>
     </section>
-  </main>
-</Base>
 
-<style>
-  main {
-    max-width: 1100px;
-    margin: 0 auto;
-    padding: var(--sp-8) var(--sp-5) var(--sp-6);
-    display: flex;
-    flex-direction: column;
-    gap: var(--sp-8);
-  }
+    <section class="proto-section" aria-labelledby="entry-heading">
+      <div class="proto-section-head">
+        <div>
+          <p class="proto-eyebrow">Choose an entry</p>
+          <h2 id="entry-heading">Start from the question you have.</h2>
+        </div>
+        <p>Learn the model in sequence, solve a focused problem, browse runnable work, or look up a capability.</p>
+      </div>
+      <div class="proto-card-grid">
+        <FeatureCard index="01" title="Learn" summary="Follow the altitude path from paint() through composition, lenses, CLI delivery, live output, and Surface." href="/learn/" linkLabel="Follow the path" />
+        <FeatureCard index="02" title="Guides" summary="Enter through a specific concern: fidelity, responsive width, vocabularies, live delivery, prompts, or testing." href="/guides/" linkLabel="Browse guides" />
+        <FeatureCard index="03" title="Demos" summary="See runnable primitives, patterns, applications, examples, and showcase pieces with their source and evidence." href="/demos/" linkLabel="Open demos" />
+        <FeatureCard index="04" title="Reference" summary="Find capabilities, modules, and representative published specimens without treating the design system as the product." href="/reference/" linkLabel="Look up a capability" />
+      </div>
+    </section>
 
-  /* --- Hero ------------------------------------------------------------- */
-  .hero {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    text-align: center;
-    gap: var(--sp-5);
-    padding-top: var(--sp-6);
-  }
-  /* Scale the rainbow wordmark up from the base cell size — it's a fixed cell
-     grid, so a uniform font-size keeps every glyph aligned. The wordmark is 62
-     cells wide (8×8 font at FULL density); a <pre> can't reflow, so the size must
-     track the viewport: 2.2vw keeps all 62 columns inside a 320px screen, capped
-     at 1.7rem so it stops growing once the desktop hero is comfortable. No rem
-     floor — a floor is what pushed it off-screen on phones. */
-  .hero-mark :global(.painted-output) {
-    font-size: min(1.7rem, 2.2vw);
-    background: transparent;
-    display: inline-block;
-  }
-  .hero-sub {
-    max-width: 56ch;
-    font-size: var(--t-h3);
-    color: var(--fg-2);
-    line-height: 1.5;
-  }
-  .hero-sub strong {
-    color: var(--cyan);
-    font-weight: var(--w-bold);
-  }
-  .hero-sub em {
-    color: var(--green);
-    font-style: normal;
-  }
-  .hero-cta {
-    display: flex;
-    align-items: center;
-    gap: var(--sp-4);
-    flex-wrap: wrap;
-    justify-content: center;
-  }
-  .btn {
-    font-family: var(--font-mono);
-    font-size: var(--t-small);
-    font-weight: var(--w-bold);
-    color: var(--ink);
-    background: var(--cyan);
-    padding: var(--sp-2) var(--sp-4);
-    border-radius: var(--radius);
-    text-decoration: none;
-    transition: transform 120ms ease, box-shadow 120ms ease;
-  }
-  .btn:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 6px 22px -8px var(--cyan);
-  }
-  .cta-hint {
-    font-size: var(--t-small);
-    color: var(--fg-dim);
-  }
-
-  /* --- Doors ------------------------------------------------------------ */
-  .doors {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--sp-5);
-    justify-content: center;
-  }
-  .door {
-    display: block;
-    text-decoration: none;
-    border-radius: var(--radius);
-    padding: var(--sp-2);
-    transition: transform 140ms ease, box-shadow 140ms ease;
-  }
-  .door-art :global(.painted-output) {
-    background: transparent;
-    margin: 0;
-  }
-  .door:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 14px 34px -16px var(--door);
-  }
-  .door:focus-visible {
-    outline: 2px solid var(--door);
-    outline-offset: 3px;
-  }
-  /* "soon" door reads as not-yet — desaturated until hovered. */
-  .door.soon {
-    opacity: 0.62;
-    cursor: not-allowed;
-  }
-  .door.soon:hover {
-    opacity: 0.85;
-    transform: translateY(-1px);
-  }
-
-  /* --- Live island ----------------------------------------------------- */
-  .live {
-    display: flex;
-    flex-direction: column;
-    gap: var(--sp-3);
-    border-top: 1px solid var(--line);
-    padding-top: var(--sp-6);
-  }
-  .live h2 {
-    font-size: var(--t-h2);
-    color: var(--fg);
-    margin: 0;
-  }
-  .live-note {
-    max-width: 64ch;
-    color: var(--fg-2);
-  }
-  .live-note code {
-    color: var(--cyan);
-  }
-  .live-slot {
-    height: min(70vh, 560px);
-    display: flex;
-    margin-top: var(--sp-3);
-  }
-
-  .dim {
-    color: var(--fg-dim);
-  }
-
-  /* Accessible name carrier for the decorative box-art wordmark. */
-  .sr-only {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    margin: -1px;
-    padding: 0;
-    overflow: hidden;
-    clip: rect(0 0 0 0);
-    white-space: nowrap;
-    border: 0;
-  }
-
-  @media (max-width: 720px) {
-    main {
-      padding: var(--sp-6) var(--sp-4);
-      gap: var(--sp-6);
-    }
-    .doors {
-      gap: var(--sp-4);
-    }
-  }
-</style>
+    <section class="proto-section" aria-label="Related destinations">
+      <div class="proto-cross-links">
+        <CrossLink eyebrow="Learn path" title="From value to Surface" summary="The progressive spine keeps the first useful stop clear while preserving the deeper implementation model." href="/learn/altitude/" linkLabel="View altitude path" />
+        <CrossLink eyebrow="Methodology" title="Rendered by Painted" summary="Static output, semantic documents, recordings, and browser shell each have an explicit source of truth." href="/about/rendered-by-painted/" linkLabel="Read the methodology" />
+        <CrossLink eyebrow="Compatibility" title="Existing walkthrough" summary="The original continuity page remains available as a deeper tour of the rendering model." href="/walkthrough/" linkLabel="Visit walkthrough" />
+      </div>
+    </section>
+  </div>
+</Prototype>

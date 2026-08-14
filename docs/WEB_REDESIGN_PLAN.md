@@ -1,6 +1,6 @@
 # Painted web redesign plan
 
-Status: Wave 0 complete; Wave 1 ready
+Status: Wave 1 complete; Wave 2 ready
 Scope: `web/`, its generated inputs, and the documentation/demo metadata needed to publish it  
 Execution model: root agent owns judgment and integration; Sol and Terra agents implement bounded work packages
 
@@ -318,6 +318,62 @@ missing, or extra generated records.
   concrete behavior that cannot be expressed by the static shell.
 - Verification: relevant focused Python tests, the outputgen drift check, and
   `npm run build` pass; visual packages hand back desktop and mobile screenshots.
+
+## Wave 1 gate
+
+Accepted by root review on 2026-08-13. Wave 2 may begin from these foundations,
+but no Wave 2 routes or page migrations were implemented as part of this gate.
+
+### Catalog and generation foundation
+
+- `web/src/generated/catalog.json` implements the frozen CatalogV1 shape with
+  five ordered tiers, 48 tiered demos, and 44 specimens sourced from `PANELS`.
+- `painted._demo_discovery.DEMO_TIERS` now exposes the discovery-owned tier order
+  to build tooling without creating a second inventory. The existing private
+  `_GROUPS` name remains a compatibility alias for the runtime CLI.
+- `tools/web_catalog.py` converts `discover_demos()` and `PANELS` into deterministic,
+  repo-relative records. It does not infer guide, capability, progression, or
+  media metadata.
+- Installed commands are published only for globally unique unqualified demo
+  names. Both `patterns/layers` and `apps/layers` therefore publish
+  `command: null`; neither accidental first-match behavior nor the unreachable
+  selector is presented as a stable command.
+- Panel generation now emits the catalog, and outputgen's check exact-compares
+  the committed artifact so stale, missing, or extra JSON records fail the
+  existing drift gate.
+
+### Shell and prototype foundation
+
+- `/prototypes/home/` provides the reviewed shell without replacing `/` or
+  changing compatibility routes. Its primary navigation uses the frozen Learn /
+  Guides / Demos / Reference destinations.
+- New page-header, specimen, media-placeholder, feature-card, and cross-link
+  components establish the Wave 1 composition vocabulary. The shell remains
+  Astro and CSS only; no client runtime was added.
+- The prototype imports existing generated monitor fragments for every terminal
+  claim. The recording area is explicitly labeled as planned media and points to
+  genuine static fragments as its fallback; it does not simulate terminal motion.
+- The accepted visual direction uses a compact wordmark, strong editorial type,
+  restrained cell-derived rules, and genuine Painted grids rather than a generic
+  terminal-window treatment. The first mobile pass was rejected because
+  document-level overflow clipping hid over-wide content. The corrected pass
+  removes that mask, wraps ordinary content, and confines horizontal scrolling
+  to fixed cell-grid specimen containers.
+- Reviewed screenshots live at `/tmp/painted-web-wave1-terra/home-desktop.png`
+  (1440×1000) and `/tmp/painted-web-wave1-terra/home-mobile.png` (390×844).
+  They are review evidence, not repository artifacts.
+
+### Gate verification and open edges
+
+- `./dev check` passes all repository tiers.
+- Focused demo-completion and website-catalog tests pass (15 tests).
+- `uv run python -m tools.outputgen --check`, `npm run build`, and
+  `git diff --check` pass.
+- Canonical Learn, Guides, and Demos destinations are intentionally not yet
+  published; their prototype navigation targets become buildable in Wave 2.
+- The media placeholder remains a placeholder until the recording workflow and
+  real assets land in Wave 4. The existing homepage and cosmetic React surface
+  remain untouched until an accepted replacement is ready.
 
 ## Implementation waves
 

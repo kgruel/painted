@@ -1,0 +1,42 @@
+---
+interface Props {
+  id: string;
+  title: string;
+  description: string;
+  fallbackLabel?: string;
+  videoSrc?: string;
+  poster?: string;
+}
+
+const { id, title, description, fallbackLabel = "Static frame", videoSrc, poster } = Astro.props;
+---
+
+<section class="proto-media proto-media-fallback" aria-labelledby={`${id}-title`}>
+  <div class="proto-media-topline">
+    <p class="proto-eyebrow">Delivery, over time</p>
+    <span class="proto-media-status">{videoSrc ? "recording" : fallbackLabel}</span>
+  </div>
+  {videoSrc ? (
+    <div class="proto-media-recording">
+      <div class="proto-media-recording-copy">
+        <h3 id={`${id}-title`}>{title}</h3>
+        <p>{description}</p>
+      </div>
+      <video class="proto-media-video" controls preload="metadata" poster={poster}>
+        <source src={videoSrc} type="video/webm" />
+        <p>A recording is available in a browser that supports WebM video.</p>
+      </video>
+    </div>
+  ) : (
+    <div class="proto-media-static">
+      <div class="proto-media-copy">
+        <span class="proto-media-glyph" aria-hidden="true">▸</span>
+        <h3 id={`${id}-title`}>{title}</h3>
+        <p>{description}</p>
+      </div>
+      <div class="proto-media-specimen">
+        <slot />
+      </div>
+    </div>
+  )}
+</section>

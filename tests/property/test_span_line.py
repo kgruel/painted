@@ -68,3 +68,12 @@ def test_line_truncate_within_budget(line: Line, mw: int) -> None:
     r = line.truncate(mw)
     assert r.width <= mw
     assert r.width <= line.width
+
+
+@given(line=lines_st())
+def test_line_width_agrees_with_natural_materialization(line: Line) -> None:
+    """The measure IS the materialization: Line.width (via the cell-model
+    display_width) equals the width of the naturally sized block. A
+    sequence-aware or len()-fallback measure diverges on ZWJ clusters and
+    non-printables — the P1 class from the wrap-engine-unification review."""
+    assert line.to_block(None).width == line.width

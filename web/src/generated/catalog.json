@@ -1,0 +1,1135 @@
+{
+  "schema_version": 1,
+  "demo_tiers": [
+    {
+      "id": "primitives",
+      "order": 0
+    },
+    {
+      "id": "patterns",
+      "order": 1
+    },
+    {
+      "id": "apps",
+      "order": 2
+    },
+    {
+      "id": "examples",
+      "order": 3
+    },
+    {
+      "id": "showcase",
+      "order": 4
+    }
+  ],
+  "demos": [
+    {
+      "id": "primitives/cell",
+      "tier": "primitives",
+      "name": "cell",
+      "slug": "cell",
+      "title": "Cell",
+      "summary": "Cell and Style — the visual atom.",
+      "source": "demos/primitives/cell.py",
+      "command": "painted demos cell",
+      "checkout_command": "uv run demos/primitives/cell.py",
+      "invocations": [],
+      "has_main": false
+    },
+    {
+      "id": "primitives/compose",
+      "tier": "primitives",
+      "name": "compose",
+      "slug": "compose",
+      "title": "Compose",
+      "summary": "Compose — spatial combination of Blocks.",
+      "source": "demos/primitives/compose.py",
+      "command": "painted demos compose",
+      "checkout_command": "uv run demos/primitives/compose.py",
+      "invocations": [],
+      "has_main": false
+    },
+    {
+      "id": "primitives/diagnostics",
+      "tier": "primitives",
+      "name": "diagnostics",
+      "slug": "diagnostics",
+      "title": "Diagnostics",
+      "summary": "render_traceback — an exception as a record tree.",
+      "source": "demos/primitives/diagnostics.py",
+      "command": "painted demos diagnostics",
+      "checkout_command": "uv run demos/primitives/diagnostics.py",
+      "invocations": [],
+      "has_main": false
+    },
+    {
+      "id": "primitives/errors",
+      "tier": "primitives",
+      "name": "errors",
+      "slug": "errors",
+      "title": "Errors",
+      "summary": "The exception hierarchy — painted's faults have names, and painted renders them.",
+      "source": "demos/primitives/errors.py",
+      "command": "painted demos errors",
+      "checkout_command": "uv run demos/primitives/errors.py",
+      "invocations": [],
+      "has_main": false
+    },
+    {
+      "id": "primitives/logging_handler",
+      "tier": "primitives",
+      "name": "logging_handler",
+      "slug": "logging_handler",
+      "title": "Logging Handler",
+      "summary": "PaintedHandler — log levels as declared severities.",
+      "source": "demos/primitives/logging_handler.py",
+      "command": "painted demos logging_handler",
+      "checkout_command": "uv run demos/primitives/logging_handler.py",
+      "invocations": [],
+      "has_main": false
+    },
+    {
+      "id": "primitives/paint",
+      "tier": "primitives",
+      "name": "paint",
+      "slug": "paint",
+      "title": "Paint",
+      "summary": "paint() — the single entry point.",
+      "source": "demos/primitives/paint.py",
+      "command": "painted demos paint",
+      "checkout_command": "uv run demos/primitives/paint.py",
+      "invocations": [],
+      "has_main": false
+    },
+    {
+      "id": "primitives/refs",
+      "tier": "primitives",
+      "name": "refs",
+      "slug": "refs",
+      "title": "Refs",
+      "summary": "Refs — the denotation channel becomes a link.",
+      "source": "demos/primitives/refs.py",
+      "command": "painted demos refs",
+      "checkout_command": "uv run demos/primitives/refs.py",
+      "invocations": [],
+      "has_main": false
+    },
+    {
+      "id": "primitives/span_line",
+      "tier": "primitives",
+      "name": "span_line",
+      "slug": "span_line",
+      "title": "Span Line",
+      "summary": "Span and Line — mixed styles in a single line.",
+      "source": "demos/primitives/span_line.py",
+      "command": "painted demos span_line",
+      "checkout_command": "uv run demos/primitives/span_line.py",
+      "invocations": [],
+      "has_main": false
+    },
+    {
+      "id": "patterns/denotation",
+      "tier": "patterns",
+      "name": "denotation",
+      "slug": "denotation",
+      "title": "Denotation",
+      "summary": "Denotation — refed record lines: one ref channel, two readers.",
+      "source": "demos/patterns/denotation.py",
+      "command": "painted demos denotation",
+      "checkout_command": "uv run demos/patterns/denotation.py",
+      "invocations": [
+        "uv run demos/patterns/denotation.py -q     # census: records, refs, resolvable",
+        "uv run demos/patterns/denotation.py        # the refed feed (links on a TTY)",
+        "uv run demos/patterns/denotation.py -v     # + resolution table (the link reader)",
+        "uv run demos/patterns/denotation.py -vv    # + hit probes (the mouse reader)"
+      ],
+      "has_main": true
+    },
+    {
+      "id": "patterns/fidelity",
+      "tier": "patterns",
+      "name": "fidelity",
+      "slug": "fidelity",
+      "title": "Fidelity",
+      "summary": "Fidelity spectrum — the whole disclosure ladder, one render fn.",
+      "source": "demos/patterns/fidelity.py",
+      "command": "painted demos fidelity",
+      "checkout_command": "uv run demos/patterns/fidelity.py",
+      "invocations": [
+        "uv run demos/patterns/fidelity.py -q        # rung 1: depth — one line",
+        "uv run demos/patterns/fidelity.py           # rung 1: depth — directory list",
+        "uv run demos/patterns/fidelity.py -v        # rung 1: depth — styled bars",
+        "uv run demos/patterns/fidelity.py -vv       # rung 1: depth — full detail",
+        "uv run demos/patterns/fidelity.py --timestamp        # rung 2: a named facet, any depth",
+        "uv run demos/patterns/fidelity.py --brief            # depth alias: == -q (depth 0)",
+        "uv run demos/patterns/fidelity.py --full             # depth alias: == -vv (depth 3)",
+        "uv run demos/patterns/fidelity.py -vv --max-lines 3  # rung 3: density budget"
+      ],
+      "has_main": true
+    },
+    {
+      "id": "patterns/focus",
+      "tier": "patterns",
+      "name": "focus",
+      "slug": "focus",
+      "title": "Focus",
+      "summary": "Focus + Cursor + Search — navigation vs capture.",
+      "source": "demos/patterns/focus.py",
+      "command": "painted demos focus",
+      "checkout_command": "uv run demos/patterns/focus.py",
+      "invocations": [
+        "uv run demos/patterns/focus.py -q        # one-line result",
+        "uv run demos/patterns/focus.py           # emission trace",
+        "uv run demos/patterns/focus.py -v        # trace + key frames",
+        "uv run demos/patterns/focus.py -vv       # bordered scenarios + more frames"
+      ],
+      "has_main": true
+    },
+    {
+      "id": "patterns/help",
+      "tier": "patterns",
+      "name": "help",
+      "slug": "help",
+      "title": "Help",
+      "summary": "Help is a document — authored as a doc-IR node tree, projected at each zoom.",
+      "source": "demos/patterns/help.py",
+      "command": "painted demos help",
+      "checkout_command": "uv run demos/patterns/help.py",
+      "invocations": [
+        "uv run demos/patterns/help.py -q           # one-line summary",
+        "uv run demos/patterns/help.py              # sample help at SUMMARY",
+        "uv run demos/patterns/help.py -v           # sample help at DETAILED",
+        "uv run demos/patterns/help.py -vv          # SUMMARY and DETAILED side by side",
+        "uv run demos/patterns/help.py --help       # this demo's own zoom-aware help",
+        "uv run demos/patterns/help.py --help -v    # ...with more detail"
+      ],
+      "has_main": true
+    },
+    {
+      "id": "patterns/hit_testing",
+      "tier": "patterns",
+      "name": "hit_testing",
+      "slug": "hit_testing",
+      "title": "Hit Testing",
+      "summary": "Hit testing — Block.ref propagation through composition to Buffer.hit().",
+      "source": "demos/patterns/hit_testing.py",
+      "command": "painted demos hit_testing",
+      "checkout_command": "uv run demos/patterns/hit_testing.py",
+      "invocations": [
+        "uv run demos/patterns/hit_testing.py -q        # cell/ref counts",
+        "uv run demos/patterns/hit_testing.py           # dashboard + hit probes",
+        "uv run demos/patterns/hit_testing.py -v        # + provenance map (ref layer)",
+        "uv run demos/patterns/hit_testing.py -vv       # + composition trace (build steps)"
+      ],
+      "has_main": true
+    },
+    {
+      "id": "patterns/layers",
+      "tier": "patterns",
+      "name": "layers",
+      "slug": "layers",
+      "title": "Layers",
+      "summary": "Layer stack — modal push/pop and Action flow.",
+      "source": "demos/patterns/layers.py",
+      "command": null,
+      "checkout_command": "uv run demos/patterns/layers.py",
+      "invocations": [
+        "uv run demos/patterns/layers.py -q        # one-line summary",
+        "uv run demos/patterns/layers.py           # per-scenario actions",
+        "uv run demos/patterns/layers.py -v        # step table + key frames",
+        "uv run demos/patterns/layers.py -vv       # bordered + render-order snapshot"
+      ],
+      "has_main": true
+    },
+    {
+      "id": "patterns/live",
+      "tier": "patterns",
+      "name": "live",
+      "slug": "live",
+      "title": "Live",
+      "summary": "Live streaming — parallel health checks with animated spinners.",
+      "source": "demos/patterns/live.py",
+      "command": "painted demos live",
+      "checkout_command": "uv run demos/patterns/live.py",
+      "invocations": [
+        "uv run demos/patterns/live.py                  # live on TTY, static in pipe",
+        "uv run demos/patterns/live.py --static         # force static (final snapshot)",
+        "uv run demos/patterns/live.py -q               # live, one-line counter",
+        "uv run demos/patterns/live.py -v               # live, detailed view",
+        "uv run demos/patterns/live.py -vv              # live, bordered dashboard",
+        "uv run demos/patterns/live.py --json           # JSON (implies static)",
+        "uv run demos/patterns/live.py | cat            # pipe detection -> static plain"
+      ],
+      "has_main": true
+    },
+    {
+      "id": "patterns/monitor",
+      "tier": "patterns",
+      "name": "monitor",
+      "slug": "monitor",
+      "title": "Monitor",
+      "summary": "Host monitor — one dataset across the fidelity spectrum.",
+      "source": "demos/patterns/monitor.py",
+      "command": "painted demos monitor",
+      "checkout_command": "uv run demos/patterns/monitor.py",
+      "invocations": [
+        "uv run demos/patterns/monitor.py -q     # worst-first, one line",
+        "uv run demos/patterns/monitor.py        # labeled severity bars",
+        "uv run demos/patterns/monitor.py -vv    # bars + per-metric detail"
+      ],
+      "has_main": true
+    },
+    {
+      "id": "patterns/palette_icons",
+      "tier": "patterns",
+      "name": "palette_icons",
+      "slug": "palette_icons",
+      "title": "Palette Icons",
+      "summary": "Palette + IconSet — ambient configuration via ContextVar switching.",
+      "source": "demos/patterns/palette_icons.py",
+      "command": "painted demos palette_icons",
+      "checkout_command": "uv run demos/patterns/palette_icons.py",
+      "invocations": [
+        "uv run demos/patterns/palette_icons.py -q      # palette roles only",
+        "uv run demos/patterns/palette_icons.py         # one dashboard (ambient)",
+        "uv run demos/patterns/palette_icons.py -v      # 3 palettes, same dashboard",
+        "uv run demos/patterns/palette_icons.py -vv     # palette × icons matrix"
+      ],
+      "has_main": true
+    },
+    {
+      "id": "patterns/profiler",
+      "tier": "patterns",
+      "name": "profiler",
+      "slug": "profiler",
+      "title": "Profiler",
+      "summary": "Self-profiling — painted introspects its own rendering performance.",
+      "source": "demos/patterns/profiler.py",
+      "command": "painted demos profiler",
+      "checkout_command": "uv run demos/patterns/profiler.py",
+      "invocations": [
+        "uv run demos/patterns/profiler.py -q        # summary stats",
+        "uv run demos/patterns/profiler.py           # emission traces",
+        "uv run demos/patterns/profiler.py -v        # frame chart + flame graph",
+        "uv run demos/patterns/profiler.py -vv       # frame-by-frame detail"
+      ],
+      "has_main": true
+    },
+    {
+      "id": "patterns/prompts",
+      "tier": "patterns",
+      "name": "prompts",
+      "slug": "prompts",
+      "title": "Prompts",
+      "summary": "Declared prompts — the DECLARED rung's real output, as content.",
+      "source": "demos/patterns/prompts.py",
+      "command": "painted demos prompts",
+      "checkout_command": "uv run demos/patterns/prompts.py",
+      "invocations": [
+        "uv run demos/patterns/prompts.py       # rung 1: the two default record lines",
+        "uv run demos/patterns/prompts.py -v    # rung 2: + the real refusal text",
+        "uv run demos/patterns/prompts.py -vv   # rung 3: + the resolution ladder"
+      ],
+      "has_main": true
+    },
+    {
+      "id": "patterns/rendering",
+      "tier": "patterns",
+      "name": "rendering",
+      "slug": "rendering",
+      "title": "Rendering",
+      "summary": "Rendering patterns — three ways to control how data becomes output.",
+      "source": "demos/patterns/rendering.py",
+      "command": "painted demos rendering",
+      "checkout_command": "uv run demos/patterns/rendering.py",
+      "invocations": [
+        "uv run demos/patterns/rendering.py               # show available patterns",
+        "uv run demos/patterns/rendering.py --explicit     # lens API with zoom",
+        "uv run demos/patterns/rendering.py --custom       # custom render function",
+        "uv run demos/patterns/rendering.py --palette      # palette switching"
+      ],
+      "has_main": true
+    },
+    {
+      "id": "patterns/responsive",
+      "tier": "patterns",
+      "name": "responsive",
+      "slug": "responsive",
+      "title": "Responsive",
+      "summary": "Responsive layout — width drives layout; zoom drives detail.",
+      "source": "demos/patterns/responsive.py",
+      "command": "painted demos responsive",
+      "checkout_command": "uv run demos/patterns/responsive.py",
+      "invocations": [
+        "uv run demos/patterns/responsive.py -q     # minimal",
+        "uv run demos/patterns/responsive.py        # summary",
+        "uv run demos/patterns/responsive.py -v     # detailed",
+        "uv run demos/patterns/responsive.py -vv    # full",
+        "uv run demos/patterns/responsive.py -i",
+        "uv run demos/patterns/responsive.py -i -v  # starts at DETAILED zoom"
+      ],
+      "has_main": true
+    },
+    {
+      "id": "patterns/table",
+      "tier": "patterns",
+      "name": "table",
+      "slug": "table",
+      "title": "Table",
+      "summary": "Table construction — one table, grown from a fixed grid to a responsive layout.",
+      "source": "demos/patterns/table.py",
+      "command": "painted demos table",
+      "checkout_command": "uv run demos/patterns/table.py",
+      "invocations": [
+        "uv run demos/patterns/table.py -q     # the punchline: fixed breaks, responsive adapts",
+        "uv run demos/patterns/table.py        # the full fixed → AUTO → Fill → responsive ladder",
+        "uv run demos/patterns/table.py -vv    # + width ladder, clamps, weights, wide chars",
+        "uv run demos/patterns/table.py -i"
+      ],
+      "has_main": true
+    },
+    {
+      "id": "patterns/testing",
+      "tier": "patterns",
+      "name": "testing",
+      "slug": "testing",
+      "title": "Testing",
+      "summary": "Replay testing — emission capture and observation traces.",
+      "source": "demos/patterns/testing.py",
+      "command": "painted demos testing",
+      "checkout_command": "uv run demos/patterns/testing.py",
+      "invocations": [
+        "uv run demos/patterns/testing.py -q        # pass/fail summary",
+        "uv run demos/patterns/testing.py           # emission traces",
+        "uv run demos/patterns/testing.py -v        # traces + frame snapshots",
+        "uv run demos/patterns/testing.py -vv       # bordered sections + diff counts"
+      ],
+      "has_main": true
+    },
+    {
+      "id": "patterns/timing",
+      "tier": "patterns",
+      "name": "timing",
+      "slug": "timing",
+      "title": "Timing",
+      "summary": "Frame timing — per-phase render loop profiling with FrameTimer.",
+      "source": "demos/patterns/timing.py",
+      "command": "painted demos timing",
+      "checkout_command": "uv run demos/patterns/timing.py",
+      "invocations": [
+        "uv run demos/patterns/timing.py -q       # avg frame time",
+        "uv run demos/patterns/timing.py          # phase breakdown",
+        "uv run demos/patterns/timing.py -v       # sparklines + flame graph",
+        "uv run demos/patterns/timing.py -vv      # frame-by-frame detail"
+      ],
+      "has_main": true
+    },
+    {
+      "id": "apps/animation",
+      "tier": "apps",
+      "name": "animation",
+      "slug": "animation",
+      "title": "Animation",
+      "summary": "Animation — update() + mark_dirty() driven rendering.",
+      "source": "demos/apps/animation.py",
+      "command": "painted demos animation",
+      "checkout_command": "uv run demos/apps/animation.py",
+      "invocations": [],
+      "has_main": true
+    },
+    {
+      "id": "apps/focus_form",
+      "tier": "apps",
+      "name": "focus_form",
+      "slug": "focus_form",
+      "title": "Focus Form",
+      "summary": "Focus Form — focus navigation + text input.",
+      "source": "demos/apps/focus_form.py",
+      "command": "painted demos focus_form",
+      "checkout_command": "uv run demos/apps/focus_form.py",
+      "invocations": [],
+      "has_main": true
+    },
+    {
+      "id": "apps/layers",
+      "tier": "apps",
+      "name": "layers",
+      "slug": "layers",
+      "title": "Layers",
+      "summary": "Layers — modal stacking for input and rendering.",
+      "source": "demos/apps/layers.py",
+      "command": null,
+      "checkout_command": "uv run demos/apps/layers.py",
+      "invocations": [],
+      "has_main": true
+    },
+    {
+      "id": "apps/minimal",
+      "tier": "apps",
+      "name": "minimal",
+      "slug": "minimal",
+      "title": "Minimal",
+      "summary": "Minimal — the simplest Surface application.",
+      "source": "demos/apps/minimal.py",
+      "command": "painted demos minimal",
+      "checkout_command": "uv run demos/apps/minimal.py",
+      "invocations": [],
+      "has_main": true
+    },
+    {
+      "id": "apps/mouse",
+      "tier": "apps",
+      "name": "mouse",
+      "slug": "mouse",
+      "title": "Mouse",
+      "summary": "Mouse — drawable canvas with click, drag, and scroll.",
+      "source": "demos/apps/mouse.py",
+      "command": "painted demos mouse",
+      "checkout_command": "uv run demos/apps/mouse.py",
+      "invocations": [],
+      "has_main": true
+    },
+    {
+      "id": "apps/search_filter",
+      "tier": "apps",
+      "name": "search_filter",
+      "slug": "search_filter",
+      "title": "Search Filter",
+      "summary": "Search Filter — interactive fuzzy search over a list.",
+      "source": "demos/apps/search_filter.py",
+      "command": "painted demos search_filter",
+      "checkout_command": "uv run demos/apps/search_filter.py",
+      "invocations": [],
+      "has_main": true
+    },
+    {
+      "id": "apps/viewport",
+      "tier": "apps",
+      "name": "viewport",
+      "slug": "viewport",
+      "title": "Viewport",
+      "summary": "Viewport — learn scroll state by watching it change.",
+      "source": "demos/apps/viewport.py",
+      "command": "painted demos viewport",
+      "checkout_command": "uv run demos/apps/viewport.py",
+      "invocations": [],
+      "has_main": true
+    },
+    {
+      "id": "apps/widgets",
+      "tier": "apps",
+      "name": "widgets",
+      "slug": "widgets",
+      "title": "Widgets",
+      "summary": "Widgets — interactive UI components.",
+      "source": "demos/apps/widgets.py",
+      "command": "painted demos widgets",
+      "checkout_command": "uv run demos/apps/widgets.py",
+      "invocations": [],
+      "has_main": true
+    },
+    {
+      "id": "examples/big_text",
+      "tier": "examples",
+      "name": "big_text",
+      "slug": "big_text",
+      "title": "Big Text",
+      "summary": "Big Text — block character rendering with multiple sizes and styles.",
+      "source": "demos/examples/big_text.py",
+      "command": "painted demos big_text",
+      "checkout_command": "uv run demos/examples/big_text.py",
+      "invocations": [],
+      "has_main": true
+    },
+    {
+      "id": "examples/disk",
+      "tier": "examples",
+      "name": "disk",
+      "slug": "disk",
+      "title": "Disk",
+      "summary": "Disk Space — interactive disk usage visualization.",
+      "source": "demos/examples/disk.py",
+      "command": "painted demos disk",
+      "checkout_command": "uv run demos/examples/disk.py",
+      "invocations": [],
+      "has_main": true
+    },
+    {
+      "id": "examples/harmonograph_lab",
+      "tier": "examples",
+      "name": "harmonograph_lab",
+      "slug": "harmonograph_lab",
+      "title": "Harmonograph Lab",
+      "summary": "Harmonograph Lab — play the four-pendulum score as an instrument.",
+      "source": "demos/examples/harmonograph_lab.py",
+      "command": "painted demos harmonograph_lab",
+      "checkout_command": "uv run demos/examples/harmonograph_lab.py",
+      "invocations": [
+        "uv run demos/examples/harmonograph_lab.py"
+      ],
+      "has_main": true
+    },
+    {
+      "id": "examples/lenses",
+      "tier": "examples",
+      "name": "lenses",
+      "slug": "lenses",
+      "title": "Lenses",
+      "summary": "Lenses — tree and chart data visualization.",
+      "source": "demos/examples/lenses.py",
+      "command": "painted demos lenses",
+      "checkout_command": "uv run demos/examples/lenses.py",
+      "invocations": [],
+      "has_main": true
+    },
+    {
+      "id": "examples/theme_carnival",
+      "tier": "examples",
+      "name": "theme_carnival",
+      "slug": "theme_carnival",
+      "title": "Theme Carnival",
+      "summary": "Palette Carnival — interactive Palette explorer with live switching.",
+      "source": "demos/examples/theme_carnival.py",
+      "command": "painted demos theme_carnival",
+      "checkout_command": "uv run demos/examples/theme_carnival.py",
+      "invocations": [],
+      "has_main": true
+    },
+    {
+      "id": "showcase/boids",
+      "tier": "showcase",
+      "name": "boids",
+      "slug": "boids",
+      "title": "Boids",
+      "summary": "Boids — agents in a continuous world, projected onto cells.",
+      "source": "demos/showcase/boids.py",
+      "command": "painted demos boids",
+      "checkout_command": "uv run demos/showcase/boids.py",
+      "invocations": [
+        "uv run demos/showcase/boids.py                   # one pose, mid-flight",
+        "uv run demos/showcase/boids.py --live            # watch them flock",
+        "uv run demos/showcase/boids.py --seed 13 -v      # new scatter + spread spark",
+        "uv run demos/showcase/boids.py --frame 30 -vv    # early chaos, full stats",
+        "uv run demos/showcase/boids.py -q                # one-line census",
+        "uv run demos/showcase/boids.py --json            # the flock as data"
+      ],
+      "has_main": true
+    },
+    {
+      "id": "showcase/donut",
+      "tier": "showcase",
+      "name": "donut",
+      "slug": "donut",
+      "title": "Donut",
+      "summary": "donut.c — a spinning torus, state reduced to a frame counter.",
+      "source": "demos/showcase/donut.py",
+      "command": "painted demos donut",
+      "checkout_command": "uv run demos/showcase/donut.py",
+      "invocations": [
+        "uv run demos/showcase/donut.py                   # one frame, mid-spin",
+        "uv run demos/showcase/donut.py --live            # spin it",
+        "uv run demos/showcase/donut.py --frame 200 -v    # later pose + shading legend",
+        "uv run demos/showcase/donut.py -vv               # bordered, full stats",
+        "uv run demos/showcase/donut.py -q                # one-line pose census",
+        "uv run demos/showcase/donut.py --json            # the pose as data"
+      ],
+      "has_main": true
+    },
+    {
+      "id": "showcase/fire",
+      "tier": "showcase",
+      "name": "fire",
+      "slug": "fire",
+      "title": "Fire",
+      "summary": "Fire — the Doom PSX flame, with randomness as frozen data.",
+      "source": "demos/showcase/fire.py",
+      "command": "painted demos fire",
+      "checkout_command": "uv run demos/showcase/fire.py",
+      "invocations": [
+        "uv run demos/showcase/fire.py                    # one pose, steady burn",
+        "uv run demos/showcase/fire.py --live             # let it burn",
+        "uv run demos/showcase/fire.py --seed 13 -v       # different chance, legend",
+        "uv run demos/showcase/fire.py --frame 20 -vv     # early ignition, full stats",
+        "uv run demos/showcase/fire.py -q                 # one-line census",
+        "uv run demos/showcase/fire.py --json             # the heat field as data"
+      ],
+      "has_main": true
+    },
+    {
+      "id": "showcase/harmonograph",
+      "tier": "showcase",
+      "name": "harmonograph",
+      "slug": "harmonograph",
+      "title": "Harmonograph",
+      "summary": "Harmonograph — four pendulums drawing in eight-dot terminal cells.",
+      "source": "demos/showcase/harmonograph.py",
+      "command": "painted demos harmonograph",
+      "checkout_command": "uv run demos/showcase/harmonograph.py",
+      "invocations": [
+        "uv run demos/showcase/harmonograph.py                  # gallery plate, nothing else",
+        "uv run demos/showcase/harmonograph.py --live           # let the figure breathe",
+        "uv run demos/showcase/harmonograph.py --note           # + maker's note",
+        "uv run demos/showcase/harmonograph.py -vv              # + score and raster facts",
+        "uv run demos/showcase/harmonograph.py --score          # the score by name",
+        "uv run demos/showcase/harmonograph.py --stats          # raster facts by name",
+        "uv run demos/showcase/harmonograph.py -q               # one-line microplate",
+        "uv run demos/showcase/harmonograph.py --json           # the score as data"
+      ],
+      "has_main": true
+    },
+    {
+      "id": "showcase/life",
+      "tier": "showcase",
+      "name": "life",
+      "slug": "life",
+      "title": "Life",
+      "summary": "Conway's Life — a pure pattern, animated by the harness.",
+      "source": "demos/showcase/life.py",
+      "command": "painted demos life",
+      "checkout_command": "uv run demos/showcase/life.py",
+      "invocations": [
+        "uv run demos/showcase/life.py                    # snapshot at generation 100",
+        "uv run demos/showcase/life.py --live             # animate from the seed",
+        "uv run demos/showcase/life.py --seed acorn -v    # grid + population sparkline",
+        "uv run demos/showcase/life.py --gen 300 -vv      # bordered, full stats",
+        "uv run demos/showcase/life.py -q                 # one-line census",
+        "uv run demos/showcase/life.py --json             # the grid as data"
+      ],
+      "has_main": true
+    },
+    {
+      "id": "showcase/lorenz",
+      "tier": "showcase",
+      "name": "lorenz",
+      "slug": "lorenz",
+      "title": "Lorenz",
+      "summary": "Lorenz — the butterfly, with time accumulated in the state.",
+      "source": "demos/showcase/lorenz.py",
+      "command": "painted demos lorenz",
+      "checkout_command": "uv run demos/showcase/lorenz.py",
+      "invocations": [
+        "uv run demos/showcase/lorenz.py                  # the butterfly, mid-flight",
+        "uv run demos/showcase/lorenz.py --live           # watch it trace",
+        "uv run demos/showcase/lorenz.py --frame 80 -v    # early flight + separation",
+        "uv run demos/showcase/lorenz.py -vv              # bordered, full stats",
+        "uv run demos/showcase/lorenz.py -q               # one-line census",
+        "uv run demos/showcase/lorenz.py --json           # tracers + trails as data"
+      ],
+      "has_main": true
+    },
+    {
+      "id": "showcase/mandelbrot",
+      "tier": "showcase",
+      "name": "mandelbrot",
+      "slug": "mandelbrot",
+      "title": "Mandelbrot",
+      "summary": "Mandelbrot — escape time, and an honest black.",
+      "source": "demos/showcase/mandelbrot.py",
+      "command": "painted demos mandelbrot",
+      "checkout_command": "uv run demos/showcase/mandelbrot.py",
+      "invocations": [
+        "uv run demos/showcase/mandelbrot.py                       # a TTY streams the descent",
+        "uv run demos/showcase/mandelbrot.py --static              # one settled portrait",
+        "uv run demos/showcase/mandelbrot.py --static --frame 750  # a deeper pose",
+        "uv run demos/showcase/mandelbrot.py --proof               # color by what is proved",
+        "uv run demos/showcase/mandelbrot.py -v                    # + the status legend",
+        "uv run demos/showcase/mandelbrot.py -vv                   # + trace internals",
+        "uv run demos/showcase/mandelbrot.py --note                # + the maker's note",
+        "uv run demos/showcase/mandelbrot.py -q                    # one-line census",
+        "uv run demos/showcase/mandelbrot.py --json                # the view as data"
+      ],
+      "has_main": true
+    },
+    {
+      "id": "showcase/plasma",
+      "tier": "showcase",
+      "name": "plasma",
+      "slug": "plasma",
+      "title": "Plasma",
+      "summary": "Plasma — a colored field, where every cell's color is data.",
+      "source": "demos/showcase/plasma.py",
+      "command": "painted demos plasma",
+      "checkout_command": "uv run demos/showcase/plasma.py",
+      "invocations": [
+        "uv run demos/showcase/plasma.py                  # one pose of the field",
+        "uv run demos/showcase/plasma.py --live           # let it swirl",
+        "uv run demos/showcase/plasma.py --frame 200 -v   # later pose + shade legend",
+        "uv run demos/showcase/plasma.py -vv              # bordered, runs/row stats",
+        "uv run demos/showcase/plasma.py -q               # one-line census",
+        "uv run demos/showcase/plasma.py --json           # the pose as data"
+      ],
+      "has_main": true
+    },
+    {
+      "id": "showcase/raymarch",
+      "tier": "showcase",
+      "name": "raymarch",
+      "slug": "raymarch",
+      "title": "Raymarch",
+      "summary": "SDF raymarcher — donut generalized into a renderer.",
+      "source": "demos/showcase/raymarch.py",
+      "command": "painted demos raymarch",
+      "checkout_command": "uv run demos/showcase/raymarch.py",
+      "invocations": [
+        "uv run demos/showcase/raymarch.py                # one portrait pose",
+        "uv run demos/showcase/raymarch.py --live         # orbit, then settle",
+        "uv run demos/showcase/raymarch.py --frame 200 -v # later pose + legend",
+        "uv run demos/showcase/raymarch.py -vv            # bordered, march stats",
+        "uv run demos/showcase/raymarch.py --stats        # the stats facet by name",
+        "uv run demos/showcase/raymarch.py -q             # one-line pose census",
+        "uv run demos/showcase/raymarch.py --json         # the pose as data"
+      ],
+      "has_main": true
+    },
+    {
+      "id": "showcase/starmap",
+      "tier": "showcase",
+      "name": "starmap",
+      "slug": "starmap",
+      "title": "Starmap",
+      "summary": "Starmap — the night sky, every star a link.",
+      "source": "demos/showcase/starmap.py",
+      "command": "painted demos starmap",
+      "checkout_command": "uv run demos/showcase/starmap.py",
+      "invocations": [
+        "uv run demos/showcase/starmap.py             # tonight's chart (winter hexagon)",
+        "uv run demos/showcase/starmap.py --live      # pan the whole celestial sphere",
+        "uv run demos/showcase/starmap.py -v          # + names on the bright stars",
+        "uv run demos/showcase/starmap.py -vv         # + catalog table with resolved links",
+        "uv run demos/showcase/starmap.py -q          # one-line census",
+        "uv run demos/showcase/starmap.py --json      # the catalog as data"
+      ],
+      "has_main": true
+    },
+    {
+      "id": "showcase/wireworld",
+      "tier": "showcase",
+      "name": "wireworld",
+      "slug": "wireworld",
+      "title": "Wireworld",
+      "summary": "Wireworld — a cellular automaton that computes, seeded from ASCII art.",
+      "source": "demos/showcase/wireworld.py",
+      "command": "painted demos wireworld",
+      "checkout_command": "uv run demos/showcase/wireworld.py",
+      "invocations": [
+        "uv run demos/showcase/wireworld.py                    # the diode, mid-run",
+        "uv run demos/showcase/wireworld.py --live             # watch it compute",
+        "uv run demos/showcase/wireworld.py --circuit clocks   # two rhythms",
+        "uv run demos/showcase/wireworld.py --gen 5 -vv        # early ticks, stats",
+        "uv run demos/showcase/wireworld.py -q                 # one-line census",
+        "uv run demos/showcase/wireworld.py --json             # the machine as data"
+      ],
+      "has_main": true
+    }
+  ],
+  "specimens": [
+    {
+      "id": "chrome_borders",
+      "fragment": "panels/chrome_borders.html",
+      "source": "tools/reference_specimens.py",
+      "render_as": "block",
+      "width": 64
+    },
+    {
+      "id": "chrome_elevation",
+      "fragment": "panels/chrome_elevation.html",
+      "source": "tools/reference_specimens.py",
+      "render_as": "block",
+      "width": 64
+    },
+    {
+      "id": "colors_ansi",
+      "fragment": "panels/colors_ansi.html",
+      "source": "tools/reference_specimens.py",
+      "render_as": "block",
+      "width": 64
+    },
+    {
+      "id": "colors_palette",
+      "fragment": "panels/colors_palette.html",
+      "source": "tools/reference_specimens.py",
+      "render_as": "block",
+      "width": 64
+    },
+    {
+      "id": "colors_presets",
+      "fragment": "panels/colors_presets.html",
+      "source": "tools/reference_specimens.py",
+      "render_as": "block",
+      "width": 64
+    },
+    {
+      "id": "colors_vivid",
+      "fragment": "panels/colors_vivid.html",
+      "source": "tools/reference_specimens.py",
+      "render_as": "block",
+      "width": 64
+    },
+    {
+      "id": "comp_buttons",
+      "fragment": "panels/comp_buttons.html",
+      "source": "tools/reference_specimens.py",
+      "render_as": "block",
+      "width": 64
+    },
+    {
+      "id": "comp_card",
+      "fragment": "panels/comp_card.html",
+      "source": "tools/reference_specimens.py",
+      "render_as": "block",
+      "width": 64
+    },
+    {
+      "id": "comp_chart",
+      "fragment": "panels/comp_chart.html",
+      "source": "tools/reference_specimens.py",
+      "render_as": "block",
+      "width": 64
+    },
+    {
+      "id": "comp_listview",
+      "fragment": "panels/comp_listview.html",
+      "source": "tools/reference_specimens.py",
+      "render_as": "block",
+      "width": 64
+    },
+    {
+      "id": "comp_progress",
+      "fragment": "panels/comp_progress.html",
+      "source": "tools/reference_specimens.py",
+      "render_as": "block",
+      "width": 64
+    },
+    {
+      "id": "comp_sparkline",
+      "fragment": "panels/comp_sparkline.html",
+      "source": "tools/reference_specimens.py",
+      "render_as": "block",
+      "width": 64
+    },
+    {
+      "id": "comp_spinner",
+      "fragment": "panels/comp_spinner.html",
+      "source": "tools/reference_specimens.py",
+      "render_as": "block",
+      "width": 64
+    },
+    {
+      "id": "comp_table",
+      "fragment": "panels/comp_table.html",
+      "source": "tools/reference_specimens.py",
+      "render_as": "block",
+      "width": 64
+    },
+    {
+      "id": "comp_tree",
+      "fragment": "panels/comp_tree.html",
+      "source": "tools/reference_specimens.py",
+      "render_as": "block",
+      "width": 64
+    },
+    {
+      "id": "disclosure_brief",
+      "fragment": "panels/disclosure_brief.html",
+      "source": "tools/disclosure_specimens.py",
+      "render_as": "block",
+      "width": 64
+    },
+    {
+      "id": "disclosure_budget",
+      "fragment": "panels/disclosure_budget.html",
+      "source": "tools/disclosure_specimens.py",
+      "render_as": "block",
+      "width": 64
+    },
+    {
+      "id": "disclosure_default",
+      "fragment": "panels/disclosure_default.html",
+      "source": "tools/disclosure_specimens.py",
+      "render_as": "block",
+      "width": 64
+    },
+    {
+      "id": "disclosure_doc_d1",
+      "fragment": "panels/disclosure_doc_d1.html",
+      "source": "tools/disclosure_specimens.py",
+      "render_as": "block",
+      "width": 64
+    },
+    {
+      "id": "disclosure_doc_d2",
+      "fragment": "panels/disclosure_doc_d2.html",
+      "source": "tools/disclosure_specimens.py",
+      "render_as": "block",
+      "width": 64
+    },
+    {
+      "id": "disclosure_full",
+      "fragment": "panels/disclosure_full.html",
+      "source": "tools/disclosure_specimens.py",
+      "render_as": "block",
+      "width": 64
+    },
+    {
+      "id": "disclosure_q",
+      "fragment": "panels/disclosure_q.html",
+      "source": "tools/disclosure_specimens.py",
+      "render_as": "block",
+      "width": 64
+    },
+    {
+      "id": "disclosure_tag_q",
+      "fragment": "panels/disclosure_tag_q.html",
+      "source": "tools/disclosure_specimens.py",
+      "render_as": "block",
+      "width": 64
+    },
+    {
+      "id": "disclosure_v",
+      "fragment": "panels/disclosure_v.html",
+      "source": "tools/disclosure_specimens.py",
+      "render_as": "block",
+      "width": 64
+    },
+    {
+      "id": "disclosure_vv",
+      "fragment": "panels/disclosure_vv.html",
+      "source": "tools/disclosure_specimens.py",
+      "render_as": "block",
+      "width": 64
+    },
+    {
+      "id": "door_guides",
+      "fragment": "panels/door_guides.html",
+      "source": "tools/landing_specimens.py",
+      "render_as": "block",
+      "width": 64
+    },
+    {
+      "id": "door_reference",
+      "fragment": "panels/door_reference.html",
+      "source": "tools/landing_specimens.py",
+      "render_as": "block",
+      "width": 64
+    },
+    {
+      "id": "door_walkthrough",
+      "fragment": "panels/door_walkthrough.html",
+      "source": "tools/landing_specimens.py",
+      "render_as": "block",
+      "width": 64
+    },
+    {
+      "id": "glyphs_box",
+      "fragment": "panels/glyphs_box.html",
+      "source": "tools/reference_specimens.py",
+      "render_as": "block",
+      "width": 64
+    },
+    {
+      "id": "glyphs_iconset",
+      "fragment": "panels/glyphs_iconset.html",
+      "source": "tools/reference_specimens.py",
+      "render_as": "block",
+      "width": 64
+    },
+    {
+      "id": "hero",
+      "fragment": "panels/hero.html",
+      "source": "tools/landing_specimens.py",
+      "render_as": "block",
+      "width": 64
+    },
+    {
+      "id": "logo_wordmark",
+      "fragment": "panels/logo_wordmark.html",
+      "source": "tools/reference_specimens.py",
+      "render_as": "block",
+      "width": 64
+    },
+    {
+      "id": "monitor_default",
+      "fragment": "panels/monitor_default.html",
+      "source": "demos/patterns/monitor.py",
+      "render_as": "block",
+      "width": 48
+    },
+    {
+      "id": "monitor_default_honest",
+      "fragment": "panels/monitor_default_honest.html",
+      "source": "demos/patterns/monitor.py",
+      "render_as": "block",
+      "width": 48
+    },
+    {
+      "id": "monitor_json",
+      "fragment": "panels/monitor_json.html",
+      "source": "demos/patterns/monitor.py",
+      "render_as": "json",
+      "width": 48
+    },
+    {
+      "id": "monitor_live",
+      "fragment": "panels/monitor_live.html",
+      "source": "demos/patterns/monitor.py",
+      "render_as": "block",
+      "width": 48
+    },
+    {
+      "id": "monitor_plain",
+      "fragment": "panels/monitor_plain.html",
+      "source": "demos/patterns/monitor.py",
+      "render_as": "plain",
+      "width": 48
+    },
+    {
+      "id": "monitor_q",
+      "fragment": "panels/monitor_q.html",
+      "source": "demos/patterns/monitor.py",
+      "render_as": "block",
+      "width": 64
+    },
+    {
+      "id": "monitor_transcribe",
+      "fragment": "panels/monitor_transcribe.html",
+      "source": "demos/patterns/monitor.py",
+      "render_as": "block",
+      "width": 48
+    },
+    {
+      "id": "monitor_vv",
+      "fragment": "panels/monitor_vv.html",
+      "source": "demos/patterns/monitor.py",
+      "render_as": "block",
+      "width": 56
+    },
+    {
+      "id": "refs_anchors",
+      "fragment": "panels/refs_anchors.html",
+      "source": "demos/primitives/refs.py",
+      "render_as": "block",
+      "width": 64
+    },
+    {
+      "id": "spacing_cells",
+      "fragment": "panels/spacing_cells.html",
+      "source": "tools/reference_specimens.py",
+      "render_as": "block",
+      "width": 64
+    },
+    {
+      "id": "type_bigtext",
+      "fragment": "panels/type_bigtext.html",
+      "source": "tools/reference_specimens.py",
+      "render_as": "block",
+      "width": 64
+    },
+    {
+      "id": "type_modifiers",
+      "fragment": "panels/type_modifiers.html",
+      "source": "tools/reference_specimens.py",
+      "render_as": "block",
+      "width": 64
+    }
+  ]
+}

@@ -1,0 +1,33 @@
+---
+import PageHeader from "../../components/PageHeader.astro";
+import Learning from "../../layouts/Learning.astro";
+import { internalRungs } from "../../data/learning";
+---
+
+<Learning
+  title="Painted internals"
+  description="The implementation mental model from Cell through Surface."
+  current="learn"
+>
+  <PageHeader
+    eyebrow="Learn · Internals"
+    title="Cell → Style → Span → Line → Block → Buffer → Lens → Surface"
+    summary="Use this spine to understand what the altitude path is made from. It explains ownership and boundaries without turning the first-use path into an internals course."
+  >
+    <div class="learn-actions">
+      <a class="proto-button" href="/learn/altitude/">Return to the altitude path <span aria-hidden="true">→</span></a>
+      <a class="learn-secondary-link" href="/docs/primitives/">Open the published primitives document</a>
+    </div>
+  </PageHeader>
+
+  <ol class="learn-internals-list">
+    {internalRungs.map((rung, index) => (
+      <li id={rung.id}>
+        <span class="learn-list-index">{String(index + 1).padStart(2, "0")}</span>
+        <h2>{rung.name}</h2>
+        <p>{rung.summary}</p>
+        <a class="learn-list-link" href={`/learn/${rung.altitude}/`}>{rung.altitude} rung <span aria-hidden="true">→</span></a>
+      </li>
+    ))}
+  </ol>
+</Learning>

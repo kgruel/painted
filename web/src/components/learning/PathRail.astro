@@ -1,0 +1,22 @@
+---
+import { altitudeHref, type AltitudeId, altitudeSteps } from "../../data/learning";
+
+interface Props {
+  current?: AltitudeId;
+}
+
+const { current } = Astro.props;
+---
+
+<nav class="learn-path-rail" aria-label="Altitude path">
+  <ol>
+    {altitudeSteps.map((step, index) => (
+      <li>
+        <a href={altitudeHref(step.id)} aria-current={current === step.id ? "step" : undefined}>
+          <span class="learn-path-number" aria-hidden="true">{String(index + 1).padStart(2, "0")}</span>
+          <span>{step.shortTitle}</span>
+        </a>
+      </li>
+    ))}
+  </ol>
+</nav>

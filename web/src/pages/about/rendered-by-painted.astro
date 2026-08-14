@@ -1,0 +1,37 @@
+---
+import PageHeader from "../../components/PageHeader.astro";
+import Learning from "../../layouts/Learning.astro";
+import { mediaLanes } from "../../data/media-lanes";
+---
+
+<Learning
+  title="Rendered by Painted"
+  description="How the Painted website assigns terminal output, documents, motion, and browser behavior to honest sources."
+>
+  <PageHeader
+    eyebrow="Methodology"
+    title="Each claim keeps the representation that can prove it."
+    summary="The site does not recreate terminal output with decorative markup or flatten structured documents into screenshots. Four lanes keep ownership explicit."
+  />
+
+  <ol class="learn-lanes">
+    {mediaLanes.map((lane) => (
+      <li>
+        <strong>{lane.owner}</strong>
+        <span>{lane.claim}</span>
+        <span>{lane.published}</span>
+      </li>
+    ))}
+  </ol>
+
+  <section class="learn-section" aria-labelledby="why-heading">
+    <div class="learn-section-head">
+      <h2 id="why-heading">Why the boundary matters</h2>
+      <p>Generated cell fragments are drift-checked against Painted. Semantic documents remain navigable HTML. Recordings are reserved for time and interaction. Astro owns only the surrounding website.</p>
+    </div>
+    <div class="learn-inline-links">
+      <a class="proto-button" href="/learn/">Learn Painted <span aria-hidden="true">→</span></a>
+      <a class="learn-secondary-link" href="/guides/">Browse guides</a>
+    </div>
+  </section>
+</Learning>

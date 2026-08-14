@@ -1,0 +1,58 @@
+---
+import PageHeader from "../../components/PageHeader.astro";
+import Specimen from "../../components/Specimen.astro";
+import PathRail from "../../components/learning/PathRail.astro";
+import Learning from "../../layouts/Learning.astro";
+import { altitudeSteps } from "../../data/learning";
+
+import transcribed from "../../generated/panels/monitor_transcribe.html?raw";
+---
+
+<Learning
+  title="The Painted altitude path"
+  description="Progress from paint() through composition, lenses, CLI delivery, live output, and Surface."
+  current="learn"
+>
+  <PageHeader
+    eyebrow="Learn · Altitude"
+    title="paint → compose → lens → CLI → live → Surface"
+    summary="The path is monotonic: each rung preserves the meaning below it while adding a capability that simpler output cannot supply."
+  >
+    <div class="learn-actions">
+      <a class="proto-button" href="/learn/paint/">Begin at paint() <span aria-hidden="true">→</span></a>
+      <a class="learn-secondary-link" href="/learn/internals/">See the internal model</a>
+    </div>
+  </PageHeader>
+
+  <PathRail />
+
+  <section class="learn-step-hero" aria-labelledby="first-proof-heading">
+    <div>
+      <p class="proto-eyebrow">First proof</p>
+      <div class="learn-section-head">
+        <h2 id="first-proof-heading">A declared shape is already enough to render.</h2>
+        <p>This committed fragment is generated from the monitor sample through Painted’s transcription path.</p>
+      </div>
+    </div>
+    <Specimen label="paint(data)" detail="generated HTML" source="monitor.py">
+      <Fragment set:html={transcribed} />
+    </Specimen>
+  </section>
+
+  <section class="learn-section" aria-labelledby="path-heading">
+    <div class="learn-section-head">
+      <h2 id="path-heading">The complete progression</h2>
+      <p>Read in order for a guided path, or enter at the first rung matching the surface you own.</p>
+    </div>
+    <ol class="learn-step-list">
+      {altitudeSteps.map((step, index) => (
+        <li>
+          <span class="learn-list-index">{String(index + 1).padStart(2, "0")}</span>
+          <h2>{step.title}</h2>
+          <p>{step.summary}</p>
+          <a class="learn-list-link" href={`/learn/${step.id}/`}>Learn this rung <span aria-hidden="true">→</span></a>
+        </li>
+      ))}
+    </ol>
+  </section>
+</Learning>

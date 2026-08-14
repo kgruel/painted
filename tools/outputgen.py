@@ -25,12 +25,14 @@ if __package__ is None:  # invoked as a script: python tools/outputgen.py
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from painted._doc_pages import DOCS as _DOC_PAGES_CATALOG
+from painted._demo_discovery import discover_demos
 
 from tools.capture import capture_demo, import_module_by_path
 from tools.disclosure_specimens import DISCLOSURE as _DISCLOSURE_CATALOG
 from painted.publish import to_html
 from tools.landing_specimens import LANDING as _LANDING_CATALOG
 from tools.reference_specimens import CATALOG as _REFERENCE_CATALOG
+from tools.web_catalog import catalog_json
 
 
 @dataclass(frozen=True, slots=True)
@@ -239,6 +241,10 @@ PANELS_DIR = Path("web/src/generated/panels")
 # so the site cannot list a page the terminal doesn't have (or vice versa).
 DOC_PAGES_DIR = Path("web/src/generated/docs")
 
+# Website-facing demo/specimen inventory. It is emitted beside the panels and
+# checked by the same outputgen drift gate.
+CATALOG_PATH = Path("web/src/generated/catalog.json")
+
 
 def _read_text(path: Path) -> str:
     return path.read_text(encoding="utf-8")
@@ -412,6 +418,23 @@ def emit_doc_pages(*, repo_root: Path, out_dir: Path | None = None) -> list[Path
     return written
 
 
+def _catalog_json(*, repo_root: Path) -> str:
+    return catalog_json(repo_root=repo_root, demos=discover_demos(), panels=PANELS)
+
+
+def emit_catalog(*, repo_root: Path) -> Path:
+    """Emit the deterministic website demo/specimen catalog."""
+    path = repo_root / CATALOG_PATH
+    _write_text(path, _catalog_json(repo_root=repo_root))
+    return path
+
+
+def check_catalog(*, repo_root: Path) -> bool:
+    """Whether the committed website catalog is missing, stale, or has extras."""
+    path = repo_root / CATALOG_PATH
+    return not path.exists() or _read_text(path) != _catalog_json(repo_root=repo_root)
+
+
 def _doc_pages_index() -> str:
     """The page registry as JSON — the site lists pages from the same DOCS
     dict the terminal dispatches on, so neither side can list a page the
@@ -484,6 +507,7 @@ def main(argv: list[str] | None = None) -> int:
         # Doc pages always land at the in-repo default — they are committed,
         # gated artifacts; the DIR override only redirects the panel set.
         written += emit_doc_pages(repo_root=repo_root)
+        written.append(emit_catalog(repo_root=repo_root))
         print("Wrote panels:")
         for p in written:
             shown = p.relative_to(repo_root) if p.is_relative_to(repo_root) else p
@@ -527,7 +551,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.check:
         panel_stale = check_panels(repo_root=repo_root)
         doc_page_stale = check_doc_pages(repo_root=repo_root)
-        if mismatched or panel_stale or doc_page_stale:
+        catalog_stale = check_catalog(repo_root=repo_root)
+        if mismatched or panel_stale or doc_page_stale or catalog_stale:
             if mismatched:
                 print("outputgen doc blocks out of date:", file=sys.stderr)
                 for path, names in mismatched:
@@ -541,6 +566,9 @@ def main(argv: list[str] | None = None) -> int:
                 print("site doc pages out of date — run `./dev panels`:", file=sys.stderr)
                 for name in doc_page_stale:
                     print(f"  - {name}", file=sys.stderr)
+            if catalog_stale:
+                print("site catalog out of date — run `./dev panels`:", file=sys.stderr)
+                print(f"  - {CATALOG_PATH}", file=sys.stderr)
             return 1
         return 0
 

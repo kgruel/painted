@@ -1,3 +1,19 @@
+---
+title: TUI Core, Surface, and Layers
+summary: Own interactive state while Surface delivers frames and layers route input.
+slug: tui-core-surface-layers
+order: 4
+source: docs/guides/05-tui-core-surface-layers.md
+prerequisite:
+  label: Learn the Surface rung
+  href: /learn/surface/
+altitudes:
+  - surface
+relatedDemos:
+  - patterns/layers
+  - apps/layers
+---
+
 # TUI Core: Surface and Layers
 
 Interactive painted apps are built from:

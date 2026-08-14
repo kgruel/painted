@@ -1,0 +1,56 @@
+---
+import type { AltitudeId } from "../../data/learning";
+
+interface Destination {
+  label: string;
+  href: string;
+}
+
+interface Demo {
+  id: string;
+  title: string;
+  summary: string;
+  source: string;
+}
+
+interface Props {
+  prerequisite: Destination;
+  altitudes: AltitudeId[];
+  relatedDemos: Demo[];
+  source: string;
+}
+
+const { prerequisite, altitudes, relatedDemos, source } = Astro.props;
+const repository = "https://github.com/kgruel/painted/blob/main/";
+---
+
+<aside class="learn-guide-facts" aria-label="Guide context">
+  <div>
+    <p class="learn-fact-label">Prerequisite</p>
+    <a href={prerequisite.href}>{prerequisite.label} <span aria-hidden="true">→</span></a>
+  </div>
+  <div>
+    <p class="learn-fact-label">Applicable altitude</p>
+    <ul class="learn-tags">
+      {altitudes.map((altitude) => <li><a href={`/learn/${altitude}/`}>{altitude}</a></li>)}
+    </ul>
+  </div>
+  {relatedDemos.length > 0 && (
+    <div class="learn-related-demos">
+      <p class="learn-fact-label">Related demos</p>
+      <ul>
+        {relatedDemos.map((demo) => (
+          <li>
+            <span><strong>{demo.title}</strong> <code>{demo.id}</code></span>
+            <span>{demo.summary}</span>
+            <a href={`${repository}${demo.source}`}>View source <span aria-hidden="true">↗</span></a>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )}
+  <div>
+    <p class="learn-fact-label">Guide source</p>
+    <a href={`${repository}${source}`}>{source} <span aria-hidden="true">↗</span></a>
+  </div>
+</aside>

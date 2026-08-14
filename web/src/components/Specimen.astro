@@ -1,0 +1,22 @@
+---
+interface Props {
+  label: string;
+  detail?: string;
+  source?: string;
+}
+
+const { label, detail, source } = Astro.props;
+---
+
+<figure class="proto-specimen">
+  <figcaption class="proto-specimen-bar">
+    <span class="proto-specimen-label"><span aria-hidden="true">▣</span> {label}</span>
+    <span class="proto-specimen-meta">
+      {detail && <span>{detail}</span>}
+      {source && <span class="proto-specimen-source">{source}</span>}
+    </span>
+  </figcaption>
+  <div class="proto-specimen-grid">
+    <slot />
+  </div>
+</figure>

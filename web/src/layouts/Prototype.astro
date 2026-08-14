@@ -1,0 +1,55 @@
+---
+import "../styles/prototype.css";
+
+interface Props {
+  title?: string;
+  description?: string;
+  current?: "learn" | "guides" | "demos" | "reference";
+}
+
+const {
+  title = "painted — website prototype",
+  description = "A proposed public-site shell for Painted.",
+  current,
+} = Astro.props;
+
+const nav = [
+  { id: "learn", label: "Learn", href: "/learn/" },
+  { id: "guides", label: "Guides", href: "/guides/" },
+  { id: "demos", label: "Demos", href: "/demos/" },
+  { id: "reference", label: "Reference", href: "/reference/" },
+] as const;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width" />
+    <meta name="description" content={description} />
+    <title>{title}</title>
+  </head>
+  <body class="painted-root prototype-body">
+    <a class="proto-skip-link" href="#main-content">Skip to content</a>
+    <header class="proto-site-header">
+      <div class="proto-shell proto-nav-wrap">
+        <a class="proto-wordmark" href="/" aria-label="Painted home">painted<span aria-hidden="true">.</span></a>
+        <nav class="proto-primary-nav" aria-label="Primary navigation">
+          {nav.map((item) => (
+            <a href={item.href} aria-current={current === item.id ? "page" : undefined}>{item.label}</a>
+          ))}
+        </nav>
+        <a class="proto-source-link" href="https://github.com/kgruel/painted">Source <span aria-hidden="true">↗</span></a>
+      </div>
+    </header>
+    <main id="main-content">
+      <slot />
+    </main>
+    <footer class="proto-site-footer">
+      <div class="proto-shell">
+        <span>painted is a semantic renderer for the terminal.</span>
+        <a href="/about/rendered-by-painted/">How this site is rendered <span aria-hidden="true">→</span></a>
+      </div>
+    </footer>
+  </body>
+</html>

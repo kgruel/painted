@@ -1,0 +1,62 @@
+---
+import { getCollection } from "astro:content";
+import PageHeader from "../../components/PageHeader.astro";
+import Learning from "../../layouts/Learning.astro";
+import publishedDocuments from "../../generated/docs/index.json";
+
+const guides = (await getCollection("guides")).sort(
+  (left, right) => left.data.order - right.data.order,
+);
+---
+
+<Learning
+  title="Painted guides"
+  description="Task-shaped guides and semantic published documents for Painted."
+  current="guides"
+>
+  <PageHeader
+    eyebrow="Guides"
+    title="Enter through the concern you have."
+    summary="Guides cut across the altitude path: composition, fidelity, live delivery, and interaction. Only authored source-backed guides appear here."
+  >
+    <div class="learn-actions">
+      <a class="proto-button" href="/learn/altitude/">See where to begin <span aria-hidden="true">→</span></a>
+    </div>
+  </PageHeader>
+
+  <section aria-labelledby="authored-heading">
+    <div class="learn-section-head">
+      <h2 id="authored-heading">Authored guides</h2>
+      <p>Rendered directly from the Markdown sources under <code>docs/guides/</code>.</p>
+    </div>
+    <div class="learn-guide-grid">
+      {guides.map((guide) => (
+        <article class="learn-guide-card">
+          <p class="proto-eyebrow">Guide {String(guide.data.order).padStart(2, "0")}</p>
+          <h2>{guide.data.title}</h2>
+          <p>{guide.data.summary}</p>
+          <ul class="learn-tags" aria-label="Applicable altitudes">
+            {guide.data.altitudes.map((altitude) => <li><span>{altitude}</span></li>)}
+          </ul>
+          <a class="proto-text-link" href={`/guides/${guide.data.slug}/`}>Read guide <span aria-hidden="true">→</span></a>
+        </article>
+      ))}
+    </div>
+  </section>
+
+  <section class="learn-section" aria-labelledby="documents-heading">
+    <div class="learn-section-head">
+      <h2 id="documents-heading">Published documents</h2>
+      <p>Semantic Doc-IR pages remain in their generated registry and existing compatibility routes.</p>
+    </div>
+    <div class="learn-document-grid">
+      {publishedDocuments.map((document) => (
+        <article class="learn-document-card">
+          <h3>{document.name}</h3>
+          <p>{document.description}</p>
+          <a class="proto-text-link" href={`/docs/${document.name}/`}>Open document <span aria-hidden="true">→</span></a>
+        </article>
+      ))}
+    </div>
+  </section>
+</Learning>
