@@ -723,17 +723,20 @@ def _word_wrap_runs(runs: _StyledRuns, width: int) -> list[_StyledRuns]:
                 rest_w -= consumed
                 if not prefix:
                     break  # stream drained by unrepresentable chars
-                lines.append(prefix)
+                if _runs_width(prefix) > 0:
+                    # A combining-marks-only prefix materializes to no cell —
+                    # never a phantom blank row.
+                    lines.append(prefix)
             line = list(rest)
             line_w = rest_w
 
-    # Emit the trailing line, but only if it carries content or is the sole row.
-    # A final word that is entirely unrepresentable (e.g. a width-2 char in a
-    # width-1 budget) drains ``line`` to empty after the wrap above; appending it
-    # unconditionally would add a phantom blank row, inflating height and
-    # diverging from the legacy ``lines if lines else ['']`` contract. Mirrors
-    # the guard in ``_char_wrap_runs``.
-    if line or not lines:
+    # Emit the trailing line only if it carries *materializable* content or is
+    # the sole row. A final word that is entirely unrepresentable (a width-2
+    # char in a width-1 budget) or combining-marks-only (a stranded mark after
+    # a row-filling take) produces no cells; appending it unconditionally
+    # would add a phantom blank row, inflating height. Mirrors the guards in
+    # ``_char_wrap_runs`` and the long-word loop above.
+    if line_w > 0 or not lines:
         lines.append(line)
     return lines
 

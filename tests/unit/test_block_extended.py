@@ -435,6 +435,15 @@ class TestWordWrapRuns:
         lines = [_line_text(ln) for ln in _word_wrap_runs(_runs(text), 10)]
         assert " ".join(lines) == text
 
+    def test_stranded_combining_mark_no_phantom_trailing_row(self):
+        # 世 + a + combining acute at width 1: the wide char drops, "a" fills
+        # the row, and the stranded mark (zero cells) must not append a
+        # phantom blank trailing row (regression: the trailing guard tested
+        # list truthiness, not materializable width).
+        b = Block.text("世á", S, width=1, wrap=Wrap.WORD)
+        assert b.height == 1
+        assert [c.char for c in b.row(0)] == ["a"]
+
     def test_word_split_across_runs_is_one_segment(self):
         # A word split across two styled runs must not wrap between them.
         bold = Style(bold=True)
