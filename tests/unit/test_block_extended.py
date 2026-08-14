@@ -455,27 +455,45 @@ class TestWordWrapRuns:
 
 
 class TestTakeRunsPrefix:
+    def _rest(self, runs, i, pos):
+        from painted.core.block import _rest_runs
+
+        return _line_text(_rest_runs(runs, i, pos))
+
     def test_basic_prefix(self):
-        prefix, rest, consumed = _take_runs_prefix(_runs("hello"), 3)
+        runs = _runs("hello")
+        prefix, i, pos, consumed = _take_runs_prefix(runs, 3)
         assert _line_text(prefix) == "hel"
-        assert _line_text(rest) == "lo"
+        assert self._rest(runs, i, pos) == "lo"
         assert consumed == 3
 
     def test_exact_fit(self):
-        prefix, rest, consumed = _take_runs_prefix(_runs("abc"), 3)
+        runs = _runs("abc")
+        prefix, i, pos, consumed = _take_runs_prefix(runs, 3)
         assert _line_text(prefix) == "abc"
-        assert rest == []
+        assert self._rest(runs, i, pos) == ""
         assert consumed == 3
 
     def test_boundary_mid_run_preserves_style_and_ref(self):
         bold = Style(bold=True)
-        prefix, rest, _consumed = _take_runs_prefix([("ab", S, "x"), ("cd", bold, "y")], 3)
+        runs = [("ab", S, "x"), ("cd", bold, "y")]
+        prefix, i, pos, _consumed = _take_runs_prefix(runs, 3)
         assert prefix == [("ab", S, "x"), ("c", bold, "y")]
-        assert rest == [("d", bold, "y")]
+        assert (i, pos) == (1, 1)
+        assert self._rest(runs, i, pos) == "d"
+
+    def test_resume_from_cursor(self):
+        runs = _runs("abcd")
+        prefix, i, pos, _c = _take_runs_prefix(runs, 2)
+        assert _line_text(prefix) == "ab"
+        prefix, i, pos, _c = _take_runs_prefix(runs, 2, i, pos)
+        assert _line_text(prefix) == "cd"
+        prefix, i, pos, _c = _take_runs_prefix(runs, 2, i, pos)
+        assert prefix == []
 
     def test_zero_width_chars_included(self):
         # Combining char after 'a'
-        prefix, _rest, _consumed = _take_runs_prefix(_runs("a\u0301bc"), 2)
+        prefix, _i, _pos, _consumed = _take_runs_prefix(_runs("a\u0301bc"), 2)
         assert "a" in _line_text(prefix)
         assert "\u0301" in _line_text(prefix)
 
@@ -483,15 +501,17 @@ class TestTakeRunsPrefix:
         # Width=1, wide lead char needs 2: it can never fit at this width, so
         # the take drops it (consumed counts its columns) and keeps going —
         # progress is guaranteed, an empty prefix means an exhausted stream.
-        prefix, rest, consumed = _take_runs_prefix(_runs("世abc"), 1)
+        runs = _runs("\u4e16abc")
+        prefix, i, pos, consumed = _take_runs_prefix(runs, 1)
         assert _line_text(prefix) == "a"
-        assert _line_text(rest) == "bc"
+        assert self._rest(runs, i, pos) == "bc"
         assert consumed == 3  # 2 dropped + 1 taken
 
     def test_all_unrepresentable_exhausts_stream(self):
-        prefix, rest, consumed = _take_runs_prefix(_runs("世"), 1)
+        runs = _runs("\u4e16")
+        prefix, i, _pos, consumed = _take_runs_prefix(runs, 1)
         assert prefix == []
-        assert rest == []
+        assert i == len(runs)
         assert consumed == 2
 
 

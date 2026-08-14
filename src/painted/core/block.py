@@ -546,69 +546,96 @@ def _pad_refs(refs: list[str | None], width: int) -> list[str | None]:
     return refs
 
 
-def _take_runs_prefix(runs: _StyledRuns, width: int) -> tuple[_StyledRuns, _StyledRuns, int]:
-    """Split a run stream at a display-column boundary.
+def _take_runs_prefix(
+    runs: _StyledRuns, width: int, start_run: int = 0, start_pos: int = 0
+) -> tuple[_StyledRuns, int, int, int]:
+    """Take a display-column prefix of ``runs`` from the cursor
+    ``(start_run, start_pos)``.
 
-    Returns ``(prefix, rest, consumed)`` — ``consumed`` counts display columns
-    removed from the stream (taken plus dropped), so a caller measuring the
-    whole stream once can subtract instead of re-scanning ``rest``. Zero-width
-    chars ride with the character before them; a char wider than the remaining
+    Returns ``(prefix, next_run, next_pos, consumed)`` — a cursor, never a
+    copied suffix, so repeated takes over a long run stay linear (a sliced
+    ``rest`` would copy the remainder per row: quadratic). ``consumed`` counts
+    display columns removed (taken plus dropped), so a caller measuring the
+    whole stream once can subtract instead of re-scanning. Zero-width chars
+    ride with the character before them; a char wider than the remaining
     budget ends the take before it. A lead char wider than ``width`` itself is
     unrepresentable at this width and dropped here, so the take always makes
-    progress: an empty prefix means the stream is exhausted (``rest == []``).
+    progress: an empty prefix means the stream is exhausted
+    (``next_run == len(runs)``). ``_rest_runs`` materializes the remainder
+    when a caller genuinely needs it as a list (one copy, at loop exit).
     """
     prefix: _StyledRuns = []
     remaining = width
     consumed = 0
-    for idx, run in enumerate(runs):
-        text = run[0]
-        if not text:
+    i, pos = start_run, start_pos
+    n = len(runs)
+    while i < n:
+        text, style, ref = runs[i]
+        if pos >= len(text):
+            i += 1
+            pos = 0
             continue
-        w = display_width(text)
-        if w <= remaining:
-            prefix.append(run)
-            remaining -= w
-            consumed += w
-            if remaining == 0:
-                return prefix, [r for r in runs[idx + 1 :] if r[0]], consumed
-            continue
-        # Boundary run: char-scan what fits, dropping fresh-row lead chars
-        # too wide to fit at any row of this width.
-        head_chars: list[str] = []
-        pos = 0
-        for ch in text:
-            cw = char_width(ch)
+        if pos == 0:
+            w = display_width(text)
+            if w <= remaining:
+                prefix.append(runs[i])
+                remaining -= w
+                consumed += w
+                i += 1
+                if remaining == 0:
+                    return prefix, i, 0, consumed
+                continue
+        # Boundary run: char-scan from the cursor. `pieces` collects the
+        # contiguous windows kept (a fresh-row drop splits the window).
+        pieces: list[str] = []
+        start = j = pos
+        text_len = len(text)
+        while j < text_len:
+            cw = char_width(text[j])
             if cw == 0:
                 # Zero-width (combining) chars ride with the preceding prefix.
-                head_chars.append(ch)
-                pos += 1
-                continue
-            if cw > width and remaining == width:
-                # Fresh row (no columns taken, zero-width marks aside): this
-                # char can never fit at this width — drop it here so it can't
-                # force an empty take.
-                consumed += cw
-                pos += 1
+                j += 1
                 continue
             if cw > remaining:
+                if cw > width and remaining == width:
+                    # Fresh row (no columns taken, zero-width marks aside):
+                    # this char can never fit at this width — drop it here so
+                    # it can't force an empty take.
+                    if j > start:
+                        pieces.append(text[start:j])
+                    consumed += cw
+                    j += 1
+                    start = j
+                    continue
                 break
-            head_chars.append(ch)
             remaining -= cw
             consumed += cw
-            pos += 1
+            j += 1
             if remaining == 0:
                 break
-        if head_chars:
-            prefix.append(("".join(head_chars), run[1], run[2]))
-        if pos >= len(text) and remaining > 0:
+        if j > start:
+            pieces.append(text[start:j])
+        if pieces:
+            prefix.append(("".join(pieces), style, ref))
+        pos = j
+        if pos >= text_len and remaining > 0:
+            i += 1
+            pos = 0
             continue
-        rest: _StyledRuns = []
-        tail = text[pos:]
-        if tail:
-            rest.append((tail, run[1], run[2]))
-        rest.extend(r for r in runs[idx + 1 :] if r[0])
-        return prefix, rest, consumed
-    return prefix, [], consumed
+        return prefix, i, pos, consumed
+    return prefix, i, pos, consumed
+
+
+def _rest_runs(runs: _StyledRuns, i: int, pos: int) -> _StyledRuns:
+    """Materialize the remainder at a take cursor as a run list (one copy)."""
+    if i >= len(runs):
+        return []
+    rest: _StyledRuns = []
+    text, style, ref = runs[i]
+    if pos < len(text):
+        rest.append((text[pos:] if pos else text, style, ref))
+    rest.extend(r for r in runs[i + 1 :] if r[0])
+    return rest
 
 
 def _ref_grid(lanes: list[list[str | None] | None], width: int) -> list[list[str | None]] | None:
@@ -629,11 +656,11 @@ def _char_wrap_runs(
     """
     rows: list[list[Cell]] = []
     lanes: list[list[str | None] | None] = []
-    rest = [r for r in runs if r[0]]
-    while rest:
-        prefix, rest, _consumed = _take_runs_prefix(rest, width)
+    i = pos = 0
+    while True:
+        prefix, i, pos, _consumed = _take_runs_prefix(runs, width, i, pos)
         if not prefix:
-            break  # stream drained by unrepresentable chars — no phantom row
+            break  # stream exhausted (unrepresentable chars drop inside the take)
         cells, refs = _cells_from_runs(prefix)
         if not cells:
             # A combining-marks-only prefix materializes to nothing (zero-width
@@ -703,18 +730,18 @@ def _word_wrap_runs(runs: _StyledRuns, width: int) -> list[_StyledRuns]:
             line = list(seg)
             line_w = word_w
         else:
-            rest = seg
             rest_w = word_w
-            while rest and rest_w > width:
-                prefix, rest, consumed = _take_runs_prefix(rest, width)
+            i = pos = 0
+            while rest_w > width:
+                prefix, i, pos, consumed = _take_runs_prefix(seg, width, i, pos)
                 rest_w -= consumed
                 if not prefix:
-                    break  # stream drained by unrepresentable chars
+                    break  # stream exhausted (unrepresentable chars drop inside)
                 if _runs_width(prefix) > 0:
                     # A combining-marks-only prefix materializes to no cell —
                     # never a phantom blank row.
                     lines.append(prefix)
-            line = list(rest)
+            line = _rest_runs(seg, i, pos)
             line_w = rest_w
 
     # Emit the trailing line only if it carries *materializable* content or is
