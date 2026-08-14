@@ -1,8 +1,9 @@
 """Property tier — Span/Line styled-text primitives.
 
-Line.to_block builds cells with its OWN wide-char + combining-drop logic
-(span.py), a parallel implementation to `_cells_from_text` that can drift. These
-laws pin its rectangle + wide-safety contract and Line.truncate's budget.
+Line.to_block materializes through the shared run engine (`_wrap_runs` /
+`_cells_from_runs` in block.py) — it once carried a parallel per-char loop that
+could drift from `_cells_from_text`; these laws pinned that seam and now guard
+the unified path's rectangle + wide-safety contract and Line.truncate's budget.
 """
 
 from __future__ import annotations

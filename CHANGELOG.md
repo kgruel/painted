@@ -28,6 +28,19 @@ breaking changes.
   break (refs survive on every fragment; natural width is the widest line);
   `callout` keeps its one-row-per-slot contract by flattening explicitly.
   ([30cac32](https://github.com/kgruel/painted/commit/30cac32))
+- **Styled text renders up to 20x faster.** Wrapping and materialization now
+  share one run-batched engine, so multi-span `Line.to_block`/`Line.wrap` and
+  wrapped `Block.text` no longer pay a per-character tax (single-line
+  `Block.text` is unchanged within noise). Traceback headers now split message
+  lines only on `\n`/CRLF — the declared break vocabulary — not `splitlines`'
+  exotic breaks, and a trailing newline keeps its blank row. Width measurement
+  is now cell-accurate everywhere: `Span.width`/`Line.width` (and
+  `display_width`) count the cells that actually render — non-printables no
+  longer fall back to `len()`, and ZWJ/emoji clusters measure per character
+  (`Span("👩‍💻").width` is now 4, matching the two wide cells painted
+  renders, where sequence-aware `wcswidth` said 2 and could crash the wrap
+  engine) — so measuring before materializing always agrees.
+  ([8954229](https://github.com/kgruel/painted/commit/8954229))
 
 ## [0.14.0] — 2026-08-13
 

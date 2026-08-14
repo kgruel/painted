@@ -85,12 +85,13 @@ class Span:
 
     @property
     def width(self) -> int:
-        """Display width, accounting for wide characters."""
-        w = wcswidth(self.text)
-        if w < 0:
-            # Fallback for strings containing non-printable chars
-            return len(self.text)
-        return w
+        """Display width, accounting for wide characters.
+
+        Cell-accurate via `display_width`: it measures exactly the cells this
+        span materializes to (non-printables scrub to one space cell each), so
+        `Line.width` always agrees with `Line.to_block(None).width`.
+        """
+        return display_width(self.text)
 ```
 <!-- docgen:end -->
 
@@ -135,9 +136,7 @@ class Line:
                 chars: list[str] = []
                 used = 0
                 for ch in span.text:
-                    cw = wcswidth(ch)
-                    if cw < 0:
-                        cw = 1
+                    cw = char_width(ch)
                     if used + cw > remaining:
                         break
                     chars.append(ch)

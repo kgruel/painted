@@ -9,7 +9,7 @@ from __future__ import annotations
 from painted import Block, Style, Wrap, border
 from painted.views import TextInputState, text_input
 from painted.core._text_width import display_width
-from painted.core.block import _word_wrap
+from painted.core.block import _word_wrap_runs
 
 
 def _row_chars(block: Block, y: int = 0) -> list[str]:
@@ -54,14 +54,45 @@ class TestBlockTextWide:
 
 class TestWordWrapWide:
     def test_word_wrap_wide_words(self):
-        lines = _word_wrap("hello 世界 there", 6)
+        lines = self._wrap("hello 世界 there", 6)
         assert lines == ["hello", "世界", "there"]
         assert all(display_width(line) <= 6 for line in lines)
 
     def test_word_wrap_breaks_long_wide_word(self):
-        lines = _word_wrap("世界世界", 3)
+        lines = self._wrap("世界世界", 3)
         assert lines == ["世", "界", "世", "界"]
         assert all(display_width(line) <= 3 for line in lines)
+
+    @staticmethod
+    def _wrap(text: str, width: int) -> list[str]:
+        runs: list[tuple[str, Style, str | None]] = [(text, Style(), None)]
+        return ["".join(t for t, _s, _r in line) for line in _word_wrap_runs(runs, width)]
+
+
+class TestZwjSequenceCellModel:
+    """wcswidth is sequence-aware (a ZWJ emoji cluster measures 2) but painted
+    materializes one Cell per character (4 columns for a two-emoji cluster).
+    Every measure counts the cell model — a sequence-aware measure would
+    under-count and corrupt layout math (regression: ContractError from the
+    wrap engine on valid emoji input)."""
+
+    ZWJ = "\U0001f469\u200d\U0001f4bb"  # woman technologist
+
+    def test_char_wrap_does_not_raise(self):
+        b = Block.text(self.ZWJ, Style(), width=2, wrap=Wrap.CHAR)
+        assert b.width == 2
+        assert b.height == 2  # two wide chars, one per row
+
+    def test_word_wrap_does_not_raise(self):
+        b = Block.text(self.ZWJ, Style(), width=2, wrap=Wrap.WORD)
+        assert b.width == 2
+
+    def test_line_width_matches_natural_block(self):
+        from painted import Line, Span
+
+        line = Line((Span(self.ZWJ, Style()),))
+        assert line.width == 4
+        assert line.to_block(None).width == 4
 
 
 class TestBorderTitleWide:

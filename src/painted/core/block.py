@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import warnings
 from collections.abc import Sequence
 from enum import Enum
@@ -16,16 +17,6 @@ from .errors import ContractError
 
 # Internal cell cache: maps Style → dict of char → Cell for ASCII characters.
 _style_cell_maps: dict[Style, dict[str, Cell]] = {}
-
-
-def _get_cell_map(style: Style) -> dict[str, Cell]:
-    """Return a char→Cell map for the given style, creating lazily."""
-    m = _style_cell_maps.get(style)
-    if m is not None:
-        return m
-    m = {}
-    _style_cell_maps[style] = m
-    return m
 
 
 def _ascii_row_tuple(chars: str, width: int, style: Style) -> tuple[Cell, ...]:
@@ -52,26 +43,9 @@ def _ascii_row_tuple(chars: str, width: int, style: Style) -> tuple[Cell, ...]:
     return row
 
 
-def _cached_cell(char: str, style: Style) -> Cell:
-    """Return a cached Cell for single ASCII characters."""
-    m = _style_cell_maps.get(style)
-    if m is not None:
-        cell = m.get(char)
-        if cell is not None:
-            return cell
-        cell = Cell(char, style)
-        m[char] = cell
-        return cell
-    m = {}
-    _style_cell_maps[style] = m
-    cell = Cell(char, style)
-    m[char] = cell
-    return cell
-
-
 def _split_lines(text: str) -> list[str]:
     """Split text on declared line breaks — the str sibling of
-    ``_split_styled_newlines``: ``\\n`` breaks, a ``\\r\\n`` pair is one break."""
+    ``_split_runs_newlines``: ``\\n`` breaks, a ``\\r\\n`` pair is one break."""
     return text.replace("\r\n", "\n").split("\n")
 
 
@@ -222,72 +196,21 @@ class Block:
         if width is not None and width <= 0:
             return Block([[]], 0, ref=ref)
 
-        if "\n" in content:
-            seg_blocks = [
-                Block.text(segment, style, width=width, wrap=wrap)
-                for segment in _split_lines(content)
-            ]
-            if width is None:
-                width = max(b.width for b in seg_blocks)
-            rows_t = tuple(
-                row if len(row) == width else tuple(_pad_row(list(row), width, style))
-                for b in seg_blocks
-                for row in b._rows
-            )
-            return Block._create(rows_t, width, ref=ref)
-
         if width is None:
+            if "\n" in content:
+                return _wrap_runs(
+                    [(content, style, None)], None, wrap=Wrap.NONE, pad_style=style, ref=ref
+                )
             cells = _cells_from_text(content, style)
             return Block._create((tuple(cells),), len(cells), ref=ref)
 
-        if wrap == Wrap.NONE:
-            # Truncate at width, single line
-            if content.isascii():
-                return Block._create((_ascii_row_tuple(content, width, style),), width, ref=ref)
-            cells = _cells_from_text(content, style, max_width=width)
-            cells = _pad_row(cells, width, style)
-            return Block._create((tuple(cells),), width, ref=ref)
+        if wrap == Wrap.NONE and content.isascii() and "\n" not in content:
+            # The hot path: single-line ASCII clip/pad through the cached
+            # tuple map, no list intermediates (the engine's degenerate case,
+            # kept inline — Block.text is the hottest constructor in the tree).
+            return Block._create((_ascii_row_tuple(content, width, style),), width, ref=ref)
 
-        if wrap == Wrap.ELLIPSIS:
-            # Truncate with the ambient marker if needed. The marker is read from
-            # current_icons() (not a hardcoded "…") so it degrades to ASCII under
-            # use_icons(ASCII_ICONS) and a strict-ASCII stream never raises on the
-            # "…" codepoint. The marker may be wider than one column ("..."), so
-            # reserve its display width — never assume a 1-column ellipsis.
-            from ..icon_set import current_icons
-
-            if display_width(content) <= width:
-                if content.isascii():
-                    return Block._create((_ascii_row_tuple(content, width, style),), width, ref=ref)
-                cells = _cells_from_text(content, style, max_width=width)
-            else:
-                ellipsis = current_icons().ellipsis
-                ell_w = display_width(ellipsis)
-                if ell_w >= width:
-                    # No room for content beside the marker — show the marker
-                    # alone, itself clipped to the budget.
-                    cells = _cells_from_text(ellipsis, style, max_width=width)
-                else:
-                    cells = _cells_from_text(content, style, max_width=width - ell_w)
-                    cells.extend(_cells_from_text(ellipsis, style))
-            cells = _pad_row(cells, width, style)
-            return Block._create((tuple(cells),), width, ref=ref)
-
-        if wrap == Wrap.CHAR:
-            # Break at any character boundary
-            rows = _char_wrap(content, width, style)
-            return Block(rows, width, ref=ref)
-
-        if wrap == Wrap.WORD:
-            # Break at word boundaries
-            lines = _word_wrap(content, width)
-            rows = [
-                _pad_row(_cells_from_text(line, style, max_width=width), width, style)
-                for line in lines
-            ]
-            return Block(rows, width, ref=ref)
-
-        raise ContractError(f"Unknown wrap mode: {wrap}")
+        return _wrap_runs([(content, style, None)], width, wrap=wrap, pad_style=style, ref=ref)
 
     @staticmethod
     def column(
@@ -565,53 +488,54 @@ def _cells_from_text(text: str, style: Style, *, max_width: int | None = None) -
 
 # --- Styled wrap engine -----------------------------------------------------
 #
-# The wrap algorithms operate on a *styled-char stream* — one (char, Style,
-# ref) entry per source character. Single-style text (`str`) is the degenerate
-# case where every entry shares one style and no ref, so the `str` entry
-# points below are thin adapters over these cores. This is the one wrap
-# engine; there is no parallel str/styled logic to keep in sync. The ref lane
-# is what lets a `Span`'s denotation survive reflow: a wrapped link keeps its
-# ref on every fragment, the same way its style rides its characters.
+# The wrap algorithms operate on a *styled-run stream* — one (text, Style,
+# ref) run per uniformly styled stretch of source text, the same shape a
+# `Span` declares. Single-style text (`str`) is the degenerate one-run case,
+# so the `str` entry points build a one-run stream rather than adapting a
+# parallel implementation. This is the one wrap engine: wrap algorithms
+# operate on runs, and materialization batches per run through the cached
+# cell maps (`_cells_from_text` is the per-run core), so the degenerate case
+# pays the fast-path cost, not a per-char tax. The ref lane is what lets a
+# `Span`'s denotation survive reflow: a wrapped link keeps its ref on every
+# fragment, the same way its style rides its characters.
 
-_StyledChars = list[tuple[str, Style, str | None]]
-
-
-def _styled_from_text(text: str, style: Style) -> _StyledChars:
-    """Expand a single-style string into a styled-char stream."""
-    return [(ch, style, None) for ch in text]
+_StyledRuns = list[tuple[str, Style, str | None]]
 
 
-def _cells_from_styled(
-    chars: _StyledChars, *, max_width: int | None = None
+def _runs_width(runs: _StyledRuns) -> int:
+    """Display width of a styled-run stream — `display_width` is cell-accurate
+    (it predicts exactly the cells `_cells_from_text` produces)."""
+    return sum(display_width(text) for text, _style, _ref in runs)
+
+
+def _cells_from_runs(
+    runs: _StyledRuns, *, max_width: int | None = None
 ) -> tuple[list[Cell], list[str | None] | None]:
-    """Materialize a styled-char stream into cells plus a parallel ref lane.
+    """Materialize a styled-run stream into cells plus a parallel ref lane.
 
-    Each character carries its own style and ref; a space placeholder follows
-    a wide char and inherits both. Mirrors `_cells_from_text` but per-char
-    rather than per-string. The ref lane is ``None`` (not a list of ``None``)
-    when no character carries a ref — the common case allocates nothing.
+    Each run batches through `_cells_from_text`'s cached maps; a run's ref
+    stamps every cell it produces (wide-char placeholders included). The ref
+    lane is ``None`` (not a list of ``None``) when no run carries a ref — the
+    common case allocates nothing. Truncation stops at the first character
+    that does not fit (a wide char at the boundary ends the take; later runs
+    do not spill past it).
     """
     cells: list[Cell] = []
     refs: list[str | None] | None = None
-    used = 0
-    for ch, st, ref in chars:
-        w = char_width(ch)
-        if w == 0:
+    remaining = max_width
+    for text, style, ref in runs:
+        if not text:
             continue
-        if max_width is not None and used + w > max_width:
-            break
+        run_cells = _cells_from_text(text, style, max_width=remaining)
         if ref is not None and refs is None:
             refs = cast("list[str | None]", [None] * len(cells))
-        cells.append(Cell(ch, st))
+        cells.extend(run_cells)
         if refs is not None:
-            refs.append(ref)
-        if w == 2:
-            cells.append(Cell(" ", st))
-            if refs is not None:
-                refs.append(ref)
-        used += w
-        if max_width is not None and used >= max_width:
-            break
+            refs.extend([ref] * len(run_cells))
+        if remaining is not None:
+            remaining -= len(run_cells)
+            if remaining <= 0 or len(run_cells) < display_width(text):
+                break
     return cells, refs
 
 
@@ -622,134 +546,176 @@ def _pad_refs(refs: list[str | None], width: int) -> list[str | None]:
     return refs
 
 
-def _styled_width(chars: _StyledChars) -> int:
-    """Display width of a styled-char stream."""
-    return sum(w for w in (char_width(entry[0]) for entry in chars) if w > 0)
+def _take_runs_prefix(
+    runs: _StyledRuns, width: int, start_run: int = 0, start_pos: int = 0
+) -> tuple[_StyledRuns, int, int, int]:
+    """Take a display-column prefix of ``runs`` from the cursor
+    ``(start_run, start_pos)``.
 
-
-def _take_styled_prefix(seg: _StyledChars, width: int) -> tuple[_StyledChars, int]:
-    """Take a styled prefix within width columns; returns (prefix, consumed)."""
-    used = 0
-    out: _StyledChars = []
-    consumed = 0
-    for i, entry in enumerate(seg):
-        w = char_width(entry[0])
-        if w == 0:
-            out.append(entry)
-            consumed = i + 1
-            continue
-        if w > width:
-            break
-        if used + w > width:
-            break
-        out.append(entry)
-        used += w
-        consumed = i + 1
-        if used == width:
-            break
-    return out, consumed
-
-
-def _char_wrap_styled(
-    chars: _StyledChars, width: int, pad_style: Style
-) -> tuple[list[list[Cell]], list[list[str | None]] | None]:
-    """Wrap a styled-char stream at any character boundary by display width.
-
-    Returns the cell rows plus a parallel grid of ref rows — ``None`` when no
-    character carries a ref, so the common case allocates nothing.
+    Returns ``(prefix, next_run, next_pos, consumed)`` — a cursor, never a
+    copied suffix, so repeated takes over a long run stay linear (a sliced
+    ``rest`` would copy the remainder per row: quadratic). ``consumed`` counts
+    display columns removed (taken plus dropped), so a caller measuring the
+    whole stream once can subtract instead of re-scanning. Zero-width chars
+    ride with the character before them; a char wider than the remaining
+    budget ends the take before it. A lead char wider than ``width`` itself is
+    unrepresentable at this width and dropped here, so the take always makes
+    progress: an empty prefix means the stream is exhausted
+    (``next_run == len(runs)``). ``_rest_runs`` materializes the remainder
+    when a caller genuinely needs it as a list (one copy, at loop exit).
     """
-    if not chars:
-        return [_pad_row([], width, pad_style)], None
+    prefix: _StyledRuns = []
+    remaining = width
+    consumed = 0
+    i, pos = start_run, start_pos
+    n = len(runs)
+    while i < n:
+        text, style, ref = runs[i]
+        if pos >= len(text):
+            i += 1
+            pos = 0
+            continue
+        if pos == 0:
+            w = display_width(text)
+            if w <= remaining:
+                prefix.append(runs[i])
+                remaining -= w
+                consumed += w
+                i += 1
+                if remaining == 0:
+                    return prefix, i, 0, consumed
+                continue
+        # Boundary run: char-scan from the cursor. `pieces` collects the
+        # contiguous windows kept (a fresh-row drop splits the window).
+        pieces: list[str] = []
+        start = j = pos
+        text_len = len(text)
+        while j < text_len:
+            cw = char_width(text[j])
+            if cw == 0:
+                # Zero-width (combining) chars ride with the preceding prefix.
+                j += 1
+                continue
+            if cw > remaining:
+                if cw > width and remaining == width:
+                    # Fresh row (no columns taken, zero-width marks aside):
+                    # this char can never fit at this width — drop it here so
+                    # it can't force an empty take.
+                    if j > start:
+                        pieces.append(text[start:j])
+                    consumed += cw
+                    j += 1
+                    start = j
+                    continue
+                break
+            remaining -= cw
+            consumed += cw
+            j += 1
+            if remaining == 0:
+                break
+        if j > start:
+            pieces.append(text[start:j])
+        if pieces:
+            prefix.append(("".join(pieces), style, ref))
+        pos = j
+        if pos >= text_len and remaining > 0:
+            i += 1
+            pos = 0
+            continue
+        return prefix, i, pos, consumed
+    return prefix, i, pos, consumed
 
-    has_refs = any(entry[2] is not None for entry in chars)
+
+def _rest_runs(runs: _StyledRuns, i: int, pos: int) -> _StyledRuns:
+    """Materialize the remainder at a take cursor as a run list (one copy)."""
+    if i >= len(runs):
+        return []
+    rest: _StyledRuns = []
+    text, style, ref = runs[i]
+    if pos < len(text):
+        rest.append((text[pos:] if pos else text, style, ref))
+    rest.extend(r for r in runs[i + 1 :] if r[0])
+    return rest
+
+
+def _ref_grid(lanes: list[list[str | None] | None], width: int) -> list[list[str | None]] | None:
+    """Collapse per-row ref lanes into a full grid — ``None`` when no row has
+    refs, so the common case allocates nothing."""
+    if any(lane is not None for lane in lanes):
+        return [lane if lane is not None else [None] * width for lane in lanes]
+    return None
+
+
+def _char_wrap_runs(
+    runs: _StyledRuns, width: int, pad_style: Style
+) -> tuple[list[list[Cell]], list[list[str | None]] | None]:
+    """Wrap a styled-run stream at any character boundary by display width.
+
+    Returns the cell rows plus a parallel grid of ref rows (see `_ref_grid`).
+    A char wider than ``width`` itself is unrepresentable and dropped.
+    """
     rows: list[list[Cell]] = []
-    ref_rows: list[list[str | None]] = []
-    current: list[Cell] = []
-    current_refs: list[str | None] = []
-    used = 0
-
-    for ch, st, ref in chars:
-        w = char_width(ch)
-        if w == 0:
+    lanes: list[list[str | None] | None] = []
+    i = pos = 0
+    while True:
+        prefix, i, pos, _consumed = _take_runs_prefix(runs, width, i, pos)
+        if not prefix:
+            break  # stream exhausted (unrepresentable chars drop inside the take)
+        cells, refs = _cells_from_runs(prefix)
+        if not cells:
+            # A combining-marks-only prefix materializes to nothing (zero-width
+            # chars occupy no cell) — emitting it would be a phantom blank row.
             continue
-        if w > width:
-            # Can't represent this character at this width.
-            continue
-
-        if used + w > width and current:
-            rows.append(_pad_row(current, width, pad_style))
-            if has_refs:
-                ref_rows.append(_pad_refs(current_refs, width))
-            current = []
-            current_refs = []
-            used = 0
-
-        if used + w > width:
-            continue
-
-        current.append(Cell(ch, st))
-        current_refs.append(ref)
-        if w == 2:
-            current.append(Cell(" ", st))
-            current_refs.append(ref)
-        used += w
-
-        if used == width:
-            rows.append(current)
-            if has_refs:
-                ref_rows.append(current_refs)
-            current = []
-            current_refs = []
-            used = 0
-
-    if current or not rows:
-        rows.append(_pad_row(current, width, pad_style))
-        if has_refs:
-            ref_rows.append(_pad_refs(current_refs, width))
-
-    return rows, ref_rows if has_refs else None
+        rows.append(_pad_row(cells, width, pad_style))
+        lanes.append(_pad_refs(refs, width) if refs is not None else None)
+    if not rows:
+        rows.append(_pad_row([], width, pad_style))
+        lanes.append(None)
+    return rows, _ref_grid(lanes, width)
 
 
-def _word_wrap_styled(chars: _StyledChars, width: int) -> list[_StyledChars]:
-    """Break a styled-char stream at word boundaries to fit within width.
+_SPACE_RE = re.compile(r"( +)")
+
+
+def _word_wrap_runs(runs: _StyledRuns, width: int) -> list[_StyledRuns]:
+    """Break a styled-run stream at word boundaries to fit within width.
 
     Source spaces (and their styles) are preserved between words on the same
     line; the break space at a wrap point is dropped (lines are right-trimmed).
-    For uniform-style input where pad style equals the content style, this
-    yields cells identical to the legacy string wrap.
     """
-    if width <= 0 or not chars:
+    if width <= 0:
         return [[]]
 
-    # Group into alternating space / non-space segments, style + ref preserved.
-    segments: list[tuple[bool, _StyledChars]] = []
-    cur: _StyledChars = []
-    cur_sp: bool | None = None
-    for entry in chars:
-        sp = entry[0] == " "
-        if cur and sp != cur_sp:
-            segments.append((cast(bool, cur_sp), cur))
-            cur = []
-        cur.append(entry)
-        cur_sp = sp
-    if cur:
-        segments.append((cast(bool, cur_sp), cur))
+    # Group into alternating space / non-space segments, style + ref preserved
+    # across run boundaries (a word split across two spans is one segment).
+    segments: list[tuple[bool, _StyledRuns]] = []
+    for text, style, ref in runs:
+        for token in _SPACE_RE.split(text):
+            if not token:
+                continue
+            sp = token[0] == " "
+            if segments and segments[-1][0] == sp:
+                segments[-1][1].append((token, style, ref))
+            else:
+                segments.append((sp, [(token, style, ref)]))
 
-    lines: list[_StyledChars] = []
-    line: _StyledChars = []
+    lines: list[_StyledRuns] = []
+    line: _StyledRuns = []
     line_w = 0
-    pending: _StyledChars = []  # space segment awaiting a following word
+    pending: _StyledRuns = []  # space segment awaiting a following word
 
     for is_sp, seg in segments:
         if is_sp:
             pending = seg
             continue
 
-        word_w = _styled_width(seg)
+        word_w = _runs_width(seg)
         if line:
-            sp_w = _styled_width(pending)
+            sp_w = _runs_width(pending)
             if line_w + sp_w + word_w <= width:
-                line = line + pending + seg
+                # `line` is always a freshly owned list here — safe to extend.
+                line.extend(pending)
+                line.extend(seg)
                 line_w += sp_w + word_w
                 pending = []
                 continue
@@ -764,145 +730,159 @@ def _word_wrap_styled(chars: _StyledChars, width: int) -> list[_StyledChars]:
             line = list(seg)
             line_w = word_w
         else:
-            rest = seg
-            while rest and _styled_width(rest) > width:
-                prefix, consumed = _take_styled_prefix(rest, width)
-                if consumed == 0:
-                    # Unrepresentable lead char (e.g. width=1, wide char).
-                    rest = rest[1:]
-                    continue
-                lines.append(prefix)
-                rest = rest[consumed:]
-            line = list(rest)
-            line_w = _styled_width(rest)
+            rest_w = word_w
+            i = pos = 0
+            while rest_w > width:
+                prefix, i, pos, consumed = _take_runs_prefix(seg, width, i, pos)
+                rest_w -= consumed
+                if not prefix:
+                    break  # stream exhausted (unrepresentable chars drop inside)
+                if _runs_width(prefix) > 0:
+                    # A combining-marks-only prefix materializes to no cell —
+                    # never a phantom blank row.
+                    lines.append(prefix)
+            line = _rest_runs(seg, i, pos)
+            line_w = rest_w
 
-    # Emit the trailing line, but only if it carries content or is the sole row.
-    # A final word that is entirely unrepresentable (e.g. a width-2 char in a
-    # width-1 budget) drains ``line`` to empty after the wrap above; appending it
-    # unconditionally would add a phantom blank row, inflating height and
-    # diverging from the legacy ``lines if lines else ['']`` contract. Mirrors
-    # the guard in ``_char_wrap_styled``.
-    if line or not lines:
+    # Emit the trailing line only if it carries *materializable* content or is
+    # the sole row. A final word that is entirely unrepresentable (a width-2
+    # char in a width-1 budget) or combining-marks-only (a stranded mark after
+    # a row-filling take) produces no cells; appending it unconditionally
+    # would add a phantom blank row, inflating height. Mirrors the guards in
+    # ``_char_wrap_runs`` and the long-word loop above.
+    if line_w > 0 or not lines:
         lines.append(line)
     return lines
 
 
-# --- str adapters over the styled engine ------------------------------------
+def _split_runs_newlines(runs: _StyledRuns) -> list[_StyledRuns]:
+    """Split a styled-run stream on newlines — declared line structure.
 
-
-def _char_wrap(text: str, width: int, style: Style) -> list[list[Cell]]:
-    """Wrap a single-style string at any character boundary."""
-    rows, _ = _char_wrap_styled(_styled_from_text(text, style), width, style)
-    return rows
-
-
-def _word_wrap(text: str, width: int) -> list[str]:
-    """Break a single-style string at word boundaries (legacy str view)."""
-    if width <= 0 or not text:
-        return [""]
-    lines = _word_wrap_styled(_styled_from_text(text, Style()), width)
-    return ["".join(entry[0] for entry in ln) for ln in lines] or [""]
-
-
-def _take_word_prefix(word: str, width: int) -> tuple[str, int]:
-    """Take a word prefix within width columns; returns (prefix, consumed)."""
-    out, consumed = _take_styled_prefix(_styled_from_text(word, Style()), width)
-    return "".join(entry[0] for entry in out), consumed
-
-
-def _split_styled_newlines(chars: _StyledChars) -> list[_StyledChars]:
-    """Split a styled-char stream on newline entries — declared line structure.
-
-    A ``\\n`` entry is a hard break; a ``\\r`` immediately before it is part of
-    the same break (CRLF), not content. Mirrors ``Block.text``'s split one rung
-    up in style richness (decision practice/block-text-honors-newlines).
+    A ``\\n`` is a hard break; a ``\\r`` immediately before it (even at the
+    end of the previous run) is part of the same break (CRLF), not content.
+    Mirrors ``_split_lines`` one rung up in style richness (decision
+    practice/block-text-honors-newlines).
     """
-    segments: list[_StyledChars] = [[]]
-    for entry in chars:
-        if entry[0] == "\n":
-            if segments[-1] and segments[-1][-1][0] == "\r":
-                segments[-1].pop()
-            segments.append([])
-        else:
-            segments[-1].append(entry)
+    segments: list[_StyledRuns] = [[]]
+    for text, style, ref in runs:
+        if "\n" not in text:
+            if text:
+                segments[-1].append((text, style, ref))
+            continue
+        for i, part in enumerate(text.split("\n")):
+            if i:
+                seg = segments[-1]
+                if seg and seg[-1][0].endswith("\r"):
+                    last_text, last_style, last_ref = seg[-1]
+                    if len(last_text) > 1:
+                        seg[-1] = (last_text[:-1], last_style, last_ref)
+                    else:
+                        seg.pop()
+                segments.append([])
+            if part:
+                segments[-1].append((part, style, ref))
     return segments
 
 
-def _wrap_styled(
-    chars: _StyledChars,
+def _row_block(
+    cells: list[Cell],
+    refs: list[str | None] | None,
     width: int,
+    pad_style: Style,
+    ref: str | None,
+) -> Block:
+    """Pad one materialized row to width and freeze it as a single-row Block."""
+    cells = _pad_row(cells, width, pad_style)
+    if refs is not None:
+        return Block._create((tuple(cells),), width, ref=ref, refs=(tuple(_pad_refs(refs, width)),))
+    return Block._create((tuple(cells),), width, ref=ref)
+
+
+def _wrap_runs(
+    runs: _StyledRuns,
+    width: int | None,
     *,
     wrap: Wrap = Wrap.WORD,
     pad_style: Style = Style(),
+    ref: str | None = None,
 ) -> Block:
-    """Wrap a styled-char stream into a Block — the seam behind `Line.wrap`.
+    """Wrap a styled-run stream into a Block — the seam behind `Line.wrap`,
+    `Line.to_block`, and `Block.text`'s width-honoring modes.
 
     `pad_style` styles the trailing pad cells (and the ellipsis marker); it is
     the reflowing generalization of `Line.to_block` (which is `Wrap.NONE` per
-    segment). The four `Wrap` modes mirror `Block.text` exactly. A newline
-    entry is a hard break: segments split first, the wrap mode applies within
-    each segment, and the segment rows stack — the styled sibling of
-    `Block.text`'s newline handling. The ``width <= 0`` degenerate case keeps
-    its empty-block contract and collapses before the split.
-    """
-    if width <= 0:
-        return Block([[]], 0)
+    segment). A newline in any run is a hard break: segments split first, the
+    wrap mode applies within each segment, and the segment rows stack
+    (decision practice/block-text-honors-newlines). `ref` is the block-level
+    denotation (`Block.text(ref=)`); per-run refs ride the ref lane.
 
-    if any(entry[0] == "\n" for entry in chars):
+    ``width=None`` sizes naturally (the width contract: absent is natural) —
+    the widest declared line sets the width, nothing reflows or clips, and
+    all-blank lines keep their zero-width rows (structure survives natural
+    zero width). An explicitly nonpositive ``width`` keeps the empty-block
+    contract and collapses before the split.
+    """
+    if width is not None and width <= 0:
+        return Block([[]], 0, ref=ref)
+
+    if any("\n" in run[0] for run in runs):
         from .compose import join_vertical
 
-        return join_vertical(
-            *(
-                _wrap_styled(segment, width, wrap=wrap, pad_style=pad_style)
-                for segment in _split_styled_newlines(chars)
-            )
+        segments = _split_runs_newlines(runs)
+        if width is None:
+            width = max(_runs_width(segment) for segment in segments)
+            if width <= 0:
+                return Block([[] for _ in segments], 0, ref=ref)
+        stacked = join_vertical(
+            *(_wrap_runs(segment, width, wrap=wrap, pad_style=pad_style) for segment in segments)
         )
+        if ref is None:
+            return stacked
+        return Block._create(stacked._rows, stacked.width, ref=ref, refs=stacked._refs)
+
+    if width is None:
+        # Natural sizing of one declared line: materialize in full — no
+        # budget, so the wrap mode is moot.
+        cells, refs = _cells_from_runs(runs)
+        return _row_block(cells, refs, len(cells), pad_style, ref)
 
     if wrap == Wrap.CHAR:
-        rows, ref_rows = _char_wrap_styled(chars, width, pad_style)
-        return Block(rows, width, refs=ref_rows)
+        char_rows, ref_rows = _char_wrap_runs(runs, width, pad_style)
+        return Block(char_rows, width, ref=ref, refs=ref_rows)
 
     if wrap == Wrap.WORD:
-        lines = _word_wrap_styled(chars, width)
-        rows = []
-        line_refs: list[list[str | None] | None] = []
+        lines = _word_wrap_runs(runs, width)
+        word_rows = []
+        lanes: list[list[str | None] | None] = []
         for line in lines:
-            cells, refs = _cells_from_styled(line, max_width=width)
-            rows.append(_pad_row(cells, width, pad_style))
-            line_refs.append(_pad_refs(refs, width) if refs is not None else None)
-        if any(r is not None for r in line_refs):
-            ref_rows = [r if r is not None else [None] * width for r in line_refs]
-            return Block(rows, width, refs=ref_rows)
-        return Block(rows, width)
+            # Each wrapped line fits the width by construction — no budget.
+            cells, refs = _cells_from_runs(line)
+            word_rows.append(_pad_row(cells, width, pad_style))
+            lanes.append(_pad_refs(refs, width) if refs is not None else None)
+        return Block(word_rows, width, ref=ref, refs=_ref_grid(lanes, width))
 
     if wrap == Wrap.NONE:
-        cells, refs = _cells_from_styled(chars, max_width=width)
-        cells = _pad_row(cells, width, pad_style)
-        if refs is not None:
-            return Block([cells], width, refs=[_pad_refs(refs, width)])
-        return Block([cells], width)
+        cells, refs = _cells_from_runs(runs, max_width=width)
+        return _row_block(cells, refs, width, pad_style, ref)
 
     if wrap == Wrap.ELLIPSIS:
-        if _styled_width(chars) <= width:
-            cells, refs = _cells_from_styled(chars, max_width=width)
+        if _runs_width(runs) <= width:
+            cells, refs = _cells_from_runs(runs, max_width=width)
         else:
             from ..icon_set import current_icons
 
             ellipsis = current_icons().ellipsis
             ell_w = display_width(ellipsis)
-            ell_chars = _styled_from_text(ellipsis, pad_style)
+            ell_runs: _StyledRuns = [(ellipsis, pad_style, None)]
             if ell_w >= width:
-                cells, refs = _cells_from_styled(ell_chars, max_width=width)
+                cells, refs = _cells_from_runs(ell_runs, max_width=width)
             else:
-                cells, refs = _cells_from_styled(chars, max_width=width - ell_w)
-                ell_cells, _ = _cells_from_styled(ell_chars)
+                cells, refs = _cells_from_runs(runs, max_width=width - ell_w)
+                ell_cells, _ = _cells_from_runs(ell_runs)
                 if refs is not None:
                     # The marker denotes nothing — it is loss evidence, not content.
                     refs.extend([None] * len(ell_cells))
                 cells.extend(ell_cells)
-        cells = _pad_row(cells, width, pad_style)
-        if refs is not None:
-            return Block([cells], width, refs=[_pad_refs(refs, width)])
-        return Block([cells], width)
+        return _row_block(cells, refs, width, pad_style, ref)
 
     raise ContractError(f"Unknown wrap mode: {wrap}")

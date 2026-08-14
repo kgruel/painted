@@ -6,7 +6,12 @@ import pytest
 
 from painted import Block, Style, Wrap
 from painted.core._text_width import display_width
-from painted.core.block import _char_wrap, _word_wrap, _take_word_prefix, _cells_from_text
+from painted.core.block import (
+    _cells_from_text,
+    _char_wrap_runs,
+    _take_runs_prefix,
+    _word_wrap_runs,
+)
 from painted.core.buffer import Buffer
 from painted.core.cell import Cell
 from painted.core.errors import ContractError
@@ -360,85 +365,154 @@ class TestCellsFromText:
         assert len(cells) == 3
 
 
-# --- _char_wrap internals ---
+# --- run-engine internals ---
 
 
-class TestCharWrap:
+def _runs(text: str) -> list[tuple[str, Style, str | None]]:
+    return [(text, S, None)]
+
+
+def _line_text(line):
+    return "".join(text for text, _style, _ref in line)
+
+
+class TestCharWrapRuns:
     def test_empty_text_gives_padded_row(self):
-        rows = _char_wrap("", 5, S)
+        rows, refs = _char_wrap_runs(_runs(""), 5, S)
+        assert refs is None
         assert len(rows) == 1
         assert len(rows[0]) == 5
 
     def test_char_wider_than_width_skipped(self):
         # Width=1, but a wide char needs 2 columns
-        rows = _char_wrap("世", 1, S)
+        rows, _refs = _char_wrap_runs(_runs("世"), 1, S)
         assert len(rows) == 1
         # The wide char can't fit; row is padded spaces
         assert all(c.char == " " for c in rows[0])
 
     def test_exact_width_wraps(self):
-        rows = _char_wrap("abcd", 2, S)
+        rows, _refs = _char_wrap_runs(_runs("abcd"), 2, S)
         assert len(rows) == 2
         assert rows[0][0].char == "a"
         assert rows[0][1].char == "b"
         assert rows[1][0].char == "c"
         assert rows[1][1].char == "d"
 
+    def test_combining_mark_before_unrepresentable_wide_no_phantom_row(self):
+        # "a" + combining acute + wide char, width=1: the wide char can never
+        # fit and is dropped; the stranded combining mark materializes to no
+        # cell and must not become a phantom blank row (regression: the run
+        # take let a zero-width mark shield the wide char from the fresh-row
+        # drop, emitting a combining-only prefix as an extra row).
+        b = Block.text("á世", S, width=1, wrap=Wrap.CHAR)
+        assert b.height == 1
+        assert [c.char for c in b.row(0)] == ["a"]
 
-# --- _word_wrap internals ---
+
+# --- _word_wrap_runs internals ---
 
 
-class TestWordWrap:
+class TestWordWrapRuns:
     def test_empty_text(self):
-        assert _word_wrap("", 10) == [""]
+        assert _word_wrap_runs(_runs(""), 10) == [[]]
 
     def test_zero_width(self):
-        assert _word_wrap("hello", 0) == [""]
+        assert _word_wrap_runs(_runs("hello"), 0) == [[]]
 
     def test_single_long_word_broken(self):
-        lines = _word_wrap("abcdefgh", 3)
+        lines = [_line_text(ln) for ln in _word_wrap_runs(_runs("abcdefgh"), 3)]
         assert all(len(l) <= 3 for l in lines)
         assert "".join(lines) == "abcdefgh"
 
     def test_second_word_too_long(self):
-        lines = _word_wrap("hi abcdefgh end", 3)
+        lines = [_line_text(ln) for ln in _word_wrap_runs(_runs("hi abcdefgh end"), 3)]
         assert lines[0] == "hi"
         # "abcdefgh" gets broken
         assert all(len(l) <= 3 for l in lines)
 
     def test_word_wrap_preserves_all_text(self):
         text = "the quick brown fox"
-        lines = _word_wrap(text, 10)
-        reconstructed = " ".join(lines)
-        assert reconstructed == text
+        lines = [_line_text(ln) for ln in _word_wrap_runs(_runs(text), 10)]
+        assert " ".join(lines) == text
+
+    def test_stranded_combining_mark_no_phantom_trailing_row(self):
+        # 世 + a + combining acute at width 1: the wide char drops, "a" fills
+        # the row, and the stranded mark (zero cells) must not append a
+        # phantom blank trailing row (regression: the trailing guard tested
+        # list truthiness, not materializable width).
+        b = Block.text("世á", S, width=1, wrap=Wrap.WORD)
+        assert b.height == 1
+        assert [c.char for c in b.row(0)] == ["a"]
+
+    def test_word_split_across_runs_is_one_segment(self):
+        # A word split across two styled runs must not wrap between them.
+        bold = Style(bold=True)
+        lines = _word_wrap_runs([("hel", S, None), ("lo world", bold, None)], 6)
+        assert [_line_text(ln) for ln in lines] == ["hello", "world"]
 
 
-# --- _take_word_prefix internals ---
+# --- _take_runs_prefix internals ---
 
 
-class TestTakeWordPrefix:
+class TestTakeRunsPrefix:
+    def _rest(self, runs, i, pos):
+        from painted.core.block import _rest_runs
+
+        return _line_text(_rest_runs(runs, i, pos))
+
     def test_basic_prefix(self):
-        prefix, consumed = _take_word_prefix("hello", 3)
-        assert prefix == "hel"
+        runs = _runs("hello")
+        prefix, i, pos, consumed = _take_runs_prefix(runs, 3)
+        assert _line_text(prefix) == "hel"
+        assert self._rest(runs, i, pos) == "lo"
         assert consumed == 3
 
     def test_exact_fit(self):
-        prefix, consumed = _take_word_prefix("abc", 3)
-        assert prefix == "abc"
+        runs = _runs("abc")
+        prefix, i, pos, consumed = _take_runs_prefix(runs, 3)
+        assert _line_text(prefix) == "abc"
+        assert self._rest(runs, i, pos) == ""
         assert consumed == 3
+
+    def test_boundary_mid_run_preserves_style_and_ref(self):
+        bold = Style(bold=True)
+        runs = [("ab", S, "x"), ("cd", bold, "y")]
+        prefix, i, pos, _consumed = _take_runs_prefix(runs, 3)
+        assert prefix == [("ab", S, "x"), ("c", bold, "y")]
+        assert (i, pos) == (1, 1)
+        assert self._rest(runs, i, pos) == "d"
+
+    def test_resume_from_cursor(self):
+        runs = _runs("abcd")
+        prefix, i, pos, _c = _take_runs_prefix(runs, 2)
+        assert _line_text(prefix) == "ab"
+        prefix, i, pos, _c = _take_runs_prefix(runs, 2, i, pos)
+        assert _line_text(prefix) == "cd"
+        prefix, i, pos, _c = _take_runs_prefix(runs, 2, i, pos)
+        assert prefix == []
 
     def test_zero_width_chars_included(self):
         # Combining char after 'a'
-        prefix, consumed = _take_word_prefix("a\u0301bc", 2)
-        assert "a" in prefix
-        assert "\u0301" in prefix
+        prefix, _i, _pos, _consumed = _take_runs_prefix(_runs("a\u0301bc"), 2)
+        assert "a" in _line_text(prefix)
+        assert "\u0301" in _line_text(prefix)
 
-    def test_wide_char_too_big(self):
-        # Width=1, wide char needs 2
-        prefix, consumed = _take_word_prefix("世abc", 1)
-        # Can't fit the wide char; returns empty
-        assert prefix == ""
-        assert consumed == 0
+    def test_unrepresentable_lead_char_dropped(self):
+        # Width=1, wide lead char needs 2: it can never fit at this width, so
+        # the take drops it (consumed counts its columns) and keeps going —
+        # progress is guaranteed, an empty prefix means an exhausted stream.
+        runs = _runs("\u4e16abc")
+        prefix, i, pos, consumed = _take_runs_prefix(runs, 1)
+        assert _line_text(prefix) == "a"
+        assert self._rest(runs, i, pos) == "bc"
+        assert consumed == 3  # 2 dropped + 1 taken
+
+    def test_all_unrepresentable_exhausts_stream(self):
+        runs = _runs("\u4e16")
+        prefix, i, _pos, consumed = _take_runs_prefix(runs, 1)
+        assert prefix == []
+        assert i == len(runs)
+        assert consumed == 2
 
 
 # --- Block.empty() natural width ---

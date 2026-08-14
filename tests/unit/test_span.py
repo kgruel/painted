@@ -451,6 +451,35 @@ class TestLineNewlines:
         assert block.cell_ref(0, 0) == "fact:01X"
         assert block.cell_ref(0, 1) == "fact:01X"
 
+    def test_width_matches_natural_block_for_nonprintable_mix(self):
+        # A span mixing a wide char with a non-printable: wcswidth reports
+        # non-printable, and the old len() fallback undercounted the wide
+        # char (width 2 for a 3-cell row). Span.width is cell-accurate now —
+        # Line.width always agrees with what to_block(None) materializes.
+        line = Line(spans=(Span("世\t", Style()),))
+        assert line.width == 3
+        assert line.to_block(None).width == 3
+
+    def test_char_wrap_combining_only_span_no_phantom_row(self):
+        # A combining mark in its own span after a row-filling char: it
+        # materializes to no cell, so CHAR wrap must not grow a blank row
+        # (matches the pre-run-engine behavior, which dropped it).
+        from painted import Wrap
+
+        line = Line(spans=(Span("a", Style()), Span("́", Style())))
+        block = line.wrap(1, wrap=Wrap.CHAR)
+        assert block.height == 1
+
+    def test_crlf_split_across_spans_is_one_break(self):
+        # The \r ends one span, the \n starts the next: still one CRLF break,
+        # no phantom column from the \r (the run engine trims it across the
+        # run boundary, as the per-char engine did across entries).
+        line = Line(spans=(Span("a\r", Style()), Span("\nb", Style())))
+        block = line.to_block(None)
+        assert block.height == 2
+        assert block.width == 1
+        assert [block.row(y)[0].char for y in range(2)] == ["a", "b"]
+
     def test_to_block_natural_width_is_widest_segment(self):
         line = Line(spans=(Span("a\nbbb", Style()),))
         block = line.to_block(None)

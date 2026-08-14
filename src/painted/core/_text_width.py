@@ -1,12 +1,14 @@
 """Utilities for display-width-aware text measurement and truncation.
 
-Terminal UIs need to measure strings in display columns (wcwidth/wcswidth),
-not code points (len()).
+Terminal UIs need to measure strings in display columns, not code points
+(len()). painted measures in its cell model: per-char wcwidth, summed —
+never sequence-aware wcswidth, which under-counts a ZWJ cluster relative to
+the one-Cell-per-character grid the renderer actually paints.
 """
 
 from __future__ import annotations
 
-from wcwidth import wcswidth, wcwidth
+from wcwidth import wcwidth
 
 from ..icon_set import current_icons
 
@@ -15,18 +17,24 @@ _display_width_cache: dict[str, int] = {}
 
 
 def display_width(text: str) -> int:
-    """Return the display width (columns) of a string.
+    """Return the display width (columns) of a string — the cell count its
+    materialization produces (zero-width chars contribute nothing, wide chars
+    two columns, non-printables one: they scrub to a space cell).
 
-    Falls back to len(text) if wcswidth reports non-printable characters.
+    Summed per character, matching the cell model exactly — deliberately NOT
+    ``wcswidth``, which is sequence-aware: it measures a ZWJ emoji cluster as
+    one glyph (2 columns) while painted materializes one Cell per character
+    (4 columns for a two-emoji cluster). A sequence-aware measure over
+    per-char cells under-counts, corrupting layout math; the ``len()``
+    fallback it needed for non-printables miscounted too. One model: what
+    ``Cell`` renders is what every measure counts.
     """
     if text.isascii():
         return len(text)
     cached = _display_width_cache.get(text)
     if cached is not None:
         return cached
-    w = wcswidth(text)
-    if w < 0:
-        w = len(text)
+    w = sum(cw for cw in map(char_width, text) if cw > 0)
     if len(_display_width_cache) < 4096:
         _display_width_cache[text] = w
     return w
