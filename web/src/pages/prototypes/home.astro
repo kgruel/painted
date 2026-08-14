@@ -1,0 +1,105 @@
+---
+import Prototype from "../../layouts/Prototype.astro";
+import PageHeader from "../../components/PageHeader.astro";
+import Specimen from "../../components/Specimen.astro";
+import MediaPlaceholder from "../../components/MediaPlaceholder.astro";
+import FeatureCard from "../../components/FeatureCard.astro";
+import CrossLink from "../../components/CrossLink.astro";
+
+import monitorQ from "../../generated/panels/monitor_q.html?raw";
+import monitorDefault from "../../generated/panels/monitor_default.html?raw";
+import monitorVv from "../../generated/panels/monitor_vv.html?raw";
+---
+
+<Prototype
+  title="painted — homepage prototype"
+  description="Wave 1 homepage and shared-shell prototype for Painted."
+>
+  <div class="proto-shell proto-page">
+    <div class="proto-hero-grid">
+      <PageHeader
+        eyebrow="Semantic rendering for terminal cells"
+        title="One declared meaning. Every terminal surface."
+        summary="Painted turns semantic data into exact terminal cells — from a quiet line of output to a responsive CLI, a live delivery, and an interactive Surface."
+      >
+        <div class="proto-hero-actions">
+          <a class="proto-button" href="/learn/">Start with paint() <span aria-hidden="true">→</span></a>
+          <span class="proto-install"><span aria-hidden="true">$</span> pip install painted</span>
+        </div>
+      </PageHeader>
+
+      <div>
+        <Specimen label="A declared lens" detail="generated HTML" source="monitor.py">
+          <Fragment set:html={monitorDefault} />
+        </Specimen>
+        <aside class="proto-hero-note" aria-label="Specimen provenance">
+          <p>Cells, color, and borders here are published by Painted’s own HTML renderer.</p>
+          <p>The browser provides the document and navigation shell; the terminal grid remains a real rendered fragment.</p>
+        </aside>
+      </div>
+    </div>
+
+    <section class="proto-section" aria-labelledby="motion-heading">
+      <div class="proto-section-head">
+        <div>
+          <p class="proto-eyebrow">A single rendering model</p>
+          <h2 id="motion-heading">The behavior static output cannot show.</h2>
+        </div>
+        <p>A recording belongs here once it can show delivery through time and input. This prototype deliberately does not simulate that claim.</p>
+      </div>
+      <MediaPlaceholder
+        title="Recording planned: one dataset across delivery modes"
+        description="A future captured terminal recording will move the same semantic lens from quiet output through disclosure, live delivery, and an interactive Surface."
+        fallback="The genuine static fragments immediately below remain available when media is absent or motion is reduced."
+      />
+    </section>
+
+    <section class="proto-section" aria-labelledby="continuum-heading">
+      <div class="proto-section-head">
+        <div>
+          <p class="proto-eyebrow">Progressive disclosure</p>
+          <h2 id="continuum-heading">Escalate the surface, not the meaning.</h2>
+        </div>
+        <p>One monitor lens receives the same data at three points in the disclosure ladder. Wide cell grids keep their own scroll container.</p>
+      </div>
+      <div class="proto-continuum">
+        <div class="proto-continuum-item">
+          <p class="proto-continuum-label"><strong>01</strong> quiet · worst first</p>
+          <Specimen label="-q" detail="generated HTML"><Fragment set:html={monitorQ} /></Specimen>
+        </div>
+        <div class="proto-continuum-item">
+          <p class="proto-continuum-label"><strong>02</strong> default · a declared lens</p>
+          <Specimen label="default" detail="generated HTML"><Fragment set:html={monitorDefault} /></Specimen>
+        </div>
+        <div class="proto-continuum-item">
+          <p class="proto-continuum-label"><strong>03</strong> verbose · more evidence</p>
+          <Specimen label="-vv" detail="generated HTML"><Fragment set:html={monitorVv} /></Specimen>
+        </div>
+      </div>
+    </section>
+
+    <section class="proto-section" aria-labelledby="entry-heading">
+      <div class="proto-section-head">
+        <div>
+          <p class="proto-eyebrow">Choose an entry</p>
+          <h2 id="entry-heading">Start from the question you have.</h2>
+        </div>
+        <p>The canonical information architecture is visible now; these destinations are implemented in the next publishing wave.</p>
+      </div>
+      <div class="proto-card-grid">
+        <FeatureCard index="01" title="Learn" summary="Follow the altitude path from paint() through composition, lenses, CLI delivery, live output, and Surface." href="/learn/" linkLabel="Follow the path" />
+        <FeatureCard index="02" title="Guides" summary="Enter through a specific concern: fidelity, responsive width, vocabularies, live delivery, prompts, or testing." href="/guides/" linkLabel="Browse guides" />
+        <FeatureCard index="03" title="Demos" summary="See runnable primitives, patterns, applications, examples, and showcase pieces with their source and evidence." href="/demos/" linkLabel="Open demos" />
+        <FeatureCard index="04" title="Reference" summary="Find capabilities, modules, and representative published specimens without treating the design system as the product." href="/reference/" linkLabel="Look up a capability" />
+      </div>
+    </section>
+
+    <section class="proto-section" aria-label="Related destinations">
+      <div class="proto-cross-links">
+        <CrossLink eyebrow="Learn path" title="From value to Surface" summary="The progressive spine keeps the first useful stop clear while preserving the deeper implementation model." href="/learn/altitude/" linkLabel="View altitude path" />
+        <CrossLink eyebrow="Methodology" title="Rendered by Painted" summary="Static output, semantic documents, recordings, and browser shell each have an explicit source of truth." href="/about/rendered-by-painted/" linkLabel="Read the methodology" />
+        <CrossLink eyebrow="Compatibility" title="Existing walkthrough" summary="The current continuity page remains available while the new canonical learning structure is published." href="/walkthrough/" linkLabel="Visit walkthrough" />
+      </div>
+    </section>
+  </div>
+</Prototype>

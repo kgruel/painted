@@ -1,0 +1,27 @@
+---
+interface Props {
+  title: string;
+  description: string;
+  fallback: string;
+}
+
+const { title, description, fallback } = Astro.props;
+---
+
+<section class="proto-media" aria-labelledby="media-title">
+  <div class="proto-media-topline">
+    <p class="proto-eyebrow">Future recording · planned media</p>
+    <span class="proto-media-status">static fallback ready</span>
+  </div>
+  <div class="proto-media-frame">
+    <div class="proto-media-scan" aria-hidden="true">
+      <span>quiet</span><span>→</span><span>verbose</span><span>→</span><span>live</span><span>→</span><span>interactive</span>
+    </div>
+    <div class="proto-media-copy">
+      <span class="proto-media-glyph" aria-hidden="true">◌</span>
+      <h3 id="media-title">{title}</h3>
+      <p>{description}</p>
+    </div>
+  </div>
+  <p class="proto-media-fallback"><strong>Fallback:</strong> {fallback}</p>
+</section>

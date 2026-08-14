@@ -1,3 +1,20 @@
+---
+title: Primitives and Blocks
+summary: Build terminal output from immutable styles, cells, spans, lines, and blocks.
+slug: primitives-and-blocks
+order: 1
+source: docs/guides/01-primitives-and-blocks.md
+prerequisite:
+  label: Start with paint()
+  href: /learn/paint/
+altitudes:
+  - paint
+  - compose
+relatedDemos:
+  - primitives/cell
+  - primitives/span_line
+---
+
 # Primitives and Blocks
 
 painted is built from a small set of immutable “render layer” value types:

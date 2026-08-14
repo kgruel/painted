@@ -46,7 +46,12 @@ class DemoEntry:
 # runtime write, zero staleness. Do not promote this memo to disk.
 _CACHE: list[DemoEntry] | None = None
 
-_GROUPS = ("primitives", "patterns", "apps", "examples", "showcase")
+# Public within this private discovery module so build tooling can consume the
+# same tier order as the runtime discovery path.  Keep membership and ordering
+# here rather than duplicating them in website tooling.
+DEMO_TIERS = ("primitives", "patterns", "apps", "examples", "showcase")
+# Compatibility alias re-exported by ``_demo_cli``.
+_GROUPS = DEMO_TIERS
 
 
 def _find_demos_root() -> Path | None:
@@ -113,7 +118,7 @@ def discover_demos() -> list[DemoEntry]:
         return _CACHE
 
     entries: list[DemoEntry] = []
-    for group in _GROUPS:
+    for group in DEMO_TIERS:
         group_dir = root / group
         if not group_dir.is_dir():
             continue

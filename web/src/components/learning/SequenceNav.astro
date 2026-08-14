@@ -1,0 +1,35 @@
+---
+interface Destination {
+  href: string;
+  title: string;
+}
+
+interface Props {
+  previous?: Destination;
+  next?: Destination;
+  indexHref: string;
+  indexLabel: string;
+}
+
+const { previous, next, indexHref, indexLabel } = Astro.props;
+---
+
+<nav class="learn-sequence-nav" aria-label="Page sequence">
+  <div>
+    {previous && (
+      <a href={previous.href} rel="prev">
+        <span>Previous</span>
+        <strong><span aria-hidden="true">←</span> {previous.title}</strong>
+      </a>
+    )}
+  </div>
+  <a class="learn-sequence-index" href={indexHref}>{indexLabel}</a>
+  <div class="learn-sequence-next">
+    {next && (
+      <a href={next.href} rel="next">
+        <span>Next</span>
+        <strong>{next.title} <span aria-hidden="true">→</span></strong>
+      </a>
+    )}
+  </div>
+</nav>

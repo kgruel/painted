@@ -1,0 +1,63 @@
+---
+import { getCollection, render, type CollectionEntry } from "astro:content";
+import PageHeader from "../../components/PageHeader.astro";
+import GuideFacts from "../../components/learning/GuideFacts.astro";
+import SequenceNav from "../../components/learning/SequenceNav.astro";
+import Learning from "../../layouts/Learning.astro";
+import catalog from "../../generated/catalog.json";
+
+export async function getStaticPaths() {
+  const guides = (await getCollection("guides")).sort(
+    (left, right) => left.data.order - right.data.order,
+  );
+  return guides.map((entry, index) => ({
+    params: { slug: entry.data.slug },
+    props: {
+      entry,
+      previous: guides[index - 1],
+      next: guides[index + 1],
+    },
+  }));
+}
+
+interface Props {
+  entry: CollectionEntry<"guides">;
+  previous?: CollectionEntry<"guides">;
+  next?: CollectionEntry<"guides">;
+}
+
+const { entry, previous, next } = Astro.props;
+const { Content } = await render(entry);
+const demosById = new Map(catalog.demos.map((demo) => [demo.id, demo]));
+const relatedDemos = (entry.data.relatedDemos ?? []).map((id) => {
+  const demo = demosById.get(id);
+  if (!demo) throw new Error(`Guide ${entry.data.slug} names unknown demo ${id}`);
+  return demo;
+});
+---
+
+<Learning
+  title={`${entry.data.title} — Painted guide`}
+  description={entry.data.summary}
+  current="guides"
+>
+  <PageHeader eyebrow="Guide" title={entry.data.title} summary={entry.data.summary} />
+
+  <GuideFacts
+    prerequisite={entry.data.prerequisite}
+    altitudes={entry.data.altitudes}
+    relatedDemos={relatedDemos}
+    source={entry.data.source}
+  />
+
+  <article class="learn-prose">
+    <Content />
+  </article>
+
+  <SequenceNav
+    previous={previous ? { href: `/guides/${previous.data.slug}/`, title: previous.data.title } : undefined}
+    next={next ? { href: `/guides/${next.data.slug}/`, title: next.data.title } : undefined}
+    indexHref="/guides/"
+    indexLabel="All guides"
+  />
+</Learning>

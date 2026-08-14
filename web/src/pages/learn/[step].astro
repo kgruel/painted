@@ -1,0 +1,74 @@
+---
+import { getCollection } from "astro:content";
+import PageHeader from "../../components/PageHeader.astro";
+import PathRail from "../../components/learning/PathRail.astro";
+import SequenceNav from "../../components/learning/SequenceNav.astro";
+import Learning from "../../layouts/Learning.astro";
+import { altitudeHref, altitudeSteps, type AltitudeStep } from "../../data/learning";
+
+export function getStaticPaths() {
+  return altitudeSteps.map((step) => ({ params: { step: step.id }, props: { step } }));
+}
+
+interface Props {
+  step: AltitudeStep;
+}
+
+const { step } = Astro.props;
+const stepIndex = altitudeSteps.findIndex((candidate) => candidate.id === step.id);
+const previous = altitudeSteps[stepIndex - 1];
+const next = altitudeSteps[stepIndex + 1];
+const guides = (await getCollection("guides"))
+  .filter((guide) => guide.data.altitudes.includes(step.id))
+  .sort((left, right) => left.data.order - right.data.order);
+---
+
+<Learning
+  title={`${step.title} — Learn Painted`}
+  description={step.summary}
+  current="learn"
+>
+  <PathRail current={step.id} />
+
+  <div class="learn-step-hero">
+    <PageHeader
+      eyebrow={`Altitude ${String(stepIndex + 1).padStart(2, "0")}`}
+      title={step.title}
+      summary={step.summary}
+    >
+      <p class="learn-outcome"><strong>Useful outcome:</strong> {step.outcome}</p>
+    </PageHeader>
+    <aside class="learn-contract-card" aria-label="Rung contract">
+      <p>Contract at this rung</p>
+      <code>{step.contract}</code>
+    </aside>
+  </div>
+
+  <section class="learn-section" aria-labelledby="sideways-heading">
+    <div class="learn-section-head">
+      <h2 id="sideways-heading">Go sideways when the concern is specific</h2>
+      <p>Guides remain orthogonal to the progression. These are the authored guides that declare this altitude.</p>
+    </div>
+    {guides.length > 0 ? (
+      <div class="learn-guide-grid">
+        {guides.map((guide) => (
+          <article class="learn-guide-card">
+            <p class="proto-eyebrow">Guide</p>
+            <h2>{guide.data.title}</h2>
+            <p>{guide.data.summary}</p>
+            <a class="proto-text-link" href={`/guides/${guide.data.slug}/`}>Read guide <span aria-hidden="true">→</span></a>
+          </article>
+        ))}
+      </div>
+    ) : (
+      <p>No authored guide currently declares this rung. Continue along the altitude path or browse the complete guide index.</p>
+    )}
+  </section>
+
+  <SequenceNav
+    previous={previous ? { href: altitudeHref(previous.id), title: previous.title } : undefined}
+    next={next ? { href: altitudeHref(next.id), title: next.title } : undefined}
+    indexHref="/learn/altitude/"
+    indexLabel="Altitude overview"
+  />
+</Learning>

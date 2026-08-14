@@ -1,0 +1,56 @@
+---
+import PageHeader from "../../components/PageHeader.astro";
+import Learning from "../../layouts/Learning.astro";
+import { altitudeSteps, internalRungs } from "../../data/learning";
+---
+
+<Learning
+  title="Learn Painted"
+  description="Two progressive paths through Painted: from paint() to Surface, and from Cell to Surface."
+  current="learn"
+>
+  <PageHeader
+    eyebrow="Learn"
+    title="Start useful. Add altitude only when the work asks for it."
+    summary="Follow the product path from paint() to an interactive Surface, or use the implementation path to see the value types and host machinery underneath."
+  >
+    <div class="learn-actions">
+      <a class="proto-button" href="/learn/paint/">Start with paint() <span aria-hidden="true">→</span></a>
+      <a class="learn-secondary-link" href="/guides/">Browse task-shaped guides</a>
+    </div>
+  </PageHeader>
+
+  <section class="learn-split" aria-label="Learning paths">
+    <article class="learn-spine-card">
+      <p class="proto-eyebrow">Default path</p>
+      <h2>Altitude</h2>
+      <p>Begin with direct output, then add composition, interpretation, CLI behavior, changing state, and interaction.</p>
+      <p class="learn-spine-sequence">{altitudeSteps.map((step) => step.shortTitle).join(" → ")}</p>
+      <a class="proto-text-link" href="/learn/altitude/">View the altitude path <span aria-hidden="true">→</span></a>
+    </article>
+    <article class="learn-spine-card">
+      <p class="proto-eyebrow">Implementation model</p>
+      <h2>Internals</h2>
+      <p>Trace terminal meaning from individual cells through immutable rectangles and the interactive host.</p>
+      <p class="learn-spine-sequence">{internalRungs.map((rung) => rung.name).join(" → ")}</p>
+      <a class="proto-text-link" href="/learn/internals/">View the internal path <span aria-hidden="true">→</span></a>
+    </article>
+  </section>
+
+  <section class="learn-section" aria-labelledby="rungs-heading">
+    <div class="learn-section-head">
+      <h2 id="rungs-heading">Six useful stopping points</h2>
+      <p>Each rung is complete enough to ship. Continue only when the next capability becomes necessary.</p>
+    </div>
+    <ol class="learn-step-list">
+      {altitudeSteps.map((step, index) => (
+        <li>
+          <span class="learn-list-index">{String(index + 1).padStart(2, "0")}</span>
+          <h2>{step.title}</h2>
+          <p>{step.outcome}</p>
+          <a class="learn-list-link" href={`/learn/${step.id}/`}>Open rung <span aria-hidden="true">→</span></a>
+        </li>
+      ))}
+    </ol>
+  </section>
+</Learning>

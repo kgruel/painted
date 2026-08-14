@@ -12,12 +12,15 @@ ASCII (width 1) · width-1 non-ASCII (em-dash, arrow) · wide CJK/emoji (width 2
 stored as lead cell + space placeholder) · combining marks (width 0, *dropped*
 when building cells).
 
-It deliberately EXCLUDES the zero-width joiner (U+200D). Empirically, this
-``wcwidth`` build applies an emoji-ZWJ-join heuristic: ``wcswidth("x‍y")``
-returns 1, while painted drops the ZWJ and keeps x and y as two cells. That makes
-``len(cells) == display_width`` *falsely* fail — but the divergence is a wcswidth
-quirk, not a painted invariant. Excluding ZWJ keeps the alphabet in the regime
-where ``display_width(s) == sum(char_width(c) for c in s)``.
+It deliberately INCLUDES the zero-width joiner (U+200D). This alphabet once
+excluded it because ``display_width`` used sequence-aware ``wcswidth``, whose
+emoji-ZWJ-join heuristic measured "x\\u200dy" as one glyph while painted keeps
+x and y as two cells — making ``len(cells) == display_width`` falsely fail.
+The wrap-engine-unification arc inverted that: ``display_width`` now measures
+in the cell model (per-char, summed), the exact divergence that once forced
+the exclusion is the P1 bug class these laws exist to catch (a sequence-aware
+measure under-counting the per-char grid crashed the wrap engine on ZWJ
+emoji), so the joiner is load-bearing here, not a quirk to dodge.
 
 `no_ref_blocks()` — Blocks with NO ``ref`` and NO ``refs``. This is what forces the
 compose ops (join/pad/border) onto their ``Block._create`` fast path, which SKIPS
@@ -34,12 +37,13 @@ from painted import Block, Style, Wrap
 from painted.core._text_width import char_width
 from painted.core.cell import Cell
 
-# ASCII + width-1 non-ASCII + wide CJK + wide emoji + combining marks (NO ZWJ).
+# ASCII + width-1 non-ASCII + wide CJK + wide emoji + combining marks + ZWJ.
 _ASCII = "ab Z9.#"
 _NARROW_NONASCII = "—→±"  # — → ±
 _WIDE = "世界日本\U0001f600\U0001f389"  # 世 界 日 本 😀 🎉
 _COMBINING = "́̈"  # combining acute, combining diaeresis
-MIXED_ALPHABET = _ASCII + _NARROW_NONASCII + _WIDE + _COMBINING
+_JOINER = "‍"  # ZWJ — zero-width, splices emoji into clusters
+MIXED_ALPHABET = _ASCII + _NARROW_NONASCII + _WIDE + _COMBINING + _JOINER
 
 # Wide-heavy alphabet: forces 2-column chars against small width boundaries.
 WIDE_ALPHABET = "ab世界\U0001f600"  # a b 世 界 😀
