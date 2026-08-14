@@ -596,7 +596,10 @@ def _take_runs_prefix(runs: _StyledRuns, width: int) -> tuple[_StyledRuns, _Styl
                 head_chars.append(ch)
                 pos += 1
                 continue
-            if cw > width and not prefix and not head_chars:
+            if cw > width and remaining == width:
+                # Fresh row (no columns taken, zero-width marks aside): this
+                # char can never fit at this width — drop it here so it can't
+                # force an empty take.
                 consumed += cw
                 pos += 1
                 continue
@@ -645,6 +648,10 @@ def _char_wrap_runs(
         if not prefix:
             break  # stream drained by unrepresentable chars — no phantom row
         cells, refs = _cells_from_runs(prefix)
+        if not cells:
+            # A combining-marks-only prefix materializes to nothing (zero-width
+            # chars occupy no cell) — emitting it would be a phantom blank row.
+            continue
         rows.append(_pad_row(cells, width, pad_style))
         lanes.append(_pad_refs(refs, width) if refs is not None else None)
     if not rows:

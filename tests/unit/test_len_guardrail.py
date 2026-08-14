@@ -28,26 +28,41 @@ _SUSPICIOUS_ARG_RE = re.compile(
     r"(\.text\b|\btext\b|\btitle\b|\bcontent\b|\bword\b|\bkeys\b|\bkey\b|\bprefix\b|\bplaceholder\b|\bsummary\b|\bleaf\b|\bch\b)"
 )
 
-# Allowlist of len() calls that are intentionally about indices or collection sizes.
-# Keys are (path, lineno, source_snippet).
+# Allowlist of len() calls that are intentionally about indices or collection
+# sizes. Keys are (path, enclosing_function, source_snippet) — the function
+# name, not a line number, so unrelated edits and reformatting don't churn the
+# ratchet; only touching the named function's own len() moves it.
 ALLOWLIST = {
     # _run_width: len() is the display width for text proven ASCII one line up.
-    ("src/painted/core/block.py", 515, "len(text)"),
+    ("src/painted/core/block.py", "_run_width", "len(text)"),
     # _take_runs_prefix: codepoint cursor bound, not a width measure.
-    ("src/painted/core/block.py", 613, "len(text)"),
-    ("src/painted/views/components/_text_input.py", 23, "len(ch)"),
-    ("src/painted/views/components/_text_input.py", 34, "len(self.text)"),
-    ("src/painted/views/components/_text_input.py", 47, "len(self.text)"),
-    ("src/painted/views/components/_text_input.py", 57, "len(self.text)"),
-    ("src/painted/views/components/_text_input.py", 61, "len(text)"),
-    ("src/painted/views/components/_text_input.py", 69, "len(text)"),
-    ("src/painted/views/components/_text_input.py", 70, "len(text)"),
-    ("src/painted/views/components/_text_input.py", 83, "len(text)"),
+    ("src/painted/core/block.py", "_take_runs_prefix", "len(text)"),
+    ("src/painted/views/components/_text_input.py", "insert", "len(ch)"),
+    ("src/painted/views/components/_text_input.py", "delete_forward", "len(self.text)"),
+    ("src/painted/views/components/_text_input.py", "move_right", "len(self.text)"),
+    ("src/painted/views/components/_text_input.py", "move_end", "len(self.text)"),
+    ("src/painted/views/components/_text_input.py", "set_text", "len(text)"),
+    ("src/painted/views/components/_text_input.py", "_ensure_visible", "len(text)"),
 }
 
 
+def _enclosing_function(tree: ast.Module, lineno: int) -> str:
+    """Name of the innermost function containing lineno ('<module>' if none)."""
+    innermost = "<module>"
+    innermost_span = None
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            end = node.end_lineno or node.lineno
+            if node.lineno <= lineno <= end:
+                span = end - node.lineno
+                if innermost_span is None or span < innermost_span:
+                    innermost = node.name
+                    innermost_span = span
+    return innermost
+
+
 def test_no_new_len_on_text_variables_in_display_modules():
-    violations: list[tuple[str, int, str]] = []
+    violations: list[tuple[str, str, str]] = []
 
     for abs_path, rel_key in TARGET_MODULES:
         src = abs_path.read_text(encoding="utf-8")
@@ -66,9 +81,10 @@ def test_no_new_len_on_text_variables_in_display_modules():
                 continue
 
             call_src = ast.get_source_segment(src, node) or "len(?)"
-            key = (rel_key, node.lineno, call_src)
+            func = _enclosing_function(tree, node.lineno)
+            key = (rel_key, func, call_src)
             if key not in ALLOWLIST:
-                violations.append((rel_key, node.lineno, call_src))
+                violations.append((rel_key, f"{func}:{node.lineno}", call_src))
 
     if violations:
         formatted = "\n".join(f"- {p}:{ln}: {src}" for p, ln, src in violations)

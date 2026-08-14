@@ -451,6 +451,16 @@ class TestLineNewlines:
         assert block.cell_ref(0, 0) == "fact:01X"
         assert block.cell_ref(0, 1) == "fact:01X"
 
+    def test_char_wrap_combining_only_span_no_phantom_row(self):
+        # A combining mark in its own span after a row-filling char: it
+        # materializes to no cell, so CHAR wrap must not grow a blank row
+        # (matches the pre-run-engine behavior, which dropped it).
+        from painted import Wrap
+
+        line = Line(spans=(Span("a", Style()), Span("́", Style())))
+        block = line.wrap(1, wrap=Wrap.CHAR)
+        assert block.height == 1
+
     def test_crlf_split_across_spans_is_one_break(self):
         # The \r ends one span, the \n starts the next: still one CRLF break,
         # no phantom column from the \r (the run engine trims it across the

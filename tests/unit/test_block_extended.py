@@ -398,6 +398,16 @@ class TestCharWrapRuns:
         assert rows[1][0].char == "c"
         assert rows[1][1].char == "d"
 
+    def test_combining_mark_before_unrepresentable_wide_no_phantom_row(self):
+        # "a" + combining acute + wide char, width=1: the wide char can never
+        # fit and is dropped; the stranded combining mark materializes to no
+        # cell and must not become a phantom blank row (regression: the run
+        # take let a zero-width mark shield the wide char from the fresh-row
+        # drop, emitting a combining-only prefix as an extra row).
+        b = Block.text("á世", S, width=1, wrap=Wrap.CHAR)
+        assert b.height == 1
+        assert [c.char for c in b.row(0)] == ["a"]
+
 
 # --- _word_wrap_runs internals ---
 
