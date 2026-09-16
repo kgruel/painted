@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from ._text_width import char_width, display_width
+from ._normalize import freeze_fields
 from .buffer import BufferView
 from .cell import Style
 
@@ -40,10 +41,23 @@ class Span:
 
 @dataclass(frozen=True, slots=True)
 class Line:
-    """A sequence of spans forming a single line of styled text."""
+    """A sequence of spans forming a single line of styled text.
+
+    ``spans`` is a tuple *after* construction — the annotation states the
+    invariant, and ``__post_init__`` normalizes any other sequence into one.
+    This follows ``Block.__init__``, which likewise accepts a ``Sequence`` and
+    freezes it internally: a public constructor normalizes, and the tuple-only
+    fast path stays private (``Block._create``). Without it a ``Line`` built
+    from a list behaves correctly through ``width``/``to_block``/``wrap`` and
+    then fails several frames away, where the list first meets a tuple
+    concatenation — a declaration violation surfacing far from its cause.
+    """
 
     spans: tuple[Span, ...] = ()
     style: Style = Style()
+
+    def __post_init__(self) -> None:
+        freeze_fields(self, "spans")
 
     @classmethod
     def plain(cls, text: str, style: Style = Style()) -> Line:

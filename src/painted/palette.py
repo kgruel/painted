@@ -25,6 +25,7 @@ from contextvars import ContextVar, Token
 from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
 
+from .core._normalize import freeze_fields
 from .core.cell import Style
 
 # The five semantic role names an app may reference by string, plus ``text`` —
@@ -101,6 +102,9 @@ class Palette:
             Style(fg="cyan"),
         )
     )
+
+    def __post_init__(self) -> None:
+        freeze_fields(self, "series")
 
     def resolve_style(self, style: Style) -> Style:
         """Resolve a cell ``Style`` against this palette's substrate defaults.

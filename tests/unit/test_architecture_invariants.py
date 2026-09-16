@@ -571,6 +571,17 @@ def _field_is_init_false(value: ast.expr | None) -> bool:
 
 
 def test_frozen_dataclasses_guard_mutable_collection_fields() -> None:
+    """Frozen dataclasses with a mutable-typed field must coerce in __post_init__.
+
+    Blind spot, by construction: this asks whether the *annotation* names a
+    mutable head (list/dict/set), so a field annotated ``tuple[X, ...]`` or
+    ``Sequence[X]`` never reaches the check — yet a caller can still hand either
+    one a list, since Python enforces no annotation. That is exactly how
+    ``Line.spans`` came to accept a list and fail four frames later inside
+    ``table()`` (consumer review, 2026-09-15). The behavioral half of this rule
+    lives in ``tests/unit/test_frozen_containers.py``; ``__post_init__`` here is
+    only a *static proxy* for coercion, and this tier never executes.
+    """
     painted_root = _painted_root()
     violations: list[str] = []
     for py_file in painted_root.rglob("*.py"):
@@ -613,6 +624,13 @@ def test_frozen_collection_fields_defensively_copied() -> None:
 
     Mirrors test_block_defensively_freezes_rows for the two types fixed in the
     invariant-audit remediation.
+
+    Scope note: these are hand-picked examples spanning BOTH stability tiers —
+    ``AppCommand``/``HelpArg`` live on the evolving ``painted.cli`` surface,
+    which is why they stay here. The *stable* surface is covered by enumeration
+    instead, in ``tests/unit/test_frozen_containers.py``: it reflects over every
+    caller-settable sequence field in ``painted.core``/``painted.views`` and
+    proves each normalizes, rather than relying on anyone adding a case.
     """
     from painted.cli import AppCommand
     from painted.icon_set import IconSet

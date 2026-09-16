@@ -174,7 +174,7 @@ class Block:
     @staticmethod
     def text(
         content: str,
-        style: Style,
+        style: Style = Style(),
         *,
         width: int | None = None,
         wrap: Wrap = Wrap.NONE,
@@ -191,6 +191,10 @@ class Block:
         spaces — the renderer silently rewriting declared meaning. The
         ``width <= 0`` degenerate case keeps its empty-block contract and
         collapses before the split.
+
+        ``style`` defaults to an unstyled ``Style()``, matching ``Span``,
+        ``Line.plain`` and ``Cell`` — the text factories one rung down. The
+        asymmetry cost every layout caller a literal ``Style()`` argument.
         """
         ref = _resolve_ref_alias(ref, id, spelling="Block.text(id=)")
         if width is not None and width <= 0:

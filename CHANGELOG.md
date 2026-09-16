@@ -86,6 +86,29 @@ remediation.
   one form (`Plaque` + `render_plaque` + the shared `NOTE_TAG`) — named-only
   (`--note`, implied at no depth), capped, and signed, with those conventions
   held by tests rather than by review.
+- **`table_lens` — render a list of records as a table in one call.** The lens
+  rung of `table()`: `paint(rows, lens=table_lens)` (or any `run_cli`/`Surface`
+  renderer) takes a sequence of dicts, dataclasses or NamedTuples and derives
+  columns from the declared field names, where driving the stateful `table()`
+  component by hand needed a `Column` list, `Line`-wrapped cells, a
+  `TableState` and a `visible_height`. Numeric columns align right; a row
+  omitting a field gets an empty cell. A bare mapping and a sequence of scalars
+  are refused rather than coerced — `paint()` already transcribes both.
+- **`Block.text` no longer requires a `style` argument.** `Block.text("hi")`
+  now matches `Span`, `Line.plain` and `Cell`, which have always defaulted to
+  an unstyled `Style()`.
+
+### Fixed
+
+- **A `Line` built from a list of spans no longer breaks `table()`.** `Line`
+  now normalizes any sequence to a tuple at construction, as `Block` and
+  `IconSet` already did — previously `Line([Span("x")])` measured, blocked and
+  wrapped correctly, then raised `TypeError: can only concatenate list (not
+  "tuple") to list` from inside `table()`'s cell padding. The same
+  normalization now covers every sequence field on the stable surface
+  (`Doc.body`, `Section.body`, `Defs.items`, `Items.entries`, `Palette.series`,
+  `IconSet.sparkline`, `SpinnerFrames.frames`, `DataNode.path`), held together
+  by an enumerating test rather than by whoever remembers the rule.
 
 ### Changed
 

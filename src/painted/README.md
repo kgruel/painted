@@ -193,16 +193,57 @@ painted.install()                                          # uncaught tracebacks
 
 ## Data rendering
 
-For lenses (auto-dispatch, tree, chart, flame) and components (spinner, progress, list, table, text input, data explorer):
+Everything here lives in `painted.views`. Reach for it by the problem, not the
+name — that is the order this list is in.
+
+**I have data to show, and I know what it means** — a *lens*, `fn(data, zoom, width) → Block`:
 
 ```python
-from painted.views import shape_lens, tree_lens, chart_lens, flame_lens
-from painted.views import sparkline, sparkline_with_range
-from painted.views import spinner, list_view, progress_bar, table, text_input, data_explorer
-from painted.views import render_big, BigTextFormat
+from painted.views import table_lens, tree_lens, chart_lens, flame_lens, shape_lens
 ```
 
-See `views/CLAUDE.md` for details.
+| I have… | Use | Gives you |
+|---|---|---|
+| rows of records (dicts, dataclasses, NamedTuples) | **`table_lens`** | aligned columns derived from the declared fields; numeric columns right-align |
+| nested/hierarchical data | **`tree_lens`** | indented tree with branch glyphs; `node_renderer` for custom node content |
+| numbers to compare | **`chart_lens`** | horizontal bars, labeled |
+| proportions of a whole, nested | **`flame_lens`** | flame-graph segments |
+| no idea yet — exploring | **`shape_lens`** | dispatch by shape. The *inference* lens: use it to explore, never as the spine |
+
+**I have a stream of events, logs, or an audit trail** — the record layer:
+
+```python
+from painted.views import record_line, record_timeline, record_map, PayloadLens
+```
+
+- **`record_line(...)`** — one event as a line: a continuous gutter rail, zoom-aware
+  timestamps, kind coloring, and continuation lines at DETAILED/FULL. Write a
+  `PayloadLens` to interpret your domain's payload; `record_line` owns the structure.
+  This is what to reach for *before* writing an ad-hoc log printer.
+- **`record_timeline`** / **`record_map`** — many records as a time axis or a grid.
+- Gutter and attention factories (`gutter_lifecycle`, `gutter_freshness`,
+  `attention_staleness`, …) encode ONE dimension on the rail. Pick one.
+
+**I need something that holds state across frames** — a *component*,
+`render_fn(state, …) → Block` over frozen state you own:
+
+```python
+from painted.views import spinner, progress_bar, list_view, table, text_input, data_explorer
+```
+
+- **`table`** — the scrolling, selectable table. `table_lens` above is its lens rung:
+  if you are rendering a *static* table, use the lens and skip the state setup.
+- **`list_view`**, **`data_explorer`** — scrollable list / interactive data browser.
+- **`spinner`**, **`progress_bar`** — animation over `InPlaceRenderer` (Level 3).
+- **`text_input`** — single-line input with a cursor.
+
+**Odds and ends**: `sparkline` / `sparkline_with_range` (inline mini-charts),
+`callout` (severity-tagged message line), `render_big` / `BigTextFormat` (banner text).
+
+Multi-command CLIs have their own front door — `run_app` / `AppCommand` (Level 2),
+not `run_cli` per command.
+
+See `views/CLAUDE.md` for the full contracts.
 
 ## Aesthetic customization
 

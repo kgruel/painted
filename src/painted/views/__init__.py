@@ -54,6 +54,7 @@ __all__ = [
     "NodeRenderer",
     "shape_lens",
     "tree_lens",
+    "table_lens",
     "chart_lens",
     "flame_lens",
     "render_traceback",
@@ -166,6 +167,7 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     # Stateless views
     "NodeRenderer": (".lens", "NodeRenderer"),
     "shape_lens": (".lens", "shape_lens"),
+    "table_lens": (".lens", "table_lens"),
     "tree_lens": (".lens", "tree_lens"),
     "chart_lens": (".lens", "chart_lens"),
     "flame_lens": (".lens", "flame_lens"),

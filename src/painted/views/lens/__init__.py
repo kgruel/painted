@@ -5,6 +5,7 @@ __all__ = [
     "chart_lens",
     "flame_lens",
     "shape_lens",
+    "table_lens",
     "tree_lens",
 ]
 
@@ -13,6 +14,7 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "chart_lens": (".chart", "chart_lens"),
     "flame_lens": (".flame", "flame_lens"),
     "shape_lens": (".shape", "shape_lens"),
+    "table_lens": (".table", "table_lens"),
     "tree_lens": (".tree", "tree_lens"),
 }
 

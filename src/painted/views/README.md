@@ -7,11 +7,12 @@ Lenses (stateless) and components (frozen state + pure render). Import everythin
 Stateless functions: `fn(data, zoom, width) → Block`.
 
 ```python
-from painted.views import shape_lens, tree_lens, chart_lens, flame_lens, sparkline
+from painted.views import shape_lens, table_lens, tree_lens, chart_lens, flame_lens, sparkline
 ```
 
 - **`shape_lens`** — auto-dispatch by data shape: the explicit *inference* lens (`lens=shape_lens`). Dict → key-value, list → items, numeric → chart, nested → tree. `paint()`'s no-lens default *transcribes* declared shape — it never infers arrangement; `shape_lens` is what you reach for when you want the guess.
-- **`tree_lens`** — hierarchical data with expand/collapse.
+- **`table_lens`** — a sequence of records (dicts, dataclasses, NamedTuples) as aligned columns. The lens rung of `table()`: columns are derived from the *declared* field names (union, first-seen order), a row omitting a field gets an empty cell, and a column whose values are all numeric aligns right — the type is the declaration. Zoom is two-rung on purpose (`0` = count line, `>=1` = the table): column importance is not declared by the data, so there is no ladder that drops columns. Refuses a bare mapping and a sequence of scalars — `paint()` already transcribes both. Pass `columns=` to override widths/headers; use `table()` itself when you need scrolling or selection.
+- **`tree_lens`** — hierarchical data with expand/collapse. A node slot is an offer of height 1: `node_renderer` must return exactly one row (a taller Block raises `ContractError`, never a silent crop). For multi-line node detail, nest it as child nodes.
 - **`chart_lens`** — numeric data as horizontal bar charts.
 - **`flame_lens`** — proportional visualization (flame graph style).
 - **`sparkline`** / **`sparkline_with_range`** — inline mini-charts from numeric sequences.
@@ -36,7 +37,7 @@ from painted.views import DataExplorerState, data_explorer
 - **`spinner(state) → Block`** — animated spinner. Frames: `DOTS`, `LINE`, `BRAILLE`.
 - **`progress_bar(state) → Block`** — horizontal progress bar.
 - **`list_view(state, items, render_item) → Block`** — scrollable list with selection.
-- **`table(state, rows, columns) → Block`** — scrollable table with headers.
+- **`table(state, columns, rows, visible_height) → Block`** — scrollable table with headers and selection. For a *static* table, reach for `table_lens` instead.
 - **`text_input(state) → Block`** — single-line input with cursor.
 - **`data_explorer(state) → Block`** — interactive data browser.
 

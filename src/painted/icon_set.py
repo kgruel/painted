@@ -20,6 +20,8 @@ from contextvars import ContextVar, Token
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
 
+from .core._normalize import freeze_fields
+
 
 @dataclass(frozen=True)
 class IconSet:
@@ -89,11 +91,10 @@ class IconSet:
     scroll_down: str = "▼"
 
     def __post_init__(self) -> None:
-        # Coerce a caller-owned sequence to a tuple so this frozen value cannot
-        # be mutated through a retained reference (the value is indexed at
-        # render time, so post-construction mutation would be observable).
-        if not isinstance(self.spinner, tuple):
-            object.__setattr__(self, "spinner", tuple(self.spinner))
+        # Coerce caller-owned sequences to tuples so this frozen value cannot be
+        # mutated through a retained reference (both are indexed at render time,
+        # so post-construction mutation would be observable).
+        freeze_fields(self, "spinner", "sparkline")
 
 
 ASCII_ICONS = IconSet(

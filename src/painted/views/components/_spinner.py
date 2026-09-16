@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
+from ...core._normalize import freeze_fields
 from ...core.block import Block
 from ...core.cell import Style
 from ...cursor import Cursor, CursorMode
@@ -18,6 +19,9 @@ class SpinnerFrames:
     """A set of animation frames for a spinner."""
 
     frames: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        freeze_fields(self, "frames")
 
 
 DOTS = SpinnerFrames(frames=("⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"))

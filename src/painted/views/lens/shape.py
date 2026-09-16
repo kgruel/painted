@@ -7,6 +7,7 @@ from enum import Enum
 from typing import TYPE_CHECKING, Any
 
 from ...core._text_width import display_width, truncate, truncate_ellipsis
+from ._records import format_value, is_namedtuple
 
 if TYPE_CHECKING:
     from ...core.fidelity import Fidelity
@@ -30,9 +31,9 @@ _CYCLE_MARKER = "↻ <cycle>"
 _DEPTH_MARKER = "…"
 
 
-def _is_namedtuple(x: Any) -> bool:
-    """A tuple carrying the NamedTuple protocol (declared field schema)."""
-    return isinstance(x, tuple) and hasattr(x, "_fields") and hasattr(x, "_asdict")
+# The declared-schema vocabulary lives in `_records` so the table lens answers
+# "what fields does this declare?" exactly as transcription does.
+_is_namedtuple = is_namedtuple
 
 
 def _muted_marker(text: str, width: int | None) -> Block:
@@ -255,7 +256,7 @@ def _render_scalar(
 
     if zoom == 1:
         # Truncated value
-        text = _format_value(value)
+        text = format_value(value)
         if width is not None and display_width(text) > width:
             text = truncate_ellipsis(text, width) if width > 1 else truncate(text, width)
         return Block.text(text, style, width=width)
@@ -264,24 +265,13 @@ def _render_scalar(
     # `max_str` cap is a char budget (fidelity.chars), not a width — it applies
     # under natural sizing too; only the final display-width clip is width-gated.
     max_str = fidelity.chars if fidelity and fidelity.chars > 0 else _MAX_STR_DISPLAY
-    text = _format_value(value)
+    text = format_value(value)
     if isinstance(value, str) and display_width(text) > max_str:
         original_chars = len(value)
         text = truncate(text, max_str) + f"... [{original_chars} chars]"
     if width is not None and display_width(text) > width:
         text = truncate_ellipsis(text, width) if width > 1 else truncate(text, width)
     return Block.text(text, style, width=width)
-
-
-def _format_value(value: Any) -> str:
-    """Format a value for display."""
-    if value is None:
-        return "None"
-    if isinstance(value, bool):
-        return str(value)
-    if isinstance(value, str):
-        return value
-    return str(value)
 
 
 def _render_dict(
