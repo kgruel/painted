@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "recordings": [
+    {
+      "id": "apps/focus_form",
+      "target_kind": "demo",
+      "recipe": "demos/recordings/apps-focus-form.tape",
+      "command": "uv run python -m tools.record_media apps/focus_form",
+      "viewport": {
+        "width": 820,
+        "height": 500
+      },
+      "duration_seconds": 4.633333,
+      "frame_count": 278,
+      "video": "/media/apps-focus-form.mp4",
+      "gif": null,
+      "poster": {
+        "path": "/media/apps-focus-form-poster.png",
+        "frame": 230
+      },
+      "fallback_specimen_id": null,
+      "accessibility_description": "A keyboard-operated form moves focus through hostname, port, username, and submit; entered values appear in the submitted confirmation."
+    },
+    {
+      "id": "homepage/continuum",
+      "target_kind": "homepage",
+      "recipe": "demos/recordings/homepage-continuum.tape",
+      "command": "uv run python -m tools.record_media homepage/continuum",
+      "viewport": {
+        "width": 760,
+        "height": 520
+      },
+      "duration_seconds": 7.866667,
+      "frame_count": 472,
+      "video": "/media/homepage-continuum.mp4",
+      "gif": null,
+      "poster": {
+        "path": "/media/homepage-continuum-poster.png",
+        "frame": 420
+      },
+      "fallback_specimen_id": null,
+      "accessibility_description": "Health checks progress from pending to four healthy, one degraded, and one down; the expanded view names each service, latency, and result."
+    }
+  ]
+}
