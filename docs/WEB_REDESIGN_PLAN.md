@@ -538,9 +538,15 @@ editorial/API-currentness pass or deployment.
 - Hidden setup frames are removed explicitly at raw frame 20. The homepage MP4
   is 702×468, 60fps, 472 frames, and 7.866667 seconds; its poster selects encoded
   frame 420. The focus-form MP4 is 766×450, 60fps, 278 frames, and 4.633333
-  seconds; its poster selects encoded frame 230. First, middle, last, and poster
-  frames were inspected for both accepted assets with no shell noise, clipping,
-  illegible color, or cell/glyph defect.
+  seconds; its poster selects encoded frame 230. The historical inspection of
+  first, middle, last, and poster frames reported no shell noise, clipping,
+  illegible color, or cell/glyph defect. **2026-09-26 correction (WEB-001):**
+  preparation evidence, confirmed by the Fable 5.1 HIGH review of checkpoint
+  `5ae9062`, shows a visible `>` shell prompt in homepage encoded frames 0 and
+  471 and in the published poster. The historical blanket "no shell noise"
+  claim is therefore incorrect. All MP4/PNG bytes are preserved; accepting the
+  prompt or authorizing a re-recording remains an owner decision, not new media
+  acceptance. Native H.264 browser playback remains unverified.
 
 ### Recipe, manifest, and drift boundary
 

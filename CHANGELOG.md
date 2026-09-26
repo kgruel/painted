@@ -45,6 +45,7 @@ breaking changes.
 - **Watch real terminal recordings on the website homepage and focus-form demo.**
   Native playback controls, posters, and visible descriptions accompany
   drift-checked media metadata; guide demo links now open their detail pages.
+  ([5ae9062](https://github.com/kgruel/painted/commit/5ae9062b3fac16fdf67388eaf0414b6f9da603af))
 
 ## [0.14.0] — 2026-08-13
 
