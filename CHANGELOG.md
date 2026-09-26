@@ -42,6 +42,11 @@ breaking changes.
   engine) — so measuring before materializing always agrees.
   ([8954229](https://github.com/kgruel/painted/commit/8954229))
 
+### Added
+
+- **Explore historical operational evidence with the Fieldwork demo.** Search
+  records, follow explicit references, and retrace readings in the CLI or TUI.
+
 ## [0.14.0] — 2026-08-13
 
 The **honesty remediation** (0.14) — RENDER_MODEL.md law 6 ("the layer that

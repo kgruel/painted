@@ -1,0 +1,152 @@
+{
+  "source": "gruel.network / homelab-coord / selected historical records",
+  "description": "Eight unmodified operational facts selected on 2026-09-04. Timestamps are recording times; payload.date, where present, is the reported event date. This is an excerpt, not a current health assessment. Unresolved references are retained.",
+  "facts": [
+    {
+      "id": "01KWN07EGGNMJDMKT2HPJHD5QK",
+      "kind": "incident",
+      "ts": 1783116315.151986,
+      "observer": "relay",
+      "payload": {
+        "name": "gitlab-oom-ssh-banner-2026-04-20",
+        "message": "GitLab VM (3.8GB RAM, no swap) ran out of memory: gitaly consumed 3.3GB leaving <140MB for OS + sshd. Symptom was TCP handshake succeeding (nc -zv OK) but SSH banner exchange stalling — caused by fork failure from memory starvation, not a network/auth issue. Fix: docker restart gitlab freed 3.0GB, container healthy within ~60s. Long-term fix identified but not yet applied: add swap or increase VM RAM from 4GB to 6GB.",
+        "date": "2026-04-20",
+        "source": "changelog-backfill",
+        "host": "gitlab",
+        "service": "gitlab"
+      }
+    },
+    {
+      "id": "01KWN07EKS1ZAPNX2RND15VPJJ",
+      "kind": "practice",
+      "ts": 1783116315.257276,
+      "observer": "relay",
+      "payload": {
+        "name": "ssh-banner-stall-is-memory-starvation",
+        "message": "On a git/SSH host, if `nc -zv` succeeds (TCP handshake OK) but the SSH banner exchange stalls or hangs, suspect memory starvation causing fork failure rather than network or auth problems. Diagnose with `free -h` on the VM and `docker stats` on the container; restarting the memory-starved container is often sufficient to recover.",
+        "date": "2026-04-20",
+        "source": "changelog-backfill",
+        "incident": "incident/gitlab-oom-ssh-banner-2026-04-20",
+        "incident_ref": "01KWN07EGGNMJDMKT2HPJHD5QK"
+      }
+    },
+    {
+      "id": "01KWN07FH5ZTJCABESGXK9F3PF",
+      "kind": "incident",
+      "ts": 1783116316.19746,
+      "observer": "relay",
+      "payload": {
+        "name": "dev-vm-tmp-tmpfs-wedge-2026-04-28",
+        "message": "dev VM's /tmp is tmpfs sized at 1.5GB on a 3GB VM. Receiving a 2.2GB scp into /tmp consumed all available memory and wedged sshd. Emergency fix: 2GB /swapfile provisioned inline (fallocate/mkswap/swapon, persisted in fstab). Root-cause fix: bumped VM RAM from 3072 to 6144 MB in terraform/vm-dev.tf; the swap stays as belt-and-suspenders.",
+        "date": "2026-04-28",
+        "source": "changelog-backfill",
+        "host": "dev",
+        "path": "terraform/vm-dev.tf",
+        "deploy": "deploy/dev-vm-cleanup-2026-04-28",
+        "deploy_ref": "01KWN07FAK07NWDTY09VNZBHA1"
+      }
+    },
+    {
+      "id": "01KXBYCRB5EWHDHTAQ32HE0PT8",
+      "kind": "incident",
+      "ts": 1783886143.845138,
+      "observer": "sol/homelab-audit",
+      "payload": {
+        "name": "monitor-alert-selector-blindness-2026-07-12",
+        "status": "open",
+        "severity": "high",
+        "discovered_by": "sol/homelab-audit",
+        "audit_vertex": "homelab-audit",
+        "message": "Both Prometheus and Grafana HostDown rules query job=node while the live job is node-exporter; DockerDaemonDown queries nonexistent job=docker. Whole-host and Docker-daemon failure rules are inert. Grafana owns Telegram while Prometheus has no Alertmanager, so alert evaluation/ownership also needs consolidation.",
+        "audit_entity": "finding--observability--inert-alert-selectors"
+      }
+    },
+    {
+      "id": "01KY6DHHMM3Y41E2QHXAKS74NA",
+      "kind": "incident",
+      "ts": 1784774444.58454,
+      "observer": "relay",
+      "payload": {
+        "name": "media-root-disk-full-2026-07-22",
+        "message": "Jellyfin crash-looped on media (192.168.1.40) with exit 139: its startup guard refuses to boot below 2GiB free on /config/data. Root cause: unbounded /var/log/journal grew to 3.1G on a 32G root disk (95% full, 1.7G free), no SystemMaxUse cap set. journald had regrown after a prior 2026-05 cleanup (docs/operations/homelab-audit-2026-05-24.md flagged 91% full and recommended a bump) since the fix then was only a one-time vacuum, not a durable cap.",
+        "ref": "practice/jellyfin-cache-nvme-move",
+        "_unresolved_refs": [
+          {
+            "field": "ref",
+            "addr": "practice/jellyfin-cache-nvme-move",
+            "kind": "practice",
+            "key": "jellyfin-cache-nvme-move"
+          }
+        ]
+      }
+    },
+    {
+      "id": "01KY6DHHR8TQ5ZSSB9R9ZF5WSC",
+      "kind": "deploy",
+      "ts": 1784774444.769268,
+      "observer": "relay",
+      "payload": {
+        "name": "media-root-disk-bump-2026-07-22",
+        "message": "Bumped media VM (vmid 302) root disk 32G -> 50G: qm resize on pve-main (LVM, online), growpart /dev/sda 1 + resize2fs /dev/sda1 inside the VM (no reboot needed). terraform/vm-media.tf disk size updated to 50 for consistency (disk changes are in lifecycle.ignore_changes so terraform plan shows no drift — the .tf value only matters for VM recreation from scratch).",
+        "ref": "incident/media-root-disk-full-2026-07-22",
+        "ref_ref": "01KY6DHHMM3Y41E2QHXAKS74NA"
+      }
+    },
+    {
+      "id": "01KY6DHHVZ30PM2CAMM1PPSJJM",
+      "kind": "practice",
+      "ts": 1784774444.891403,
+      "observer": "relay",
+      "payload": {
+        "name": "journald-size-cap-provisioning",
+        "message": "systemd-journald has no default disk cap; on flat-compose VMs with small (20-32G) root disks this silently fills the disk over months (seen on media and on runner-01/runner-02, see practice/uncapped-docker-json-file-logging). Fix pattern: drop /etc/systemd/journald.conf.d/00-size-cap.conf with SystemMaxUse=1G + SystemKeepFree=2G, both live (systemctl restart systemd-journald) and baked into the VM's cloud-init write_files (proxmox/vm-media.yml) so a re-provisioned VM inherits the cap instead of re-discovering this the hard way. Not yet applied to other VMs' cloud-init — only media so far.",
+        "ref": "incident/media-root-disk-full-2026-07-22",
+        "ref_ref": "01KY6DHHMM3Y41E2QHXAKS74NA"
+      }
+    },
+    {
+      "id": "01KY6DZSQ6DF0WGQGH40HKMYWE",
+      "kind": "deploy",
+      "ts": 1784774911.62331,
+      "observer": "relay",
+      "payload": {
+        "name": "journald-fleet-cap-rollout-2026-07-22",
+        "message": "Rolled out the media journald-cap fix (practice/journald-size-cap-provisioning) fleet-wide: 13/14 guest VMs got a live /etc/systemd/journald.conf.d/00-size-cap.conf (SystemMaxUse=1G/SystemKeepFree=2G standard, 300M/800M on the 10G-disk runners) applied via kaygee sudo (deploy's sudoers is scoped narrower than kaygee's NOPASSWD:ALL on most hosts) plus the same block baked into each proxmox/vm-*.yml cloud-init and re-uploaded to the correct Proxmox node's snippet storage (pve-main/pve-nas/pve-dev — vm-runner.yml uploaded to both pve-main and pve-nas since runner-01/02 live on different nodes). Pre-fix journal sizes ranged 1-4GB uncapped on every host; dev was at 96% root-disk full (811M free, worse than media's incident) and infra at 88% (3.7G free) — both now have headroom back (dev ~1.8G free, infra ~5.8G free). hermes (192.168.1.52) was unreachable (ssh timeout) — cloud-init updated and snippet uploaded to pve-dev, but the live journald.conf.d drop-in was NOT applied; needs a manual pass once it's back up. commission (vmid 407) and homeassistant (HAOS) were out of scope — commission has no live VM yet (config-only stub), HAOS isn't part of this repo's cloud-init/docker-compose fleet.",
+        "ref": "practice/journald-size-cap-provisioning",
+        "ref_ref": "01KY6DHHVZ30PM2CAMM1PPSJJM"
+      }
+    }
+  ],
+  "checks": [
+    {
+      "records": [
+        "01KY6DHHMM3Y41E2QHXAKS74NA",
+        "01KY6DHHVZ30PM2CAMM1PPSJJM",
+        "01KY6DZSQ6DF0WGQGH40HKMYWE"
+      ],
+      "question": "How much disk space is available now?",
+      "command": "./scripts/host-cleanup.sh media",
+      "scope": "Run in gruel.network. Default mode audits; the historical rollout still needs host-by-host verification.",
+      "source": "scripts/host-cleanup.sh"
+    },
+    {
+      "records": [
+        "01KWN07EGGNMJDMKT2HPJHD5QK",
+        "01KWN07EKS1ZAPNX2RND15VPJJ"
+      ],
+      "question": "Is the GitLab stack responding now?",
+      "command": "./hlab status gitlab",
+      "scope": "Run in gruel.network. A status response alone does not establish available memory.",
+      "source": "hlab"
+    },
+    {
+      "records": [
+        "01KXBYCRB5EWHDHTAQ32HE0PT8"
+      ],
+      "question": "Which alerts are firing now?",
+      "command": "./scripts/alert-check.sh --firing",
+      "scope": "Run in gruel.network. No firing alerts does not prove that selectors cover every host.",
+      "source": "scripts/alert-check.sh"
+    }
+  ]
+}

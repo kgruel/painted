@@ -82,3 +82,15 @@ The fidelity demo supports:
 ```bash
 uv run python demos/tour.py
 ```
+
+## Fieldwork: investigating recorded evidence
+
+```bash
+uv run painted demos fieldwork -i
+uv run painted demos fieldwork --match journald -v --checks
+```
+
+Search real historical incidents from gruel.network, follow references to
+practices and later deployments, and retrace your reading. The same depth and
+named facets work in the CLI and interactive view. A local loops SQLite store
+can replace the bundled excerpt. See [the walkthrough](examples/FIELDWORK.md).
