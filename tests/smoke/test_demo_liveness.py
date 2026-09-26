@@ -108,6 +108,7 @@ SHOWCASE = [
     "donut",
     "fire",
     "harmonograph",
+    "interference",
     "life",
     "lorenz",
     "mandelbrot",

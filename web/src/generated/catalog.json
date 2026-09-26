@@ -678,6 +678,19 @@
       "has_main": true
     },
     {
+      "id": "showcase/interference",
+      "tier": "showcase",
+      "name": "interference",
+      "slug": "interference",
+      "title": "Interference",
+      "summary": "Interference — two sources, and the quiet places they make together.",
+      "source": "demos/showcase/interference.py",
+      "command": "painted demos interference",
+      "checkout_command": "uv run demos/showcase/interference.py",
+      "invocations": [],
+      "has_main": true
+    },
+    {
       "id": "showcase/life",
       "tier": "showcase",
       "name": "life",

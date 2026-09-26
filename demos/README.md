@@ -82,3 +82,17 @@ The fidelity demo supports:
 ```bash
 uv run python demos/tour.py
 ```
+
+## Showcase
+
+Animated gallery pieces with static, plain-text, and JSON deliveries.
+
+```bash
+uv run painted demos interference --live
+uv run painted demos interference --phase opposed --note
+uv run painted demos interference -vv
+```
+
+`interference.py` draws two radial wave sources in cyan and amber. Switch to
+`--phase opposed` to hold a line of cancellation through the moving field.
+`--frame` selects a reproducible still or the starting frame of a live run.
