@@ -46,6 +46,7 @@ breaking changes.
 
 - **Explore two-source wave interference with `painted demos interference`.**
   Reproducible stills and live animation include opposed phases and signed colorless output.
+  ([6a215c1](https://github.com/kgruel/painted/commit/6a215c190f1de2c6a63a156c1f71d197f0e40cff))
 
 ## [0.14.0] — 2026-08-13
 

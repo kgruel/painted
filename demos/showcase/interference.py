@@ -12,6 +12,13 @@ marks keep the field readable. This is an analytic drawing, not a fluid solver.
     painted demos interference --stats         # sample measurements
     painted demos interference --note          # maker's note
     painted demos interference --json          # the reproducible score
+
+    uv run demos/showcase/interference.py --live
+    uv run demos/showcase/interference.py --phase opposed
+    uv run demos/showcase/interference.py -v
+    uv run demos/showcase/interference.py --stats
+    uv run demos/showcase/interference.py --note
+    uv run demos/showcase/interference.py --json
 """
 
 from __future__ import annotations

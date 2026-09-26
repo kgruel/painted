@@ -83,9 +83,9 @@ The fidelity demo supports:
 uv run python demos/tour.py
 ```
 
-## Showcase
+## Interference showcase
 
-Animated gallery pieces with static, plain-text, and JSON deliveries.
+An animated gallery piece with static, plain-text, and JSON deliveries.
 
 ```bash
 uv run painted demos interference --live

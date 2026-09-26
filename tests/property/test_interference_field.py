@@ -1,15 +1,18 @@
 """The wave drawing's symmetry and bounds, independent of its raster."""
 
 import math
+from pathlib import Path
 
 from hypothesis import given, strategies as st
 
 from painted import Fidelity, Style
 from painted.capabilities import Capabilities, use_capabilities
 
+from tests.helpers import block_to_text
 from tools.capture import import_module_by_path
 
-D = import_module_by_path("demos/showcase/interference.py", module_name="_interference_laws")
+_DEMO = Path(__file__).resolve().parents[2] / "demos" / "showcase" / "interference.py"
+D = import_module_by_path(_DEMO, module_name="_interference_laws")
 
 
 @given(
@@ -31,6 +34,38 @@ def test_superposition_is_bounded_and_has_the_declared_symmetry(x, y, frame, pha
 @given(y=st.floats(-20, 20), frame=st.integers(-10000, 10000))
 def test_opposed_sources_cancel_on_the_entire_bisector(y, frame):
     assert abs(D._value(0, y, D._fetch(frame, "opposed"))) < 1e-12
+
+
+@given(
+    x=st.floats(-20, 20),
+    y=st.floats(-20, 20),
+    frame=st.integers(-10000, 10000),
+    phase=st.sampled_from(("together", "opposed")),
+)
+def test_field_repeats_after_48_frames(x, y, frame, phase):
+    # Trig argument reduction accumulates roundoff over this frame range;
+    # absolute tolerance also covers the cancellation nodes near zero.
+    assert math.isclose(
+        D._value(x, y, D._fetch(frame, phase)),
+        D._value(x, y, D._fetch(frame + 48, phase)),
+        rel_tol=0,
+        abs_tol=1e-12,
+    )
+
+
+@given(
+    x=st.floats(-20, 20),
+    y=st.floats(-20, 20),
+    frame=st.integers(-10000, 10000),
+    phase=st.sampled_from(("together", "opposed")),
+)
+def test_field_negates_after_24_frames(x, y, frame, phase):
+    assert math.isclose(
+        D._value(x, y, D._fetch(frame, phase)),
+        -D._value(x, y, D._fetch(frame + 24, phase)),
+        rel_tol=0,
+        abs_tol=1e-12,
+    )
 
 
 @given(
@@ -68,7 +103,7 @@ def test_colorless_picture_preserves_sign_even_without_unicode(value, glyph):
     frame=st.integers(-10000, 10000),
     phase=st.sampled_from(("together", "opposed")),
 )
-def test_disclosure_and_named_facets_change_output_without_changing_the_score(frame, phase):
+def test_disclosure_and_named_facets_show_measurements_and_signed_note(frame, phase):
     field = D._fetch(frame, phase)
     summary = D._render(field, Fidelity(depth=1), None)
     detailed = D._render(field, Fidelity(depth=2), None)
@@ -78,4 +113,16 @@ def test_disclosure_and_named_facets_change_output_without_changing_the_score(fr
     assert summary.height < detailed.height < full.height
     assert stats.height > summary.height
     assert note.height > summary.height
-    assert field == D._fetch(frame, phase)
+    for block in (summary, detailed, note):
+        assert " / RMS " not in block_to_text(block)
+    for block in (full, stats):
+        text = block_to_text(block)
+        assert "samples 2628 / RMS " in text
+        assert " / near zero " in text
+    for block in (summary, detailed, full, stats):
+        assert "The shape of a cancellation" not in block_to_text(block)
+        assert "Astra" not in block_to_text(block)
+    note_text = block_to_text(note)
+    assert "The shape of a cancellation" in note_text
+    assert "Each source makes rings." in note_text
+    assert "— Astra" in note_text
