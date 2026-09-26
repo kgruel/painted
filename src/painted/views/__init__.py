@@ -3,6 +3,11 @@
 Public namespace for Painted view-layer APIs.
 """
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .lens.table import table_lens as table_lens
+
 __all__ = [
     # Aesthetic
     "Palette",

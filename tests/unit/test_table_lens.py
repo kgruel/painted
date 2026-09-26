@@ -8,7 +8,7 @@ refuses the two shapes transcription already covers.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import NamedTuple
 
 import pytest
@@ -52,6 +52,49 @@ def test_dataclass_fields_become_columns():
     assert out[0].split("│") == ["name", "cores"]
 
 
+@pytest.mark.parametrize("zoom", [0, 1, 2, 3])
+def test_dataclass_repr_false_fields_stay_suppressed(zoom: int):
+    @dataclass
+    class Credential:
+        user: str
+        secret: str = field(repr=False)
+
+    out = rows_of(table_lens([Credential("alice", "private-value")], zoom))
+    assert "secret" not in "\n".join(out)
+    assert "private-value" not in "\n".join(out)
+    if zoom == 0:
+        assert out == ["1 row x 1 column"]
+    else:
+        assert out[0] == "user"
+        assert out[2] == "alice"
+
+
+def test_dict_keys_keep_identity_when_their_header_spellings_match():
+    out = rows_of(table_lens([{1: "number", "1": "string"}], 1))
+    assert [cell.strip() for cell in out[0].split("│")] == ["1", "1"]
+    assert out[2].split("│") == ["number", "string"]
+
+
+def test_non_string_keys_in_column_mismatch_guidance():
+    with pytest.raises(ContractError, match="explicit list must match the derived order"):
+        table_lens([{1: "one"}], 1, columns=[])
+
+
+def test_heterogeneous_record_types_share_the_declared_field_union():
+    @dataclass
+    class Host:
+        name: str
+
+    class Count(NamedTuple):
+        n: int
+
+    out = rows_of(table_lens([Host("api"), Count(2), {"name": "db", "n": 3}], 1))
+    assert [cell.strip() for cell in out[0].split("│")] == ["name", "n"]
+    assert [cell.strip() for cell in out[2].split("│")] == ["api", ""]
+    assert [cell.strip() for cell in out[3].split("│")] == ["", "2"]
+    assert [cell.strip() for cell in out[4].split("│")] == ["db", "3"]
+
+
 def test_namedtuple_fields_become_columns():
     class Point(NamedTuple):
         x: int
@@ -91,14 +134,32 @@ def test_zoom_zero_singular_row_and_column():
     assert rows_of(table_lens([{"a": 1}], 0)) == ["1 row x 1 column"]
 
 
-def test_empty_sequence_is_zero_rows_at_any_zoom():
-    assert rows_of(table_lens([], 1)) == ["0 rows"]
+@pytest.mark.parametrize("zoom", [-1, 0, 1, 2, 3])
+@pytest.mark.parametrize("width", [None, 0, 1, 20])
+def test_empty_sequence_is_zero_rows_at_any_zoom(zoom: int, width: int | None):
+    block = table_lens([], zoom, width)
+    assert block.height == 1
+    assert block.width == (6 if width is None else width)
+    assert rows_of(block) == ["0 rows"[:width].rstrip()]
+
+
+@pytest.mark.parametrize("zoom", [1, 2, 3])
+def test_positive_zoom_keeps_every_declared_column(zoom: int):
+    assert rows_of(table_lens(ROWS, zoom)) == rows_of(table_lens(ROWS, 1))
 
 
 @pytest.mark.parametrize("width", [1, 6, 12, 24, 80])
 def test_width_is_exact(width: int):
     """Law 5 — every sibling lens is width-exact; table() alone treats it as a budget."""
     assert table_lens(ROWS, 1, width).width == width
+
+
+@pytest.mark.parametrize("zoom", [0, 1, 2, 3])
+@pytest.mark.parametrize("width", [0, -1, -10])
+def test_nonpositive_width_collapses_like_sibling_lenses(zoom: int, width: int):
+    block = table_lens(ROWS, zoom, width)
+    assert block.width == 0
+    assert block.height == 1
 
 
 def test_natural_width_is_content_width():

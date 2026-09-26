@@ -1,5 +1,10 @@
 """Lens functions: stateless content-to-Block transformation at zoom levels."""
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .table import table_lens as table_lens
+
 __all__ = [
     "NodeRenderer",
     "chart_lens",

@@ -36,7 +36,7 @@ def format_value(value: Any) -> str:
     return str(value)
 
 
-def record_fields(item: Any) -> dict[str, Any] | None:
+def record_fields(item: Any) -> dict[Any, Any] | None:
     """Project one item to its declared field mapping, or None if it declares none.
 
     The three declared-schema shapes ``transcribe`` honors (PAINT_DESIGN §3): a
@@ -49,5 +49,6 @@ def record_fields(item: Any) -> dict[str, Any] | None:
     if is_namedtuple(item):
         return dict(item._asdict())
     if is_dataclass(item) and not isinstance(item, type):
-        return {f.name: getattr(item, f.name) for f in fields(item)}
+        # repr=False is declared suppression, as in transcribe().
+        return {f.name: getattr(item, f.name) for f in fields(item) if f.repr}
     return None

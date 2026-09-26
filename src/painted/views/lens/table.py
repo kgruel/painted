@@ -45,8 +45,9 @@ def table_lens(
     **Accepted subjects** — a sequence whose items declare a field schema:
     ``dict``, dataclass instance, or ``NamedTuple``. Columns are the union of
     the declared field names in first-seen order; a row that omits one renders
-    an empty cell, because that row did not declare it. A sequence of scalars
-    is a single unnamed column. Anything else raises ``ContractError`` rather
+    an empty cell, because that row did not declare it. Dataclass fields with
+    ``repr=False`` stay suppressed, as in transcription. A sequence of scalars
+    is refused. Unsupported subjects raise ``ContractError`` rather
     than being coerced into a shape it never declared — a bare ``dict`` included
     (``paint()``/``transcribe`` already render one as key/value, so there is
     nothing here for it to add).
@@ -63,24 +64,28 @@ def table_lens(
     numeric aligns right. The type *is* the declaration.
 
     Args:
-        data: A sequence of records (or of scalars).
+        data: A sequence of records.
         zoom: 0 for the count line; >= 1 for the table.
         width: Exact width — the block is padded or clipped to it. None sizes
             naturally (the width law).
         columns: Explicit ``Column`` list, overriding derivation — the escape
             hatch for fixed widths, ``Fill``, or custom headers. Must match the
             derived column order; use ``table()`` directly for anything further.
-        fidelity: Threaded to cell transcription for its ``chars`` budget.
+        fidelity: Accepted for lens-call compatibility; budgets and tags are
+            not currently consumed. ``zoom`` controls the two disclosure rungs.
 
     Returns:
-        Block — natural height (one header row plus one row per record). No
+        Block — natural height (header, separator, then one row per record). No
         scroll window is opened, so no evidence row is reserved.
     """
+    if width is not None and width <= 0:
+        return Block.empty(0, 1)
+
     if isinstance(data, (str, bytes)) or not hasattr(data, "__iter__"):
         raise ContractError(
             f"table_lens needs a sequence of records; got {type(data).__name__}. "
-            "Accepted: a sequence of dicts, dataclasses, or NamedTuples (or of "
-            "scalars, as one column). A single mapping is already rendered as "
+            "Accepted: a sequence of dicts, dataclasses, or NamedTuples. "
+            "A single mapping is already rendered as "
             "key/value by paint()."
         )
     if isinstance(data, dict):
@@ -93,8 +98,8 @@ def table_lens(
     items = list(data)
 
     # Column derivation: declared field names, union in first-seen order.
-    names: list[str] = []
-    records: list[dict[str, Any] | None] = []
+    names: list[Any] = []
+    records: list[dict[Any, Any] | None] = []
     for item in items:
         record = record_fields(item)
         records.append(record)
@@ -125,7 +130,8 @@ def table_lens(
     for name in names:
         present = [r[name] for r in records if r is not None and name in r]
         align = Align.END if present and all(_is_numeric(v) for v in present) else Align.START
-        derived.append(Column(header=Line.plain(name), width=AUTO, align=align, ellipsis=True))
+        # Preserve the original key for lookup; only its header is display text.
+        derived.append(Column(header=Line.plain(str(name)), width=AUTO, align=align, ellipsis=True))
     rows = [
         [
             Line.plain(format_value(r[name])) if r is not None and name in r else Line.plain("")
@@ -138,7 +144,7 @@ def table_lens(
         if len(columns) != len(derived):
             raise ContractError(
                 f"table_lens was given {len(columns)} columns but the data declares "
-                f"{len(derived)} ({', '.join(names)}); the "
+                f"{len(derived)} ({', '.join(map(str, names))}); the "
                 "explicit list must match the derived order"
             )
         derived = columns

@@ -134,6 +134,37 @@ def test_tuple_field_normalizes_a_list(key: tuple[str, str]):
     )
 
 
+@pytest.mark.parametrize("key", sorted(PROBES), ids=lambda k: f"{k[0]}.{k[1]}")
+def test_sequence_fields_detach_caller_lists_on_replace(key: tuple[str, str]):
+    """Construction and dataclasses.replace must both sever the mutable alias."""
+    _, field_name = key
+    original = PROBES[key]()  # type: ignore[operator]
+    expected = getattr(original, field_name)
+    source = list(expected)
+    updated = dataclasses.replace(original, **{field_name: source})
+    source.append(object())
+    assert getattr(updated, field_name) == expected
+    assert type(getattr(updated, field_name)) is tuple
+    assert getattr(original, field_name) == expected
+
+
+def test_line_from_list_survives_table_padding():
+    """The downstream consumer's exact failure, through the public component."""
+    from painted.core import Line, Span
+    from painted.views import Column, TableState, table
+
+    spans = [Span("x")]
+    line = Line(spans)
+    spans.append(Span("not part of the line"))
+    block = table(
+        TableState().with_count(1),
+        [Column(header=Line.plain("wide"))],
+        [[line]],
+        visible_height=1,
+    )
+    assert "".join(cell.char for cell in block.row(2)) == "x   "
+
+
 def test_exempt_set_is_empty_and_shrink_only():
     """Guards the docstring's claim. If this ever fails, a ruling is owed."""
     assert EXEMPT == frozenset(), (
