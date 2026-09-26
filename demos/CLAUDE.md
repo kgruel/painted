@@ -120,6 +120,7 @@ examples/
   lenses.py         Tree and chart data visualization
   theme_carnival.py Interactive palette explorer
   harmonograph_lab.py Editable four-pendulum instrument, shared showcase plate ✓
+  fieldwork.py      Recorded evidence: search, follow references, retrace readings in CLI/TUI ✓
 
 showcase/           (pattern test shape; surface-delivered animated spectacle)
   life.py           Conway's Life: pure step + fetch_stream animation     ✓

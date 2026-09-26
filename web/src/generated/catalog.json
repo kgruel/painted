@@ -555,6 +555,25 @@
       "has_main": true
     },
     {
+      "id": "examples/fieldwork",
+      "tier": "examples",
+      "name": "fieldwork",
+      "slug": "fieldwork",
+      "title": "Fieldwork",
+      "summary": "Fieldwork — follow an operational question through recorded evidence.",
+      "source": "demos/examples/fieldwork.py",
+      "command": "painted demos fieldwork",
+      "checkout_command": "uv run demos/examples/fieldwork.py",
+      "invocations": [
+        "uv run demos/examples/fieldwork.py -i",
+        "uv run demos/examples/fieldwork.py --match journald -v --checks",
+        "uv run demos/examples/fieldwork.py --match banner --provenance",
+        "uv run demos/examples/fieldwork.py --match journald --json",
+        "uv run demos/examples/fieldwork.py --store ~/Code/gruel.network/.loops/data/homelab-coord.db -i"
+      ],
+      "has_main": true
+    },
+    {
       "id": "examples/harmonograph_lab",
       "tier": "examples",
       "name": "harmonograph_lab",
