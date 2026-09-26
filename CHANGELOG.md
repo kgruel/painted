@@ -47,6 +47,12 @@ breaking changes.
   drift-checked media metadata; guide demo links now open their detail pages.
   ([5ae9062](https://github.com/kgruel/painted/commit/5ae9062b3fac16fdf67388eaf0414b6f9da603af))
 
+### Added
+
+- **Explore two-source wave interference with `painted demos interference`.**
+  Reproducible stills and live animation include opposed phases and signed colorless output.
+  ([6a215c1](https://github.com/kgruel/painted/commit/6a215c190f1de2c6a63a156c1f71d197f0e40cff))
+
 ## [0.14.0] — 2026-08-13
 
 The **honesty remediation** (0.14) — RENDER_MODEL.md law 6 ("the layer that

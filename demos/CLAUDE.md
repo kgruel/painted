@@ -133,6 +133,7 @@ showcase/           (pattern test shape; surface-delivered animated spectacle)
   starmap.py        The night sky: real catalog, refs make every star a link ✓
   mandelbrot.py     Escape time: proof vs presumption, the unknown declared ✓
   harmonograph.py   Damped pendulums: Braille subpixels + capability carriers ✓
+  interference.py   Two radial sources: signed displacement + cancellation laws ✓
 ```
 
 Old stepping stones (`block.py`, `buffer.py`, `buffer_view.py`) deleted —
