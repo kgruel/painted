@@ -42,6 +42,10 @@ breaking changes.
   engine) — so measuring before materializing always agrees.
   ([8954229](https://github.com/kgruel/painted/commit/8954229))
 
+- **Watch real terminal recordings on the website homepage and focus-form demo.**
+  Native playback controls, posters, and visible descriptions accompany
+  drift-checked media metadata; guide demo links now open their detail pages.
+
 ## [0.14.0] — 2026-08-13
 
 The **honesty remediation** (0.14) — RENDER_MODEL.md law 6 ("the layer that

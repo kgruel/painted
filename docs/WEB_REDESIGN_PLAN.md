@@ -1,6 +1,6 @@
 # Painted web redesign plan
 
-Status: Wave 3 complete; Wave 4 ready
+Status: Wave 4 isolated checkpoint; mandatory review pending; Wave 5 not started
 Scope: `web/`, its generated inputs, and the documentation/demo metadata needed to publish it  
 Execution model: root agent owns judgment and integration; Sol and Terra agents implement bounded work packages
 
@@ -508,6 +508,106 @@ relationships, or begin Wave 4 cleanup.
   and remove dead cosmetic assets after import checks. The inherited guide
   currentness debt recorded in the Wave 2 gate also remains; Wave 3 did not hide
   it behind broader reference claims.
+
+## Wave 4 gate — historical implementation notes
+
+The preserved pending snapshot recorded root acceptance on 2026-08-14. The
+notes below retain that historical evidence, not a fresh review of this isolated
+branch. In particular, the screenshot paths, browser probes, and test counts are
+historical claims; they have not been re-established merely by copying the work.
+The 2026-09-26 checkpoint requires a separate Fable 5.1 HIGH review against `main`
+(including the inherited Waves 2/3). It is **ready for review, not redesign
+completion**. Fresh preparation evidence is recorded in the workstream handoff.
+
+Wave 4 adds a deliberately small first recording set, a reproducible media build
+path, and manifest-driven presentation. It does not begin the Wave 5
+editorial/API-currentness pass or deployment.
+
+### Recording selection and production
+
+- The initial published set contains exactly two recordings. `homepage/continuum`
+  moves one fixed health-check dataset through quiet, live pending, expanded,
+  and final detailed states. `apps/focus_form` replays genuine keyboard focus,
+  capture, text entry, navigation, and submission on the tier-qualified demo.
+- The responsive-width candidate was rejected because its 120-column state was
+  clipped by the candidate viewport and its sequence did not yet prove enough
+  beyond the existing static width examples. Harmonograph and Mandelbrot were
+  rejected because the 520px candidate viewport clipped their mandatory live
+  cost meters; either requires a new capture at least 620px high before it can
+  be considered for publication.
+- Hidden setup frames are removed explicitly at raw frame 20. The homepage MP4
+  is 702×468, 60fps, 472 frames, and 7.866667 seconds; its poster selects encoded
+  frame 420. The focus-form MP4 is 766×450, 60fps, 278 frames, and 4.633333
+  seconds; its poster selects encoded frame 230. First, middle, last, and poster
+  frames were inspected for both accepted assets with no shell noise, clipping,
+  illegible color, or cell/glyph defect.
+
+### Recipe, manifest, and drift boundary
+
+- `tools/recording_recipes.py` is the explicit curation boundary. Demo targets
+  must use CatalogV1's tier-qualified identity; homepage targets use an explicit
+  `homepage/{slug}` identity. No demo/media/specimen relationship is inferred
+  from filenames or source equality, and CatalogV1 remains unchanged.
+- `tools/record_media.py` reuses the repository's VHS workflow honestly: VHS
+  emits text frames at the declared viewport and frame rate, then ffmpeg encodes
+  MP4/WebM/GIF output. This avoids VHS's direct-video 25fps cap. The builder
+  validates a contiguous raw-frame inventory, applies the declared trim, caps
+  the encoded frame count, and extracts the poster from the exact declared
+  post-trim frame.
+- `web/src/generated/media.json` is a separate deterministic MediaManifestV1.
+  Drafts are validated but not published. Published records require real recipe,
+  video/GIF, and poster files; their duration must agree with frame count and
+  frame rate. Optional static fallback IDs are checked against `PANELS` when
+  present. Both accepted records deliberately use `fallback_specimen_id: null`:
+  the homepage retains its nearby generated continuum, while the focus detail
+  retains its poster, behavior description, source, and runnable commands.
+- Media emission and exact comparison are part of `tools.outputgen.py`, so stale
+  metadata, missing assets, invalid identities, invalid curated specimens, or a
+  mismatched generated manifest fail the existing output-generation gate.
+
+### Website integration, cleanup, and accessibility
+
+- The homepage consumes only the explicit `homepage/continuum` manifest record.
+  The focus-form detail consumes only the exact `apps/focus_form` record; the
+  other 47 demo details contain no recording placeholder or inferred media.
+  Related guide demos now link to canonical tier-qualified detail routes while
+  retaining separately labeled source links.
+- `Recording.astro` uses native controls with `muted`, `playsinline`, and
+  `preload="metadata"`; it never autoplays. The manifest description is visible,
+  the poster remains useful without playback, no audio track means no fabricated
+  captions, and visible fallback guidance points to the page's remaining static
+  evidence. Reduced-motion emulation stays paused on the poster.
+- Keyboard replay reaches both video controls, and `:focus-visible` produces a
+  2px yellow outline. Heading/figure semantics use a direct-child `figcaption`.
+  Exact 1440×1000 and DevTools-emulated 390×844 probes report document
+  `clientWidth === scrollWidth` on the homepage and focus detail; intentionally
+  wide homepage specimens retain only local scrolling.
+- The now-unimported `MediaFallback.astro` and its dead CSS were removed after
+  `rg` and a successful build. `PaintedSurface.jsx` remains because the
+  compatibility walkthrough imports it, `MediaPlaceholder.astro` remains for
+  the prototype route, and the shared color/type CSS remains part of the shell.
+
+### Gate verification and open edges
+
+- The full `./dev check` staircase passes, including 3,363 tests in the
+  single-process cohesion tier, output generation, and docs checks. Focused
+  media/catalog/reference tests pass (29 tests), `npm run build` emits all 73
+  routes, `git diff --check` passes, and a generated-site audit resolves 1,031
+  internal `href`/`src` references with zero missing pages, fragments, or assets.
+- The media identity/asset audit finds exactly two unique declared records and
+  all four published assets. Built markup contains two videos, no autoplay, and
+  no fabricated caption tracks. Compatibility `/walkthrough/*` and `/docs/*`
+  routes remain buildable.
+- Reviewed production frames live under `/tmp/painted-web-wave4-sol/`. Exact
+  page, scrolled recording, keyboard-focus, and reduced-motion/no-video evidence
+  lives under `/tmp/painted-web-wave4-terra/`. These are review artifacts, not
+  repository assets.
+- No pattern or showcase recording is published in this first set; the rejected
+  candidates above are explicit omissions. The inherited Wave 2 guide/API
+  currentness debt remains open for Wave 5: outdated primitive excerpts, the old
+  `truncate` ellipsis default, and the legacy renderer/`CliContext` guide shapes.
+  Wave 5 is not started or authorized by this checkpoint; deployment remains a
+  separate user-approved action.
 
 ## Implementation waves
 

@@ -73,14 +73,14 @@ a:focus-visible, button:focus-visible { outline: 2px solid var(--yellow); outlin
 .proto-media-fallback strong { color: var(--fg-2); }
 @media (prefers-reduced-motion: reduce) { .proto-media-frame { background: var(--ink); } .proto-media-scan { display: none; } }
 
-.proto-media-static { display: grid; grid-template-columns: minmax(0, .8fr) minmax(300px, 1.2fr); gap: var(--sp-5); align-items: center; padding: var(--sp-5); background: repeating-linear-gradient(0deg, transparent 0, transparent 25px, color-mix(in srgb, var(--line) 38%, transparent) 26px); }
-.proto-media-static .proto-media-copy { max-width: none; text-align: left; }
-.proto-media-specimen { min-width: 0; }
-.proto-media-specimen .proto-specimen { border-color: var(--line); }
-.proto-media-video { display: block; width: 100%; max-height: 680px; background: var(--ink); }
-.proto-media-recording-copy { padding: var(--sp-5); border-bottom: 1px solid var(--line); }
-.proto-media-recording-copy h3 { font-size: var(--t-h2); }
-.proto-media-recording-copy p { margin-top: var(--sp-2); color: var(--fg-2); font-size: var(--t-small); line-height: 1.55; }
+.recording { margin: 0; border: 1px solid var(--line-bold); background: var(--proto-paper); }
+.recording-copy { padding: var(--sp-5); border-bottom: 1px solid var(--line); }
+.recording-copy .proto-eyebrow { margin-bottom: var(--sp-2); }
+.recording-copy h2 { color: var(--fg); font-size: var(--t-h2); }
+.recording-description { margin: var(--sp-2) 0 0; color: var(--fg-2); font-size: var(--t-small); line-height: 1.55; }
+.recording-video { display: block; width: 100%; max-height: 680px; background: var(--ink); }
+.recording-video:focus-visible { outline: 2px solid var(--yellow); outline-offset: 4px; }
+.recording-unavailable { margin: 0; padding: var(--sp-3) var(--sp-5); border-top: 1px solid var(--line); color: var(--fg-dim); font-size: var(--t-caption); line-height: 1.55; }
 
 .proto-continuum { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sp-4); }
 .proto-continuum-item { min-width: 0; display: grid; grid-template-rows: auto 1fr; }
@@ -120,7 +120,8 @@ a:focus-visible, button:focus-visible { outline: 2px solid var(--yellow); outlin
   .proto-install { max-width: 100%; overflow-x: auto; }
   .proto-section-head { gap: var(--sp-3); }
   .proto-continuum { grid-template-columns: 1fr; }
-  .proto-media-static { grid-template-columns: 1fr; padding: var(--sp-4); }
+  .recording-copy { padding: var(--sp-4); }
+  .recording-unavailable { padding: var(--sp-3) var(--sp-4); }
   .proto-card-grid { grid-template-columns: 1fr; }
   .proto-capability-grid { grid-template-columns: 1fr; }
   .proto-card { min-height: 0; }

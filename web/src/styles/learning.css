@@ -311,6 +311,12 @@
   color: var(--magenta);
 }
 
+.learn-related-demo-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+}
+
 .learn-prose {
   max-width: 860px;
   margin: clamp(48px, 7vw, 80px) auto 0;

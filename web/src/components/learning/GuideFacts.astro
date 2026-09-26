@@ -11,6 +11,8 @@ interface Demo {
   title: string;
   summary: string;
   source: string;
+  tier: string;
+  slug: string;
 }
 
 interface Props {
@@ -43,7 +45,10 @@ const repository = "https://github.com/kgruel/painted/blob/main/";
           <li>
             <span><strong>{demo.title}</strong> <code>{demo.id}</code></span>
             <span>{demo.summary}</span>
-            <a href={`${repository}${demo.source}`}>View source <span aria-hidden="true">↗</span></a>
+            <span class="learn-related-demo-links">
+              <a href={`/demos/${demo.tier}/${demo.slug}/`}>Open demo <span aria-hidden="true">→</span></a>
+              <a href={`${repository}${demo.source}`}>View source <span aria-hidden="true">↗</span></a>
+            </span>
           </li>
         ))}
       </ul>

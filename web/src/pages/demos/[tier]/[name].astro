@@ -1,6 +1,8 @@
 ---
 import Prototype from "../../../layouts/Prototype.astro";
 import catalog from "../../../generated/catalog.json";
+import media from "../../../generated/media.json";
+import Recording from "../../../components/Recording.astro";
 import "../../../styles/demos.css";
 
 const repository = "https://github.com/kgruel/painted/blob/main/";
@@ -22,6 +24,9 @@ export function getStaticPaths() {
 
 const { demo } = Astro.props;
 const role = roles[demo.tier as keyof typeof roles];
+const recording = media.recordings.find(
+  (candidate) => candidate.target_kind === "demo" && candidate.id === demo.id,
+);
 ---
 
 <Prototype
@@ -61,6 +66,19 @@ const role = roles[demo.tier as keyof typeof roles];
         </div>
       )}
     </section>
+
+    {recording?.video && recording.poster?.path && (
+      <section class="demo-recording" aria-label={`${demo.title} recording`}>
+        <Recording
+          id={recording.id}
+          title={`${demo.title}, in use`}
+          description={recording.accessibility_description}
+          video={recording.video}
+          poster={recording.poster.path}
+          unavailableMessage="If video is unavailable, this page still provides the behavior description, source, and runnable commands."
+        />
+      </section>
+    )}
 
     {demo.invocations.length > 0 && (
       <section class="demo-invocations" aria-labelledby="invocations-heading">

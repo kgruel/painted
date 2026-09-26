@@ -201,6 +201,8 @@
 .demo-facts a { color: var(--cyan); font-size: var(--t-small); overflow-wrap: anywhere; }
 .demo-facts p:not(.demo-fact-label) { color: var(--fg-2); font-size: var(--t-small); line-height: 1.6; }
 
+.demo-recording { margin-top: clamp(56px, 8vw, 96px); }
+
 .demo-invocations {
   margin-top: clamp(56px, 8vw, 96px);
   max-width: 920px;
