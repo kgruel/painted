@@ -70,6 +70,9 @@ breaking changes.
 - **`table_lens` honors dataclass `repr=False`, renders non-string dict keys,
   and safely collapses nonpositive widths.** Its public imports retain the typed
   signature for static checkers.
+- **`table_lens` refuses unsupported rows and multiline cells/headers instead of
+  losing data.** Ordered record sequences retain Enum names, zero-field counts,
+  neutral static rows and zoom-independent column validation.
 
 ## [0.14.0] — 2026-08-13
 

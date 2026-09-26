@@ -14,11 +14,14 @@ from typing import NamedTuple
 import pytest
 
 from painted.core.block import Block
+from painted.core.cell import Style
 from painted.core.compose import Align
 from painted.core.errors import ContractError
 from painted.core.span import Line
 from painted.views import table_lens
 from painted.views.components._table import Column
+
+from tests.helpers import assert_blocks_equal
 
 ROWS = [
     {"service": "api-gateway", "status": "ok", "pct": 99},
@@ -212,5 +215,11 @@ def test_is_a_projection_onto_table_not_a_second_renderer():
         Column(header=Line.plain("pct"), width=AUTO, align=Align.END, ellipsis=True),
     ]
     data = [[Line.plain(str(r[k])) for k in ("service", "status", "pct")] for r in ROWS]
-    expected = table(TableState().with_count(len(data)), cols, data, visible_height=len(data))
-    assert rows_of(table_lens(ROWS, 1)) == rows_of(expected)
+    expected = table(
+        TableState().with_count(len(data)),
+        cols,
+        data,
+        visible_height=len(data),
+        selected_style=Style(),
+    )
+    assert_blocks_equal(table_lens(ROWS, 1), expected)

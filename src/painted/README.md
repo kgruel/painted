@@ -210,6 +210,14 @@ from painted.views import table_lens, tree_lens, chart_lens, flame_lens, shape_l
 | proportions of a whole, nested | **`flame_lens`** | flame-graph segments |
 | no idea yet — exploring | **`shape_lens`** | dispatch by shape. The *inference* lens: use it to explore, never as the spine |
 
+`table_lens` accepts ordered `Sequence`s of those records, not bare records,
+sets or generators. Wrap a single record in `[record]`. Unsupported rows and
+multiline cells/headers raise `ContractError`; nothing is silently flattened.
+Zero-visible-field records show counts at every zoom (`repr=False` remains
+suppressed). `columns=` is a positional override with matching cardinality,
+even at count zoom or on empty input. See the [views guide](views/README.md)
+for the full boundary and `docs/PAINT_DESIGN.md` §3 for its contract.
+
 **I have a stream of events, logs, or an audit trail** — the record layer:
 
 ```python

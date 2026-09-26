@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
 
 from ...core.block import Block
@@ -23,6 +24,16 @@ def _is_numeric(value: Any) -> bool:
     return isinstance(value, (int, float)) and not isinstance(value, bool)
 
 
+def _single_line(text: str, location: str) -> str:
+    """Validate before Line.paint can discard a declared break."""
+    if "\n" in text or "\r" in text:
+        raise ContractError(
+            f"table_lens {location} must be single-line (no LF or CR); "
+            "supply single-line text or use a multiline layout instead."
+        )
+    return text
+
+
 def table_lens(
     data: Any,
     zoom: int,
@@ -42,15 +53,20 @@ def table_lens(
     It is a projection onto ``table()``, not a second table renderer — every
     column-width, ellipsis and overflow behavior is that component's.
 
-    **Accepted subjects** — a sequence whose items declare a field schema:
-    ``dict``, dataclass instance, or ``NamedTuple``. Columns are the union of
-    the declared field names in first-seen order; a row that omits one renders
-    an empty cell, because that row did not declare it. Dataclass fields with
-    ``repr=False`` stay suppressed, as in transcription. A sequence of scalars
-    is refused. Unsupported subjects raise ``ContractError`` rather
-    than being coerced into a shape it never declared — a bare ``dict`` included
-    (``paint()``/``transcribe`` already render one as key/value, so there is
-    nothing here for it to add).
+    **Accepted subjects** — an ordered ``collections.abc.Sequence`` of dicts,
+    dataclass instances or NamedTuples (not arbitrary Mapping rows). Bare
+    records are refused before collection handling: wrap one in ``[record]``.
+    Text/binary containers, sets, generators and other iterables are refused,
+    never silently materialized. Unsupported rows raise ``ContractError``
+    identifying their zero-based index and type, at every zoom.
+
+    Columns are the union of declared fields in first-seen order, preserving
+    dict key identity. A missing field renders an empty cell; dataclass fields
+    with ``repr=False`` stay suppressed. Nonempty records with no visible
+    fields show ``N rows x 0 columns`` at every zoom; empty input shows ``0 rows``.
+    Formatted cells and derived/explicit headers must be single-line (no LF or
+    CR), validated even at count zoom or when clipped. Enum leaves preserve
+    transcription's named spelling and unnamed fallback. Cells do not recurse.
 
     **Zoom is deliberately two-rung**: ``0`` is the count line (``3 rows x 4
     columns``), ``>= 1`` is the table with every declared column. There is no
@@ -64,96 +80,108 @@ def table_lens(
     numeric aligns right. The type *is* the declaration.
 
     Args:
-        data: A sequence of records.
+        data: An ordered Sequence of supported records.
         zoom: 0 for the count line; >= 1 for the table.
         width: Exact width — the block is padded or clipped to it. None sizes
-            naturally (the width law).
+            naturally (the width law). Nonpositive widths collapse before validation.
         columns: Explicit ``Column`` list, overriding derivation — the escape
-            hatch for fixed widths, ``Fill``, or custom headers. Must match the
-            derived column order; use ``table()`` directly for anything further.
+            hatch for fixed widths, ``Fill``, or custom headers. Cardinality must
+            match the derived columns at every zoom, even on empty input. The
+            override is positional; header text need not equal field names.
+            Use ``table()`` directly for scrolling or selection.
         fidelity: Accepted for lens-call compatibility; budgets and tags are
             not currently consumed. ``zoom`` controls the two disclosure rungs.
 
     Returns:
-        Block — natural height (header, separator, then one row per record). No
-        scroll window is opened, so no evidence row is reserved.
+        Block — natural height (header, separator, then one row per record), or
+        a one-line count summary. No selection or scroll window is invented.
     """
     if width is not None and width <= 0:
         return Block.empty(0, 1)
 
-    if isinstance(data, (str, bytes)) or not hasattr(data, "__iter__"):
+    # Record identity takes precedence over incidental iterability (NamedTuple
+    # is itself a Sequence, and a dataclass may implement __iter__).
+    if record_fields(data) is not None:
         raise ContractError(
-            f"table_lens needs a sequence of records; got {type(data).__name__}. "
-            "Accepted: a sequence of dicts, dataclasses, or NamedTuples. "
-            "A single mapping is already rendered as "
-            "key/value by paint()."
+            f"table_lens needs a Sequence of records, not a bare {type(data).__name__}; "
+            "pass [record] for one row, or use paint() to transcribe the record."
         )
-    if isinstance(data, dict):
+    if isinstance(data, (str, bytes, bytearray, memoryview)) or not isinstance(data, Sequence):
         raise ContractError(
-            "table_lens needs a sequence of records, not a single mapping; "
-            "paint() already renders a dict as key/value rows. Pass a sequence "
-            "of dicts (e.g. list(d.values()), or [d] for one row)."
+            f"table_lens needs an ordered Sequence of records; got {type(data).__name__}. "
+            "Pass a Sequence of dicts, dataclass instances, or NamedTuples "
+            "(not text/binary containers, sets, generators or arbitrary iterables)."
         )
-
-    items = list(data)
 
     # Column derivation: declared field names, union in first-seen order.
     names: list[Any] = []
-    records: list[dict[Any, Any] | None] = []
-    for item in items:
+    records: list[dict[Any, Any]] = []
+    for index, item in enumerate(data):
         record = record_fields(item)
-        records.append(record)
         if record is None:
-            continue
+            raise ContractError(
+                f"table_lens row {index} has unsupported type {type(item).__name__}; "
+                "each row must be a dict, dataclass instance, or NamedTuple."
+            )
+        records.append(record)
         for key in record:
             if key not in names:
                 names.append(key)
 
-    if items and not names:
+    if columns is not None and len(columns) != len(names):
         raise ContractError(
-            "table_lens needs items that declare named fields (dict, dataclass, "
-            f"or NamedTuple); got a sequence of {type(items[0]).__name__}. A "
-            "sequence of scalars declares order, not columns — paint() already "
-            "transcribes it as items."
+            f"table_lens was given {len(columns)} columns but the data declares "
+            f"{len(names)} ({', '.join(map(str, names))}); the "
+            "explicit list must match the derived order"
         )
 
-    if zoom <= 0 or not items:
-        count = len(items)
+    # Validate once, before count/empty returns or width clipping. Keep original
+    # keys for lookup; only the derived header is display text.
+    headers = [
+        _single_line(str(name), f"derived header at column {index}")
+        for index, name in enumerate(names)
+    ]
+    if columns is not None:
+        for index, column in enumerate(columns):
+            _single_line(
+                "".join(span.text for span in column.header.spans),
+                f"explicit header at column {index}",
+            )
+    rows = [
+        [
+            Line.plain(_single_line(format_value(record[name]), f"row {index}, field {name!r}"))
+            if name in record
+            else Line.plain("")
+            for name in names
+        ]
+        for index, record in enumerate(records)
+    ]
+
+    if zoom <= 0 or not names:
+        count = len(records)
         text = f"{count} row{'s' if count != 1 else ''}"
         if count:
             text += f" x {len(names)} column{'s' if len(names) != 1 else ''}"
         return Block.text(text, Style(), width=width)
 
-    # A row that declares no schema sits in a mixed sequence; its cells are
-    # empty rather than silently re-projected into someone else's columns.
-    derived = []
-    for name in names:
-        present = [r[name] for r in records if r is not None and name in r]
-        align = Align.END if present and all(_is_numeric(v) for v in present) else Align.START
-        # Preserve the original key for lookup; only its header is display text.
-        derived.append(Column(header=Line.plain(str(name)), width=AUTO, align=align, ellipsis=True))
-    rows = [
-        [
-            Line.plain(format_value(r[name])) if r is not None and name in r else Line.plain("")
-            for name in names
-        ]
-        for r in records
-    ]
-
-    if columns is not None:
-        if len(columns) != len(derived):
-            raise ContractError(
-                f"table_lens was given {len(columns)} columns but the data declares "
-                f"{len(derived)} ({', '.join(map(str, names))}); the "
-                "explicit list must match the derived order"
+    if columns is None:
+        derived = []
+        for name, header in zip(names, headers):
+            present = [r[name] for r in records if name in r]
+            align = Align.END if all(_is_numeric(v) for v in present) else Align.START
+            derived.append(
+                Column(header=Line.plain(header), width=AUTO, align=align, ellipsis=True)
             )
+    else:
         derived = columns
 
     state = TableState().with_count(len(rows))
     # visible_height == row count: the whole table is shown, so `table()` opens
     # no scroll window and reserves no evidence row. Natural height is the lens
     # contract; a host that cannot fit it owns that viewport (RENDER_MODEL law 6).
-    block = table(state, derived, rows, visible_height=len(rows), width=width)
+    block = table(
+        state, derived, rows, visible_height=len(rows), width=width, selected_style=Style()
+    )
     if width is None:
         return block
     # `table()` treats a width as a *budget* — with no Fill column it sizes

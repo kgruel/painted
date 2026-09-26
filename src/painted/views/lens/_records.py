@@ -14,6 +14,7 @@ The module is private; its names are not, so public siblings may import them
 from __future__ import annotations
 
 from dataclasses import fields, is_dataclass
+from enum import Enum
 from typing import Any
 
 
@@ -25,8 +26,13 @@ def is_namedtuple(x: Any) -> bool:
 def format_value(value: Any) -> str:
     """Format a scalar for display — the shared leaf spelling.
 
-    What ``paint()`` shows for a value is what a table cell shows for it.
+    Shares leaf spelling, not recursive container rendering or zoom policy.
+    Enum identity precedes scalar subclasses (IntEnum/StrEnum); an unnamed
+    Flag keeps its own str() fallback rather than inventing TypeName.None.
     """
+    if isinstance(value, Enum):
+        name = value.name
+        return f"{type(value).__name__}.{name}" if name is not None else str(value)
     if value is None:
         return "None"
     if isinstance(value, bool):

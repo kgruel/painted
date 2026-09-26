@@ -132,10 +132,10 @@ _table_data = st.lists(
     st.dictionaries(
         st.sampled_from(["a", "bb", "ccc", "\u5e73\u4eee\u540d"]),
         st.one_of(st.integers(), st.text(alphabet=MIXED_ALPHABET, max_size=6), st.none()),
-        min_size=1,
+        min_size=0,
         max_size=4,
     ),
-    min_size=1,
+    min_size=0,
     max_size=6,
 )
 
