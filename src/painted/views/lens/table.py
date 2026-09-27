@@ -93,8 +93,9 @@ def table_lens(
             naturally (the width law). Nonpositive widths collapse before validation.
         columns: Explicit ``Column`` list, overriding derivation — the escape
             hatch for fixed widths, ``Fill``, or custom headers. Cardinality must
-            match the derived columns at every zoom, even on empty input. The
-            override is positional; header text need not equal field names.
+            match the derived columns at every zoom, even on empty input. Mismatch
+            diagnostics quote field-name text, escaping controls. The override is
+            positional; header text need not equal field names.
             Use ``table()`` directly for scrolling or selection.
         fidelity: Accepted for lens-call compatibility; budgets and tags are
             not currently consumed. ``zoom`` controls the two disclosure rungs.
@@ -136,7 +137,7 @@ def table_lens(
                 names.append(key)
 
     if columns is not None and len(columns) != len(names):
-        fields = f" ({', '.join(map(str, names))})" if names else ""
+        fields = f" ({', '.join(repr(str(name)) for name in names)})" if names else ""
         raise ContractError(
             f"table_lens was given {len(columns)} columns but the data declares "
             f"{len(names)}{fields}; the "
