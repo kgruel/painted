@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import replace
+from enum import Enum
 from typing import TYPE_CHECKING, Any
 
 from ...core.block import Block
-from ...core.cell import Style
+from ...core.cell import Style, scrub_control
 from ...core.compose import Align, fit_to_width
 from ...core.errors import ContractError
 from ...core.span import Line
@@ -20,18 +22,18 @@ __all__ = ["table_lens"]
 
 
 def _is_numeric(value: Any) -> bool:
-    """Numeric for alignment purposes — bool excluded, matching `_is_numeric_sequence`."""
-    return isinstance(value, (int, float)) and not isinstance(value, bool)
+    """Numbers declare numeric alignment; bool and Enum declare other meanings."""
+    return isinstance(value, (int, float)) and not isinstance(value, (bool, Enum))
 
 
 def _single_line(text: str, location: str) -> str:
-    """Validate before Line.paint can discard a declared break."""
+    """Refuse declared breaks first, then neutralize other controls like Cell."""
     if "\n" in text or "\r" in text:
         raise ContractError(
             f"table_lens {location} must be single-line (no LF or CR); "
             "supply single-line text or use a multiline layout instead."
         )
-    return text
+    return scrub_control(text)
 
 
 def table_lens(
@@ -65,7 +67,11 @@ def table_lens(
     with ``repr=False`` stay suppressed. Nonempty records with no visible
     fields show ``N rows x 0 columns`` at every zoom; empty input shows ``0 rows``.
     Formatted cells and derived/explicit headers must be single-line (no LF or
-    CR), validated even at count zoom or when clipped. Enum leaves preserve
+    CR), validated even at count zoom or when clipped. Other C0/C1 controls,
+    including DEL, become one space each, as in Cell/transcription; explicit
+    headers retain styles, refs and settings at the ``table()`` input boundary
+    without mutating caller values. This does not alter ``table()``'s header
+    base-style override or lack of output refs. Enum leaves preserve
     transcription's named spelling and unnamed fallback. Cells do not recurse.
 
     **Zoom is deliberately two-rung**: ``0`` is the count line (``3 rows x 4
@@ -77,7 +83,8 @@ def table_lens(
     it dropped through the ``+Nc`` badge (law 6).
 
     Alignment is derived, not guessed: a column whose every present value is
-    numeric aligns right. The type *is* the declaration.
+    an int/float (excluding bool and all Enum values) aligns right; otherwise it
+    aligns left. Explicit columns retain their alignment. The type *is* the declaration.
 
     Args:
         data: An ordered Sequence of supported records.
@@ -129,9 +136,10 @@ def table_lens(
                 names.append(key)
 
     if columns is not None and len(columns) != len(names):
+        fields = f" ({', '.join(map(str, names))})" if names else ""
         raise ContractError(
             f"table_lens was given {len(columns)} columns but the data declares "
-            f"{len(names)} ({', '.join(map(str, names))}); the "
+            f"{len(names)}{fields}; the "
             "explicit list must match the derived order"
         )
 
@@ -147,6 +155,20 @@ def table_lens(
                 "".join(span.text for span in column.header.spans),
                 f"explicit header at column {index}",
             )
+        # Clone only the text-bearing path; retain all column/line/span settings
+        # and caller-owned values. Validation above includes split-span CRLF.
+        columns = [
+            replace(
+                column,
+                header=replace(
+                    column.header,
+                    spans=tuple(
+                        replace(span, text=scrub_control(span.text)) for span in column.header.spans
+                    ),
+                ),
+            )
+            for column in columns
+        ]
     rows = [
         [
             Line.plain(_single_line(format_value(record[name]), f"row {index}, field {name!r}"))

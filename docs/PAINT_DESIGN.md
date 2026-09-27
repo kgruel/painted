@@ -199,6 +199,16 @@ operational receipt.
   `ContractError` with row/field or column location and a remedy to supply
   single-line text or use a multiline layout. Validation precedes disclosure;
   low zoom and clipping must not hide invalid input. No flattening occurs.
+  After LF/CR refusal, other C0/C1 controls (U+0000–U+001F and
+  U+007F–U+009F, including DEL) become one space each via `core.cell.scrub_control`.
+  This matches Cell/transcription rather than deleting separators or introducing
+  a second control policy. It applies to formatted cells, derived headers and
+  every span of explicit headers; other Unicode characters are untouched by
+  this boundary. Explicit Columns/Lines/Spans are cloned without changing their
+  styles, refs or settings, or mutating caller values. This is input preservation
+  at the `table()` boundary, not a change to that component's rendering: it
+  currently replaces header Line base style and does not carry buffer refs into
+  its output Block. Suppressed fields are never formatted or scrubbed.
 - Zoom `<=0` is the count summary; positive zoom shows all declared columns
   unless there are none. Explicit `columns=` overrides are positional: their
   count must equal the derived count even at low zoom or for empty sequences;
@@ -208,6 +218,9 @@ operational receipt.
   named spelling (`Type.MEMBER`, including IntEnum/StrEnum and named Flag
   combinations), with the enum's own `str()` fallback when `.name is None`.
   This shares leaf spelling, not recursive transcription inside cells.
+  Alignment derives from declared types: only columns whose every present value
+  is an int/float, excluding bool and **all** Enum values (including IntEnum and
+  IntFlag), align right. Other columns align left; explicit alignment wins.
 
 Width clipping/overflow evidence remains owned by `table()`; the lens pads its
 result to exact offered width and otherwise returns natural height. `fidelity`

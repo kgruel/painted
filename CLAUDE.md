@@ -100,7 +100,7 @@ Surface + Layer             # alt-screen TUI with keyboard + diff rendering
 | Renderer | `icon_set.py` | IconSet (glyph vocabulary), ASCII fallback |
 | Renderer | `capabilities.py` | Capabilities (color/glyph/link facets), current_capabilities, use_capabilities — the sixth ambient channel (RENDERER_CONTRACT_DESIGN §9) |
 | Renderer | `views/record.py` | record_line, PayloadLens, GutterFn |
-| Renderer | `views/lens/` | shape_lens, tree_lens, chart_lens, flame_lens |
+| Renderer | `views/lens/` | table_lens (static record sequences), tree_lens, chart_lens, flame_lens, shape_lens (exploration) |
 | Renderer | `views/_traceback.py` | render_traceback (an exception as a record tree) |
 | Renderer | `views/components/` | Stateful view components (spinner, progress, list, table, etc.) |
 | Renderer | `views/` | Public view-layer namespace (re-exports lenses + components) |

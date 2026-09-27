@@ -204,7 +204,7 @@ from painted.views import table_lens, tree_lens, chart_lens, flame_lens, shape_l
 
 | I have… | Use | Gives you |
 |---|---|---|
-| rows of records (dicts, dataclasses, NamedTuples) | **`table_lens`** | aligned columns derived from the declared fields; numeric columns right-align |
+| rows of records (dicts, dataclasses, NamedTuples) | **`table_lens`** | aligned columns derived from declared fields; int/float columns right-align (excluding bool/Enum) |
 | nested/hierarchical data | **`tree_lens`** | indented tree with branch glyphs; `node_renderer` for custom node content |
 | numbers to compare | **`chart_lens`** | horizontal bars, labeled |
 | proportions of a whole, nested | **`flame_lens`** | flame-graph segments |
@@ -212,7 +212,9 @@ from painted.views import table_lens, tree_lens, chart_lens, flame_lens, shape_l
 
 `table_lens` accepts ordered `Sequence`s of those records, not bare records,
 sets or generators. Wrap a single record in `[record]`. Unsupported rows and
-multiline cells/headers raise `ContractError`; nothing is silently flattened.
+multiline cells/headers (LF/CR) raise `ContractError`; nothing is silently flattened.
+Other C0/C1 controls, including DEL, become one space each, matching transcription.
+Enum names align left unless `columns=` explicitly overrides alignment.
 Zero-visible-field records show counts at every zoom (`repr=False` remains
 suppressed). `columns=` is a positional override with matching cardinality,
 even at count zoom or on empty input. See the [views guide](views/README.md)

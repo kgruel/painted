@@ -44,17 +44,19 @@ breaking changes.
 
 ### Added
 
-- **`table_lens` — render a list of records as a table in one call.** The lens
-  rung of `table()`: `paint(rows, lens=table_lens)` (or any `run_cli`/`Surface`
-  renderer) takes a sequence of dicts, dataclasses or NamedTuples and derives
-  columns from the declared field names, where driving the stateful `table()`
-  component by hand needed a `Column` list, `Line`-wrapped cells, a
-  `TableState` and a `visible_height`. Numeric columns align right; a row
-  omitting a field gets an empty cell. A bare mapping and a sequence of scalars
-  are refused rather than coerced — `paint()` already transcribes both.
+- **`table_lens` renders ordered record sequences as static tables in one call.**
+  `paint(rows, lens=table_lens)` derives columns from dict keys, dataclass fields
+  or NamedTuples, honoring `repr=False`, Enum names and ordinary numeric
+  alignment. Unsupported rows and LF/CR cells or headers are refused; other
+  C0/C1 controls become spaces. Counts, exact widths and positional `Column`
+  overrides work without selection or scroll state.
+  ([52b17f1](https://github.com/kgruel/painted/commit/52b17f1),
+  [a18faf4](https://github.com/kgruel/painted/commit/a18faf4),
+  [724d61d](https://github.com/kgruel/painted/commit/724d61d))
 - **`Block.text` no longer requires a `style` argument.** `Block.text("hi")`
   now matches `Span`, `Line.plain` and `Cell`, which have always defaulted to
   an unstyled `Style()`.
+  ([52b17f1](https://github.com/kgruel/painted/commit/52b17f1))
 
 ### Fixed
 
@@ -67,12 +69,7 @@ breaking changes.
   (`Doc.body`, `Section.body`, `Defs.items`, `Items.entries`, `Palette.series`,
   `IconSet.sparkline`, `SpinnerFrames.frames`, `DataNode.path`), held together
   by an enumerating test rather than by whoever remembers the rule.
-- **`table_lens` honors dataclass `repr=False`, renders non-string dict keys,
-  and safely collapses nonpositive widths.** Its public imports retain the typed
-  signature for static checkers.
-- **`table_lens` refuses unsupported rows and multiline cells/headers instead of
-  losing data.** Ordered record sequences retain Enum names, zero-field counts,
-  neutral static rows and zoom-independent column validation.
+  ([52b17f1](https://github.com/kgruel/painted/commit/52b17f1))
 
 ## [0.14.0] — 2026-08-13
 

@@ -233,16 +233,18 @@ item = search.selected_item(matches)
 
 ## Lens Functions
 
-Four built-in strategies. Lenses are plain functions `(data, zoom, width) -> Block`. All are importable from `painted.views`.
+Lenses are plain functions `(data, zoom, width) -> Block`. These data-arrangement lenses are importable from `painted.views`.
 
+- **table_lens** — Static aligned columns from an ordered `Sequence` of dicts, dataclass instances or NamedTuples. Zoom `<=0` shows counts; positive zoom shows all declared columns. Ordinary int/float columns right-align; bool and Enum values do not. Refuses unsupported rows and LF/CR in cells or headers; other C0/C1 controls become spaces. `columns=` overrides positionally with matching cardinality, even for empty input. See the [views guide](../src/painted/views/README.md) and [consumer contract](PAINT_DESIGN.md#explicit-table-arrangement--consumer-contract-amendment-2026-09-26). Use `table()` for scrolling or selection.
 - **shape_lens** — Auto-dispatches by data shape. Numeric sequences → chart_lens. Hierarchical dicts → tree_lens. Everything else uses built-in shape rendering (zoom 0: type/count, zoom 1: summary, zoom 2: full).
 - **tree_lens** — Hierarchical data with branch characters. Supports dicts, tuples, node protocol.
 - **chart_lens** — Numeric data as sparklines (zoom 1) or bar charts (zoom 2).
 - **flame_lens** — Proportional width visualization. Nested dicts → flame graph rows.
 
 ```python
-from painted.views import shape_lens, tree_lens, chart_lens, flame_lens
+from painted.views import table_lens, shape_lens, tree_lens, chart_lens, flame_lens
 
+block = table_lens([{"name": "Alice", "age": 30}], zoom=1, width=40)  # table
 block = shape_lens({"name": "Alice", "age": 30}, zoom=1, width=40)  # keys
 block = shape_lens([10, 20, 30], zoom=1, width=40)                  # sparkline
 block = tree_lens({"src": {"main.py": None}}, zoom=2, width=40)     # tree
