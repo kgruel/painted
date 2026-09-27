@@ -620,9 +620,12 @@ class TestOfferSeam:
             terminal_patch.setattr(
                 shutil, "get_terminal_size", lambda *a, **k: os.terminal_size((next(cols), 24))
             )
-            runner._dispatch(_ctx(is_tty=True, width=999, use_ansi=True, mode=OutputMode.LIVE))
+            code = runner._dispatch(
+                _ctx(is_tty=True, width=999, use_ansi=True, mode=OutputMode.LIVE)
+            )
         # The stdlib module is shared with pytest, which reports before fixture teardown.
         assert shutil.get_terminal_size is original_terminal_size
+        assert code == 0
         assert offered == [30, 50]  # the resize re-entered as a changed offer
 
     def test_forced_plain_live_reoffers_current_geometry_per_frame(self, monkeypatch, capsys):
