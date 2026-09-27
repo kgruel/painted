@@ -69,6 +69,15 @@ class TestBlockImmutability:
 
 
 class TestBlockTextEdgeCases:
+    @pytest.mark.parametrize("content", ["hi", "界", "a\nb", ""])
+    @pytest.mark.parametrize("width", [None, 0, 1, 10])
+    def test_default_style_matches_explicit_unstyled(self, content, width):
+        from tests.helpers import assert_blocks_equal
+
+        assert_blocks_equal(
+            Block.text(content, width=width), Block.text(content, Style(), width=width)
+        )
+
     def test_width_zero_returns_empty(self):
         b = Block.text("hello", S, width=0)
         assert b.width == 0

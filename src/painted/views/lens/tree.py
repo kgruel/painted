@@ -59,7 +59,8 @@ def tree_lens(
             Branch characters are added automatically; return content only. The
             returned Block must be exactly one row (height 1) — a node slot is an
             offer of height 1; a taller Block raises ContractError (it is not
-            silently cropped to its first row).
+            silently cropped to its first row). For multi-line node detail, nest
+            it as child nodes rather than growing the slot.
         icons: Optional IconSet override (uses ambient if None).
 
     Returns:
@@ -244,7 +245,9 @@ def _render_node(node_renderer: NodeRenderer, key: str, value: Any, depth: int) 
     if block.height != 1:
         raise ContractError(
             f"node_renderer returned a Block of height {block.height}; a tree node "
-            "slot is an offer of height 1 (return exactly one row)"
+            "slot is an offer of height 1 (return exactly one row). For multi-line "
+            "node detail, nest the detail as child nodes — the tree already has a "
+            "rung for depth"
         )
     return block
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from typing import Any
 
+from ...core._normalize import freeze_fields
 from ...core._text_width import display_width, truncate, truncate_ellipsis
 from ...core.block import Block
 from ...core.cell import Style
@@ -26,6 +27,9 @@ class DataNode:
     path: tuple[str, ...]
     expandable: bool
     expanded: bool
+
+    def __post_init__(self) -> None:
+        freeze_fields(self, "path")
 
 
 def flatten(

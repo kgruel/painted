@@ -52,6 +52,7 @@ import warnings
 from dataclasses import InitVar, dataclass
 from typing import TypeVar
 
+from ._normalize import freeze_fields
 from ._text_width import display_width
 from .block import Block, Wrap
 from .cell import Cell, Style
@@ -119,6 +120,9 @@ class Doc:
     title: str | None
     body: tuple[Node, ...]
 
+    def __post_init__(self) -> None:
+        freeze_fields(self, "body")
+
 
 @dataclass(frozen=True, slots=True)
 class Section:
@@ -130,6 +134,9 @@ class Section:
     hint: str | None = None  # help's "(what to show)" subhead
     min_depth: int = 0
     tag: str | None = None
+
+    def __post_init__(self) -> None:
+        freeze_fields(self, "body")
 
 
 @dataclass(frozen=True, slots=True)
@@ -159,6 +166,9 @@ class Defs:
     min_depth: int = 0
     tag: str | None = None
 
+    def __post_init__(self) -> None:
+        freeze_fields(self, "items")
+
 
 @dataclass(frozen=True, slots=True)
 class Items:
@@ -168,6 +178,9 @@ class Items:
     ordered: bool = False
     min_depth: int = 0
     tag: str | None = None
+
+    def __post_init__(self) -> None:
+        freeze_fields(self, "entries")
 
 
 # Sentinel for the deprecated ``Code(ref=)`` alias: an InitVar so it is passed to

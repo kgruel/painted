@@ -182,6 +182,7 @@ STABLE_VIEWS_SURFACE = frozenset(
         # Stateless views
         "NodeRenderer",
         "shape_lens",
+        "table_lens",
         "tree_lens",
         "chart_lens",
         "flame_lens",
