@@ -62,13 +62,11 @@ breaking changes.
   alignment. Unsupported rows and LF/CR cells or headers are refused; other
   C0/C1 controls become spaces. Counts, exact widths and positional `Column`
   overrides work without selection or scroll state.
-  ([52b17f1](https://github.com/kgruel/painted/commit/52b17f1),
-  [a18faf4](https://github.com/kgruel/painted/commit/a18faf4),
-  [724d61d](https://github.com/kgruel/painted/commit/724d61d))
+  ([b219f11](https://github.com/kgruel/painted/commit/b219f110df1de62b7f45c287db5f6ac15c399319))
 - **`Block.text` no longer requires a `style` argument.** `Block.text("hi")`
   now matches `Span`, `Line.plain` and `Cell`, which have always defaulted to
   an unstyled `Style()`.
-  ([52b17f1](https://github.com/kgruel/painted/commit/52b17f1))
+  ([b219f11](https://github.com/kgruel/painted/commit/b219f110df1de62b7f45c287db5f6ac15c399319))
 
 ### Fixed
 
@@ -81,7 +79,7 @@ breaking changes.
   (`Doc.body`, `Section.body`, `Defs.items`, `Items.entries`, `Palette.series`,
   `IconSet.sparkline`, `SpinnerFrames.frames`, `DataNode.path`), held together
   by an enumerating test rather than by whoever remembers the rule.
-  ([52b17f1](https://github.com/kgruel/painted/commit/52b17f1))
+  ([b219f11](https://github.com/kgruel/painted/commit/b219f110df1de62b7f45c287db5f6ac15c399319))
 
 ## [0.14.0] — 2026-08-13
 
