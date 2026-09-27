@@ -63,6 +63,9 @@ breaking changes.
   C0/C1 controls become spaces. Counts, exact widths and positional `Column`
   overrides work without selection or scroll state.
   ([b219f11](https://github.com/kgruel/painted/commit/b219f110df1de62b7f45c287db5f6ac15c399319))
+  Column-count mismatch diagnostics quote field names without emitting active
+  terminal controls or line breaks.
+  ([2a164bb](https://github.com/kgruel/painted/commit/2a164bbebcf95367ab67f490addb073c28f4e41c))
 - **`Block.text` no longer requires a `style` argument.** `Block.text("hi")`
   now matches `Span`, `Line.plain` and `Cell`, which have always defaulted to
   an unstyled `Style()`.
@@ -80,6 +83,10 @@ breaking changes.
   `IconSet.sparkline`, `SpinnerFrames.frames`, `DataNode.path`), held together
   by an enumerating test rather than by whoever remembers the rule.
   ([b219f11](https://github.com/kgruel/painted/commit/b219f110df1de62b7f45c287db5f6ac15c399319))
+
+- **Verbose development checks complete through prompt and live-offer tests.**
+  Terminal-size test doubles no longer break pytest reporting.
+  ([1ad60dd](https://github.com/kgruel/painted/commit/1ad60ddb3317f199d7bfa4805bf5678ad801132d))
 
 ## [0.14.0] — 2026-08-13
 
