@@ -600,11 +600,9 @@ class TestOfferSeam:
         # Terminal resizes between the two frames: 30 cols, then 50.
         cols = iter([30, 50])
         import os
+        import shutil
 
-        monkeypatch.setattr(
-            "shutil.get_terminal_size",
-            lambda *a, **k: os.terminal_size((next(cols), 24)),
-        )
+        original_terminal_size = shutil.get_terminal_size
 
         offered: list[int | None] = []
 
@@ -618,7 +616,13 @@ class TestOfferSeam:
 
         runner = CliRunner(renderer=rnd, fetch=lambda: "unused", fetch_stream=fake_stream)
         # LIVE on a TTY viewport (use_ansi True, is_tty True) → in-place ANSI branch.
-        runner._dispatch(_ctx(is_tty=True, width=999, use_ansi=True, mode=OutputMode.LIVE))
+        with monkeypatch.context() as terminal_patch:
+            terminal_patch.setattr(
+                shutil, "get_terminal_size", lambda *a, **k: os.terminal_size((next(cols), 24))
+            )
+            runner._dispatch(_ctx(is_tty=True, width=999, use_ansi=True, mode=OutputMode.LIVE))
+        # The stdlib module is shared with pytest, which reports before fixture teardown.
+        assert shutil.get_terminal_size is original_terminal_size
         assert offered == [30, 50]  # the resize re-entered as a changed offer
 
     def test_forced_plain_live_reoffers_current_geometry_per_frame(self, monkeypatch, capsys):
@@ -627,12 +631,11 @@ class TestOfferSeam:
         viewport, so each state's render re-reads current columns — never the
         detection-time ctx.width."""
         import os
+        import shutil
+
+        original_terminal_size = shutil.get_terminal_size
 
         cols = iter([30, 50])
-        monkeypatch.setattr(
-            "shutil.get_terminal_size",
-            lambda *a, **k: os.terminal_size((next(cols), 24)),
-        )
 
         offered: list[int | None] = []
 
@@ -646,7 +649,15 @@ class TestOfferSeam:
 
         runner = CliRunner(renderer=rnd, fetch=lambda: "unused", fetch_stream=fake_stream)
         # Forced-plain on a TTY (use_ansi False, is_tty True) → non-ANSI branch.
-        code = runner._dispatch(_ctx(is_tty=True, width=999, use_ansi=False, mode=OutputMode.LIVE))
+        with monkeypatch.context() as terminal_patch:
+            terminal_patch.setattr(
+                shutil, "get_terminal_size", lambda *a, **k: os.terminal_size((next(cols), 24))
+            )
+            code = runner._dispatch(
+                _ctx(is_tty=True, width=999, use_ansi=False, mode=OutputMode.LIVE)
+            )
+        # Restore before reporting, not just when the monkeypatch fixture tears down.
+        assert shutil.get_terminal_size is original_terminal_size
         assert code == 0
         assert offered == [30, 50]  # never the stale detection-time 999
         assert "b" in capsys.readouterr().out  # the last frame still deposits
