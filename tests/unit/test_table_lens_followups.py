@@ -93,26 +93,46 @@ def test_styled_ref_header_is_preserved_at_the_table_projection_boundary(monkeyp
     from importlib import import_module
 
     module = import_module("painted.views.lens.table")
-    header = Line(
-        (Span("a\tb", Style(fg="red"), ref="first"), Span("c\x85d", ref="second")),
-        style=Style(italic=True),
+    first_style = Style(fg="red", bg="blue", bold=True, dim=True, underline=True, reverse=True)
+    second_style = Style(fg="green", italic=True)
+    spans = (
+        Span("a\tb", first_style, ref="first"),
+        Span("c\x85d", second_style, ref="second"),
     )
+    header = Line(spans, style=Style(italic=True))
+    column = Column(header)
+    columns = [column]
+    rows = [{"v": "ok"}]
     expected = Line(
-        (Span("a b", Style(fg="red"), ref="first"), Span("c d", ref="second")),
+        (Span("a b", first_style, ref="first"), Span("c d", second_style, ref="second")),
         style=Style(italic=True),
     ).to_block(None)
     calls = []
 
     def render(state, columns, rows, **kwargs):
-        materialized = columns[0].header.to_block(None)
+        forwarded = columns[0].header
+        # Assert before materialization: to_block's Cell scrubbing can hide a
+        # missing lens sanitizer, and merged cell styles can hide Line.style loss.
+        assert [span.text for span in forwarded.spans] == ["a b", "c d"]
+        assert [span.style for span in forwarded.spans] == [first_style, second_style]
+        assert [span.ref for span in forwarded.spans] == ["first", "second"]
+        assert forwarded.style == Style(italic=True)
+        materialized = forwarded.to_block(None)
         assert_blocks_equal(materialized, expected)
         assert [materialized.cell_ref(x, 0) for x in range(6)] == ["first"] * 3 + ["second"] * 3
         calls.append(True)
         return table(state, columns, rows, **kwargs)
 
     monkeypatch.setattr(module, "table", render)
-    table_lens([{"v": "ok"}], 1, columns=[Column(header)])
+    table_lens(rows, 1, columns=columns)
     assert calls == [True]
+    assert columns == [column] and columns[0] is column
+    assert column.header is header and header.spans == spans
+    assert [span.text for span in spans] == ["a\tb", "c\x85d"]
+    assert [span.style for span in spans] == [first_style, second_style]
+    assert [span.ref for span in spans] == ["first", "second"]
+    assert header.style == Style(italic=True)
+    assert rows == [{"v": "ok"}]
 
 
 @pytest.mark.parametrize("zoom", [-1, 0, 1, 3])
@@ -240,4 +260,81 @@ def test_empty_column_mismatch_has_no_empty_parentheses(zoom, rows):
     assert str(exc.value) == (
         "table_lens was given 1 columns but the data declares 0; "
         "the explicit list must match the derived order"
+    )
+
+
+@pytest.mark.parametrize(
+    "name, displayed",
+    [
+        ("a\x1bb", r"'a\x1bb'"),
+        ("a\nb", r"'a\nb'"),
+        ("a\rb", r"'a\rb'"),
+        ("a\x00b", r"'a\x00b'"),
+        ("a\tb", r"'a\tb'"),
+        ("a\x7fb", r"'a\x7fb'"),
+        ("a\x85b", r"'a\x85b'"),
+        ("a\x9bb", r"'a\x9bb'"),
+        ("ordinary", "'ordinary'"),
+        ("界é", "'界é'"),
+        (42, "'42'"),
+        (Formatted("a\x1bb"), r"'a\x1bb'"),
+    ],
+    ids=["ESC", "LF", "CR", "NUL", "TAB", "DEL", "NEL", "CSI", "plain", "unicode", "int", "object"],
+)
+@pytest.mark.parametrize("zoom, width", [(1, None), (0, 1)])
+def test_column_mismatch_escapes_field_display_before_text_validation(name, displayed, zoom, width):
+    class MustNotFormat:
+        def __str__(self):
+            pytest.fail("column mismatch must precede cell formatting")
+
+    value = MustNotFormat()
+    row = {name: value}
+    rows = [row]
+    # Even invalid explicit headers are diagnosed only after cardinality.
+    column = Column(Line.plain("bad\nheader"))
+    columns = [column, column]
+    with pytest.raises(ContractError) as exc:
+        table_lens(rows, zoom, width, columns=columns)
+    message = str(exc.value)
+    assert message == (
+        f"table_lens was given 2 columns but the data declares 1 ({displayed}); "
+        "the explicit list must match the derived order"
+    )
+    assert not any(ord(c) < 0x20 or 0x7F <= ord(c) < 0xA0 for c in message)
+    assert rows == [row] and rows[0] is row
+    assert len(row) == 1 and next(iter(row)) is name and row[name] is value
+    assert columns == [column, column] and all(c is column for c in columns)
+    assert column.header.spans[0].text == "bad\nheader"
+
+
+def test_column_mismatch_keeps_distinct_keys_and_first_seen_union_order():
+    key = Formatted("same")
+    rows = [{key: "first", 42: "number"}, {"same": "last", key: "again"}]
+    original_items = [list(row.items()) for row in rows]
+    with pytest.raises(ContractError) as exc:
+        table_lens(rows, -1, columns=[])
+    assert str(exc.value) == (
+        "table_lens was given 0 columns but the data declares 3 ('same', '42', 'same'); "
+        "the explicit list must match the derived order"
+    )
+    assert [list(row.items()) for row in rows] == original_items
+    assert next(iter(rows[0])) is key
+    # Matching positional overrides still look values up by original key, not text.
+    block = table_lens(rows, 1, columns=[Column(Line.plain("x")) for _ in range(3)])
+    expected = table_lens(
+        [{"a": "first", "b": "number"}, {"c": "last", "a": "again"}],
+        1,
+        columns=[Column(Line.plain("x")) for _ in range(3)],
+    )
+    assert_blocks_equal(block, expected)
+
+
+@pytest.mark.parametrize("width", [0, -1])
+def test_nonpositive_width_collapses_before_column_mismatch(width):
+    class MustNotFormat:
+        def __str__(self):
+            pytest.fail("nonpositive width must precede mismatch name formatting")
+
+    assert_blocks_equal(
+        table_lens([{MustNotFormat(): "ok"}], 0, width, columns=[]), Block.empty(0, 1)
     )
