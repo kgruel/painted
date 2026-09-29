@@ -446,7 +446,7 @@ def _render_lens_view(
 # ---------------------------------------------------------------------------
 
 # Row tuple: (entry, depth, path, is_expanded, is_last)
-type TreeRow = tuple[DirEntry, int, tuple[str, ...], bool, bool]
+TreeRow = tuple[DirEntry, int, tuple[str, ...], bool, bool]
 
 
 def _flatten_tree(

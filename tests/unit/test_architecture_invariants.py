@@ -1327,3 +1327,59 @@ def test_stamped_version_matches_newest_released_changelog_section() -> None:
         f"CHANGELOG section [{newest.name}] carries no release date — a released "
         "section is dated at the cut; an undated container is spelled [Unreleased]"
     )
+
+
+# ---------------------------------------------------------------------------
+# Shipped Python must parse at the requires-python floor
+# ---------------------------------------------------------------------------
+
+
+def _requires_python_floor() -> tuple[int, int]:
+    """The (major, minor) floor declared by pyproject's `requires-python`."""
+    import tomllib
+
+    repo_root = Path(__file__).resolve().parents[2]
+    with (repo_root / "pyproject.toml").open("rb") as fh:
+        spec = tomllib.load(fh)["project"]["requires-python"]
+    match = re.fullmatch(r"\s*>=\s*(\d+)\.(\d+)(?:\.\d+)?\s*", spec)
+    assert match, (
+        f"requires-python = {spec!r} is not a single '>=X.Y' floor; teach "
+        "_requires_python_floor the new shape rather than skipping the check"
+    )
+    return int(match.group(1)), int(match.group(2))
+
+
+def test_shipped_python_parses_at_requires_python_floor() -> None:
+    """Every .py in the wheel or the demo tree parses at the declared floor.
+
+    Shipped = `src/` (the package) + `demos/` (force-included into the wheel and
+    discovered by `painted demos`). A syntax newer than the floor (e.g. a PEP 695
+    `type X = ...` statement, 3.12+) parses fine on a newer dev interpreter but
+    fails on the floor; `_demo_discovery._parse_demo` swallows the SyntaxError, so
+    the demo would silently vanish. `ast.parse(feature_version=...)` rejects the
+    3.12+ grammar additions (type statements, type-parameter lists) on any newer
+    interpreter. It does not detect every newer feature (e.g. PEP 701 f-strings,
+    or stdlib APIs newer than the floor) — it is a location claim about grammar,
+    not a proof the file runs on the floor.
+    """
+    floor = _requires_python_floor()
+    repo_root = Path(__file__).resolve().parents[2]
+    files = sorted(
+        path
+        for tree in ("src", "demos")
+        for path in (repo_root / tree).rglob("*.py")
+        if "__pycache__" not in path.parts
+    )
+    assert files, "found no shipped .py files — the tree layout changed"
+
+    failures: list[str] = []
+    for path in files:
+        try:
+            ast.parse(path.read_text(encoding="utf-8"), filename=str(path), feature_version=floor)
+        except SyntaxError as exc:
+            failures.append(f"{path.relative_to(repo_root)}:{exc.lineno}: {exc.msg}")
+
+    assert not failures, (
+        f"shipped Python does not parse at the requires-python floor "
+        f"{floor[0]}.{floor[1]}:\n  " + "\n  ".join(failures)
+    )
