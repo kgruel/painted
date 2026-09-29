@@ -7,7 +7,7 @@ lives on the release page. This project adheres to
 [Semantic Versioning](https://semver.org/); pre-1.0, minor versions may carry
 breaking changes.
 
-## [Unreleased]
+## [0.15.0] — 2026-09-28
 
 ### Changed
 
