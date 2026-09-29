@@ -1,0 +1,33 @@
+---
+interface Props {
+  id: string;
+  title: string;
+  description: string;
+  video: string;
+  poster: string;
+  unavailableMessage: string;
+}
+
+const { id, title, description, video, poster, unavailableMessage } = Astro.props;
+---
+
+<figure class="recording" data-recording-id={id} aria-labelledby={`${id}-title`}>
+  <figcaption class="recording-copy">
+    <p class="proto-eyebrow">Recording</p>
+    <h2 id={`${id}-title`}>{title}</h2>
+    <p class="recording-description" id={`${id}-description`}>{description}</p>
+  </figcaption>
+  <video
+    class="recording-video"
+    controls
+    muted
+    playsinline
+    preload="metadata"
+    poster={poster}
+    aria-describedby={`${id}-description`}
+  >
+    <source src={video} type="video/mp4" />
+    {unavailableMessage}
+  </video>
+  <p class="recording-unavailable">{unavailableMessage}</p>
+</figure>

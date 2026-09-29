@@ -860,6 +860,8 @@ class TestLaw6EvidencePins:
         with pytest.raises(ContractError) as excinfo:
             tree_lens({"a": 1}, zoom=1, width=20, node_renderer=two_row)
         assert "2" in str(excinfo.value), "ContractError message must name the offending height"
+        assert "height 1" in str(excinfo.value)
+        assert "nest the detail as child nodes" in str(excinfo.value)
 
         # A height-1 callback renders without complaint.
         def one_row(key: str, value: object, depth: int) -> Block:

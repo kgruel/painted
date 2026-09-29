@@ -108,6 +108,7 @@ SHOWCASE = [
     "donut",
     "fire",
     "harmonograph",
+    "interference",
     "life",
     "lorenz",
     "mandelbrot",
@@ -156,6 +157,7 @@ APPS = [
     ("apps/viewport.py", "ViewportInspectorApp", ["down", "down", "q"]),
     ("apps/widgets.py", "WidgetsApp", ["right", "tab", "down", "q"]),
     ("examples/big_text.py", "BigTextDemo", ["q"]),
+    ("examples/fieldwork.py", "Fieldwork", ["tab", "j", "enter", "backspace", "q"]),
     (
         "examples/harmonograph_lab.py",
         "HarmonographLab",

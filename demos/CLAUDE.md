@@ -120,6 +120,7 @@ examples/
   lenses.py         Tree and chart data visualization
   theme_carnival.py Interactive palette explorer
   harmonograph_lab.py Editable four-pendulum instrument, shared showcase plate ✓
+  fieldwork.py      Recorded evidence: search, follow references, retrace readings in CLI/TUI ✓
 
 showcase/           (pattern test shape; surface-delivered animated spectacle)
   life.py           Conway's Life: pure step + fetch_stream animation     ✓
@@ -133,6 +134,7 @@ showcase/           (pattern test shape; surface-delivered animated spectacle)
   starmap.py        The night sky: real catalog, refs make every star a link ✓
   mandelbrot.py     Escape time: proof vs presumption, the unknown declared ✓
   harmonograph.py   Damped pendulums: Braille subpixels + capability carriers ✓
+  interference.py   Two radial sources: signed displacement + cancellation laws ✓
 ```
 
 Old stepping stones (`block.py`, `buffer.py`, `buffer_view.py`) deleted —

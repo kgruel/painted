@@ -1,0 +1,390 @@
+.reference-page {
+  min-width: 0;
+}
+
+.reference-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-4);
+  margin-top: var(--sp-5);
+}
+
+.reference-secondary-link,
+.reference-entry-link {
+  color: var(--cyan);
+  font-size: var(--t-small);
+  font-weight: var(--w-bold);
+  text-decoration: none;
+}
+
+.reference-secondary-link:hover,
+.reference-entry-link:hover {
+  color: var(--fg);
+}
+
+.reference-report {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(420px, 0.8fr);
+  gap: clamp(24px, 5vw, 64px);
+  align-items: end;
+  margin-top: clamp(48px, 8vw, 88px);
+  padding: var(--sp-5);
+  border: 1px solid var(--line-bold);
+  background: color-mix(in srgb, var(--panel) 56%, var(--ink));
+}
+
+.reference-report h2,
+.reference-method h2 {
+  font-size: clamp(22px, 3vw, 30px);
+  letter-spacing: -0.035em;
+}
+
+.reference-report p:not(.proto-eyebrow),
+.reference-method > p:not(.proto-eyebrow) {
+  max-width: 720px;
+  margin-top: var(--sp-3);
+  color: var(--fg-2);
+  font-size: var(--t-small);
+  line-height: 1.6;
+}
+
+.reference-counts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0;
+  border-top: 1px solid var(--line);
+  border-left: 1px solid var(--line);
+}
+
+.reference-counts div {
+  min-width: 0;
+  padding: var(--sp-3);
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.reference-counts dt {
+  color: var(--fg-dim);
+  font-size: var(--t-caption);
+  line-height: 1.35;
+}
+
+.reference-counts dd {
+  margin: var(--sp-2) 0 0;
+  color: var(--green);
+  font-size: var(--t-h2);
+  font-weight: var(--w-bold);
+}
+
+.reference-index {
+  margin-top: var(--sp-7);
+  scroll-margin-top: var(--sp-4);
+}
+
+.reference-index ol {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--line);
+  border-left: 1px solid var(--line);
+  list-style: none;
+}
+
+.reference-index li {
+  min-width: 0;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.reference-index a {
+  display: flex;
+  min-height: 64px;
+  align-items: baseline;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  color: var(--fg-2);
+  font-size: var(--t-small);
+  line-height: 1.45;
+  text-decoration: none;
+}
+
+.reference-index a:hover {
+  color: var(--fg);
+  background: color-mix(in srgb, var(--panel) 65%, var(--ink));
+}
+
+.reference-index span,
+.reference-family-index {
+  color: var(--magenta);
+  font-size: var(--t-caption);
+  font-weight: var(--w-bold);
+  letter-spacing: 0.08em;
+}
+
+.reference-families {
+  margin-top: clamp(64px, 10vw, 120px);
+}
+
+.reference-family {
+  scroll-margin-top: var(--sp-5);
+}
+
+.reference-family + .reference-family {
+  margin-top: clamp(72px, 11vw, 128px);
+}
+
+.reference-family-header {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  gap: var(--sp-3);
+  padding-bottom: var(--sp-4);
+  border-bottom: 1px solid var(--line-bold);
+}
+
+.reference-family-header h2 {
+  font-size: clamp(26px, 4vw, 40px);
+  letter-spacing: -0.045em;
+}
+
+.reference-family-header p:not(.reference-family-index) {
+  max-width: 760px;
+  margin-top: var(--sp-3);
+  color: var(--fg-2);
+  line-height: 1.55;
+}
+
+.reference-family-index {
+  margin: 7px 0 0;
+}
+
+.reference-entry-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-4);
+  margin-top: var(--sp-4);
+}
+
+.reference-entry {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  padding: var(--sp-4);
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--panel) 55%, var(--ink));
+}
+
+.reference-entry.is-specimen {
+  grid-column: span 2;
+  border-color: var(--line-bold);
+  background: var(--ink);
+}
+
+.reference-entry.is-omission {
+  border-style: dashed;
+}
+
+.reference-entry-header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: var(--sp-4);
+}
+
+.reference-entry-header > div {
+  min-width: 0;
+}
+
+.reference-mode {
+  margin: 0 0 var(--sp-2);
+  color: var(--green);
+  font-size: var(--t-caption);
+  font-weight: var(--w-bold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.is-link .reference-mode {
+  color: var(--cyan);
+}
+
+.is-omission .reference-mode {
+  color: var(--yellow);
+}
+
+.reference-entry h3 {
+  color: var(--fg);
+  font-size: var(--t-h3);
+}
+
+.reference-capability-tags {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: end;
+  gap: var(--sp-1);
+  max-width: 52%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.reference-capability-tags li {
+  padding: 2px 6px;
+  border: 1px solid var(--line);
+  color: var(--fg-dim);
+  font-size: var(--t-caption);
+  line-height: 1.35;
+}
+
+.reference-entry-summary {
+  margin-top: var(--sp-3);
+  color: var(--fg-2);
+  font-size: var(--t-small);
+  line-height: 1.6;
+}
+
+.reference-entry-link {
+  align-self: flex-start;
+  margin-top: auto;
+  padding-top: var(--sp-5);
+}
+
+.reference-specimen-stack {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
+  gap: var(--sp-3);
+  margin-top: var(--sp-4);
+}
+
+.reference-specimen {
+  min-width: 0;
+  margin: 0;
+  border: 1px solid var(--line);
+}
+
+.reference-specimen figcaption {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border-bottom: 1px solid var(--line);
+  color: var(--fg-dim);
+  font-size: var(--t-caption);
+  line-height: 1.4;
+}
+
+.reference-specimen figcaption span {
+  color: var(--fg-2);
+  font-weight: var(--w-bold);
+}
+
+.reference-specimen figcaption a {
+  min-width: 0;
+  color: var(--fg-dim);
+  overflow-wrap: anywhere;
+  text-decoration: none;
+}
+
+.reference-specimen figcaption a:hover {
+  color: var(--cyan);
+}
+
+.reference-specimen-grid {
+  min-width: 0;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  padding: var(--sp-4);
+}
+
+.reference-specimen-grid > .painted-output,
+.reference-specimen-grid > .term {
+  display: inline-block;
+  min-width: max-content;
+}
+
+.reference-omission {
+  margin-top: var(--sp-4);
+  padding-left: var(--sp-3);
+  border-left: 2px solid var(--yellow);
+  color: var(--fg-dim);
+  font-size: var(--t-small);
+  line-height: 1.55;
+}
+
+.reference-omission strong {
+  color: var(--yellow);
+}
+
+.reference-method {
+  margin-top: clamp(72px, 11vw, 128px);
+  padding: var(--sp-5);
+  border-left: 2px solid var(--magenta);
+  background: color-mix(in srgb, var(--panel) 55%, var(--ink));
+}
+
+@media (max-width: 760px) {
+  .reference-report {
+    grid-template-columns: 1fr;
+    padding: var(--sp-4);
+  }
+
+  .reference-index ol {
+    grid-template-columns: 1fr;
+  }
+
+  .reference-index a {
+    min-height: 0;
+  }
+
+  .reference-entry-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .reference-entry.is-specimen {
+    grid-column: auto;
+  }
+
+  .reference-entry-header {
+    flex-direction: column;
+  }
+
+  .reference-capability-tags {
+    justify-content: start;
+    max-width: none;
+  }
+}
+
+@media (max-width: 440px) {
+  .reference-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .reference-secondary-link {
+    padding: var(--sp-2) 0;
+  }
+
+  .reference-counts {
+    grid-template-columns: 1fr;
+  }
+
+  .reference-family-header {
+    grid-template-columns: 1fr;
+  }
+
+  .reference-family-index {
+    margin-top: 0;
+  }
+
+  .reference-entry,
+  .reference-method {
+    padding: var(--sp-3);
+  }
+
+  .reference-specimen-grid {
+    padding: var(--sp-3);
+  }
+}

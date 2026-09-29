@@ -1625,20 +1625,28 @@ class _RecordingRenderer:
 def test_cell_paint_clamps_wide_block_to_terminal_width(monkeypatch: pytest.MonkeyPatch) -> None:
     import painted._prompt_cell as pc
 
-    monkeypatch.setattr(pc.shutil, "get_terminal_size", lambda *a: os.terminal_size((10, 24)))
+    monkeypatch.setattr(
+        pc.shutil, "get_terminal_size", lambda fallback=(80, 24): os.terminal_size((10, 24))
+    )
     rec = _RecordingRenderer()
     pc._paint(rec, Block.text("x" * 50, Style()))
     assert rec.frames[0].width == 10  # clipped to the terminal, no soft-wrap
+    # pytest's verbose reporter shares shutil and calls this before teardown.
+    assert pc.shutil.get_terminal_size(fallback=(80, 24)) == os.terminal_size((10, 24))
 
 
 def test_cell_paint_leaves_a_narrow_block_untouched(monkeypatch: pytest.MonkeyPatch) -> None:
     import painted._prompt_cell as pc
 
-    monkeypatch.setattr(pc.shutil, "get_terminal_size", lambda *a: os.terminal_size((80, 24)))
+    monkeypatch.setattr(
+        pc.shutil, "get_terminal_size", lambda fallback=(80, 24): os.terminal_size((80, 24))
+    )
     rec = _RecordingRenderer()
     narrow = Block.text("hi", Style())
     pc._paint(rec, narrow)
     assert rec.frames[0] is narrow  # no-op when it already fits
+    # Keep the keyword-fallback regression on this double as well.
+    assert pc.shutil.get_terminal_size(fallback=(80, 24)) == os.terminal_size((80, 24))
 
 
 # --- F7: terminal restoration is unconditional on the answer path -----------

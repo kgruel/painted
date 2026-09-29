@@ -1,0 +1,77 @@
+---
+interface ReferenceEntry {
+  id: string;
+  title: string;
+  summary: string;
+  covers: string[];
+  mode: "specimen" | "link" | "omission";
+  specimen_ids: string[];
+  href: string | null;
+  link_label: string | null;
+  omission_reason: string | null;
+}
+
+interface SpecimenRecord {
+  id: string;
+  fragment: string;
+  source: string;
+}
+
+interface Props {
+  entry: ReferenceEntry;
+  specimens: Record<string, SpecimenRecord>;
+  fragments: Record<string, string>;
+}
+
+const { entry, specimens, fragments } = Astro.props;
+const modeLabel = {
+  specimen: "Published cells",
+  link: "Guide or source",
+  omission: "Explicit omission",
+}[entry.mode];
+---
+
+<article class={`reference-entry is-${entry.mode}`}>
+  <header class="reference-entry-header">
+    <div>
+      <p class="reference-mode">{modeLabel}</p>
+      <h3>{entry.title}</h3>
+    </div>
+    <ul class="reference-capability-tags" aria-label="Capabilities covered">
+      {entry.covers.map((capability) => <li>{capability}</li>)}
+    </ul>
+  </header>
+
+  <p class="reference-entry-summary">{entry.summary}</p>
+
+  {entry.mode === "specimen" && (
+    <div class="reference-specimen-stack">
+      {entry.specimen_ids.map((id) => {
+        const specimen = specimens[id];
+        return (
+          <figure class="reference-specimen">
+            <figcaption>
+              <span>{id}</span>
+              <a href={`https://github.com/kgruel/painted/blob/main/${specimen.source}`}>
+                {specimen.source} <span aria-hidden="true">↗</span>
+              </a>
+            </figcaption>
+            <div class="reference-specimen-grid">
+              <Fragment set:html={fragments[id]} />
+            </div>
+          </figure>
+        );
+      })}
+    </div>
+  )}
+
+  {entry.mode === "link" && entry.href && entry.link_label && (
+    <a class="reference-entry-link" href={entry.href}>
+      {entry.link_label} <span aria-hidden="true">{entry.href.startsWith("http") ? "↗" : "→"}</span>
+    </a>
+  )}
+
+  {entry.mode === "omission" && (
+    <p class="reference-omission"><strong>Not represented here:</strong> {entry.omission_reason}</p>
+  )}
+</article>

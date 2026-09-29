@@ -42,6 +42,52 @@ breaking changes.
   engine) — so measuring before materializing always agrees.
   ([8954229](https://github.com/kgruel/painted/commit/8954229))
 
+- **Watch real terminal recordings on the website homepage and focus-form demo.**
+  Native playback controls, posters, and visible descriptions accompany
+  drift-checked media metadata; guide demo links now open their detail pages.
+  ([5ae9062](https://github.com/kgruel/painted/commit/5ae9062b3fac16fdf67388eaf0414b6f9da603af))
+
+### Added
+
+- **Explore two-source wave interference with `painted demos interference`.**
+  Reproducible stills and live animation include opposed phases and signed colorless output.
+  ([6a215c1](https://github.com/kgruel/painted/commit/6a215c190f1de2c6a63a156c1f71d197f0e40cff))
+- **Explore historical operational evidence with the Fieldwork demo.** Search
+  records, follow explicit references, and retrace readings in the CLI or TUI.
+  ([809cfa1](https://github.com/kgruel/painted/commit/809cfa1f16b9b0abb12555e9745562c8c0c8744a))
+
+- **`table_lens` renders ordered record sequences as static tables in one call.**
+  `paint(rows, lens=table_lens)` derives columns from dict keys, dataclass fields
+  or NamedTuples, honoring `repr=False`, Enum names and ordinary numeric
+  alignment. Unsupported rows and LF/CR cells or headers are refused; other
+  C0/C1 controls become spaces. Counts, exact widths and positional `Column`
+  overrides work without selection or scroll state.
+  ([b219f11](https://github.com/kgruel/painted/commit/b219f110df1de62b7f45c287db5f6ac15c399319))
+  Column-count mismatch diagnostics quote field names without emitting active
+  terminal controls or line breaks.
+  ([2a164bb](https://github.com/kgruel/painted/commit/2a164bbebcf95367ab67f490addb073c28f4e41c))
+- **`Block.text` no longer requires a `style` argument.** `Block.text("hi")`
+  now matches `Span`, `Line.plain` and `Cell`, which have always defaulted to
+  an unstyled `Style()`.
+  ([b219f11](https://github.com/kgruel/painted/commit/b219f110df1de62b7f45c287db5f6ac15c399319))
+
+### Fixed
+
+- **A `Line` built from a list of spans no longer breaks `table()`.** `Line`
+  now normalizes any sequence to a tuple at construction, as `Block` and
+  `IconSet` already did — previously `Line([Span("x")])` measured, blocked and
+  wrapped correctly, then raised `TypeError: can only concatenate list (not
+  "tuple") to list` from inside `table()`'s cell padding. The same
+  normalization now covers every sequence field on the stable surface
+  (`Doc.body`, `Section.body`, `Defs.items`, `Items.entries`, `Palette.series`,
+  `IconSet.sparkline`, `SpinnerFrames.frames`, `DataNode.path`), held together
+  by an enumerating test rather than by whoever remembers the rule.
+  ([b219f11](https://github.com/kgruel/painted/commit/b219f110df1de62b7f45c287db5f6ac15c399319))
+
+- **Verbose development checks complete through prompt and live-offer tests.**
+  Terminal-size test doubles no longer break pytest reporting.
+  ([1ad60dd](https://github.com/kgruel/painted/commit/1ad60ddb3317f199d7bfa4805bf5678ad801132d))
+
 ## [0.14.0] — 2026-08-13
 
 The **honesty remediation** (0.14) — RENDER_MODEL.md law 6 ("the layer that

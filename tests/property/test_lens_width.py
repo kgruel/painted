@@ -16,7 +16,7 @@ from hypothesis import example, given
 from hypothesis import strategies as st
 
 from painted.core.block import Block
-from painted.views import chart_lens, flame_lens, shape_lens, tree_lens
+from painted.views import chart_lens, flame_lens, shape_lens, table_lens, tree_lens
 from painted.views.lens.shape import transcribe
 
 from tests.property.strategies import MIXED_ALPHABET, text_st
@@ -123,6 +123,30 @@ def test_tree_lens_honors_width(data, z: int, w: int) -> None:
 )
 def test_flame_lens_honors_width(data, z: int, w: int) -> None:
     assert flame_lens(data, zoom=z, width=w).width == w
+
+
+# A table's subject is a sequence of records, so it needs its own strategy: rows
+# of declared fields, with keys drawn from a small pool so rows sometimes share
+# columns and sometimes do not (the union-of-keys path).
+_table_data = st.lists(
+    st.dictionaries(
+        st.sampled_from(["a", "bb", "ccc", "\u5e73\u4eee\u540d"]),
+        st.one_of(st.integers(), st.text(alphabet=MIXED_ALPHABET, max_size=6), st.none()),
+        min_size=0,
+        max_size=4,
+    ),
+    min_size=0,
+    max_size=6,
+)
+
+
+@given(
+    data=_table_data,
+    z=st.integers(min_value=0, max_value=3),
+    w=st.integers(min_value=1, max_value=80),
+)
+def test_table_lens_honors_width(data, z: int, w: int) -> None:
+    assert table_lens(data, zoom=z, width=w).width == w
 
 
 @given(

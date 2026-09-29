@@ -3,6 +3,11 @@
 Public namespace for Painted view-layer APIs.
 """
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .lens.table import table_lens as table_lens
+
 __all__ = [
     # Aesthetic
     "Palette",
@@ -54,6 +59,7 @@ __all__ = [
     "NodeRenderer",
     "shape_lens",
     "tree_lens",
+    "table_lens",
     "chart_lens",
     "flame_lens",
     "render_traceback",
@@ -166,6 +172,7 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     # Stateless views
     "NodeRenderer": (".lens", "NodeRenderer"),
     "shape_lens": (".lens", "shape_lens"),
+    "table_lens": (".lens", "table_lens"),
     "tree_lens": (".lens", "tree_lens"),
     "chart_lens": (".lens", "chart_lens"),
     "flame_lens": (".lens", "flame_lens"),

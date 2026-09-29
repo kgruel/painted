@@ -1,6 +1,6 @@
 # Painted web redesign plan
 
-Status: Wave 1 complete; Wave 2 ready
+Status: Wave 4 isolated checkpoint; mandatory review pending; Wave 5 not started
 Scope: `web/`, its generated inputs, and the documentation/demo metadata needed to publish it  
 Execution model: root agent owns judgment and integration; Sol and Terra agents implement bounded work packages
 
@@ -374,6 +374,246 @@ but no Wave 2 routes or page migrations were implemented as part of this gate.
 - The media placeholder remains a placeholder until the recording workflow and
   real assets land in Wave 4. The existing homepage and cosmetic React surface
   remain untouched until an accepted replacement is ready.
+
+## Wave 2 gate
+
+Accepted by root review on 2026-08-13. Wave 2 publishes the primary learning and
+guide experiences and promotes the accepted shell to `/`; it does not begin the
+Wave 3 demo gallery or reference redesign.
+
+### Learn and guide publishing
+
+- The canonical Learn routes now build: `/learn/`, `/learn/altitude/`,
+  `/learn/internals/`, and the six altitude rungs from `paint` through `surface`.
+  The altitude and internal spines remain separate, with explicit cross-links
+  rather than one merged tutorial.
+- The direct lens contract is described as `(data, zoom, width) → Block`; the CLI
+  rung separately explains the framework renderer seam
+  `(data, fidelity, width) → Block`. The site does not claim those signatures are
+  identical merely because they form a continuous progression.
+- Four authored Markdown guides load directly from `docs/guides/` through an
+  external Astro content collection. Their frontmatter is the declared source
+  for slug, order, prerequisite, applicable altitudes, and related demo IDs;
+  their prose is not copied into website files.
+- Related guide demos resolve through `catalog.json` and currently link to source
+  rather than nonexistent Wave 3 detail routes. The duplicate `layers` records
+  remain distinct by their tier-qualified IDs.
+- The guide index derives its Published documents group from
+  `generated/docs/index.json` and preserves the existing semantic Doc-IR routes.
+  `/about/rendered-by-painted/` records the four honest media lanes in the
+  accepted shell.
+
+### Homepage implementation
+
+- `/` now uses the accepted responsive shell with a compact wordmark, concise
+  promise, install/GitHub/Learn actions, a genuine monitor specimen, generated
+  disclosure continuum, problem-shaped capability preview, and the four primary
+  destination cards.
+- The homepage no longer imports the cosmetic React surface. The component file
+  remains for compatibility pages until later cleanup.
+- With no committed recording asset, the media component renders a generated
+  later-tick fallback. Its copy claims only continuity of the renderer across
+  another state; timing and input remain explicitly reserved for a real
+  recording.
+- The first guide-detail facts grid and the first mobile capture method were
+  rejected during review. The accepted grid uses balanced columns with full-width
+  related/source rows, and final mobile evidence uses exact DevTools emulation
+  rather than a cropped desktop viewport.
+
+### Gate verification and open edges
+
+- Astro builds 24 static pages, including every Wave 2 canonical route and all
+  compatibility pages. The only missing internal destination is `/demos/`, which
+  belongs to Wave 3 and is not disguised with a placeholder page.
+- `./dev check`, `./dev docs --check`, `npm run build`, and `git diff --check`
+  pass. Reviewed screenshots live under `/tmp/painted-web-wave2-terra/` and
+  `/tmp/painted-web-wave2-sol/`.
+- All reviewed 390px pages report document `scrollWidth === clientWidth`; fixed
+  cell grids and the altitude rail own their local horizontal scrolling.
+- The source-backed guide structure is accepted, but its inherited prose requires
+  a later editorial/API-currentness pass. Known debt includes outdated primitive
+  excerpts, the old `truncate` ellipsis default, and a materially stale CLI guide
+  centered on the legacy renderer and `CliContext` shapes. The TUI guide remains
+  broadly current.
+- A real recording and poster remain Wave 4 work. Demo detail links remain Wave 3
+  work.
+
+## Wave 3 gate
+
+Accepted by root review on 2026-08-13. Wave 3 publishes the catalog-backed demo
+experience and replaces the old design-system reference with a checked capability
+index. It does not add recording metadata or assets, infer undeclared media
+relationships, or begin Wave 4 cleanup.
+
+### Demo catalog and command honesty
+
+- `/demos/` presents the five discovery-owned tiers as public learning roles:
+  foundations, reusable workflows, interactive behavior, complete small
+  applications, and visual spectacle. The page imports `catalog.json`; it does
+  not rescan demo sources or maintain a second inventory.
+- All 48 catalog records build at tier-qualified
+  `/demos/{tier}/{name}/` routes. Detail pages publish the declared summary,
+  source, checkout command, non-null installed command, and verbatim invocation
+  examples without exposing discovery flags or internal test-shape language.
+- Both `patterns/layers` and `apps/layers` publish only their distinct source and
+  checkout command. Root rejected an initial explanatory "installed command
+  unavailable" panel because the frozen contract requires the ambiguous command
+  to be omitted, not dramatized.
+- Root also rejected an absent-media/provenance section on every detail page. No
+  demo-to-specimen or demo-to-recording relationship is inferred, and missing
+  media is not represented with a placeholder or "coming soon" treatment.
+
+### Capability reference and generated coverage
+
+- `/reference/` now uses nine problem-shaped capability families instead of the
+  old Components / Colors / Spacing / Type / Brand organization.
+- `tools/reference_specimens.py` keeps `CATALOG` as the specimen authority and
+  adds an explicit pedagogical coverage declaration beside it. The declaration
+  accounts for all 49 frozen capability terms exactly once in 39 entries: 12
+  specimen entries, 27 precise guide/demo/API-source links, and zero omissions.
+- `tools/reference_coverage.py` validates family identity and ordering, exact
+  per-capability coverage, evidence-mode fields, and every static specimen ID
+  against `tools.outputgen.PANELS`. It emits the deterministic
+  `web/src/generated/reference_coverage.json`, which `outputgen --check` now
+  drift-gates.
+- Nineteen existing PANELS specimens support the static entries. No new specimen
+  registry or bespoke panel was added, and CatalogV1 remains unchanged. Live,
+  StreamSurface, interactive, hit-testing, mouse, cursor, focus, search, and
+  layers behavior stays link-backed rather than being claimed by a static frame.
+  The spinner specimen claims only its frame inventory and selected frame.
+- Root rejected a help link to an unrelated primitives document and public copy
+  that exposed the redesign process. The accepted links resolve to semantically
+  relevant guides, demos, published documents, or current source files.
+
+### Visual, route, and verification gate
+
+- The accepted demo gallery is dense but navigable without client JavaScript;
+  its first viewport establishes the five roles before entering the 48-card
+  catalog. Detail pages stay useful without constructing fake media chrome.
+- The accepted reference leads with a bounded coverage claim, exposes evidence
+  modes, and renders genuine Painted fragments in capability-shaped groups.
+  Wide border and view specimens scroll inside their own containers.
+- Exact Chromium DevTools captures report document `clientWidth === scrollWidth`
+  at 1440×1000 and 390×844 for the demo gallery, both ambiguous `layers` pages,
+  and the reference. Demo evidence is under `/tmp/painted-web-wave3-terra/`;
+  reference and scrolled-specimen evidence is under
+  `/tmp/painted-web-wave3-sol/`.
+- Focused catalog/reference/completion tests pass (86 tests). `./dev check`,
+  `uv run python -m tools.outputgen --check`, `npm run build`, and
+  `git diff --check` pass. Astro builds 73 pages: the prior 24 plus the demo index
+  and 48 detail routes. An integrated generated-site audit checks 875 internal
+  links across all 73 routes with no missing page or fragment destination.
+- Wave 4 is ready. Its work remains deliberately explicit: select and record a
+  small media set, add only consumed recording metadata, integrate real assets,
+  and remove dead cosmetic assets after import checks. The inherited guide
+  currentness debt recorded in the Wave 2 gate also remains; Wave 3 did not hide
+  it behind broader reference claims.
+
+## Wave 4 gate — historical implementation notes
+
+The preserved pending snapshot recorded root acceptance on 2026-08-14. The
+notes below retain that historical evidence, not a fresh review of this isolated
+branch. In particular, the screenshot paths, browser probes, and test counts are
+historical claims; they have not been re-established merely by copying the work.
+The 2026-09-26 checkpoint requires a separate Fable 5.1 HIGH review against `main`
+(including the inherited Waves 2/3). It is **ready for review, not redesign
+completion**. Fresh preparation evidence is recorded in the workstream handoff.
+
+Wave 4 adds a deliberately small first recording set, a reproducible media build
+path, and manifest-driven presentation. It does not begin the Wave 5
+editorial/API-currentness pass or deployment.
+
+### Recording selection and production
+
+- The initial published set contains exactly two recordings. `homepage/continuum`
+  moves one fixed health-check dataset through quiet, live pending, expanded,
+  and final detailed states. `apps/focus_form` replays genuine keyboard focus,
+  capture, text entry, navigation, and submission on the tier-qualified demo.
+- The responsive-width candidate was rejected because its 120-column state was
+  clipped by the candidate viewport and its sequence did not yet prove enough
+  beyond the existing static width examples. Harmonograph and Mandelbrot were
+  rejected because the 520px candidate viewport clipped their mandatory live
+  cost meters; either requires a new capture at least 620px high before it can
+  be considered for publication.
+- Hidden setup frames are removed explicitly at raw frame 20. The homepage MP4
+  is 702×468, 60fps, 472 frames, and 7.866667 seconds; its poster selects encoded
+  frame 420. The focus-form MP4 is 766×450, 60fps, 278 frames, and 4.633333
+  seconds; its poster selects encoded frame 230. The historical inspection of
+  first, middle, last, and poster frames reported no shell noise, clipping,
+  illegible color, or cell/glyph defect. **2026-09-26 correction (WEB-001):**
+  preparation evidence, confirmed by the Fable 5.1 HIGH review of checkpoint
+  `5ae9062`, shows a visible `>` shell prompt in homepage encoded frames 0 and
+  471 and in the published poster. The historical blanket "no shell noise"
+  claim is therefore incorrect. All MP4/PNG bytes are preserved; accepting the
+  prompt or authorizing a re-recording remains an owner decision, not new media
+  acceptance. Native H.264 browser playback remains unverified.
+
+### Recipe, manifest, and drift boundary
+
+- `tools/recording_recipes.py` is the explicit curation boundary. Demo targets
+  must use CatalogV1's tier-qualified identity; homepage targets use an explicit
+  `homepage/{slug}` identity. No demo/media/specimen relationship is inferred
+  from filenames or source equality, and CatalogV1 remains unchanged.
+- `tools/record_media.py` reuses the repository's VHS workflow honestly: VHS
+  emits text frames at the declared viewport and frame rate, then ffmpeg encodes
+  MP4/WebM/GIF output. This avoids VHS's direct-video 25fps cap. The builder
+  validates a contiguous raw-frame inventory, applies the declared trim, caps
+  the encoded frame count, and extracts the poster from the exact declared
+  post-trim frame.
+- `web/src/generated/media.json` is a separate deterministic MediaManifestV1.
+  Drafts are validated but not published. Published records require real recipe,
+  video/GIF, and poster files; their duration must agree with frame count and
+  frame rate. Optional static fallback IDs are checked against `PANELS` when
+  present. Both accepted records deliberately use `fallback_specimen_id: null`:
+  the homepage retains its nearby generated continuum, while the focus detail
+  retains its poster, behavior description, source, and runnable commands.
+- Media emission and exact comparison are part of `tools.outputgen.py`, so stale
+  metadata, missing assets, invalid identities, invalid curated specimens, or a
+  mismatched generated manifest fail the existing output-generation gate.
+
+### Website integration, cleanup, and accessibility
+
+- The homepage consumes only the explicit `homepage/continuum` manifest record.
+  The focus-form detail consumes only the exact `apps/focus_form` record; the
+  other 47 demo details contain no recording placeholder or inferred media.
+  Related guide demos now link to canonical tier-qualified detail routes while
+  retaining separately labeled source links.
+- `Recording.astro` uses native controls with `muted`, `playsinline`, and
+  `preload="metadata"`; it never autoplays. The manifest description is visible,
+  the poster remains useful without playback, no audio track means no fabricated
+  captions, and visible fallback guidance points to the page's remaining static
+  evidence. Reduced-motion emulation stays paused on the poster.
+- Keyboard replay reaches both video controls, and `:focus-visible` produces a
+  2px yellow outline. Heading/figure semantics use a direct-child `figcaption`.
+  Exact 1440×1000 and DevTools-emulated 390×844 probes report document
+  `clientWidth === scrollWidth` on the homepage and focus detail; intentionally
+  wide homepage specimens retain only local scrolling.
+- The now-unimported `MediaFallback.astro` and its dead CSS were removed after
+  `rg` and a successful build. `PaintedSurface.jsx` remains because the
+  compatibility walkthrough imports it, `MediaPlaceholder.astro` remains for
+  the prototype route, and the shared color/type CSS remains part of the shell.
+
+### Gate verification and open edges
+
+- The full `./dev check` staircase passes, including 3,363 tests in the
+  single-process cohesion tier, output generation, and docs checks. Focused
+  media/catalog/reference tests pass (29 tests), `npm run build` emits all 73
+  routes, `git diff --check` passes, and a generated-site audit resolves 1,031
+  internal `href`/`src` references with zero missing pages, fragments, or assets.
+- The media identity/asset audit finds exactly two unique declared records and
+  all four published assets. Built markup contains two videos, no autoplay, and
+  no fabricated caption tracks. Compatibility `/walkthrough/*` and `/docs/*`
+  routes remain buildable.
+- Reviewed production frames live under `/tmp/painted-web-wave4-sol/`. Exact
+  page, scrolled recording, keyboard-focus, and reduced-motion/no-video evidence
+  lives under `/tmp/painted-web-wave4-terra/`. These are review artifacts, not
+  repository assets.
+- No pattern or showcase recording is published in this first set; the rejected
+  candidates above are explicit omissions. The inherited Wave 2 guide/API
+  currentness debt remains open for Wave 5: outdated primitive excerpts, the old
+  `truncate` ellipsis default, and the legacy renderer/`CliContext` guide shapes.
+  Wave 5 is not started or authorized by this checkpoint; deployment remains a
+  separate user-approved action.
 
 ## Implementation waves
 

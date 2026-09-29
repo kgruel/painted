@@ -1,0 +1,80 @@
+---
+import DemoCard from "../../components/demos/DemoCard.astro";
+import Prototype from "../../layouts/Prototype.astro";
+import catalog from "../../generated/catalog.json";
+import "../../styles/demos.css";
+
+const roles = {
+  primitives: {
+    title: "Foundations",
+    summary: "The visual and structural building blocks that make terminal output precise.",
+  },
+  patterns: {
+    title: "Reusable workflows",
+    summary: "Declared approaches for composition, disclosure, delivery, and inspection.",
+  },
+  apps: {
+    title: "Interactive behavior",
+    summary: "Surface applications where state, input, and rendering meet.",
+  },
+  examples: {
+    title: "Complete small applications",
+    summary: "Compact programs that bring several Painted capabilities together.",
+  },
+  showcase: {
+    title: "Visual spectacle",
+    summary: "Rich terminal scenes and simulations built from the same semantic model.",
+  },
+} as const;
+
+const demosByTier = new Map(
+  catalog.demo_tiers.map((tier) => [
+    tier.id,
+    catalog.demos.filter((demo) => demo.tier === tier.id),
+  ]),
+);
+---
+
+<Prototype
+  title="Painted demos"
+  description="A catalog of Painted foundations, reusable workflows, interactive behavior, complete small applications, and visual spectacle."
+  current="demos"
+>
+  <div class="proto-shell demo-page demo-gallery-page">
+    <header class="proto-page-header">
+      <p class="proto-eyebrow">Demos</p>
+      <h1>See the renderer from five useful angles.</h1>
+      <p class="proto-page-summary">Start with foundations, follow reusable workflows, or go straight to interactive behavior and complete applications. Every entry links to its tier-qualified source-backed page.</p>
+    </header>
+
+    <nav class="demo-role-nav" aria-label="Demo roles">
+      <span class="demo-role-nav-label">Browse by role</span>
+      <ol>
+        {catalog.demo_tiers.map((tier) => (
+          <li><a href={`#${tier.id}`}>{roles[tier.id].title}</a></li>
+        ))}
+      </ol>
+    </nav>
+
+    <div class="demo-gallery-groups">
+      {catalog.demo_tiers.map((tier) => {
+        const role = roles[tier.id];
+        const demos = demosByTier.get(tier.id) ?? [];
+        return (
+          <section class="demo-gallery-section" id={tier.id} aria-labelledby={`${tier.id}-heading`}>
+            <div class="demo-gallery-section-head">
+              <div>
+                <p class="proto-eyebrow">{String(tier.order + 1).padStart(2, "0")}</p>
+                <h2 id={`${tier.id}-heading`}>{role.title}</h2>
+              </div>
+              <p>{role.summary} <span class="demo-count">{demos.length} demos</span></p>
+            </div>
+            <div class="demo-card-grid">
+              {demos.map((demo) => <DemoCard demo={demo} />)}
+            </div>
+          </section>
+        );
+      })}
+    </div>
+  </div>
+</Prototype>

@@ -31,8 +31,11 @@ from tools.capture import capture_demo, import_module_by_path
 from tools.disclosure_specimens import DISCLOSURE as _DISCLOSURE_CATALOG
 from painted.publish import to_html
 from tools.landing_specimens import LANDING as _LANDING_CATALOG
+from tools.media_manifest import media_manifest_json
+from tools.recording_recipes import RECORDING_RECIPES
 from tools.reference_specimens import CATALOG as _REFERENCE_CATALOG
-from tools.web_catalog import catalog_json
+from tools.reference_coverage import reference_coverage_json
+from tools.web_catalog import build_catalog, catalog_json
 
 
 @dataclass(frozen=True, slots=True)
@@ -245,6 +248,15 @@ DOC_PAGES_DIR = Path("web/src/generated/docs")
 # checked by the same outputgen drift gate.
 CATALOG_PATH = Path("web/src/generated/catalog.json")
 
+# Curated capability-oriented reference coverage. This remains separate from
+# CatalogV1: it has an immediate /reference consumer and does not change the
+# frozen demo/specimen inventory schema.
+REFERENCE_COVERAGE_PATH = Path("web/src/generated/reference_coverage.json")
+
+# Recording metadata stays separate from frozen CatalogV1. Draft recipes are
+# validated but absent from this artifact until their real media exists.
+MEDIA_MANIFEST_PATH = Path("web/src/generated/media.json")
+
 
 def _read_text(path: Path) -> str:
     return path.read_text(encoding="utf-8")
@@ -435,6 +447,46 @@ def check_catalog(*, repo_root: Path) -> bool:
     return not path.exists() or _read_text(path) != _catalog_json(repo_root=repo_root)
 
 
+def _media_manifest_json(*, repo_root: Path) -> str:
+    catalog = build_catalog(repo_root=repo_root, demos=discover_demos(), panels=PANELS)
+    return media_manifest_json(
+        repo_root=repo_root,
+        recipes=RECORDING_RECIPES,
+        catalog=catalog,
+        panels=PANELS,
+    )
+
+
+def emit_media_manifest(*, repo_root: Path) -> Path:
+    """Emit validated, deterministic website recording metadata."""
+    path = repo_root / MEDIA_MANIFEST_PATH
+    _write_text(path, _media_manifest_json(repo_root=repo_root))
+    return path
+
+
+def check_media_manifest(*, repo_root: Path) -> bool:
+    """Whether committed recording metadata is missing or stale."""
+    path = repo_root / MEDIA_MANIFEST_PATH
+    return not path.exists() or _read_text(path) != _media_manifest_json(repo_root=repo_root)
+
+
+def _reference_coverage_json() -> str:
+    return reference_coverage_json(panels=PANELS)
+
+
+def emit_reference_coverage(*, repo_root: Path) -> Path:
+    """Emit the deterministic, reference-specific capability report."""
+    path = repo_root / REFERENCE_COVERAGE_PATH
+    _write_text(path, _reference_coverage_json())
+    return path
+
+
+def check_reference_coverage(*, repo_root: Path) -> bool:
+    """Whether the committed reference coverage report is missing or stale."""
+    path = repo_root / REFERENCE_COVERAGE_PATH
+    return not path.exists() or _read_text(path) != _reference_coverage_json()
+
+
 def _doc_pages_index() -> str:
     """The page registry as JSON — the site lists pages from the same DOCS
     dict the terminal dispatches on, so neither side can list a page the
@@ -508,6 +560,8 @@ def main(argv: list[str] | None = None) -> int:
         # gated artifacts; the DIR override only redirects the panel set.
         written += emit_doc_pages(repo_root=repo_root)
         written.append(emit_catalog(repo_root=repo_root))
+        written.append(emit_reference_coverage(repo_root=repo_root))
+        written.append(emit_media_manifest(repo_root=repo_root))
         print("Wrote panels:")
         for p in written:
             shown = p.relative_to(repo_root) if p.is_relative_to(repo_root) else p
@@ -552,7 +606,16 @@ def main(argv: list[str] | None = None) -> int:
         panel_stale = check_panels(repo_root=repo_root)
         doc_page_stale = check_doc_pages(repo_root=repo_root)
         catalog_stale = check_catalog(repo_root=repo_root)
-        if mismatched or panel_stale or doc_page_stale or catalog_stale:
+        reference_coverage_stale = check_reference_coverage(repo_root=repo_root)
+        media_manifest_stale = check_media_manifest(repo_root=repo_root)
+        if (
+            mismatched
+            or panel_stale
+            or doc_page_stale
+            or catalog_stale
+            or reference_coverage_stale
+            or media_manifest_stale
+        ):
             if mismatched:
                 print("outputgen doc blocks out of date:", file=sys.stderr)
                 for path, names in mismatched:
@@ -569,6 +632,12 @@ def main(argv: list[str] | None = None) -> int:
             if catalog_stale:
                 print("site catalog out of date — run `./dev panels`:", file=sys.stderr)
                 print(f"  - {CATALOG_PATH}", file=sys.stderr)
+            if reference_coverage_stale:
+                print("reference coverage out of date — run `./dev panels`:", file=sys.stderr)
+                print(f"  - {REFERENCE_COVERAGE_PATH}", file=sys.stderr)
+            if media_manifest_stale:
+                print("media manifest out of date — run `./dev panels`:", file=sys.stderr)
+                print(f"  - {MEDIA_MANIFEST_PATH}", file=sys.stderr)
             return 1
         return 0
 

@@ -82,3 +82,29 @@ The fidelity demo supports:
 ```bash
 uv run python demos/tour.py
 ```
+
+## Interference showcase
+
+An animated gallery piece with static, plain-text, and JSON deliveries.
+
+```bash
+uv run painted demos interference --live
+uv run painted demos interference --phase opposed --note
+uv run painted demos interference -vv
+```
+
+`interference.py` draws two radial wave sources in cyan and amber. Switch to
+`--phase opposed` to hold a line of cancellation through the moving field.
+`--frame` selects a reproducible still or the starting frame of a live run.
+
+## Fieldwork: investigating recorded evidence
+
+```bash
+uv run painted demos fieldwork -i
+uv run painted demos fieldwork --match journald -v --checks
+```
+
+Search real historical incidents from gruel.network, follow references to
+practices and later deployments, and retrace your reading. The same depth and
+named facets work in the CLI and interactive view. A local loops SQLite store
+can replace the bundled excerpt. See [the walkthrough](examples/FIELDWORK.md).

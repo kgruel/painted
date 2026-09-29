@@ -171,6 +171,63 @@ is design-intent above, not yet implemented):
   them back out; broadening waits on a consumer holding a genuine custom
   container.
 
+### Explicit table arrangement — consumer contract amendment (2026-09-26)
+
+`table_lens` is the explicit, static projection onto `table()`, not a change to
+base-case transcription or its concrete-container dispatch. Owner approval is
+recorded in the preserved private decision note
+`painted-reorientation-20260926/OWNER_DECISIONS_AND_RESUMPTION.md` (under the
+repository's Git directory); this section is the library contract, not that
+operational receipt.
+
+- The outer subject must declare `collections.abc.Sequence`, excluding `str`,
+  `bytes`, `bytearray` and `memoryview`. A bare dict, dataclass instance or
+  NamedTuple is recognized **before** collection handling and refused with
+  `[record]` guidance, even if iterable. Sets, generators and arbitrary
+  iterables are refused, never silently materialized.
+- Every row must be a dict, dataclass instance or NamedTuple; this does not
+  broaden rows to arbitrary `Mapping` implementations. Unsupported rows raise
+  `ContractError` with their zero-based index, type and supported-row remedy at
+  both count and table zoom. Supported heterogeneous records remain valid.
+- Columns are the first-seen union of declared keys/fields, retaining key
+  identity. Missing fields produce blank cells; dataclass `repr=False` fields
+  remain suppressed. Zero-visible-field collections show the truthful count
+  (`N rows x 0 columns`) at **every** zoom, not a scalar diagnosis. Empty
+  sequences show `0 rows`. Both summaries honor exact width.
+- Formatted cells and derived/explicit headers must be single-line: LF or CR
+  (including CRLF, leading, trailing and consecutive breaks) raises
+  `ContractError` with row/field or column location and a remedy to supply
+  single-line text or use a multiline layout. Validation precedes disclosure;
+  low zoom and clipping must not hide invalid input. No flattening occurs.
+  After LF/CR refusal, other C0/C1 controls (U+0000–U+001F and
+  U+007F–U+009F, including DEL) become one space each via `core.cell.scrub_control`.
+  This matches Cell/transcription rather than deleting separators or introducing
+  a second control policy. It applies to formatted cells, derived headers and
+  every span of explicit headers; other Unicode characters are untouched by
+  this boundary. Explicit Columns/Lines/Spans are cloned without changing their
+  styles, refs or settings, or mutating caller values. This is input preservation
+  at the `table()` boundary, not a change to that component's rendering: it
+  currently replaces header Line base style and does not carry buffer refs into
+  its output Block. Suppressed fields are never formatted or scrubbed.
+- Zoom `<=0` is the count summary; positive zoom shows all declared columns
+  unless there are none. Explicit `columns=` overrides are positional: their
+  count must equal the derived count even at low zoom or for empty sequences;
+  custom header spelling need not equal field names. Nonpositive width keeps
+  the established 0-by-1 collapse **before all validation**.
+- Static rows have no selection styling. Enum leaves retain transcription's
+  named spelling (`Type.MEMBER`, including IntEnum/StrEnum and named Flag
+  combinations), with the enum's own `str()` fallback when `.name is None`.
+  This shares leaf spelling, not recursive transcription inside cells.
+  Alignment derives from declared types: only columns whose every present value
+  is an int/float, excluding bool and **all** Enum values (including IntEnum and
+  IntFlag), align right. Other columns align left; explicit alignment wins.
+
+Width clipping/overflow evidence remains owned by `table()`; the lens pads its
+result to exact offered width and otherwise returns natural height. `fidelity`
+is accepted for call compatibility, but budgets and tags are not consumed. Use
+`table()` directly for selection or scrolling. This amendment neither widens
+existing tuple-storage constructor annotations nor promises deep immutability.
+
 ## 4. The signature — a closed kwarg surface
 
 The four meaning channels (`design/meaning-channels`, ratified 2026-07-04)

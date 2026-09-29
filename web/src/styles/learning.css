@@ -257,7 +257,7 @@
 
 .learn-guide-facts {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 1px;
   margin: var(--sp-6) 0;
   border: 1px solid var(--line);
@@ -270,7 +270,8 @@
   background: var(--ink);
 }
 
-.learn-guide-facts > .learn-related-demos {
+.learn-guide-facts > .learn-related-demos,
+.learn-guide-facts > .learn-guide-source {
   grid-column: 1 / -1;
 }
 
@@ -308,6 +309,12 @@
 
 .learn-related-demos code {
   color: var(--magenta);
+}
+
+.learn-related-demo-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
 }
 
 .learn-prose {
@@ -442,7 +449,8 @@
     grid-template-columns: 1fr;
   }
 
-  .learn-guide-facts > .learn-related-demos {
+  .learn-guide-facts > .learn-related-demos,
+  .learn-guide-facts > .learn-guide-source {
     grid-column: auto;
   }
 

@@ -2,16 +2,26 @@
 import Prototype from "../layouts/Prototype.astro";
 import PageHeader from "../components/PageHeader.astro";
 import Specimen from "../components/Specimen.astro";
-import MediaFallback from "../components/MediaFallback.astro";
+import Recording from "../components/Recording.astro";
 import FeatureCard from "../components/FeatureCard.astro";
 import CrossLink from "../components/CrossLink.astro";
+import media from "../generated/media.json";
 
 import monitorQ from "../generated/panels/monitor_q.html?raw";
 import monitorDefault from "../generated/panels/monitor_default.html?raw";
 import monitorVv from "../generated/panels/monitor_vv.html?raw";
-import monitorLive from "../generated/panels/monitor_live.html?raw";
 
 const REPOSITORY = "https://github.com/kgruel/painted";
+const continuumRecording = media.recordings.find((recording) => recording.id === "homepage/continuum");
+
+if (
+  !continuumRecording
+  || continuumRecording.target_kind !== "homepage"
+  || !continuumRecording.video
+  || !continuumRecording.poster?.path
+) {
+  throw new Error("Missing declared homepage/continuum recording");
+}
 ---
 
 <Prototype
@@ -46,20 +56,18 @@ const REPOSITORY = "https://github.com/kgruel/painted";
       <div class="proto-section-head">
         <div>
           <p class="proto-eyebrow">One rendering model</p>
-          <h2 id="delivery-heading">A lens can render a later state without changing shape.</h2>
+          <h2 id="delivery-heading">Delivery reveals what a final frame cannot.</h2>
         </div>
-        <p>This published frame confirms what persists at another tick. A recording carries the timing and input behavior.</p>
+        <p>Health checks resolve in place while their structure stays coherent from the first pending state to the final result.</p>
       </div>
-      <MediaFallback
-        id="live-frame"
-        title="A later live frame, published as cells"
-        description="The values have moved; the semantic lens and its terminal structure have not."
-        fallbackLabel="Published frame"
-      >
-        <Specimen label="--live" detail="later tick" source="monitor.py">
-          <Fragment set:html={monitorLive} />
-        </Specimen>
-      </MediaFallback>
+      <Recording
+        id={continuumRecording.id}
+        title="Health checks, delivered over time"
+        description={continuumRecording.accessibility_description}
+        video={continuumRecording.video}
+        poster={continuumRecording.poster.path}
+        unavailableMessage="If video is unavailable, the progressive disclosure examples below remain useful static context."
+      />
     </section>
 
     <section class="proto-section" aria-labelledby="continuum-heading">
@@ -68,7 +76,7 @@ const REPOSITORY = "https://github.com/kgruel/painted";
           <p class="proto-eyebrow">Progressive disclosure</p>
           <h2 id="continuum-heading">Escalate the surface, not the meaning.</h2>
         </div>
-        <p>One monitor lens receives the same data at three points in the disclosure ladder. Wide grids scroll inside their own frame.</p>
+        <p>One monitor lens receives the same data at three points in the disclosure ladder. These static examples remain useful independently of the recording. Wide grids scroll inside their own frame.</p>
       </div>
       <div class="proto-continuum">
         <div class="proto-continuum-item">
