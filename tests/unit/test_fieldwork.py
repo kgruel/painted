@@ -227,6 +227,35 @@ def test_viewport_evidence_survives_labels_facets_and_notices(width, height, foc
         assert f"{count} below" in frames[0].lines[3][:32]
 
 
+@pytest.mark.parametrize(
+    "total,scroll,height,width,expected",
+    [
+        # The full range, down to the width where it exactly fits.
+        (10, 0, 4, 80, "lines 1-4/10"),
+        (10, 0, 4, 12, "lines 1-4/10"),
+        (10, 8, 4, 13, "lines 9-10/10"),
+        (0, 0, 5, 11, "lines 0-0/0"),
+        # Rows omitted: the count, then the bare marker once the count cannot fit.
+        (10, 0, 4, 11, "+6 rows"),
+        (10, 0, 4, 7, "+6 rows"),
+        (10, 0, 4, 6, "+"),
+        (10, 8, 4, 12, "+8 rows"),
+        (10, 0, 0, 8, "+10 rows"),
+        (10, 0, 0, 7, "+"),
+        (10, 0, 4, 1, "+"),
+        (10, 0, 4, 0, "+"),
+        # Nothing omitted: 'all', then '=' below three columns.
+        (3, 0, 5, 10, "all"),
+        (3, 0, 5, 3, "all"),
+        (3, 0, 5, 2, "="),
+        (3, 0, 5, 0, "="),
+        (0, 0, 5, 3, "all"),
+    ],
+)
+def test_viewport_evidence_label_ladder(total, scroll, height, width, expected):
+    assert F._viewport_evidence(total, scroll, height, width) == expected
+
+
 @pytest.mark.parametrize("width,height", [(1, 1), (8, 2), (20, 4)])
 def test_tiny_frames_prioritize_evidence_over_chrome(width, height):
     app = F.Fieldwork(synthetic_archive(), F.Location(selected="0"))
