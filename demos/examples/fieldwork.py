@@ -33,7 +33,16 @@ from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
 
-from painted import Block, Fidelity, Style, Wrap, fit_to_width, join_vertical, run_cli
+from painted import (
+    Block,
+    Fidelity,
+    Style,
+    Wrap,
+    fit_to_width,
+    join_vertical,
+    print_block,
+    run_cli,
+)
 from painted.cli import OutputMode, Tag
 from painted.palette import current_palette
 from painted.tui import Region, Surface
@@ -259,11 +268,13 @@ def _fetch() -> View:
     return project(load_archive(), Location())
 
 
-def _shown(fidelity: Fidelity, tag: str) -> bool:
+def _implied(fidelity: Fidelity, tag: str) -> bool:
     declaration = next(t for t in _TAGS if t.name == tag)
-    return fidelity.shows(tag) or (
-        declaration.implied_at is not None and fidelity.depth >= declaration.implied_at
-    )
+    return declaration.implied_at is not None and fidelity.depth >= declaration.implied_at
+
+
+def _shown(fidelity: Fidelity, tag: str) -> bool:
+    return fidelity.shows(tag) or _implied(fidelity, tag)
 
 
 def _render(view: View, fidelity: Fidelity, width: int | None) -> Block:
@@ -492,8 +503,14 @@ class Fieldwork(Surface):
                 explicit_facets=frozenset(explicit),
                 scroll=0,
             )
-            if _shown(self.location.fidelity, tag) and tag not in explicit:
-                self.notice = f"{tag} is also implied at depth 3; V reduces depth."
+            # An implied facet is already on screen, so toggling it changes no
+            # frame; the notice is the only visible record of the intent change.
+            if _implied(self.location.fidelity, tag):
+                self.notice = (
+                    f"{tag} is now explicit; it stays shown when V reduces depth."
+                    if tag in explicit
+                    else f"{tag} is also implied at depth 3; V reduces depth."
+                )
         elif key in ("page_down", "page_up"):
             step = max(1, self.body_height - 2) * (1 if key == "page_down" else -1)
             self.location = replace(
@@ -668,6 +685,11 @@ def main() -> int:
         return project(archive, location)
 
     def interactive(ctx) -> int:
+        # Off a TTY there is no keyboard to end the desk: deliver the static
+        # reading of the requested location at natural width instead.
+        if not ctx.is_tty:
+            print_block(_render(fetch(ctx), ctx.fidelity, None), use_ansi=ctx.use_ansi)
+            return 0
         archive, location = open_location(ctx)
         asyncio.run(Fieldwork(archive, location).run())
         return 0
