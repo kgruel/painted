@@ -7,6 +7,19 @@ lives on the release page. This project adheres to
 [Semantic Versioning](https://semver.org/); pre-1.0, minor versions may carry
 breaking changes.
 
+## [Unreleased]
+
+### Fixed
+
+- **`painted demos disk` works on Python 3.11 again.** The demo used 3.12-only
+  syntax, so on the 3.11 floor it silently vanished from the demo list; every
+  shipped `.py` is now checked to parse at the declared `requires-python`.
+  ([a47b3d0](https://github.com/kgruel/painted/commit/a47b3d0))
+- **The Fieldwork demo's `-i` no longer hangs off a terminal.** Piped or
+  redirected, it prints the static reading and exits; making an already-implied
+  facet explicit now says so instead of changing nothing visibly.
+  ([5d28176](https://github.com/kgruel/painted/commit/5d28176))
+
 ## [0.15.0] — 2026-09-28
 
 ### Changed
