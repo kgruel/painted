@@ -168,7 +168,7 @@ Key patterns:
 
 **Session start**: run `sl read project` — the loops store (`.loops/`, vertex `project`) is the operational memory: decisions, open threads, roadmap status, frictions. Docs are authoritative for the library; the store for what's in flight and why (store: `practice/docs-authoritative-store-operational`). Emit as you work — the loops skill has the practice.
 
-**Git**: never commit directly to `main` — branch first, always. On a feature branch, commit as you go (one logical unit per commit) without asking; pushing needs an explicit ask every time.
+**Git**: never commit directly to `main` — branch first, always. On a feature branch, commit as you go (one logical unit per commit) and push the branch without asking. Merging to `main` and releasing stay explicit asks (the `release` skill).
 
 **Changelog**: `CHANGELOG.md`'s `## [Unreleased]` is the release container — each slice adds its line **as it lands**, appended to the end of its subsection, never reconstructed archaeologically at cut time. The cut renames that heading to `## [X.Y.Z] — YYYY-MM-DD` and stamps `pyproject.toml` + `uv.lock` in the same commit, so the date is written once, when it's true. One line per change:
 

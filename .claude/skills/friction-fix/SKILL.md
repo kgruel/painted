@@ -71,7 +71,7 @@ git checkout -b fix/<short-slug>
 ```
 
 Never commit on `main` (the changelog line in §7 is the one sanctioned
-exception). Commit as work goes green; **push only on Kyle's explicit ask**.
+exception). Commit as work goes green and push the branch freely; merging to `main` is Kyle's explicit ask.
 
 - Check the seam for an existing precedent before inventing one — the refusal
   seam had already ruled errors-belong-on-stderr; the fix *extended* §8 rather
