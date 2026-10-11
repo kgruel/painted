@@ -372,12 +372,12 @@ def _count_visible_nodes(children: list[tuple[str, Any]], remaining_zoom: int) -
 def _subtree_drop_evidence(count: int, width: int) -> Block:
     """A muted ``… N nodes hidden`` line for a width-dropped sibling group.
 
-    Reuses the shared law-6 evidence-row vocabulary (``views._frame.evidence_row``)
+    Reuses the shared law-6 evidence-row vocabulary (``core._frame.evidence_row``)
     through its caller-wording seam — the same ambient ellipsis + ``muted`` role
     every other omission mark degrades through, width-exact — rather than
     inventing a second evidence idiom in the lens.
     """
-    from .._frame import evidence_row
+    from ...core._frame import evidence_row
 
     noun = "node" if count == 1 else "nodes"
     return evidence_row(0, 0, width, label=f"{count} {noun} hidden")

@@ -7,7 +7,7 @@ sequence of them into columns. Were they to disagree, the same data would name
 different fields depending on which lens you reached for.
 
 The module is private; its names are not, so public siblings may import them
-(``painted/views/_frame.py`` sets the precedent). The rule enforcing that is
+(``painted/core/_frame.py`` sets the precedent). The rule enforcing that is
 ``test_public_modules_do_not_import_private_symbols_from_siblings``.
 """
 

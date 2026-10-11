@@ -23,23 +23,27 @@ is public in 0.13. The windowed components (``list_view``/``table``/
 ``data_explorer``) reuse ``evidence_row`` directly, reserving their last body row
 under overflow (0.14 honesty-remediation S1, RENDER_MODEL law 6).
 
-Placement (views, not core.compose): this is a *meaning-bearing* disclosure
-artifact — it renders the semantics of omission through the ambient icon set and
-palette — not a generic geometric op. ``core.compose`` is pure Block geometry;
-growing it a palette-styled, law-6 evidence builder would blur that split. The
-frame helper lives here beside the row because they are one vocabulary
-(``assemble_frame`` calls ``evidence_row``).
+Placement (core, private; public through ``painted.views``): this is a
+*meaning-bearing* disclosure artifact — it renders the semantics of omission
+through the ambient icon set and palette — so it stays out of ``core.compose``,
+which is pure Block geometry. It lives below views because the host rung
+(``painted.host``) consumes ``assemble_frame``, and ``tui``/``cli`` import the
+host: a views home made ``import painted.tui`` load ``painted.views`` through a
+root module (ratified 2026-10-11, docs/ARCHITECTURE.md "Root tiers"). Its
+dependencies are core plus the ambient ``icon_set``/``palette`` — the same
+ambient reads ``core.compose`` and ``core.writer`` already make. ``painted.views``
+remains the public import path for both names.
 """
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from ..core.compose import join_vertical, pad, vslice
-from ..core.errors import ContractError
+from .compose import join_vertical, pad, vslice
+from .errors import ContractError
 
 if TYPE_CHECKING:
-    from ..core.block import Block
+    from .block import Block
 
 
 def evidence_row(
@@ -70,7 +74,7 @@ def evidence_row(
     (clipped/padded per the width contract), so a height-only re-slice never
     perturbs width.
     """
-    from ..core.block import Block
+    from .block import Block
     from ..icon_set import current_icons
     from ..palette import current_palette
 
@@ -126,7 +130,7 @@ def assemble_frame(
         raise ContractError(f"assemble_frame height must be >= 0, got {height}")
 
     if height == 0:
-        from ..core.block import Block
+        from .block import Block
 
         return Block.empty(content.width, 0)
 

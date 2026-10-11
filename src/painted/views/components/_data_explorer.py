@@ -12,7 +12,7 @@ from ...core.cell import Style
 from ...core.compose import join_vertical
 from ...cursor import Cursor
 from ...viewport import Viewport, _scroll_into_capacity, frame_capacity
-from .._frame import evidence_row
+from ...core._frame import evidence_row
 
 _MAX_CHILDREN = 50
 

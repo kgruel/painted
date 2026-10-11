@@ -28,8 +28,9 @@ Placement (package root, beside ``inplace.py`` / ``diagnostics.py``, not
 delivery mechanisms at root, while ``painted.views`` holds semantic projections
 and component render functions. This adapter is host *orchestration* — render
 planning, ticketed cache publication, frame identity, coordinate resolution — not
-a view. It consumes ``views.assemble_frame`` (a root module importing views is
-fine — the ``diagnostics.py`` precedent).
+a view. It consumes ``core._frame.assemble_frame`` — never ``painted.views`` —
+so it stays in the root *foundation* tier that ``tui`` and ``cli`` may import
+(docs/ARCHITECTURE.md, "Root tiers").
 
 Two distinct identities, deliberately kept apart (the review's P1a/P1b):
 
@@ -58,7 +59,7 @@ from typing import TYPE_CHECKING
 from .core.errors import ContractError
 from .mouse import MouseButton
 from .viewport import Viewport, frame_capacity
-from .views import assemble_frame
+from .core._frame import assemble_frame
 
 if TYPE_CHECKING:
     from .core.block import Block
