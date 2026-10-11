@@ -442,10 +442,14 @@ def print_block(
         # Plain text: just characters, no styling.
         # rstrip trailing spaces — join_vertical pads to widest block,
         # which creates noise when piped to files/other tools.
-        for row_idx in range(block.height):
-            line = row_visible_text(block.row(row_idx))
-            stream.write(line.rstrip())
-            stream.write("\n")
+        # One write per call, like the ANSI path: a one-shot delivery's write
+        # count must not scale with block height.
+        stream.write(
+            "".join(
+                row_visible_text(block.row(row_idx)).rstrip() + "\n"
+                for row_idx in range(block.height)
+            )
+        )
 
     stream.flush()
 

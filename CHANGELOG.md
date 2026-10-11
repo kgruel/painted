@@ -15,6 +15,8 @@ breaking changes.
   frame-evidence builder moved below views. `painted.views.evidence_row`
   and `assemble_frame` keep their import path, and package-root modules are
   now held to gated dependency tiers.
+- **Piped output is one `write` call, not two per row.** `print_block`'s plain
+  path batches like the ANSI path already did, with identical bytes.
 
 ## [0.15.0] — 2026-09-28
 
