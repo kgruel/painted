@@ -1,0 +1,249 @@
+{
+  "meta": {
+    "painted": "0.15.0",
+    "commit": "7f005f7",
+    "date": "2026-10-11",
+    "python": "3.13.16",
+    "platform": "Linux x86_64",
+    "iterations": 200
+  },
+  "scenarios": {
+    "import painted": {
+      "group": "cold",
+      "n": 20,
+      "median_us": 3051.3,
+      "p95_us": 4860.2,
+      "peak_kib": 0.0,
+      "counters": {
+        "modules": 1
+      }
+    },
+    "import painted.views": {
+      "group": "cold",
+      "n": 20,
+      "median_us": 3021.5,
+      "p95_us": 6519.8,
+      "peak_kib": 0.0,
+      "counters": {
+        "modules": 2
+      }
+    },
+    "import painted.cli": {
+      "group": "cold",
+      "n": 20,
+      "median_us": 3517.2,
+      "p95_us": 6303.3,
+      "peak_kib": 0.0,
+      "counters": {
+        "modules": 2
+      }
+    },
+    "import painted.tui": {
+      "group": "cold",
+      "n": 20,
+      "median_us": 62390.5,
+      "p95_us": 84204.5,
+      "peak_kib": 0.0,
+      "counters": {
+        "modules": 29
+      }
+    },
+    "help (-h)": {
+      "group": "cli",
+      "n": 200,
+      "median_us": 227.7,
+      "p95_us": 423.8,
+      "peak_kib": 20.9,
+      "counters": {
+        "bytes": 223
+      }
+    },
+    "completion": {
+      "group": "cli",
+      "n": 200,
+      "median_us": 121.9,
+      "p95_us": 313.1,
+      "peak_kib": 10.1,
+      "counters": {
+        "candidates": 6
+      }
+    },
+    "transcribe zoom 0": {
+      "group": "project",
+      "n": 200,
+      "median_us": 4.4,
+      "p95_us": 5.9,
+      "peak_kib": 2.1,
+      "counters": {
+        "cells": 100
+      }
+    },
+    "transcribe zoom 1": {
+      "group": "project",
+      "n": 200,
+      "median_us": 53.4,
+      "p95_us": 76.7,
+      "peak_kib": 4.4,
+      "counters": {
+        "cells": 100
+      }
+    },
+    "transcribe zoom 2": {
+      "group": "project",
+      "n": 200,
+      "median_us": 102.9,
+      "p95_us": 130.5,
+      "peak_kib": 8.1,
+      "counters": {
+        "cells": 400
+      }
+    },
+    "transcribe zoom 3": {
+      "group": "project",
+      "n": 200,
+      "median_us": 384.4,
+      "p95_us": 508.0,
+      "peak_kib": 28.1,
+      "counters": {
+        "cells": 1700
+      }
+    },
+    "dashboard compose": {
+      "group": "compose",
+      "n": 200,
+      "median_us": 4386.5,
+      "p95_us": 6204.8,
+      "peak_kib": 168.7,
+      "counters": {
+        "cells": 5175
+      }
+    },
+    "serialize plain": {
+      "group": "serialize",
+      "n": 200,
+      "median_us": 1930.8,
+      "p95_us": 2056.8,
+      "peak_kib": 45.3,
+      "counters": {
+        "bytes": 8080,
+        "writes": 1
+      }
+    },
+    "serialize ansi": {
+      "group": "serialize",
+      "n": 200,
+      "median_us": 18131.0,
+      "p95_us": 27605.6,
+      "peak_kib": 52.0,
+      "counters": {
+        "bytes": 9707,
+        "writes": 1
+      }
+    },
+    "serialize html": {
+      "group": "serialize",
+      "n": 200,
+      "median_us": 27236.1,
+      "p95_us": 40555.0,
+      "peak_kib": 209.5,
+      "counters": {
+        "bytes": 20526
+      }
+    },
+    "serialize json": {
+      "group": "serialize",
+      "n": 200,
+      "median_us": 131.6,
+      "p95_us": 184.1,
+      "peak_kib": 16.0,
+      "counters": {
+        "bytes": 14651
+      }
+    },
+    "buffer diff sparse": {
+      "group": "diff",
+      "n": 200,
+      "median_us": 762.2,
+      "p95_us": 867.1,
+      "peak_kib": 8.7,
+      "counters": {
+        "changed_cells": 120
+      }
+    },
+    "buffer diff full": {
+      "group": "diff",
+      "n": 200,
+      "median_us": 7240.6,
+      "p95_us": 11802.5,
+      "peak_kib": 855.5,
+      "counters": {
+        "changed_cells": 12000
+      }
+    },
+    "host frame (static)": {
+      "group": "host",
+      "n": 200,
+      "median_us": 23.4,
+      "p95_us": 32.1,
+      "peak_kib": 8.0,
+      "counters": {
+        "rows": 50
+      },
+      "over_budget": 0
+    },
+    "host frame (scroll)": {
+      "group": "host",
+      "n": 200,
+      "median_us": 30.0,
+      "p95_us": 48.0,
+      "peak_kib": 8.4,
+      "counters": {
+        "rows": 50
+      },
+      "over_budget": 0
+    },
+    "key -> flushed frame": {
+      "group": "host",
+      "n": 200,
+      "median_us": 3083.7,
+      "p95_us": 4193.6,
+      "peak_kib": 320.3,
+      "counters": {
+        "changed_cells": 42,
+        "writes": 1,
+        "bytes": 357
+      },
+      "over_budget": 0
+    },
+    "large table (2000 rows)": {
+      "group": "large",
+      "n": 200,
+      "median_us": 218937.3,
+      "p95_us": 255360.7,
+      "peak_kib": 9030.2,
+      "counters": {
+        "rows": 2002
+      }
+    },
+    "large tree (5x5)": {
+      "group": "large",
+      "n": 200,
+      "median_us": 1820.0,
+      "p95_us": 2091.7,
+      "peak_kib": 170.9,
+      "counters": {
+        "rows": 156
+      }
+    },
+    "traceback (depth 20, chained)": {
+      "group": "large",
+      "n": 200,
+      "median_us": 3306.6,
+      "p95_us": 4348.6,
+      "peak_kib": 268.7,
+      "counters": {
+        "rows": 256
+      }
+    }
+  }
+}

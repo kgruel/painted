@@ -303,7 +303,7 @@ Exit criteria:
   appropriate evidence.
 - Primitive clipping behavior remains small, predictable, and policy-free.
 
-## Milestone 8: Baselines and boundaries — *in progress (boundaries ratified 2026-10-11; baselines open)*
+## Milestone 8: Baselines and boundaries — *built 2026-10-11 (boundaries ratified; baseline recorded in docs/PERFORMANCE.md)*
 
 Measure the stable pipeline and enforce the package structure that adoption
 revealed — before the teaching pass describes either.

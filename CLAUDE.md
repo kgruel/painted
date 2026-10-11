@@ -29,6 +29,7 @@ Below painted in the monorepo: `libs/atoms/` defines Facts and Specs; `libs/engi
 ./dev lint               # ty check + ruff format check
 ./dev cov [--html]       # coverage report (not gated — informational; ~88% today)
 ./dev fmt                # auto-format (ruff)
+./dev bench [--compare docs/baselines/baseline.json]  # scenario baselines (informational, not gated; docs/PERFORMANCE.md)
 ```
 
 `./dev check` must pass before any commit. Gate ordering: architecture checks first, then lint, then tests. If structure is wrong, everything else is noise. Tier-by-tier — what each tier catches, the test shape it takes, and where a *new* test goes — is `tests/CLAUDE.md`.
@@ -233,5 +234,6 @@ docs/
   PROMPTS_DESIGN.md   # Inline prompts: the parser's fourth reflection — stdin-TTY gate, /dev/tty refusal, prompt fidelity ladder, declared answers (implemented)
   RENDERER_CONTRACT_DESIGN.md  # The framework-seam renderer boundary: (data, fidelity, width) → Block, renderer= seam, transcription default, width-at-the-offer, ref_schemes declaration (RATIFIED 2026-07-12 — 0.11/M4)
   RENDER_MODEL.md     # The umbrella: semantic-renderer ladder, dual allocation contract, the eight laws, the interaction boundary (RATIFIED 2026-07-10 — design of record; amendments go against its laws)
+  PERFORMANCE.md      # Structural delivery gates + scenario baselines (./dev bench) and the comparison process (M8)
   RENDER_MODEL_AUDIT.md  # Full evidence tables for the render-model law audit — commit-pinned, reproducible (companion to RENDER_MODEL.md §8)
 ```
