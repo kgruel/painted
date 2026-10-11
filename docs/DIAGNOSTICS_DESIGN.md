@@ -66,6 +66,10 @@ part of the evolving surface, not the semver-stable `core`/`views` contract. The
 smoke tier auto-verifies the facade resolves. No CLI involvement, `_CLI_SEAMS`
 untouched.
 
+*Amended 2026-10-11 (roadmap M8)*: root no longer imports freely. `diagnostics.py`
+is a root **composite** module (docs/ARCHITECTURE.md, "Root tiers"). It may import
+`views`, and no layer may import it except through a declared seam.
+
 ## 4. `render_traceback` — the zoom ladder
 
 `render_traceback(exc, zoom, width, *, suppress=(), redact=default_redact)`.

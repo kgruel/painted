@@ -231,131 +231,221 @@ def test_runtime_state_dataclasses_are_frozen() -> None:
 
 
 # =============================================================================
-# Layer boundary enforcement
+# Layer boundary enforcement (docs/ARCHITECTURE.md, "Module Map")
 #
-# Allowed dependency direction: core ← views ← cli ← tui
-# Each layer may only import from layers to its left (and root shared modules).
-#
-# Known violation: views/record.py imports Zoom from cli.types.
-# Zoom is shared rendering vocabulary that should move out of cli/ — tracked
-# in follow-up.md item 3. The allowlist below makes this explicit.
+# Library (core, views) below framework (cli, tui); dependencies point down.
+# Package-root modules are not exempt: each belongs to one root tier, and the
+# tier fixes both what it may import and who may import it (ratified
+# 2026-10-11, roadmap M8). An unrestricted root let ``tui → host → views`` pass
+# the tui→views ban for a release; tiers make such laundering a failure.
 # =============================================================================
 
-_KNOWN_VIOLATIONS: set[tuple[str, str]] = set()
+_ROOT_TIERS: dict[str, frozenset[str]] = {
+    # ContextVar presentation policy core itself reads.
+    "ambient": frozenset({"palette", "icon_set", "refs"}),
+    # Shared state primitives and delivery mechanisms; never import views.
+    "foundation": frozenset(
+        {
+            "capabilities",
+            "vocabulary",
+            "theme",
+            "viewport",
+            "cursor",
+            "focus",
+            "search",
+            "keyboard",
+            "mouse",
+            "inplace",
+            "host",
+            "publish",
+            "_sparkline_core",
+            "_timer",
+        }
+    ),
+    # Library entry points built on views.
+    "composite": frozenset({"display", "diagnostics", "_transcription"}),
+    # CLI-only machinery and painted's own command-line entry points.
+    "framework": frozenset(
+        {
+            "__init__",
+            "__main__",
+            "_prompt_cell",
+            "_docs_cli",
+            "_doc_pages",
+            "_demo_cli",
+            "_demo_discovery",
+        }
+    ),
+}
 
+_LAYERS = ("core", "views", "cli", "tui")
 
-def _layer_of(mod: str) -> str:
-    """Classify a painted module into its architectural layer."""
-    for layer in ("core", "views", "cli", "tui"):
-        if mod == f"painted.{layer}" or mod.startswith(f"painted.{layer}."):
-            return layer
-    return "root"
+# What each layer or root tier may import (its own class is always allowed).
+_ALLOWED: dict[str, frozenset[str]] = {
+    "core": frozenset({"ambient"}),
+    "views": frozenset({"core", "ambient", "foundation"}),
+    "cli": frozenset({"core", "ambient", "foundation"}),
+    "tui": frozenset({"core", "ambient", "foundation"}),
+    "ambient": frozenset({"core"}),
+    "foundation": frozenset({"core", "ambient"}),
+    "composite": frozenset({"core", "views", "ambient", "foundation"}),
+    "framework": frozenset({"core", "views", "cli", "tui", "ambient", "foundation", "composite"}),
+}
 
-
-def _layer_files(painted_root: Path, layer: str) -> list[Path]:
-    """Get all .py files in a layer directory."""
-    return sorted((painted_root / layer).rglob("*.py"))
-
-
-def _check_layer_boundary(
-    painted_root: Path,
-    src_root: Path,
-    layer: str,
-    forbidden_layers: set[str],
-    allowed_seams: frozenset[tuple[str, str]] = frozenset(),
-) -> list[str]:
-    """Check that a layer doesn't import from forbidden layers.
-
-    ``allowed_seams`` carves narrow, file-scoped exceptions: each ``(relative
-    file path, imported module)`` pair is a documented crossing that the guard
-    permits. Anything else crossing the boundary still fails — the exception is
-    a seam, not a blanket relaxation.
-    """
-    violations = []
-    for py_file in _layer_files(painted_root, layer):
-        rel = str(py_file.relative_to(src_root))
-        imported = _iter_imported_modules(src_root, py_file)
-        for mod in sorted(imported):
-            target_layer = _layer_of(mod)
-            if target_layer in forbidden_layers:
-                key = (layer, target_layer)
-                if key in _KNOWN_VIOLATIONS:
-                    continue
-                if (rel, mod) in allowed_seams:
-                    continue
-                violations.append(
-                    f"{py_file.relative_to(src_root)} imports {mod} ({layer} → {target_layer})"
-                )
-    return violations
-
-
-def test_core_is_self_contained() -> None:
-    """core/ must not import from views/, cli/, or tui/."""
-    painted_root = Path(__file__).resolve().parents[2] / "src" / "painted"
-    src_root = painted_root.parent
-    violations = _check_layer_boundary(painted_root, src_root, "core", {"views", "cli", "tui"})
-    assert not violations, "core/ imports higher layers:\n" + "\n".join(violations)
-
-
-def test_views_do_not_import_cli_or_tui() -> None:
-    """views/ may import core/ and root, but not cli/ or tui/."""
-    painted_root = Path(__file__).resolve().parents[2] / "src" / "painted"
-    src_root = painted_root.parent
-    violations = _check_layer_boundary(painted_root, src_root, "views", {"cli", "tui"})
-    assert not violations, "views/ imports framework layers:\n" + "\n".join(violations)
-
-
-# The live-delivery seams: the two-tier live-delivery contract
-# (docs/LIVE_DELIVERY_DESIGN.md) makes the CLI framework the orchestrator of
-# BOTH live tiers — ephemeral (InPlaceRenderer, in root) and sustained
-# (Surface, in tui). StreamSurface is the cli-private adapter that hosts a
-# fetch_stream on an alt screen, so it must subclass tui's Surface; and both
-# tiers dress their frames with the delivery-cost gauge, whose renderer is
-# views' public cost_meter — re-implementing it in cli would undo the
-# component graduation. These are the ONLY sanctioned crossings; every other
-# cli file stays tui- and views-free (both imports are lazy where it matters,
-# so `import painted` never pays for either).
+# Crossing seams: framework-layer imports that reach a layer they may not —
+# directly, or through a composite/framework root module. Each is file-scoped
+# to one (file, target) pair and serves a ratified contract
+# (docs/ARCHITECTURE.md, "Crossing seams").
 #
-# Seams are framework→library only — cli reaching down into views/tui. The
-# reverse direction is never a seam: a library module needing the framework
-# means the code is in the wrong layer, not that the boundary needs a hole.
-# Each seam is file-scoped to one (file, target) pair, serves a ratified
-# contract, and exists only because dissolving it (duplicating the code in
-# cli, or demoting it below the boundary) was honestly worse.
+# Seams are framework→library only. The reverse direction is never a seam: a
+# library module needing the framework means the code is in the wrong layer.
 #
-# TRIPWIRE (ratified 2026-06-10): this set never grows past two. Both
-# entries are delivery concerns — cli orchestrating how frames reach the
-# terminal — so a third legitimate seam is evidence that a delivery layer
-# exists and wants a name. The response is to extract it (move the seam
-# files below the boundary, shrinking this set back toward zero), never to
-# add a third entry. The allowlist is a pressure gauge, not a budget.
+# TRIPWIRE (ratified 2026-06-10, re-counted 2026-10-11): the 2026-06-10 rule
+# said a third seam is evidence that a delivery layer wants a name. Counting
+# root crossings honestly shows it already fired — all four are delivery or
+# prompt rendering the framework orchestrates. Extracting a delivery subsystem
+# is the recorded follow-up; until then this set only shrinks (pinned by
+# _SEAM_CEILING), and each entry must still be a real import.
 _CLI_SEAMS = frozenset(
     {
         ("painted/cli/stream_surface.py", "painted.tui.surface"),
         ("painted/cli/live_meter.py", "painted.views"),
+        ("painted/cli/runner.py", "painted._transcription"),
+        ("painted/cli/prompts.py", "painted._prompt_cell"),
     }
 )
+_SEAM_CEILING = 4
 
 
-def test_cli_does_not_import_tui() -> None:
-    """cli/ may import core/ and root, but not tui/ or views/.
+def _root_module_tier(name: str) -> str | None:
+    for tier, members in _ROOT_TIERS.items():
+        if name in members:
+            return tier
+    return None
 
-    Exception: the documented live-delivery seams (see _CLI_SEAMS).
-    """
-    painted_root = Path(__file__).resolve().parents[2] / "src" / "painted"
-    src_root = painted_root.parent
-    violations = _check_layer_boundary(
-        painted_root, src_root, "cli", {"tui", "views"}, allowed_seams=_CLI_SEAMS
+
+def _class_of(mod: str) -> str | None:
+    """Classify a painted module as a layer or a root tier (None if unknown)."""
+    if mod == "painted":
+        return _root_module_tier("__init__")
+    parts = mod.split(".")
+    if parts[1] in _LAYERS:
+        return parts[1]
+    return _root_module_tier(parts[1])
+
+
+def _painted_imports(src_root: Path, py_file: Path) -> list[str]:
+    return sorted(
+        m
+        for m in _iter_imported_modules(src_root, py_file)
+        if m == "painted" or m.startswith("painted.")
     )
-    assert not violations, "cli/ imports higher layers:\n" + "\n".join(violations)
 
 
-def test_tui_does_not_import_views_or_cli() -> None:
-    """tui/ may import core/ and root, but not views/ or cli/."""
-    painted_root = Path(__file__).resolve().parents[2] / "src" / "painted"
+def _check_class_boundary(py_files: list[Path], src_root: Path, own: str) -> list[str]:
+    """Imports from ``py_files`` (all of class ``own``) that ``_ALLOWED`` forbids.
+
+    A declared crossing seam is permitted; anything else crossing fails, and an
+    unclassified target fails too (it must be placed before it can be used).
+    """
+    allowed = _ALLOWED[own] | {own}
+    violations = []
+    for py_file in py_files:
+        rel = str(py_file.relative_to(src_root))
+        for mod in _painted_imports(src_root, py_file):
+            target = _class_of(mod)
+            if target in allowed or (rel, mod) in _CLI_SEAMS:
+                continue
+            violations.append(f"{rel} imports {mod} ({own} → {target or 'unclassified'})")
+    return violations
+
+
+def _layer_files(painted_root: Path, layer: str) -> list[Path]:
+    return sorted((painted_root / layer).rglob("*.py"))
+
+
+def _root_files(painted_root: Path) -> list[Path]:
+    return sorted(painted_root.glob("*.py"))
+
+
+@pytest.mark.parametrize("layer", _LAYERS)
+def test_layer_imports_respect_boundaries(layer: str) -> None:
+    """Each layer imports only what _ALLOWED grants it, plus declared seams."""
+    painted_root = _painted_root()
     src_root = painted_root.parent
-    violations = _check_layer_boundary(painted_root, src_root, "tui", {"views", "cli"})
-    assert not violations, "tui/ imports sibling layers:\n" + "\n".join(violations)
+    violations = _check_class_boundary(_layer_files(painted_root, layer), src_root, layer)
+    assert not violations, f"{layer}/ crosses its boundary:\n" + "\n".join(violations)
+
+
+def test_every_root_module_has_exactly_one_tier() -> None:
+    """New root modules must be placed; stale tier entries must be removed."""
+    on_disk = {p.stem for p in _root_files(_painted_root())}
+    members = [name for tier in _ROOT_TIERS.values() for name in tier]
+    assert len(members) == len(set(members)), "a root module is listed in two tiers"
+    assert set(members) == on_disk, (
+        f"unclassified root modules: {sorted(on_disk - set(members))}; "
+        f"tier entries with no module: {sorted(set(members) - on_disk)}"
+    )
+
+
+@pytest.mark.parametrize("tier", list(_ROOT_TIERS))
+def test_root_tier_imports_respect_boundaries(tier: str) -> None:
+    painted_root = _painted_root()
+    src_root = painted_root.parent
+    files = [p for p in _root_files(painted_root) if p.stem in _ROOT_TIERS[tier]]
+    violations = _check_class_boundary(files, src_root, tier)
+    assert not violations, f"root {tier} tier crosses its boundary:\n" + "\n".join(violations)
+
+
+def test_crossing_seams_are_real_and_shrink_only() -> None:
+    """Every seam is a live import, and the table never grows."""
+    src_root = _painted_root().parent
+    assert len(_CLI_SEAMS) <= _SEAM_CEILING, (
+        "the crossing-seam table grew — extract a delivery layer instead "
+        "(docs/ARCHITECTURE.md, 'Crossing seams')"
+    )
+    stale = [
+        f"{rel} no longer imports {mod}"
+        for rel, mod in sorted(_CLI_SEAMS)
+        if mod not in _painted_imports(src_root, src_root / rel)
+    ]
+    assert not stale, "stale crossing seams (remove them and lower _SEAM_CEILING):\n" + "\n".join(
+        stale
+    )
+
+
+_MODULE_ROW = re.compile(r"^\| \*\*(?P<sub>[^*]+)\*\* \| `(?P<file>[^`]+\.py)` \|")
+
+
+def test_architecture_module_map_matches_filesystem() -> None:
+    """docs/ARCHITECTURE.md lists every module once, with root tiers matching _ROOT_TIERS."""
+    painted_root = _painted_root()
+    doc = painted_root.parents[1] / "docs" / "ARCHITECTURE.md"
+    listed: dict[str, str] = {}
+    for line in doc.read_text(encoding="utf-8").splitlines():
+        m = _MODULE_ROW.match(line)
+        if not m:
+            continue
+        sub, file = m["sub"], m["file"]
+        if sub.startswith("root"):
+            path, tier = file, sub.split("·")[1].strip()
+        else:
+            path, tier = f"{sub}{file}", ""
+        assert path not in listed, f"{path} listed twice in the module map"
+        listed[path] = tier
+
+    on_disk = {
+        str(p.relative_to(painted_root))
+        for p in painted_root.rglob("*.py")
+        if p.name != "__init__.py" or p.parent == painted_root
+    }
+    assert set(listed) == on_disk, (
+        f"missing from the module map: {sorted(on_disk - set(listed))}; "
+        f"listed but absent: {sorted(set(listed) - on_disk)}"
+    )
+    doc_tiers = {path[:-3]: tier for path, tier in listed.items() if tier}
+    code_tiers = {name: tier for tier, names in _ROOT_TIERS.items() for name in names}
+    assert doc_tiers == code_tiers, "module map root tiers disagree with _ROOT_TIERS"
 
 
 def test_public_modules_do_not_import_private_symbols_from_siblings() -> None:

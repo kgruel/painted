@@ -159,9 +159,9 @@ host rung mounts *any* binding, `-i` is now honest on every command and
 `_get_parser` offers it unconditionally — the `docs/MODE_RESOLUTION.md` filtering
 rationale (hide `-i` when it is a no-op) is satisfied by the capability existing,
 not by gating. The runner reaches the tui `HostSurface` through the *existing*
-`stream_surface.py` cli→tui seam (a thin `run_host_surface` launcher) — the arch
-tripwire caps that crossing at two seam files, so `runner.py` itself stays tui-
-free.
+`stream_surface.py` cli→tui seam (a thin `run_host_surface` launcher). `_CLI_SEAMS`
+is pinned shrink-only (`docs/ARCHITECTURE.md`, "Crossing seams"; root modules count
+as crossings), so `runner.py` itself stays tui-free.
 
 Two local seams worth knowing before you touch delivery:
 

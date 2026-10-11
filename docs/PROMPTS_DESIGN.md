@@ -232,6 +232,9 @@ entry), so the `ListState`/`TextInputState` components CELL binds are
 reached from root, never from inside `cli/`. root→`views` and root→`cli`
 are the precedented edges — the same shape `inplace.py` and
 `diagnostics.py` already take.
+*Amended 2026-10-11 (roadmap M8)*: routing through root no longer avoids the
+count. `cli/prompts.py → _prompt_cell` is a declared `_CLI_SEAMS` entry, and
+`_prompt_cell.py` is a root **framework** module (docs/ARCHITECTURE.md, "Root tiers").
 
 ## 6. The declaration — one primitive, three domain shapes (RATIFIED 2026-07-07)
 

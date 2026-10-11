@@ -11,9 +11,10 @@ under the handler lock, and ``install`` routes ``sys.excepthook`` through
     logging.getLogger().addHandler(painted.PaintedHandler())
     painted.install()                       # uncaught tracebacks render too
 
-This lives at the package ROOT, not in ``cli/``: the ``_CLI_SEAMS`` tripwire is
-frozen at two, and nothing in ``cli/`` may import ``views``. Root modules may
-import ``views`` and ``core`` freely (precedent: ``inplace.py``).
+This lives at the package ROOT, not in ``cli/``: a log handler and an excepthook
+are not argv-driven, and ``cli/`` may not import ``views``. It is a root
+*composite* module (docs/ARCHITECTURE.md, "Root tiers"): it may import ``views``,
+and no layer imports it.
 """
 
 from __future__ import annotations

@@ -397,7 +397,9 @@ waits for a concrete consumer.
   the host offered it — without yet proving a public type is the fix.
 - **Package boundaries / the root-layer exemption.** Real coupling observed
   during adoption drives extraction, not the neatness of a proposed layer
-  diagram.
+  diagram. *(The exemption is now closed: roadmap M8 ratified gated root tiers on
+  2026-10-11, see ARCHITECTURE.md "Module Map". Delivery-layer extraction is
+  still a follow-up.)*
 - **Performance budgets.** A separate lane: scenario baselines along the
   pipeline stages (project → compose → serialize → diff → deliver), plus the
   fidelity question *does lower detail do less work, or render-then-discard?*

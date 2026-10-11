@@ -26,7 +26,7 @@ invariant bites *where*, so you know what to read before you touch it.
 
 - **Self-contained.** `core/` may import stdlib, `wcwidth`, and a few root
   modules it depends on (`palette`, `icon_set`, `refs`) — but never `views/`,
-  `cli/`, or `tui/`. Gated by `test_core_is_self_contained`
+  `cli/`, or `tui/` (or any non-ambient root tier). Gated by `test_layer_imports_respect_boundaries`
   (`tests/unit/test_architecture_invariants.py`). A cross-layer need means the
   code belongs one layer up, not a new import here.
 - **Frozen everything.** `Style`, `Cell`, `Span`, `Line` are frozen dataclasses;

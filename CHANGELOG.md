@@ -7,6 +7,15 @@ lives on the release page. This project adheres to
 [Semantic Versioning](https://semver.org/); pre-1.0, minor versions may carry
 breaking changes.
 
+## [Unreleased]
+
+### Changed
+
+- **`import painted.tui` no longer loads `painted.views`.** The host rung's
+  frame-evidence builder moved below views. `painted.views.evidence_row`
+  and `assemble_frame` keep their import path, and package-root modules are
+  now held to gated dependency tiers.
+
 ## [0.15.0] — 2026-09-28
 
 ### Changed

@@ -142,7 +142,7 @@ NOT required for this change and should not ride along. *(Buried 2026-06-10
   crosses the `cli ↛ tui` invariant. This is the ONE sanctioned crossing: the
   two-tier contract makes the CLI framework the orchestrator of *both* live
   tiers, so it must reach the alt-screen delivery. Carved as a file-scoped
-  exception in `test_cli_does_not_import_tui` (`_CLI_SEAMS`); every other
+  exception in `test_layer_imports_respect_boundaries` (`_CLI_SEAMS`); every other
   `cli → tui` import still fails the guard. The import is lazy (inside
   `_run_live_surface`), so `import painted` never pays for tui.
 - **`-i` / `--live` convergence (§6)** → realized. With `live_delivery=
@@ -190,6 +190,8 @@ terminal — so a third legitimate seam is evidence that a delivery layer
 exists and wants a name. The response is extraction (the seam files move
 below the `cli ↛ views/tui` boundary, shrinking the allowlist back toward
 zero), never a third entry. Re-layer, never relax.
+
+**Amended 2026-10-11 (roadmap M8, docs/ARCHITECTURE.md "Root tiers")**: package-root modules now count. `_transcription.py` (cli/runner) and `_prompt_cell.py` (cli/prompts) reached `views` from `cli` through root, so counted honestly `_CLI_SEAMS` holds four crossings, and the tripwire had already fired. The table now lists all four, is pinned shrink-only, and delivery-layer extraction is the recorded follow-up.
 
 ## 9. Deferred items closed (2026-06-10)
 

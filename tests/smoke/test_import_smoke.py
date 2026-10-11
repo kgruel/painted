@@ -136,3 +136,29 @@ def test_import_painted_does_not_eagerly_load_heavy_layers() -> None:
         + result.stdout.replace("||", "\n")
         + result.stderr
     )
+
+
+_TUI_WITHOUT_VIEWS_SCRIPT = r"""
+import sys
+import painted.tui
+loaded = sorted(m for m in sys.modules if m == "painted.views" or m.startswith("painted.views."))
+if loaded:
+    print("VIEWS||" + "||".join(loaded))
+    sys.exit(1)
+print("OK")
+"""
+
+
+def test_import_tui_does_not_load_views() -> None:
+    """`import painted.tui` stays views-free, including through root modules.
+
+    The arch tier forbids tui→views and root-foundation→views by AST. This is the
+    runtime half: through 0.15, tui → host → views passed the AST check while
+    still loading views (docs/ARCHITECTURE.md, "Root tiers").
+    """
+    result = _run(_TUI_WITHOUT_VIEWS_SCRIPT)
+    assert result.returncode == 0, (
+        "import painted.tui loaded painted.views:\n"
+        + result.stdout.replace("||", "\n")
+        + result.stderr
+    )
