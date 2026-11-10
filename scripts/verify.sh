@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# DESC: Model-check the formal models in verification/ with TLC (needs Java; ~40s; not part of check)
+# DESC: Model-check the formal models in verification/ with TLC (needs Java; ~1 min; not part of check)
 # Usage: ./dev verify [--trace NAME | --sync]
 #
 #   (no args)      run every check, the recorded findings, and the mutants

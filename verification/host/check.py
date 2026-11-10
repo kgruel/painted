@@ -10,7 +10,7 @@ into verification/.tools/ at a pinned version and verified by hash; set
 TLA2TOOLS to a tla2tools.jar path to use that file instead (same hash check).
 
 Exit status is 0 only when every run ends the way EXPECT says it should: the
-shipped protocol passes, the recorded finding still reproduces, and each mutant
+protocol passes under any caller, and each mutant
 (the model with one guard broken) is caught by the property that guards it.
 """
 
@@ -40,27 +40,25 @@ TLC_SHA256 = "936a262061c914694dfd669a543be24573c45d5aa0ff20a8b96b23d01e050e88"
 
 # name -> (config, text to break, replacement, invariant expected to fail or None)
 RUNS: dict[str, tuple[str, str | None, str | None, str | None]] = {
-    # The checks.
-    "Shipped": ("Shipped.cfg", None, None, None),
-    # FINDING (open): one Plan published onto two forks with different Blocks
-    # yields equal FrameTokens. Expected to fail until that is ruled on; if this
-    # starts passing, the finding was fixed - move it to the checks above.
-    "AnyCaller": ("AnyCaller.cfg", None, None, "StaleHitsDrop"),
+    # The check: the adapter under any caller its types allow, Plan reuse
+    # included. (Closed finding: one Plan published twice used to yield equal
+    # FrameTokens; publish now mints the generation identity, so this passes.)
+    "AnyCaller": ("AnyCaller.cfg", None, None, None),
     # The mutants: the model with one guard of host.py removed.
     "mutant: publish ignores the ticket base": (
-        "Shipped.cfg",
+        "AnyCaller.cfg",
         "    /\\ p.base = adapter[b].gid                                  \\* GUARD: ticket base\n",
         "    /\\ TRUE\n",
         "NoRegress",
     ),
     "mutant: generation identity is a per-lineage counter": (
-        "Shipped.cfg",
-        "[gid |-> p.gid, key |-> p.key,",
+        "AnyCaller.cfg",
+        "[gid |-> nextGid, key |-> p.key,",
         "[gid |-> adapter[b].gid + 1, key |-> p.key,",
         "StaleHitsDrop",
     ),
     "mutant: frame token omits the offset": (
-        "Shipped.cfg",
+        "AnyCaller.cfg",
         "Token(a)   == <<a.gid, a.off, a.F>>",
         "Token(a)   == <<a.gid, a.F>>",
         "StaleHitsDrop",
