@@ -23,7 +23,7 @@ the bounds below. Tests check the orders someone wrote; this checks all of them.
 ./dev verify
 ```
 
-About four and a half minutes. Needs Java 11+ on PATH or installed through mise; TLC 1.7.4
+About a minute. Needs Java 11+ on PATH or installed through mise; TLC 1.7.4
 is fetched once into `verification/.tools/` and verified by hash. It is not part
 of `./dev check` — only the drift ratchet is (see the sync record below).
 
@@ -62,9 +62,9 @@ fails when the covered code no longer matches it. Run `./dev verify --sync` to
 move it forward — only after you have confirmed every row above still describes
 the code. A new method that writes the same state belongs in `covered` too.
 
-**Bounds:** 2 forks, 3 renderer-input versions, 4 distinct `Plan` tickets,
+**Bounds:** 2 forks, 3 renderer-input versions, 3 distinct `Plan` tickets,
 4 accepted publishes, 2 distinct Blocks, offsets {0,1}, heights {1,2} — about
-22.5 million states.
+7.1 million states.
 
 **Left out, deliberately:**
 
