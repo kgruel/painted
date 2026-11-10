@@ -9,6 +9,12 @@ breaking changes.
 
 ## [Unreleased]
 
+### Added
+
+- **`painted demos sandpile` — a new showcase.** The abelian sandpile, animated;
+  its still and its animation are the same data by theorem, and a test holds them
+  equal. ([b0da0d6](https://github.com/kgruel/painted/commit/b0da0d6))
+
 ### Fixed
 
 - **`painted demos disk` works on Python 3.11 again.** The demo used 3.12-only
