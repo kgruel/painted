@@ -28,7 +28,7 @@ breaking changes.
 - **Publishing one `ViewportAdapter` `Plan` twice no longer yields colliding
   frame tokens.** Each accepted `publish` now mints its own generation identity,
   so a stale click can't resolve through different content; `Plan` loses its
-  `proposed` field. No shipped host published a plan twice. (link pending merge)
+  `proposed` field. No shipped host published a plan twice. ([02d8f6b](https://github.com/kgruel/painted/commit/02d8f6b))
 
 ## [0.15.0] — 2026-09-28
 
