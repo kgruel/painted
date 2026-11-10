@@ -135,6 +135,7 @@ showcase/           (pattern test shape; surface-delivered animated spectacle)
   mandelbrot.py     Escape time: proof vs presumption, the unknown declared ✓
   harmonograph.py   Damped pendulums: Braille subpixels + capability carriers ✓
   interference.py   Two radial sources: signed displacement + cancellation laws ✓
+  sandpile.py       Abelian sandpile: still == animation by theorem, ledger law-tested ✓
 ```
 
 Old stepping stones (`block.py`, `buffer.py`, `buffer_view.py`) deleted —

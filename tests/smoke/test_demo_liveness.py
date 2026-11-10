@@ -114,6 +114,7 @@ SHOWCASE = [
     "mandelbrot",
     "plasma",
     "raymarch",
+    "sandpile",
     "starmap",
     "wireworld",
 ]

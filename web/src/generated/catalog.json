@@ -821,6 +821,26 @@
       "has_main": true
     },
     {
+      "id": "showcase/sandpile",
+      "tier": "showcase",
+      "name": "sandpile",
+      "slug": "sandpile",
+      "title": "Sandpile",
+      "summary": "Sandpile — a heap that forgets the order it was built in.",
+      "source": "demos/showcase/sandpile.py",
+      "command": "painted demos sandpile",
+      "checkout_command": "uv run demos/showcase/sandpile.py",
+      "invocations": [
+        "uv run demos/showcase/sandpile.py --live",
+        "uv run demos/showcase/sandpile.py --frame 2000",
+        "uv run demos/showcase/sandpile.py -v",
+        "uv run demos/showcase/sandpile.py --stats",
+        "uv run demos/showcase/sandpile.py --note",
+        "uv run demos/showcase/sandpile.py --json"
+      ],
+      "has_main": true
+    },
+    {
       "id": "showcase/starmap",
       "tier": "showcase",
       "name": "starmap",
