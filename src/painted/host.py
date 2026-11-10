@@ -34,13 +34,13 @@ fine — the ``diagnostics.py`` precedent).
 Two distinct identities, deliberately kept apart (the review's P1a/P1b):
 
 * the **generation** (``_Generation.gid``) — the cached content Block's identity,
-  a fresh ``_GenerationId`` object minted per ``plan`` call and stamped by an
-  accepted ``publish``. It is *provenance, not a counter*: a lineage-local
-  sequence could not tell two pure forks apart (both would propose the same next
-  integer), so the identity is a per-plan object compared by identity. A
-  ``seq`` survives on ``_Generation`` for ordering/debugging only. Render tickets
-  (``Plan``) gate publication against the generation identity, so an out-of-order
-  publish is rejected, and pure forks stay distinct.
+  a fresh ``_GenerationId`` object minted by each accepted ``publish``. It is
+  *provenance, not a counter*: a lineage-local sequence could not tell two pure
+  forks apart (both would propose the same next integer), so the identity is a
+  per-publish object compared by identity. A ``seq`` survives on ``_Generation``
+  for ordering/debugging only. Render tickets (``Plan``) gate publication against
+  the generation identity, so an out-of-order publish is rejected, and pure forks
+  stay distinct — even two publishes of one ``Plan``.
 * the **frame token** (``FrameToken``) — the exact *displayed mapping*
   (generation identity + offset + frame height). It changes on every distinct
   frame, *including a scroll*, and is what ``resolve`` requires — a token from a
@@ -91,18 +91,21 @@ class RenderKey:
 
 
 class _GenerationId:
-    """A collision-free generation identity — one fresh instance per ``plan``
-    call, compared by object identity.
+    """A collision-free generation identity — one fresh instance per accepted
+    ``publish``, compared by object identity.
 
-    A lineage-local counter cannot distinguish **pure forks**: two plans issued
-    from the same frozen base state would each propose ``seq + 1`` — the same
+    A lineage-local counter cannot distinguish **pure forks**: two publishes from
+    the same frozen base state would each produce ``seq + 1`` — the same
     integer — so branches with equal window geometry would mint equal
     ``FrameToken``s and cross-resolve. Frozen-state purity makes those divergent
     branches legal, so the identity needs *provenance*, not a counter. A distinct
-    object per ``plan`` supplies it: each fork carries its own sentinel through
-    ``plan → accepted generation → FrameToken``, and ``resolve`` matches on that
-    object's identity. No ``Date``/``random`` needed — the object *is* the
-    provenance. ``__slots__`` keeps it a bare identity marker.
+    object per accepted ``publish`` supplies it: each fork carries its own
+    sentinel through ``accepted generation → FrameToken``, and ``resolve``
+    matches on that object's identity. It is minted at publish, not at ``plan``:
+    a ``Plan`` is a frozen value nothing consumes, so an identity carried on it
+    would be shared by every publish of that one plan. No ``Date``/``random``
+    needed — the object *is* the provenance. ``__slots__`` keeps it a bare
+    identity marker.
     """
 
     __slots__ = ()
@@ -112,8 +115,8 @@ class _GenerationId:
 class _Generation:
     """Private: the cached (inputs → Block) pairing and its identity.
 
-    ``gid`` is the collision-free identity (a ``_GenerationId``), assigned only
-    through an accepted ``publish`` from the ticket the plan carried; it is what
+    ``gid`` is the collision-free identity (a ``_GenerationId``), minted fresh
+    by each accepted ``publish``; it is what
     ``FrameToken`` and ticketing compare on. ``seq`` is retained for ordering and
     debugging only — it is *not* the identity (pure forks share a ``seq``). Not a
     public type: correct use installs content through ``publish``, never by hand
@@ -144,24 +147,23 @@ class Plan:
     """The result of ``plan`` — the resize decision *and* the publication ticket.
 
     ``action`` is the matrix decision; ``key`` is the render inputs it was planned
-    for. The other two fields are the ticket, both opaque provenance objects —
-    carry the whole ``Plan`` to ``publish`` and never inspect them:
+    for. ``base`` is the ticket — the generation identity the plan was issued
+    against (``None`` before any publish), an opaque provenance object: carry the
+    whole ``Plan`` to ``publish`` and never inspect it. ``publish`` accepts only
+    while the adapter still sits on this identity, so a publish applied *out of
+    order* after a newer one is rejected (its base no longer matches the advanced
+    generation).
 
-    * ``base`` — the generation identity the plan was issued against (``None``
-      before any publish). ``publish`` accepts only while the adapter still sits
-      on this identity, so a publish applied *out of order* after a newer one is
-      rejected (its base no longer matches the advanced generation).
-    * ``proposed`` — a fresh identity minted for the generation this plan would
-      create. It makes **pure forks** distinguishable: two plans from one base
-      carry *different* ``proposed`` objects, so the branches they publish get
-      different generation identities (and thus non-colliding ``FrameToken``s)
-      even though both pass the ``base`` check.
+    The ticket carries no identity for the generation it would create: each
+    accepted ``publish`` mints its own. So **pure forks** stay distinguishable —
+    two publishes from one base (of two plans, or of the same plan twice) both
+    pass the ``base`` check yet install different generation identities, and
+    thus non-colliding ``FrameToken``s.
     """
 
     action: RenderAction
     key: RenderKey
     base: _GenerationId | None
-    proposed: _GenerationId
 
 
 @dataclass(frozen=True, slots=True)
@@ -460,10 +462,8 @@ class ViewportAdapter:
         ``RE_RENDER`` when any renderer input differs from the cached generation —
         width, the opaque ``inputs`` token, or content identity — or when nothing
         is cached yet; otherwise ``RE_SLICE``. The returned ``Plan`` carries the
-        ticket: the generation identity it was issued against (``base``) and a
-        fresh identity for the generation it would create (``proposed``) — the
-        latter minted *per call*, so two plans from one base publish distinct,
-        non-colliding generations.
+        ticket: the generation identity it was issued against (``base``). The new
+        generation's identity is minted by ``publish``, not here.
         """
         base = None if self.generation is None else self.generation.gid
         action = (
@@ -471,7 +471,7 @@ class ViewportAdapter:
             if self.generation is None or key != self.generation.key
             else RenderAction.RE_SLICE
         )
-        return Plan(action, key, base, _GenerationId())
+        return Plan(action, key, base)
 
     # --- Ticketed atomic cache publication + reconciliation -------------------
 
@@ -490,10 +490,11 @@ class ViewportAdapter:
           generation another publish has already advanced past returns ``None``
           (losing a race is normal in streaming; re-plan and re-render). A
           returned fact, never an exception.
-        * *pure forks* are both accepted but stay distinguishable — two plans from
-          one frozen base share a ``base`` (both pass the check) yet carry
-          different ``proposed`` identities, so the branches they publish get
-          different generation identities and thus non-colliding frame tokens.
+        * *pure forks* are both accepted but stay distinguishable — two publishes
+          from one frozen base share a ``base`` (both pass the check), but each
+          accepted publish mints a fresh generation identity, so the branches get
+          non-colliding frame tokens. This holds even when one ``Plan`` is
+          published twice: the ticket is not consumed, and it need not be.
 
         ``frame_height`` optionally updates ``F`` in the same step (a width+height
         resize renders once, publishes at the new height). The width-reflow anchor
@@ -545,7 +546,7 @@ class ViewportAdapter:
             self,
             frame_height=F,
             content=content,
-            generation=_Generation(key=plan.key, gid=plan.proposed, seq=seq),
+            generation=_Generation(key=plan.key, gid=_GenerationId(), seq=seq),
             viewport=view,
             following=following,
             cursor=new_cursor,

@@ -111,6 +111,21 @@ class TestTicketedPublication:
         assert b.resolve(0, 0, ta).stale
         assert a.resolve(0, 0, tb).stale
 
+    def test_one_plan_published_twice_does_not_collide(self) -> None:
+        """A ``Plan`` is a frozen value nothing consumes, so one plan can be
+        published twice from the same frozen base — both accepted. Each accepted
+        publish mints its own generation identity, so the two results never share
+        a token: a frame painted from one is stale against the other."""
+        a = ViewportAdapter(frame_height=3)
+        plan = a.plan(RenderKey("doc", 1, 10))
+        x = a.publish(Block.text("one", Style()), plan)
+        y = a.publish(Block.text("two", Style()), plan)
+        assert x is not None and y is not None
+        assert x.token() != y.token()
+        assert _gid(x) is not _gid(y)
+        assert y.resolve(0, 0, x.token()).stale
+        assert x.resolve(0, 0, y.token()).stale
+
     def test_generation_identity_provenance(self) -> None:
         """The generation identity changes on an accepted publish and is preserved
         across a re-slice and a scroll (same cached Block)."""

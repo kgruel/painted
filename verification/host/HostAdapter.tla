@@ -11,23 +11,23 @@
        offset, a superset of what the code can choose;
      - Block contents: a block is an opaque value from Contents;
      - RenderKey: one integer, the version of the renderer inputs. *)
-EXTENDS Naturals
+EXTENDS Naturals, FiniteSets
 
 CONSTANTS
     Branches,    \* frozen adapter values alive at once (pure forks)
     MaxKey,      \* renderer-input versions 1..MaxKey
-    MaxGid,      \* plan() calls explored
+    MaxPlans,    \* distinct Plan tickets explored
+    MaxGid,      \* accepted publish() calls explored
     Contents,    \* distinct rendered Blocks
     Offsets,     \* viewport offsets
-    Heights,     \* frame heights F
-    TicketReuse  \* TRUE: a Plan may be published more than once (it is a
-                 \* frozen value; nothing in the adapter consumes it)
+    Heights      \* frame heights F
 
 VARIABLES
     desired,    \* the host's current renderer-input version
     adapter,    \* [Branches -> adapter value]
-    nextGid,    \* models object identity: each plan() mints a fresh _GenerationId
-    plans,      \* outstanding Plan tickets
+    nextGid,    \* models object identity: each accepted publish() mints a fresh _GenerationId
+    plans,      \* Plan tickets ever issued: frozen values nothing consumes, so any
+                \* may be published any number of times, onto any fork
     shown,      \* the last displayed Frame: its token, and what it really mapped
     regressed   \* history: some publish installed older inputs over newer ones
 
@@ -58,22 +58,23 @@ InputsChange ==
     /\ desired' = desired + 1
     /\ UNCHANGED <<adapter, nextGid, plans, shown, regressed>>
 
-\* ViewportAdapter.plan(key): ticket = (base, proposed), proposed fresh per call.
+\* ViewportAdapter.plan(key): ticket = (key, base). It mints no identity.
 Plan(b) ==
-    /\ nextGid <= MaxGid
-    /\ plans' = plans \cup {[key |-> desired, base |-> adapter[b].gid, gid |-> nextGid]}
-    /\ nextGid' = nextGid + 1
-    /\ UNCHANGED <<desired, adapter, shown, regressed>>
+    /\ Cardinality(plans) < MaxPlans
+    /\ plans'= plans \cup {[key |-> desired, base |-> adapter[b].gid]}
+    /\ UNCHANGED <<desired, adapter, nextGid, shown, regressed>>
 
 \* ViewportAdapter.publish(content, plan, frame_height=...), the accepted arm.
 \* The rejected arm returns None and changes nothing, so it is not an action.
+\* The accepted arm mints the new generation's identity (_GenerationId()).
 Publish(b, p, c, o, h) ==
+    /\ nextGid <= MaxGid
     /\ p.base = adapter[b].gid                                  \* GUARD: ticket base
     /\ adapter' = [adapter EXCEPT ![b] =
-           [gid |-> p.gid, key |-> p.key, content |-> c, off |-> o, F |-> h]]  \* STAMP
+           [gid |-> nextGid, key |-> p.key, content |-> c, off |-> o, F |-> h]]  \* STAMP
+    /\ nextGid' = nextGid + 1
     /\ regressed' = (regressed \/ p.key < adapter[b].key)
-    /\ plans' = IF TicketReuse THEN plans ELSE plans \ {p}
-    /\ UNCHANGED <<desired, nextGid, shown>>
+    /\ UNCHANGED <<desired, plans, shown>>
 
 \* scroll / page_up / page_down / home / end / scroll_to / scroll_into_view.
 Scroll(b, o) ==

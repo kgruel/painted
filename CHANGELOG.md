@@ -25,6 +25,10 @@ breaking changes.
   redirected, it prints the static reading and exits; making an already-implied
   facet explicit now says so instead of changing nothing visibly.
   ([5d28176](https://github.com/kgruel/painted/commit/5d28176))
+- **Publishing one `ViewportAdapter` `Plan` twice no longer yields colliding
+  frame tokens.** Each accepted `publish` now mints its own generation identity,
+  so a stale click can't resolve through different content; `Plan` loses its
+  `proposed` field. No shipped host published a plan twice. (link pending merge)
 
 ## [0.15.0] — 2026-09-28
 
