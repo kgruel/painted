@@ -100,15 +100,16 @@ Fork(from, to) ==
     /\ adapter' = [adapter EXCEPT ![to] = adapter[from]]
     /\ UNCHANGED <<desired, nextGid, plans, shown, regressed>>
 
-Next ==
-    \/ InputsChange
-    \/ \E b \in Branches : Plan(b)
-    \/ \E b \in Branches, p \in plans, c \in Contents, o \in Offsets, h \in Heights :
-           Publish(b, p, c, o, h)
-    \/ \E b \in Branches, o \in Offsets : Scroll(b, o)
-    \/ \E b \in Branches, h \in Heights, o \in Offsets : Resize(b, h, o)
-    \/ \E b \in Branches : Frame(b)
-    \/ \E from \in Branches, to \in Branches : Fork(from, to)
+\* Named, so TLC reports each step by its action and not as "Next".
+DoPlan    == \E b \in Branches : Plan(b)
+DoPublish == \E b \in Branches, p \in plans, c \in Contents, o \in Offsets, h \in Heights :
+                 Publish(b, p, c, o, h)
+DoScroll  == \E b \in Branches, o \in Offsets : Scroll(b, o)
+DoResize  == \E b \in Branches, h \in Heights, o \in Offsets : Resize(b, h, o)
+DoFrame   == \E b \in Branches : Frame(b)
+DoFork    == \E from \in Branches, to \in Branches : Fork(from, to)
+
+Next == InputsChange \/ DoPlan \/ DoPublish \/ DoScroll \/ DoResize \/ DoFrame \/ DoFork
 
 Spec == Init /\ [][Next]_vars
 

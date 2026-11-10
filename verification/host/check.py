@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """Model-check the host adapter's ticket and frame-token protocol with TLC.
 
-    python3 verification/host/check.py            # the checks + the mutants
-    python3 verification/host/check.py --trace AnyCaller   # print one run in full
+    ./dev verify                    # the checks + the mutants
+    ./dev verify --trace AnyCaller  # print one run in full
+    ./dev verify --sync             # green run, then record the model as in sync
 
 Needs Java 11+ (on PATH, or installed through mise). TLC itself is fetched once
-into verification/.tools/ at a pinned version and verified by hash.
+into verification/.tools/ at a pinned version and verified by hash; set
+TLA2TOOLS to a tla2tools.jar path to use that file instead (same hash check).
 
 Exit status is 0 only when every run ends the way EXPECT says it should: the
 shipped protocol passes, the recorded finding still reproduces, and each mutant
@@ -15,6 +17,8 @@ shipped protocol passes, the recorded finding still reproduces, and each mutant
 from __future__ import annotations
 
 import hashlib
+import json
+import os
 import re
 import shutil
 import subprocess
@@ -24,6 +28,10 @@ import urllib.request
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE.parents[1]))
+from tools.verification_sync import covered_hash, load_manifest  # noqa: E402
+
+SYNC = HERE / "sync.json"
 SPEC = HERE / "HostAdapter.tla"
 TOOLS = HERE.parent / ".tools"
 TLC_VERSION = "1.7.4"
@@ -73,16 +81,18 @@ def _java() -> str:
 
 
 def _tlc_jar() -> Path:
-    jar = TOOLS / f"tla2tools-{TLC_VERSION}.jar"
-    if not jar.exists():
+    override = os.environ.get("TLA2TOOLS")
+    jar = Path(override) if override else TOOLS / f"tla2tools-{TLC_VERSION}.jar"
+    if not jar.exists() and not override:
         TOOLS.mkdir(exist_ok=True)
         print(f"fetching TLC {TLC_VERSION} ...", file=sys.stderr)
         with urllib.request.urlopen(TLC_URL) as response:  # noqa: S310 - pinned https URL
             jar.write_bytes(response.read())
     digest = hashlib.sha256(jar.read_bytes()).hexdigest()
     if digest != TLC_SHA256:
-        jar.unlink()
-        sys.exit(f"tla2tools.jar hash mismatch (got {digest}); deleted, not run")
+        if not override:
+            jar.unlink()
+        sys.exit(f"{jar}: hash mismatch (got {digest}); not run")
     return jar
 
 
@@ -129,7 +139,20 @@ def main(argv: list[str]) -> int:
             sys.exit("--trace needs text matching exactly one of:\n  " + "\n  ".join(RUNS))
         _run(matches[0], show=True)
         return 0
-    return 0 if all([_run(name, show=False) for name in RUNS]) else 1
+    manifest = load_manifest(SYNC)
+    drifted = covered_hash(HERE.parents[1], manifest) != manifest["sha256"]
+    if drifted and argv != ["--sync"]:
+        print(
+            f"note   {manifest['file']} changed since the model was last confirmed against it.\n"
+            "       A pass below is about the model. Read the change against the coverage table\n"
+            "       in .claude/skills/verify-host-adapter/SKILL.md, then `./dev verify --sync`."
+        )
+    green = all([_run(name, show=False) for name in RUNS])
+    if green and argv == ["--sync"]:
+        manifest["sha256"] = covered_hash(HERE.parents[1], manifest)
+        SYNC.write_text(json.dumps(manifest, indent=2) + "\n")
+        print(f"synced {SYNC.relative_to(HERE.parents[1])}")
+    return 0 if green else 1
 
 
 if __name__ == "__main__":

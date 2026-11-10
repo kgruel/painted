@@ -27,6 +27,7 @@ Below painted in the monorepo: `libs/atoms/` defines Facts and Specs; `libs/engi
 ./dev panels [out-dir]   # regenerate the docs site's real-output panels (default: web/src/generated/panels)
 ./dev test [-v]          # pytest wrapper, passthrough args
 ./dev lint               # ty check + ruff format check
+./dev verify [--sync]    # TLC model check of verification/ (needs Java, ~40s; not gated — tier 0 holds the drift ratchet)
 ./dev cov [--html]       # coverage report (not gated — informational; ~88% today)
 ./dev fmt                # auto-format (ruff)
 ```

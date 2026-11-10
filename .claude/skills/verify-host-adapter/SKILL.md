@@ -20,12 +20,12 @@ the bounds below. Tests check the orders someone wrote; this checks all of them.
 ## Run it
 
 ```bash
-python3 verification/host/check.py
+./dev verify
 ```
 
 About 40 seconds. Needs Java 11+ on PATH or installed through mise; TLC 1.7.4
 is fetched once into `verification/.tools/` and verified by hash. It is not part
-of `./dev check`.
+of `./dev check` — only the drift ratchet is (see the sync record below).
 
 Five runs, and exit 0 means each ended as recorded:
 
@@ -33,7 +33,7 @@ Five runs, and exit 0 means each ended as recorded:
 - `AnyCaller` violates `StaleHitsDrop` — **an open finding, expected to fail** (below).
 - three mutants, each the model with one guard removed, each caught.
 
-To read a run in full: `python3 verification/host/check.py --trace AnyCaller`.
+To read a run in full: `./dev verify --trace AnyCaller`.
 If the pstack `/statechart` skill is installed, read any violation with it: it
 tells the shortest path to the broken state in plain words.
 
@@ -55,10 +55,11 @@ pure, so one call is one indivisible step.
 | `Fork` — a second reference to a frozen value | frozen dataclass; no code |
 | `TicketReuse = FALSE` (`Shipped.cfg`) | `HostViewport._install_generation` plans and publishes in one step, so no ticket is published twice |
 
-**Last confirmed against the code at commit `37f1dbb`.** If
-`git log 37f1dbb.. -- src/painted/host.py` shows commits, read them against
-this table before trusting a pass. Move the sync commit forward only after you
-have confirmed every row still describes the code.
+**The sync record is `verification/host/sync.json`**: the covered symbols and a
+hash of their ASTs (docstrings and comments excluded). Tier 0 of `./dev check`
+fails when the covered code no longer matches it. Run `./dev verify --sync` to
+move it forward — only after you have confirmed every row above still describes
+the code. A new method that writes the same state belongs in `covered` too.
 
 **Bounds:** 2 forks, 3 renderer-input versions, 4 `plan` calls, 2 distinct
 Blocks, offsets {0,1}, heights {1,2} — about 5.2 million states.
@@ -87,7 +88,7 @@ Blocks, offsets {0,1}, heights {1,2} — about 5.2 million states.
 4. If a mutant reports `DRIFT`, the spec line it breaks has moved. Update the
    mutant's text in `check.py` and confirm it is still caught — a check that can
    no longer fail proves nothing.
-5. Update the table and the sync commit in this file, in the same change.
+5. Update the table in this file, then `./dev verify --sync`, in the same change.
 
 ## Open finding: a ticket can be published twice
 
