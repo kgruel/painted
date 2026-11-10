@@ -13,6 +13,8 @@ not by the tag alone.
 
 1. **The branch is done**: `./dev check` green at head (10/10), and Kyle has read
    the branch diff. Merging is Kyle's call — never merge to main unprompted.
+   Also run `./dev verify` (needs Java): the gate only checks that the formal
+   models are not stale, not that they still pass.
 2. **The changelog lines are already there**: `CHANGELOG.md`'s `## [Unreleased]`
    section carries a line per change, added as each slice landed (CLAUDE.md,
    Working practices). Read it as the record of what belongs in this release —

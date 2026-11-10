@@ -1383,3 +1383,21 @@ def test_shipped_python_parses_at_requires_python_floor() -> None:
         f"shipped Python does not parse at the requires-python floor "
         f"{floor[0]}.{floor[1]}:\n  " + "\n  ".join(failures)
     )
+
+
+def test_formal_models_are_in_sync_with_the_code_they_describe():
+    """A model check passes about the *model*. If the modelled code changed and
+    nobody re-read the model against it, that pass describes code that no longer
+    exists — so the change itself fails the gate until it is re-confirmed."""
+    from tools.verification_sync import covered_hash, load_manifest, manifests
+
+    root = Path(__file__).resolve().parents[2]
+    found = manifests(root)
+    assert found, "no verification/*/sync.json — the ratchet has nothing to hold"
+    for path in found:
+        manifest = load_manifest(path)
+        assert covered_hash(root, manifest) == manifest["sha256"], (
+            f"{manifest['file']} changed in code that {path.parent.relative_to(root)} models. "
+            "Update the model to describe the new code, run `./dev verify`, then "
+            "`./dev verify --sync` (see .claude/skills/verify-host-adapter/SKILL.md)."
+        )
